@@ -1365,17 +1365,29 @@ What the tests cover, in short:
 
 ### Known failing tests
 
-Two tests fail today. They are open defects, not flaky tests; do not
-loosen them to make them pass.
+Six tests fail today. They are open defects, not flaky tests; do not
+loosen them to make them pass. The last four came with the Golden Gate
+branch and fail on it alone too.
 
 | Test | What fails |
 | --- | --- |
 | `eo-street` `surface::street_surface_is_closed_and_on_its_section` | Two walkable surfaces fight in one place at more probes than the test allows |
 | `eo-street` `surface::verge_banks_stay_off_the_paving` | Some verge banks reach onto the paving |
+| `eo-look` `atmosphere::cie_sky_tests::the_sky_near_the_horizon_within_the_cie_clear_skies` | Near the horizon the physical sky is brighter than the CIE clear-sky range (up to x1.5 at 5 degrees elevation) |
+| `eo-look` `atmosphere::cie_sky_tests::the_sky_gradient_away_from_the_horizon_within_the_cie_clear_skies` | The gradient away from the horizon leaves the CIE range at some sun positions (up to x1.12) |
+| `eo-look` `tone::camera::tests::the_virtual_chart_renders_neutral_greys_and_keeps_hues` | The Aces2 camera style keeps 0.80 of the saturated patches' chroma, under the 0.85 the test allows |
+| `eo-render` `landmarks::landmark_lights_join_the_sky_gather` | 244 bridge deck lamps on the x1.25 ground plan, under the 250 the test expects: the Golden Gate's cable detail places them at the published 150 ft pitch on the plan |
+
+The `eo-server` network test
+`loss_reorder_and_duplicates_lose_no_input_and_keep_prediction_exact` is
+flaky: it passes alone and fails about one run in three when other network
+tests load the machine at the same time (a few millimetres of prediction
+drift; a joining world may insert its collision tiles in a timing-dependent
+order).
 
 ## Known issues
 
-- The two failing tests above.
+- The six failing tests and the flaky network test above.
 - The sign-art manifest records the first ZIP of the FHWA Standard Highway
   Signs 2024 Release 3 as the source of six signs (S1-1, W8-1, W11-2,
   W16-7PL, W16-9P, W17-1), but the published first ZIP does not hold them;

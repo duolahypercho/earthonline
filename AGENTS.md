@@ -70,10 +70,11 @@ At the repository root (Node.js):
 npm run verify:asset-lock                # nothing binary tracked under artifacts/, nothing drifted
 ```
 
-Two tests fail today and are recorded as known issues in
+Six tests fail today and are recorded as known issues in
 [native/README.md](native/README.md#known-failing-tests): the `eo-street`
-surface tests for fighting surfaces and verge banks. Do not loosen them; a
-fix makes them pass.
+surface tests for fighting surfaces and verge banks, eo-look's two CIE
+clear-sky tests and its virtual-chart hue test, and eo-render's bridge
+deck-lamp count. Do not loosen them; a fix makes them pass.
 
 ### Verification matrix
 
