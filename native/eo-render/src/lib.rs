@@ -3004,7 +3004,8 @@ impl Renderer {
 
     /// after a submitted frame (`encode`), the counters and every
     /// object index that frame's lists drew (early opaque, late opaque,
-    /// transparent). Compacted lists only. Tests and diagnostics; blocks.
+    /// transparent; with the count emulation, each list up to the bound it
+    /// was drawn with). Compacted lists only. Tests and diagnostics; blocks.
     pub fn drawn_readback(&self, ctx: &GpuContext) -> Result<([u32; COUNTER_WORDS], Vec<u32>)> {
         if !self.compact {
             return Err(anyhow!("drawn_readback needs the compacted lists"));
@@ -3036,7 +3037,9 @@ impl Renderer {
             let c = CLASS_WORD as usize;
             lists.extend([(3 * n, counters[c] as usize), (4 * n, late_of(c + 1)), (5 * n, counters[c + 2] as usize), (6 * n, late_of(c + 3))]);
         }
-        for (from, count) in lists {
+        for (list, (from, count)) in lists.into_iter().enumerate() {
+            // (the count emulation) a list draws its slots up to its bound only: past it, nothing was drawn.
+            let count = self.main_lists.as_ref().map_or(count, |m| count.min(m.bound(list) as usize));
             drawn.extend(cmds[from * 5..(from + count) * 5].chunks_exact(5).filter(|c| c[1] == 1).map(|c| c[4]));
         }
         Ok((counters, drawn))
