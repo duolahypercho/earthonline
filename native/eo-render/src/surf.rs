@@ -108,14 +108,13 @@ pub struct SurfGpu {
 }
 
 /// The strip's shader: the water's common part, the look, the sea and its surf, then surf.wgsl
-/// (every shading feature and the parts this process runs with compiled in).
+/// (every shading feature and the parts this process runs with compiled in, no debug view, no wave optics).
 pub fn shader_source() -> String {
-    shader_source_with_cove(false, crate::water::FEAT_ALL, eo_water::switches::on())
+    shader_source_with_cove(false, crate::water::ShaderBits { features: crate::water::FEAT_ALL, parts: eo_water::switches::on(), debug: 0.0, optics: false })
 }
 
-/// `features`, `parts`: the sea's shading features and parts in force (`WaterGpu::shader_bits`),
-/// compiled in as the sea's own pipelines have them (water.rs `common_source`).
-fn shader_source_with_cove(cove_detail: bool, features: u32, parts: u32) -> String {
+/// `bits`: what the sea's pipelines compile in (`WaterGpu::shader_bits`, water.rs `common_source`).
+fn shader_source_with_cove(cove_detail: bool, bits: crate::water::ShaderBits) -> String {
     format!(
         "{}
 {}
@@ -124,7 +123,7 @@ fn shader_source_with_cove(cove_detail: bool, features: u32, parts: u32) -> Stri
 {}
 {}
 {}",
-        crate::water::common_source(cove_detail, features, parts),
+        crate::water::common_source(cove_detail, bits),
         crate::look::look_common_source(),
         include_str!("sky_light_core.wgsl"),
         crate::look::LOOK_EXT_WGSL, // group 1 bindings 12-18
@@ -248,8 +247,7 @@ impl SurfGpu {
                 wgpu::BindGroupEntry { binding: 4, resource: axis_buf.as_entire_binding() },
             ],
         });
-        let (features, parts) = water.shader_bits();
-        let src = shader_source_with_cove(look.options.cove_detail, features, parts);
+        let src = shader_source_with_cove(look.options.cove_detail, water.shader_bits());
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surf.wgsl"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("surf"), bind_group_layouts: &[Some(water.surf_layout()), Some(look.main_bind_group_layout()), Some(&bgl)], immediate_size: 0 });
         let premul = wgpu::BlendState {

@@ -423,7 +423,7 @@ pub struct WaterGpu {
 }
 
 /// `EO_WATER_DEBUG`: the water pass draws its terms instead of the water (diagnostics).
-fn debug_mode() -> f32 {
+pub(crate) fn debug_mode() -> f32 {
     static MODE: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *MODE.get_or_init(|| std::env::var("EO_WATER_DEBUG").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0))
 }
@@ -448,20 +448,41 @@ fn sea_override() -> Option<eo_water::waves::SeaState> {
     })
 }
 
+/// What the water's shaders compile in as constants (`common_source`), all
+/// fixed for the life of the pipelines: the shading features (`FEAT_*`), the
+/// iteration-2 and -3 parts (eo-water `switches`), the debug view
+/// (`EO_WATER_DEBUG`, 0 off) and the submerged camera's wave optics
+/// (`--water-optics`). The uniform still carries the same values.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ShaderBits {
+    pub features: u32,
+    pub parts: u32,
+    pub debug: f32,
+    pub optics: bool,
+}
+
 /// The water shaders' shared WGSL (constants generated from eo-water, the
-/// grid and the uniform). `features` (`FEAT_*`) and `parts` (eo-water
-/// `switches`) are the shading features and the iteration-2 and -3 parts in
-/// force, compiled in as constants (`W_FEAT`, `W_GG2`: water_common.wgsl
-/// `wv_feat`, `wg_gg2`): both are fixed for the life of the pipelines, so each
-/// gate is a constant and the branch a feature does not take, its switch's
-/// earlier path when it is on and its own code when it is off, is compiled
-/// out. Gated on the uniform instead, every pixel of the sea carried every
-/// feature's code and the paths they replace in its registers (measured,
-/// golden_gate: the water pass 7.5 ms against 1.7 ms with the same bits as
-/// constants, the output unchanged).
-pub(crate) fn common_source(cove_detail: bool, features: u32, parts: u32) -> String {
-    format!("{}\n{}\n{}\n{}\nconst W_COVE_DETAIL: bool = {cove_detail};\nconst W_COVE_SCALE: f32 = {:.8};\nconst W_FEAT: u32 = {features}u;\nconst W_GG2: u32 = {parts}u;\n",
-        eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"), include_str!("cove_daylight.wgsl"), eo_data::groundscale::scale())
+/// grid and the uniform), with `bits` compiled in (`W_FEAT`, `W_GG2`,
+/// `W_DEBUG`, `W_OPTICS`: water_common.wgsl `wv_feat`, `wg_gg2`, water.wgsl):
+/// each gate is a constant, so the branch a run does not take (a feature's
+/// code when it is off, the earlier path its switch restores when it is on,
+/// the debug views, the wave optics' terms) is compiled out. Gated on the
+/// uniform instead, every pixel of the sea carried all of that code in its
+/// registers (measured, golden_gate: the water pass 6.2 ms against 1.6 ms
+/// with the features and parts as constants, the output unchanged).
+pub(crate) fn common_source(cove_detail: bool, bits: ShaderBits) -> String {
+    format!(
+        "{}\n{}\n{}\n{}\nconst W_COVE_DETAIL: bool = {cove_detail};\nconst W_COVE_SCALE: f32 = {:.8};\nconst W_FEAT: u32 = {}u;\nconst W_GG2: u32 = {}u;\nconst W_DEBUG: f32 = {:.3};\nconst W_OPTICS: bool = {};\n",
+        eo_water::optics::wgsl_constants(),
+        eo_water::surface::wgsl_constants(),
+        include_str!("water_common.wgsl"),
+        include_str!("cove_daylight.wgsl"),
+        eo_data::groundscale::scale(),
+        bits.features,
+        bits.parts,
+        bits.debug,
+        bits.optics
+    )
 }
 
 /// (iteration 2, current) the wind sea's amplitude gain per cascade on the
@@ -745,7 +766,7 @@ impl WaterGpu {
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&land_view) },
             ],
         });
-        let common = common_source(look.options.cove_detail, look.options.water_features, gg2);
+        let common = common_source(look.options.cove_detail, ShaderBits { features: look.options.water_features, parts: gg2, debug: debug_mode(), optics: look.options.water_optics });
         let plain_src = format!("{common}\n{}\nfn patch_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("water_cull.wgsl"));
         let hzb_src = format!(
             "{common}\n{}\nstruct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn patch_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, wu.view_proj, hzb_info.screen.xy); }}\n",
@@ -1003,10 +1024,10 @@ impl WaterGpu {
         self.on.load(Ordering::Relaxed)
     }
     /// the pass may draw without multi-draw-indirect-count (`FEAT_INSTANCED`).
-    /// The shading features and the iteration-2 and -3 parts compiled into the
-    /// sea's shaders (`common_source`), for the surf strip's, which shares them.
-    pub(crate) fn shader_bits(&self) -> (u32, u32) {
-        (self.features, self.gg2)
+    /// What the sea's shaders compile in (`common_source`), for the surf
+    /// strip's, which shares them.
+    pub(crate) fn shader_bits(&self) -> ShaderBits {
+        ShaderBits { features: self.features, parts: self.gg2, debug: debug_mode(), optics: self.submerged.is_some() }
     }
 
     pub fn instanced(&self) -> bool {

@@ -14,7 +14,7 @@ struct WaterU {
     // where the water draws (the terrain grid, as the flat sea did): min x, min z, max x, max z
     extent: vec4<f32>,
     // x: debug view (EO_WATER_DEBUG), 0 off; y the surf strip draws; z the shading features (water.rs `FEAT_*`);
-    // w 1 with the submerged camera's wave optics
+    // w 1 with the submerged camera's wave optics (x, z and w are also compiled in: `W_DEBUG`, `W_FEAT`, `W_OPTICS`)
     screen: vec4<f32>,
     // x scene copy taken this frame (1/0), y probe on (1/0), z land mask (m below which the field is land), w FFT live (1/0)
     flags: vec4<f32>,

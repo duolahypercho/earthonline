@@ -2323,7 +2323,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             let d_b = exp(-(1.0 - ch2) / (ch2 * mg)) / (WG_PI * mg * ch2 * ch2);
             let dens = WS_GLINT_FACETS * d_b * ch * WO_SUN_SR / (4.0 * max(vdh, 0.05));
             spec = min(spec, WO_SPEC_CEILING) * w_glints(world.xz, w_fp_lat, w_fp_along, dens, t);
-        } else if (wu.screen.w > 0.5) {
+        } else if (W_OPTICS) {
             // (water optics) resolved crests move the highlight. The GGX lobe already
             // integrates unresolved facets over the pixel footprint.
             spec = min(spec, WO_SPEC_CEILING);
@@ -2587,10 +2587,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         discard;
     }
     var s: Shade;
-    if (wu.screen.x > 0.5 && wu.screen.x < 2.5) {
+    if (W_DEBUG > 0.5 && W_DEBUG < 2.5) {
         // EO_WATER_DEBUG=1: r foam, g column (0..2 m), b signed shore distance (0..20 m); =2: r beach, g surf foam, b collar.
         var dbg = vec3<f32>(foam, clamp(column / 2.0, 0.0, 1.0), clamp(signed / 20.0, 0.0, 1.0));
-        if (wu.screen.x > 1.5) {
+        if (W_DEBUG > 1.5) {
             dbg = vec3<f32>(beach, surf_cov, collar);
         }
         s.own = dbg;
@@ -2605,7 +2605,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.side = 0.0;
         return s;
     }
-    if (wu.screen.x > 16.5 && wu.screen.x < 17.5) {
+    if (W_DEBUG > 16.5 && W_DEBUG < 17.5) {
         // (iteration 3) EO_WATER_DEBUG=17: r the obstacle foam, g its band weight, b the wave height there (0..1 m; 0 where not evaluated)
         s.own = vec3<f32>(w_dbg_obs.x, w_dbg_obs.y, max(w_dbg_obs.z, 0.0)) * 0.25 / max(look.key.w, 1e-6);
         s.through = vec3<f32>(0.0);
@@ -2619,7 +2619,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.side = 0.0;
         return s;
     }
-    if (wu.screen.x > 15.5 && wu.screen.x < 16.5) {
+    if (W_DEBUG > 15.5 && W_DEBUG < 16.5) {
         // (iteration 3) EO_WATER_DEBUG=16: r the surf's whitewater, g its bore, b its amplitude scale / 2
         s.own = vec3<f32>(w_dbg_surf.x, w_dbg_surf.y, w_dbg_surf.z * 0.5) * 0.25 / max(look.key.w, 1e-6);
         s.through = vec3<f32>(0.0);
@@ -2633,7 +2633,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.side = 0.0;
         return s;
     }
-    if (wu.screen.x > 14.5 && wu.screen.x < 15.5) {
+    if (W_DEBUG > 14.5 && W_DEBUG < 15.5) {
         // (iteration 3) EO_WATER_DEBUG=15: the bathymetry here: r depth (0..10 m), g K_r (0..1), b nearness to surveyed land (1 at it, 0 from 20 m)
         s.own = vec3<f32>(clamp(wb.depth / 10.0, 0.0, 1.0), clamp(wb.kr, 0.0, 1.0), 1.0 - clamp(wb.land / 20.0, 0.0, 1.0)) * wb.on * 0.25 / max(look.key.w, 1e-6);
         s.through = vec3<f32>(0.0);
@@ -2647,7 +2647,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.side = 0.0;
         return s;
     }
-    if (wu.screen.x > 13.5 && wu.screen.x < 14.5) {
+    if (W_DEBUG > 13.5 && W_DEBUG < 14.5) {
         // EO_WATER_DEBUG=14: r the projected reflection's facet-weighted cover, g the flat mirror's source found
         s.own = vec3<f32>(w_dbg_ppr.x, min(w_dbg_ppr.y, 1.0), 0.0) * 0.25 / max(look.key.w, 1e-6);
         s.through = vec3<f32>(0.0);
@@ -2656,7 +2656,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.sky = vec3<f32>(0.0);
         return s;
     }
-    if (wu.screen.x > 12.5 && wu.screen.x < 13.5) {
+    if (W_DEBUG > 12.5 && W_DEBUG < 13.5) {
         // EO_WATER_DEBUG=13: thresholds: r the slope along the view over 0.03, g across it over 0.03, b the unresolved spread over 0.08
         let fh = normalize(wu.fwd.xz + vec2<f32>(1e-5, 0.0));
         let sl = vec2<f32>(-n.x, -n.z) / max(n.y, 1e-3);
@@ -2674,7 +2674,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.side = 0.0;
         return s;
     }
-    if (wu.screen.x > 11.5 && wu.screen.x < 12.5) {
+    if (W_DEBUG > 11.5 && W_DEBUG < 12.5) {
         // EO_WATER_DEBUG=12: the shading normal's slopes (r x, g z, 0.5 flat, 0.1 per 0.02 of slope) and the unresolved spread (b)
         s.own = vec3<f32>(clamp(0.5 - n.x * 5.0, 0.0, 1.0), clamp(0.5 - n.z * 5.0, 0.0, 1.0), clamp(sigma_unres * 5.0, 0.0, 1.0)) * 0.25 / max(look.key.w, 1e-6);
         s.through = vec3<f32>(0.0);
@@ -2697,7 +2697,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // sand under a thin sheet is wet sand (darker: water fills its pores).
     s.through = vol.tview * select(wo_underwater(bottom_depth, l), vec3<f32>(1.0), wv_feat(2u)) * k_t * (1.0 - fog) * (1.0 - 0.4 * film);
     var bed_focus = 1.0;
-    if (wu.screen.w > 0.5 && wu.flags.w > 0.5 && lk_luma(s.through) > 0.015 && l.y > 0.0) {
+    if (W_OPTICS && wu.flags.w > 0.5 && lk_luma(s.through) > 0.015 && l.y > 0.0) {
         let direct = shadow * (1.0 - ovc) * wg_smooth(0.0, 0.2, l.y);
         bed_focus = w_caustic(p_bottom, bottom_depth, ls_up);
         s.through *= mix(1.0, bed_focus, 0.6 * direct);
@@ -2814,7 +2814,7 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     if (wv_feat(256u) && s.refl_k > 0.002 && sf_inj.rough < 0.5 && s.ppr_in < 0.5) {
         // (ppr) the frame's own geometry in the mirror
         let pr = w_ppr_reflect(i.world, s.r, i.clip.xy, s.smear);
-        if (wu.screen.x > 10.5) {
+        if (W_DEBUG > 10.5) {
             // EO_WATER_DEBUG=11: the projected reflection's coverage (r) over its image (g, b)
             return vec4<f32>(pr.w, lk_luma(pr.rgb) * 0.3, 0.0, 1.0);
         }
@@ -2856,7 +2856,7 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     // (r11b: gated by the direction to the sun alone, its soft envelope: a brightness
     // threshold cut a hard-edged block where the mirror read the drawn sky's glare)
     let glare = select(s.sun_near, 0.0, wv_feat(16u)); // (glint: the sun's own glints are counted; the glare round it mirrors smooth)
-    if (glare > 0.0 && wu.screen.w < 0.5) { // (water optics: the resolved crests carry the glare)
+    if (glare > 0.0 && !W_OPTICS) { // (water optics: the resolved crests carry the glare)
         // (fewer, smaller, brighter: one cell in six, 1.5 px, at six times; between
         // them the water keeps the plain low sky, not the sun's glare)
         let gh = w_hash(floor(i.world.xz / max(fpx * 1.5, 0.02)), floor(wu.cam.w * 8.0) + 3.0);
@@ -2907,9 +2907,9 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     }
     // EO_WATER_DEBUG=3: the water's own light only; 4: the reflection only; 5: the bottom only; 6 the body's light; 7 the glint;
     // 8 (Fresnel, the reflection's weight before haze, the fog) as colour; 9 the reflected radiance unweighted.
-    if (wu.screen.x > 2.5 && wu.screen.x < 11.5) {
+    if (W_DEBUG > 2.5 && W_DEBUG < 11.5) {
         let parts = array<vec3<f32>, 8>(s.own, refl * s.refl_k, bottom * s.through, s.body, s.gl, s.terms, refl, w_dbg_ed * 0.01);
-        return vec4<f32>(parts[min(u32(wu.screen.x + 0.5) - 3u, 7u)], 1.0);
+        return vec4<f32>(parts[min(max(u32(W_DEBUG + 0.5), 3u) - 3u, 7u)], 1.0); // (W_DEBUG is a constant: no u32 underflow to evaluate)
     }
     var out = s.own + refl * s.refl_k + bottom * s.through;
     if (wv_feat(16u)) {
