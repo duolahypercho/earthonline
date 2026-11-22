@@ -25,26 +25,31 @@ pub struct Out {
     pub far: Frozen,
     pub colliders: Vec<Collider>,
     pub stats: Value,
+    /// Materials of the generator's own groups, in place of the registry's
+    /// (none here: towers2.rs gives its new groups theirs).
+    pub materials: Vec<(String, crate::data::Material)>,
+    /// Lights the building carries (none here; towers2.rs's aviation lights).
+    pub lights: Vec<crate::LandmarkLight>,
 }
 
-fn n(v: &Value, k: &str) -> f64 {
+pub(crate) fn n(v: &Value, k: &str) -> f64 {
     crate::data::num(v, k)
 }
 
-fn hex(v: &Value, k: &str) -> Rgb {
+pub(crate) fn hex(v: &Value, k: &str) -> Rgb {
     srgb_hex(n(v, k) as u32)
 }
 
-fn flat(v: &Value) -> Vec<f64> {
+pub(crate) fn flat(v: &Value) -> Vec<f64> {
     v.as_array().map(|a| a.iter().map(|x| x.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default()
 }
 
-fn v2(v: &Value) -> [f64; 2] {
+pub(crate) fn v2(v: &Value) -> [f64; 2] {
     [v[0].as_f64().unwrap_or(0.0), v[1].as_f64().unwrap_or(0.0)]
 }
 
 /// The lowest ground under a ring.
-fn base_y(ring: &[[f64; 2]], g: &GroundGrid) -> f64 {
+pub(crate) fn base_y(ring: &[[f64; 2]], g: &GroundGrid) -> f64 {
     ring.iter().map(|p| g.at(p[0], p[1])).fold(f64::INFINITY, f64::min)
 }
 
@@ -163,6 +168,8 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
         groups: vec![("precast".into(), precast.freeze()), ("glass".into(), glass.freeze()), ("metal".into(), metal.freeze())],
         far: far.freeze(),
         colliders: vec![],
+        materials: vec![],
+        lights: vec![],
         stats: serde_json::json!({ "baseY": base, "apexY": base + h_total, "spireFromY": base + spire_y, "wingsFromY": base + wing_y0, "halfBaseM": fhalf }),
     }
 }
@@ -209,6 +216,8 @@ pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
         groups: vec![("glass".into(), glass.freeze()), ("crown".into(), crown.freeze())],
         far: far.freeze(),
         colliders: vec![],
+        materials: vec![],
+        lights: vec![],
         stats: serde_json::json!({ "baseY": base, "topY": base + h_total, "crownFromY": base + top_floor }),
     }
 }
@@ -272,6 +281,8 @@ pub fn coit(site: &Value, g: &GroundGrid) -> Out {
         groups: vec![("concrete".into(), concrete.freeze()), ("openings".into(), openings.freeze())],
         far: far.freeze(),
         colliders: vec![],
+        materials: vec![],
+        lights: vec![],
         stats: serde_json::json!({ "baseY": base_ground, "topY": top, "shaftRadiusM": r0 }),
     }
 }
@@ -419,6 +430,8 @@ pub fn sutro(site: &Value, g: &GroundGrid) -> Out {
         groups: vec![("steel".into(), steel.freeze()), ("concrete".into(), concrete.freeze())],
         far: far.freeze(),
         colliders,
+        materials: vec![],
+        lights: vec![],
         stats: serde_json::json!({ "baseY": plan.base_y, "topY": plan.base_y + height, "feet": plan.feet.iter().map(|f| [f.0[0], f.0[1], f.2]).collect::<Vec<_>>() }),
     }
 }
@@ -672,6 +685,8 @@ pub fn city_hall(site: &Value, g: &GroundGrid) -> Out {
         groups: vec![("stone".into(), stone.freeze()), ("dome".into(), dome.freeze()), ("windows".into(), windows.freeze())],
         far: far.freeze(),
         colliders: vec![],
+        materials: vec![],
+        lights: vec![],
         stats: serde_json::json!({ "baseY": base, "corniceY": y(h_top), "domeTopY": y(dome_top), "frame": { "cx": cx, "cz": cz, "longM": 2.0 * hu, "shortM": 2.0 * hv } }),
     }
 }

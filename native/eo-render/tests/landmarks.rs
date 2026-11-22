@@ -90,6 +90,25 @@ fn near_and_far_switch_on_the_gpu() {
     );
 }
 
+/// The surface kinds ride in material flag bits 25-27 and, for the fourth
+/// bit, 31 (`surface_flags`): every kind has its own bits, none touches the
+/// landmark, wet-ground, floodlight or vertex-colour flags, and the authored
+/// facade (7) and the Golden Gate's far item (8) stay apart.
+#[test]
+fn the_surface_kinds_keep_their_own_flag_bits() {
+    use eo_render::landmarks::*;
+    let others = F_LANDMARK | F_WET_GROUND | F_LM_FLOOD | eo_render::authored::F_VERTEX_COLOUR;
+    let mut seen = std::collections::HashSet::new();
+    for k in 0..=SURFACE_FLOODLIT_FAR {
+        let f = surface_flags(k);
+        assert_eq!(f & others, 0, "kind {k}");
+        assert!(seen.insert(f), "kind {k} has its own bits");
+    }
+    assert_ne!(SURFACE_AUTHORED, SURFACE_FLOODLIT_FAR);
+    assert_eq!(surface_code(Some("authored")), SURFACE_AUTHORED);
+    assert!(landmarks_constants_wgsl().contains(&format!("const LM_SURFACE_HIGH_SHIFT: u32 = {SURFACE_HIGH_SHIFT}u;")));
+}
+
 #[test]
 fn the_wgsl_constants_are_the_js_rules() {
     let js = eo_landmarks::LandmarksJs::get();

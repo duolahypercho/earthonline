@@ -1637,7 +1637,7 @@ fn shade(in: VOut) -> vec4<f32> {
     } else if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
-    if (((m.flags >> LM_SURFACE_SHIFT) & 7u) != 0u) {
+    if (lm_kind(m.flags) != 0u) {
         lm_surface(&s, m, in.world, n, dpx, dpy); // landmark-surface.js, the seawall's concrete
     } else if ((m.flags & LM_F_WET_GROUND) != 0u && (objects[in.object].kind & 255u) == 1u) {
         if (in.aux.x < 253.5) {
