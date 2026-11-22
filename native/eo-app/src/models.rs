@@ -615,6 +615,9 @@ pub struct ModelRuntime {
     model_alloc: Option<(eo_render::kit::RangeAlloc, eo_render::kit::RangeAlloc)>,
     model_ranges: Vec<Option<(u32, u32)>>,
     model_wait_free: bool,
+    /// resident models the last gate found no longer wanted (evicted
+    /// MODEL_EVICTIONS_PER_FRAME a frame): what an earlier camera left behind.
+    stale_models: usize,
     streamer: Option<Streamer>,
     kit_rx: Option<std::sync::mpsc::Receiver<Result<(eo_render::KitUpload, f64), String>>>,
     /// (`--shop-light`) the shop windows' lights, placed from the kit planner's
@@ -771,6 +774,7 @@ impl ModelRuntime {
             model_alloc: bases.model_arena.filter(|_| model_gated).map(|(v, i)| (eo_render::kit::RangeAlloc::new(v), eo_render::kit::RangeAlloc::new(i))),
             model_ranges: vec![None; world.authored.buildings.len()],
             model_wait_free: false,
+            stale_models: 0,
             streamer,
             street,
             structures,
@@ -1089,6 +1093,7 @@ impl ModelRuntime {
         let load = MODEL_LOAD_M.min(self.model_radius);
         let far_models = eo_render::far_city::FarCity::current().landmark_models;
         let (mut gone_queued, mut evict) = (std::collections::HashSet::new(), vec![]);
+        let mut stale = 0;
         self.residency.out_of_view = 0;
         for (i, b) in set.buildings.iter().enumerate() {
             let st = self.model_state[i];
@@ -1121,10 +1126,16 @@ impl ModelRuntime {
                 (false, ModelState::Queued) => {
                     gone_queued.insert(i);
                 }
-                (false, ModelState::Resident) if evict.len() < MODEL_EVICTIONS_PER_FRAME => evict.push(i),
+                (false, ModelState::Resident) => {
+                    stale += 1;
+                    if evict.len() < MODEL_EVICTIONS_PER_FRAME {
+                        evict.push(i);
+                    }
+                }
                 _ => {}
             }
         }
+        self.stale_models = stale;
         s.flush();
         if let Some(cn) = cone.as_ref() {
             self.model_hold.prune(cn);
@@ -1197,6 +1208,12 @@ impl ModelRuntime {
             self.cc0.as_ref().map(|c| c.settled()).unwrap_or(true),
             self.hlod.as_ref().filter(|_| self.hlod_drawn).map(|h| h.unsettled()).unwrap_or_default() // hlod
         )
+    }
+
+    /// Resident kit packs and models no longer wanted at the camera (an
+    /// earlier camera's, still being evicted a few a frame).
+    pub fn stale(&self) -> usize {
+        self.stale_models + self.kit.as_ref().map(|k| k.stale_resident).unwrap_or(0)
     }
 
     /// Models, maps and every kit pack wanted around the camera resident.

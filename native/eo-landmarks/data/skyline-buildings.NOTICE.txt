@@ -1,0 +1,46 @@
+skyline-buildings.json - authored facade descriptions of named San Francisco towers
+
+Hand-written table (eo-landmarks skyline.rs reads it; no build script). It
+holds facts, not copied content: heights, floor counts, materials and
+colours as published, each entry with its source in its "source" field, and
+values that no source gives marked INFERRED there.
+
+Sources consulted (public descriptions; nothing reproduced beyond short facts):
+  Wikipedia: 555 California Street; Embarcadero Center; 345 California Center;
+    Millennium Tower (San Francisco); 181 Fremont; Salesforce Tower;
+    Transamerica Pyramid; Sutro Tower; Coit Tower
+  Skidmore, Owings & Merrill, project page 555 California Street (som.com)
+  Pelli Clarke Pelli, Salesforce Tower (architectmagazine.com project gallery)
+  SFYIMBY, "Number 19: One Embarcadero Center"; Docomomo US register,
+    Embarcadero Center
+  Permasteelisa Group, 181 Fremont project page; buildingsdb.com entries
+    (181 Fremont, 345 California Center)
+  Sutro Tower Inc., sutrotower.com "Tower Technology" (antenna levels)
+  IES Lighting Handbook, floodlighting illuminance recommendations
+  Mitchell Charity, "What color is a blackbody?" (vendian.org), 3,500 K
+  Third pass (each facade's and building's "v3" object, and "v3Night"):
+    glass makers' published visible-reflectance ranges for clear and tinted
+    solar-control low-e units (PPG, Solarban 70XL product data); the Fresnel
+    reflectance of float glass (about 4 % a face at normal incidence);
+    SOM and Wikipedia on 555 California's polished carnelian granite;
+    SFYIMBY on Embarcadero Center's protruding vertical concrete stripes;
+    Wikipedia, Salesforce Tower, on the crown's light sculpture (Day for
+    Night, Jim Campbell, 2018); Wikipedia, 181 Fremont, on its screen and spire;
+    Guardian Glass, Salesforce Tower project page (neutral-looking double
+    glazing); WBDG (Whole Building Design Guide), curtain walls: spandrel
+    panels between vision glass
+
+  Fourth pass (each facade's and building's "v4" object, and "v4Night"):
+    Wikipedia, 555 California Street ('polished or rough carnelian granite');
+    PCAD (pcad.lib.washington.edu), 555 California Street (polished carnelian
+    red granite); KQED (2018) and LEDs Magazine (2018) on Day for Night (the
+    LEDs pointed back at the building, their light reflected out through
+    perforated aluminium panels; visible up to 20 miles); Real-Time Rendering,
+    4th ed., table 9.2 (the F0 of aluminium and gold); SFYIMBY on Embarcadero
+    Center's concrete and glass panels
+
+Plans: each entry names its footprint record in public/data/sf/sf-city.json
+(OpenStreetMap, ODbL 1.0; see sf-city.NOTICE.txt); the plan is read from that
+file at load, not copied here.
+
+No photograph, web-globe image or mesh was traced or sampled for any value.

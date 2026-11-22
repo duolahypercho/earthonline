@@ -202,6 +202,12 @@ var<private> measured_wall: f32;
 var<private> joinery_diffuse: vec4<f32>;
 var<private> porch_field: vec3<f32>;
 var<private> porch_measured: f32;
+// the share of a landmark wall that is glazing (landmarks_surface.wgsl
+// `lm_authored3`): its environment reflection takes the glass class.
+var<private> lm_glaze: f32;
+// the share of a landmark wall's pixel its own relief shades from the key
+// light (landmarks_surface.wgsl `lm_authored4`: fins, sunshades and reveals).
+var<private> lm_unlit: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -239,14 +245,15 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     // the rig's envMapIntensity classes stand in for the light a probe delivered; the
     // physical daylight's environment is the light itself, at its own intensity
-    let env_i = mix(look.ambient.w * cls, 1.0, lk_phys());
+    // (landmark glazing, landmarks_surface.wgsl `lm_glaze`: the glass class)
+    let env_i = mix(look.ambient.w * mix(cls, look.env_class.y, clamp(lm_glaze, 0.0, 1.0)), 1.0, lk_phys());
 
     // Key light with its shadow.
     let l = look.key_dir.xyz;
     let nl = max(dot(n, l), 0.0);
     var key = vec3<f32>(0.0);
     if (nl > 0.0 && dot(ng, l) > -0.05) {
-        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng) * lm_key_vis; // cloud and contact shadows (and a bridge deck's: landmarks_surface.wgsl)
+        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng) * lm_key_vis * (1.0 - lm_unlit); // cloud and contact shadows (and a bridge deck's, a landmark's relief: landmarks_surface.wgsl)
     }
     var direct_d = key * diffuse / LK_PI;
     var direct_s = key * lk_ggx(n, v, l, f0, rough);

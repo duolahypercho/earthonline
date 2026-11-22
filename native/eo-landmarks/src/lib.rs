@@ -24,6 +24,7 @@ pub mod geometry;
 pub mod hill_rock; // the hill rock outcrops and blocks (the coarse vegetation layer's third part)
 pub mod golden_gate;
 pub mod ground_cover;
+pub mod grove; // the groves round Coit and Sutro towers
 pub mod lights;
 pub mod palms;
 pub mod plaza;
@@ -31,13 +32,43 @@ pub mod promenade;
 pub mod rocks; // the shore's boulders and the seawall's armour stone
 pub mod set;
 pub mod shore;
+pub mod skyline; // the named skyline towers
 pub mod suspension;
 pub mod towers;
+pub mod towers2; // the landmark buildings' second generators
+pub mod towers3; // their third pass (projector floodlights, the base truss, the fluted shaft, the lattice) and fourth (`towers4_on`)
 pub mod tram;
 pub mod vegetation; // the coastal tree stands, ground vegetation and hill rock (empty for now)
 pub mod waterfront;
 
 pub use data::LandmarksJs;
+
+/// The landmark buildings' and skyline towers' third pass (towers2.rs and
+/// skyline.rs under `v3`; eo-render's projector floodlights, glazing and
+/// night windows): on unless `eo-app --no-towers3` set `EO_TOWERS3=off`
+/// before any thread started, which restores the previous output.
+pub fn towers3_on() -> bool {
+    std::env::var("EO_TOWERS3").map(|v| v != "off").unwrap_or(true)
+}
+
+/// The fourth pass (towers3.rs, skyline.rs and grove.rs under `v4`;
+/// eo-render's facade relief shadows, spandrels and LED field): on unless
+/// `eo-app --no-towers4` set `EO_TOWERS4=off` before any thread started
+/// (and only with the third pass), which restores the third pass's output.
+pub fn towers4_on() -> bool {
+    towers3_on() && std::env::var("EO_TOWERS4").map(|v| v != "off").unwrap_or(true)
+}
+
+/// Which pass the switches leave on: 2 (`--no-towers3`), 3 (`--no-towers4`) or 4.
+pub fn towers_level() -> u8 {
+    if !towers3_on() {
+        2
+    } else if !towers4_on() {
+        3
+    } else {
+        4
+    }
+}
 pub use geometry::{Frozen, GroundGrid, MeshArrays};
 pub use set::{Draw, Landmark, LandmarkSet, Role};
 

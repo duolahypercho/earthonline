@@ -68,7 +68,10 @@ pub struct Landmark {
 #[derive(Clone, Debug, Default)]
 pub struct LandmarkSet {
     pub landmarks: Vec<Landmark>,
+    /// The bridges' night lights (lights.rs).
     pub lights: Vec<LandmarkLight>,
+    /// The towers' aviation lights (towers2.rs, skyline.rs); the renderer gathers them with `lights`.
+    pub tower_lights: Vec<LandmarkLight>,
     /// The citywide quay wall (shore.rs), chunked.
     pub walls: Vec<crate::shore::WallChunk>,
     /// The seawall material (renderer.js: 0x928d84, roughness 0.93, metalness 0).
@@ -100,18 +103,27 @@ pub struct Options {
     /// tone, fluted tower legs, framed portal struts, full arch pylons, lamp
     /// standards. A preview, off by default; `eo-app --bridge-detail` turns it on.
     pub bridge_detail: bool,
+    /// The landmark buildings' second generators (towers2.rs; `eo-app
+    /// --no-towers2` builds them as the JS export's generators do).
+    pub towers2: bool,
+    /// The named skyline towers (skyline.rs; `eo-app --no-skyline`: the kit draws them).
+    pub skyline: bool,
 }
 
 impl Default for Options {
+    /// Everything on but the previews (`cove_detail`, `bridge_detail`) and
+    /// the switches `eo-app` sets in the environment before any thread
+    /// starts (`--no-towers2`: `EO_TOWERS2=off`, `--no-skyline`: `EO_SKYLINE=off`).
     fn default() -> Self {
-        Self { cove_detail: false, waterfront: true, buildings: true, lights: true, bridge_detail: false }
+        let on = |var: &str| std::env::var(var).map(|v| v != "off").unwrap_or(true);
+        Self { cove_detail: false, waterfront: true, buildings: true, lights: true, bridge_detail: false, towers2: on("EO_TOWERS2"), skyline: on("EO_SKYLINE") }
     }
 }
 
 impl Options {
     /// As the first landmarks slice built the set.
     pub fn off() -> Self {
-        Self { cove_detail: false, waterfront: false, buildings: false, lights: false, bridge_detail: false }
+        Self { cove_detail: false, waterfront: false, buildings: false, lights: false, bridge_detail: false, towers2: false, skyline: false }
     }
 }
 
@@ -147,6 +159,16 @@ pub fn claimed_records() -> std::collections::HashSet<String> {
         out.insert(crate::ferry_building::RECORD.to_string());
     }
     out
+}
+
+/// `claimed_records`, with the skyline towers' records when `opts.skyline`
+/// (skyline.rs draws them; the kit and the far boxes do not).
+pub fn claimed_records_with(opts: Options) -> std::collections::HashSet<String> {
+    let mut c = if opts.buildings { claimed_records() } else { Default::default() };
+    if opts.skyline {
+        c.extend(crate::skyline::claims());
+    }
+    c
 }
 
 /// The JS's own `roughness` / `metalness` for a city structure's material.
@@ -504,16 +526,30 @@ impl Landmark {
 
 /// Build one landmark (`buildLandmark`): the generator, then its draws.
 pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options) -> Result<Landmark> {
+    build_landmark_with(js, id, ground, ca, opts).map(|(l, _)| l)
+}
+
+/// `build_landmark`, also with the lights a generator carries: the landmark
+/// buildings come from their second generators (towers2.rs) when `opts.towers2`.
+pub fn build_landmark_with(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options) -> Result<(Landmark, Vec<LandmarkLight>)> {
     let t0 = Instant::now();
+    // the materials a second generator gives its own groups (in place of the registry's).
+    let mut own: Vec<(String, Material)> = Vec::new();
+    let mut lights: Vec<LandmarkLight> = Vec::new();
     let built: Built = match id {
         "golden-gate-bridge" => golden_gate::build_with(js, ground, ca, opts.bridge_detail),
         "bay-bridge-west" => bay_bridge::build(js, ground, ca),
-        // the landmark buildings (towers.rs).
-        other => match crate::towers::build(other, &js.buildings[other], ground) {
-            Some(o) => Built { id: other.into(), version: o.version, groups: o.groups, far: o.far, skirt: Frozen::default(), colliders: o.colliders, stats: o.stats },
+        // the landmark buildings (towers.rs; towers2.rs).
+        other => match if opts.towers2 { crate::towers2::build(other, &js.buildings[other], ground) } else { crate::towers::build(other, &js.buildings[other], ground) } {
+            Some(o) => {
+                own = o.materials;
+                lights = o.lights;
+                Built { id: other.into(), version: o.version, groups: o.groups, far: o.far, skirt: Frozen::default(), colliders: o.colliders, stats: o.stats }
+            }
             None => anyhow::bail!("eo-landmarks: no generator for {other}"),
         },
     };
+    let own_material = |k: &str| own.iter().find(|(key, _)| key == k).map(|(_, m)| m.clone());
     let def = &js.registry[id];
     let groups: Vec<&(String, Frozen)> = built.groups.iter().filter(|(_, g)| !g.is_empty()).collect();
     let mut keys: Vec<String> = Vec::new();
@@ -527,7 +563,7 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
     for target in keys {
         let list: Vec<&Frozen> = groups.iter().filter(|(k, _)| def.materials.get(k).and_then(|m| m.draw.clone()).unwrap_or_else(|| k.clone()) == target).map(|(_, g)| g).collect();
         let mesh = if list.len() == 1 { list[0].clone() } else { merge(&format!("{id}:{target}"), &list) };
-        let mut material = def.materials.get(&target).cloned().unwrap_or_else(far_material);
+        let mut material = own_material(&target).or_else(|| def.materials.get(&target).cloned()).unwrap_or_else(far_material);
         crate::suspension::finish_material(id, &target, &mut material); // the bridges' paint as a dielectric film
         draws.push(Draw { key: target, role: Role::Near, material, mesh });
     }
@@ -541,7 +577,7 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
         }
     }
     if !built.far.is_empty() {
-        let mut material = far_material();
+        let mut material = own_material("far").unwrap_or_else(far_material);
         crate::suspension::finish_material(id, "far", &mut material);
         draws.push(Draw { key: "far".into(), role: Role::Far, material, mesh: built.far.clone() });
     }
@@ -549,7 +585,7 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
         draws.push(Draw { key: "skirt".into(), role: Role::Near, material: far_material(), mesh: built.skirt.clone() });
     }
     let anchor = [def.anchor["x"].as_f64().unwrap_or(0.0), def.anchor["z"].as_f64().unwrap_or(0.0)];
-    Ok(Landmark {
+    Ok((Landmark {
         id: id.into(),
         name: def.name.clone(),
         version: built.version,
@@ -560,7 +596,7 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
         colliders: built.colliders,
         stats: built.stats,
         build_ms: t0.elapsed().as_secs_f64() * 1e3,
-    })
+    }, lights))
 }
 
 impl LandmarkSet {
@@ -587,7 +623,11 @@ impl LandmarkSet {
         if opts.buildings {
             ids.extend(crate::towers::BUILDING_IDS);
         }
-        let landmarks = std::thread::scope(|s| {
+        let (built, skyline) = std::thread::scope(|s| {
+            // the named skyline towers (skyline.rs) beside the landmarks.
+            let sky = opts.skyline.then(|| s.spawn(|| crate::skyline::build_all(repo_root, height_at)));
+            // the groves round Coit and Sutro towers (grove.rs; `--no-grove`).
+            let grove = (opts.buildings && crate::grove::grove_on()).then(|| s.spawn(|| crate::grove::build_all(repo_root, height_at, ca)));
             let hs: Vec<_> = ids
                 .iter()
                 .map(|id| {
@@ -599,14 +639,44 @@ impl LandmarkSet {
                         let d = ground_scale_shift(js, id);
                         let shifted = |x: f64, z: f64| height_at(x + d[0], z + d[1]);
                         let ground = if d == [0.0, 0.0] { ground_of(js, id, height_at) } else { ground_of(js, id, &shifted) };
-                        let mut l = build_landmark(js, id, &ground, std, opts)?;
+                        let (mut l, mut lights) = build_landmark_with(js, id, &ground, std, opts)?;
                         l.translate(d);
-                        Ok::<Landmark, anyhow::Error>(l)
+                        for k in &mut lights {
+                            k.pos[0] += d[0];
+                            k.pos[2] += d[1];
+                            k.base[0] += d[0];
+                            k.base[2] += d[1];
+                        }
+                        Ok::<(Landmark, Vec<LandmarkLight>), anyhow::Error>((l, lights))
                     })
                 })
                 .collect();
-            hs.into_iter().map(|h| h.join().expect("landmark build thread panicked")).collect::<Result<Vec<_>>>()
-        })?;
+            let built = hs.into_iter().map(|h| h.join().expect("landmark build thread panicked")).collect::<Result<Vec<_>>>();
+            let mut skyline = sky.map(|h| h.join().expect("skyline build thread panicked"));
+            if let Some(g) = grove.map(|h| h.join().expect("grove build thread panicked")) {
+                skyline = Some(match (skyline, g) {
+                    (Some(Ok((mut a, mut b))), Ok((ga, gl))) => {
+                        a.extend(ga);
+                        b.extend(gl); // the groves' lights (grove.rs `loop_lamps`, the fourth pass)
+                        Ok((a, b))
+                    }
+                    (None, g) => g,
+                    (Some(e @ Err(_)), _) | (Some(Ok(_)), e @ Err(_)) => e,
+                });
+            }
+            (built, skyline)
+        });
+        let mut tower_lights: Vec<LandmarkLight> = Vec::new();
+        let mut landmarks: Vec<Landmark> = Vec::new();
+        for (l, lights) in built? {
+            landmarks.push(l);
+            tower_lights.extend(lights);
+        }
+        if let Some(sk) = skyline {
+            let (sl, lights) = sk?;
+            landmarks.extend(sl);
+            tower_lights.extend(lights);
+        }
         let build_ms = t0.elapsed().as_secs_f64() * 1e3;
         // The shore edge: the citywide quay wall and the Ferry Plaza pier.
         let t1 = Instant::now();
@@ -777,11 +847,11 @@ impl LandmarkSet {
         } else {
             Vec::new()
         };
-        let mut landmarks = landmarks;
         landmarks.extend(railing_landmark);
         Ok(Self {
             landmarks,
             lights,
+            tower_lights,
             walls,
             wall_material: Some(Material { surface: Some("seawall".into()), ..plain_material(0.93, 0.0, "sidewalk") }),
             structures,

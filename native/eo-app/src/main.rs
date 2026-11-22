@@ -682,6 +682,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             s if eo_water::switches::GG3_SWITCHES.contains(&s) => {} // read by its crate (the surf and bathymetry)
             s if eo_landmarks::suspension::GG3_SWITCHES.contains(&s) => {} // read by its crate (the bridge finish)
             s if eo_landmarks::suspension::AGING_SWITCHES.contains(&s) => {} // read by its crate (the Golden Gate's aging)
+            "--no-towers2" | "--no-skyline" | "--no-towers3" | "--no-grove" | "--no-towers4" => {} // `roofs_flags` (eo_landmarks::set::Options, eo_landmarks::towers3_on, towers4_on)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -974,7 +975,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         _ => None,
     };
     // the building records the landmark buildings draw instead.
-    let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records_with(eo_landmarks::set::Options::default()) } else { HashSet::new() };
     // stage A9 (`--tunnels`): a building over a tunnel's approach cut or portal canopy is
     // left out as a claimed one (none without tunnels: the claims and every key as before).
     if let Some(w) = structures_job.as_ref().and_then(|j| j.world()).filter(|w| !w.terrain_cuts().is_empty()) {
@@ -1475,6 +1476,15 @@ fn roofs_flags() {
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),
         ("--no-ground-beach-fit", "EO_GROUND_BEACH_FIT"),
+        // the landmark buildings' second generators and the named skyline towers (eo_landmarks::set::Options).
+        ("--no-towers2", "EO_TOWERS2"),
+        ("--no-skyline", "EO_SKYLINE"),
+        // the landmark buildings' and skyline towers' third pass (eo_landmarks::towers3_on).
+        ("--no-towers3", "EO_TOWERS3"),
+        // the groves round Coit and Sutro towers (eo_landmarks::grove::grove_on).
+        ("--no-grove", "EO_GROVE"),
+        // the landmark buildings', skyline towers' and groves' fourth pass (eo_landmarks::towers4_on).
+        ("--no-towers4", "EO_TOWERS4"),
     ] {
         if a.iter().any(|x| x == flag) {
             // SAFETY: first thing in main, before any other thread exists.

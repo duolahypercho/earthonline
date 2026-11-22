@@ -108,6 +108,9 @@ impl Mode {
     }
 }
 
+/// Pumps at most spent evicting what an earlier shot left resident (each evicts a few packs and models).
+const STALE_PUMPS_MAX: usize = 2000;
+
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
     a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
@@ -607,12 +610,21 @@ impl Io<'_> {
     /// Stream until the view is resident (the upload queue empty, every
     /// tile the view wants in), the parked cars in, and again.
     pub fn settle(&mut self, cam: &Camera, timeout_s: f64) -> Result<Value> {
-        let a = settle_p(self.ctx, self.renderer, self.world, self.models, Some(&mut *self.props), cam, timeout_s)?;
+        let mut a = settle_p(self.ctx, self.renderer, self.world, self.models, Some(&mut *self.props), cam, timeout_s)?;
+        // what an earlier shot's camera left resident (kit packs and models
+        // no longer wanted here, evicted a few a pump) goes before the frame
+        // converges, so a shot draws what this camera alone streams in, not
+        // what the shot before it happened to leave (the convergence draws do not pump).
+        let mut pumps = 0;
+        while self.models.stale() > 0 && pumps < STALE_PUMPS_MAX {
+            a += settle_p(self.ctx, self.renderer, self.world, self.models, Some(&mut *self.props), cam, timeout_s)?;
+            pumps += 1;
+        }
         crate::props::sync_parked(self.ctx, self.renderer, self.props, self.agents, cam);
         let b = settle_p(self.ctx, self.renderer, self.world, self.models, Some(&mut *self.props), cam, timeout_s)?;
         let settled = self.models.settled() && self.props.settled();
         Ok(json!({
-            "ms": a + b, "timeout_s": timeout_s, "settled": settled,
+            "ms": a + b, "timeout_s": timeout_s, "settled": settled, "stale_pumps": pumps, "stale_left": self.models.stale(),
             "unsettled": (!settled).then(|| self.models.unsettled()),
             "uploads_pending": self.models.uploads.pending(),
         }))

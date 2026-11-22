@@ -30,10 +30,12 @@ use std::collections::HashMap;
 
 /// Material flag: a landmark material, fogged with the set's cap (read in
 /// look_light, which the props' and agents' shaders also call: bit 29 is free
-/// in their tables, whose lens index uses bits 24-25); bits 25-27 the surface
-/// kind (read only by draw.wgsl's `shade`).
+/// in their tables, whose lens index uses bits 24-25); bits 25-27 and 31 the
+/// surface kind (`surface_flags`; read only by draw.wgsl's `shade`).
 pub const F_LANDMARK: u32 = 1 << 29;
 pub const SURFACE_SHIFT: u32 = 25;
+/// The surface kind's fourth bit (8) moves to flag bit 31 by this shift.
+pub const SURFACE_HIGH_SHIFT: u32 = 28;
 /// Material flag on the vertex-colour material: the terrain takes the wet margin at the waterline.
 pub const F_WET_GROUND: u32 = 1 << 28;
 pub const SURFACE_NONE: u32 = 0;
@@ -52,9 +54,25 @@ pub const SURFACE_SEAWALL: u32 = 3;
 pub const SURFACE_PRECAST: u32 = 4;
 pub const SURFACE_FIN_CURTAIN: u32 = 5;
 pub const SURFACE_GILDED_CLADDING: u32 = 6;
+/// the authored facade of the second tower generators and the
+/// skyline towers (eo-landmarks skyline.rs styles; landmarks_surface.wgsl
+/// `lm_authored`): the style's index rides in `rough_flatten`, the storey
+/// origin (world y) in `thin_absorption`.
+pub const SURFACE_AUTHORED: u32 = 7;
 /// the Golden Gate's far item: no surface of its own, only the towers'
-/// floodlighting at night (`BridgeFeatures::night`).
-pub const SURFACE_FLOODLIT_FAR: u32 = 7;
+/// floodlighting at night (`BridgeFeatures::night`). The first kind past
+/// bits 25-27: its fourth bit is flag bit 31 (`surface_flags`).
+pub const SURFACE_FLOODLIT_FAR: u32 = 8;
+/// Material flag: a floodlit landmark material (`base.rgb`: the floodlights'
+/// illuminance in lux at the lit band's foot, its foot and head in world y;
+/// a vertex-colour material does not read `base.rgb` otherwise).
+pub const F_LM_FLOOD: u32 = 1 << 30;
+
+/// The material flags of a surface kind: its low three bits at bits 25-27
+/// (`SURFACE_SHIFT`), its fourth at bit 31 (landmarks_surface.wgsl `lm_kind`).
+pub const fn surface_flags(kind: u32) -> u32 {
+    ((kind & 7) << SURFACE_SHIFT) | ((kind & 8) << SURFACE_HIGH_SHIFT)
+}
 
 pub fn surface_code(kind: Option<&str>) -> u32 {
     match kind {
@@ -64,6 +82,7 @@ pub fn surface_code(kind: Option<&str>) -> u32 {
         Some("precast") => SURFACE_PRECAST,
         Some("fin-curtain") => SURFACE_FIN_CURTAIN,
         Some("gilded-cladding") => SURFACE_GILDED_CLADDING,
+        Some("authored") => SURFACE_AUTHORED,
         _ => SURFACE_NONE,
     }
 }
@@ -120,7 +139,7 @@ pub fn pack_colour(c: &[f32]) -> u32 {
 pub fn material(m: &eo_landmarks::data::Material, anchor: [f64; 2], landmark: bool) -> GpuMaterial {
     let mut g = GpuMaterial::vertex_colour();
     g.params = [m.roughness as f32, m.metalness as f32, anchor[0] as f32, anchor[1] as f32];
-    g.flags = F_VERTEX_COLOUR | if landmark { F_LANDMARK } else { 0 } | (surface_code(m.surface.as_deref()) << SURFACE_SHIFT);
+    g.flags = F_VERTEX_COLOUR | if landmark { F_LANDMARK } else { 0 } | surface_flags(surface_code(m.surface.as_deref()));
     if surface_code(m.surface.as_deref()) == SURFACE_PRECAST {
         // the precast surface's panel bay and storey (its
         // `surfaceOptions`, else the JS defaults) ride in two words a
@@ -136,13 +155,77 @@ pub fn material(m: &eo_landmarks::data::Material, anchor: [f64; 2], landmark: bo
         // word a vertex-colour material does not read marks it for lm_surface.
         g.rough_flatten = 1.0;
     }
+    let o = m.surface_options.as_ref();
+    if kind == SURFACE_AUTHORED {
+        g.rough_flatten = o.and_then(|o| o["facade"].as_f64()).unwrap_or(0.0) as f32;
+        g.thin_absorption = o.and_then(|o| o["originY"].as_f64()).unwrap_or(0.0) as f32;
+    }
+    if let Some(f) = o.and_then(|o| o["flood"].as_array()).filter(|f| f.len() == 3) {
+        let v = |i: usize| f[i].as_f64().unwrap_or(0.0) as f32;
+        g.base = [v(0), v(1), v(2), 1.0];
+        g.flags |= F_LM_FLOOD;
+    }
+    // the third pass's projector rig (eo-landmarks towers3.rs `with_rig`):
+    // `base` = (first projector, the rig's origin y, count) in place of the lit band.
+    if let Some(f) = o.and_then(|o| o["rig"].as_array()).filter(|f| f.len() == 3) {
+        let v = |i: usize| f[i].as_f64().unwrap_or(0.0) as f32;
+        g.base = [v(0), v(1), v(2), 1.0];
+        g.flags |= F_LM_FLOOD;
+    }
     g
+}
+
+/// WGSL of the authored facade styles (eo-landmarks skyline.rs
+/// `facade_rows`, four rows a style), the floodlights' colour and, for the
+/// third pass (`LM_V3`, off with `eo-app --no-towers3`), the projector
+/// rigs (eo-landmarks towers3.rs `projector_rows`, three rows a projector)
+/// and the crown sculpture's luminance. The tables are module constants
+/// (a program-scope constant array in the backend), not `var<private>`
+/// arrays, which every invocation of the city shader would copy and carry
+/// in registers (the projector table alone doubled the city draw's GPU time).
+pub fn authored_constants_wgsl() -> String {
+    let level = eo_landmarks::towers_level();
+    let (v3, v4) = (level >= 3, level >= 4);
+    let rows = eo_landmarks::skyline::facade_rows_at(level);
+    let nr = eo_landmarks::skyline::FACADE_ROWS;
+    let mut s = format!("\n// generated by landmarks.rs authored_constants_wgsl (eo-landmarks data/skyline-buildings.json)\nconst LM_F_FLOOD: u32 = {}u;\nconst LM_FACADE_COUNT: u32 = {}u;\nconst LM_FACADE_ROWS: u32 = {nr}u;\nconst LM_V4: bool = {v4};\nconst LM_FACADES: array<vec4<f32>, {}> = array<vec4<f32>, {}>(\n", F_LM_FLOOD, rows.len(), rows.len().max(1) * nr, rows.len().max(1) * nr);
+    let mut body: Vec<String> = Vec::new();
+    for r in &rows {
+        for k in 0..nr {
+            body.push(format!("    vec4<f32>({:.6}, {:.6}, {:.6}, {:.6})", r[4 * k], r[4 * k + 1], r[4 * k + 2], r[4 * k + 3]));
+        }
+    }
+    if body.is_empty() {
+        body.push(["    vec4<f32>(1.0)".to_string()].into_iter().chain((1..nr).map(|_| "vec4<f32>(0.0)".to_string())).collect::<Vec<_>>().join(", "));
+    }
+    s.push_str(&body.join(",\n"));
+    s.push_str("\n);\n");
+    let c = eo_landmarks::skyline::flood_colour_linear();
+    s.push_str(&format!("const LM_TOWER_FLOOD_RGB: vec3<f32> = vec3<f32>({:.6}, {:.6}, {:.6});\n", c[0], c[1], c[2]));
+    let (proj, _) = eo_landmarks::towers3::projector_rows();
+    s.push_str(&format!("const LM_V3: bool = {v3};\nconst LM_PROJ_COUNT: u32 = {}u;\nconst LM_PROJ: array<vec4<f32>, {}> = array<vec4<f32>, {}>(\n", proj.len(), proj.len().max(1) * 3, proj.len().max(1) * 3));
+    let mut body: Vec<String> = Vec::new();
+    for r in &proj {
+        for k in 0..3 {
+            body.push(format!("    vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", r[4 * k], r[4 * k + 1], r[4 * k + 2], r[4 * k + 3]));
+        }
+    }
+    if body.is_empty() {
+        body.push("    vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0)".into());
+    }
+    s.push_str(&body.join(",\n"));
+    s.push_str("\n);\n");
+    let led = eo_landmarks::skyline::led_luminance();
+    s.push_str(&format!("const LM_LED_WASH_CD: f32 = {:.4};\nconst LM_LED_FIGURE_CD: f32 = {:.4};\n", led[0], led[1]));
+    s
 }
 
 /// Append the set's static draws to the scene's arrays and table; their
 /// materials to `materials`; their LOD groups numbered from `group_base`.
 pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTable, group_base: u32) -> LandmarkStatic {
-    let mut out = LandmarkStatic { group_base, lights: set.lights.clone(), ..Default::default() };
+    // the bridges' lights and the towers' (eo-landmarks set.rs `tower_lights`).
+    let lights = set.lights.iter().chain(&set.tower_lights).copied().collect();
+    let mut out = LandmarkStatic { group_base, lights, ..Default::default() };
     // The terrain (the vertex-colour material, kind 1) takes the wet margin.
     if let Some(m0) = materials.gpu.first_mut() {
         m0.flags |= F_WET_GROUND;
@@ -185,7 +268,7 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
         for d in &l.draws {
             let mut gm = material(&d.material, l.anchor, true);
             if features.night && d.key == "far" && l.id == "golden-gate-bridge" {
-                gm.flags |= SURFACE_FLOODLIT_FAR << SURFACE_SHIFT;
+                gm.flags = (gm.flags & !surface_flags(15)) | surface_flags(SURFACE_FLOODLIT_FAR);
             }
             let mat = materials.named(&format!("landmark:{}:{}", l.id, d.key), gm);
             let m = &d.mesh;
@@ -425,6 +508,7 @@ pub fn landmarks_constants_wgsl() -> String {
         ("LM_F_LANDMARK", format!("{}u", F_LANDMARK)),
         ("LM_F_WET_GROUND", format!("{}u", F_WET_GROUND)),
         ("LM_SURFACE_SHIFT", format!("{}u", SURFACE_SHIFT)),
+        ("LM_SURFACE_HIGH_SHIFT", format!("{}u", SURFACE_HIGH_SHIFT)),
         ("LM_SEA_LEVEL_Y", f(js.sea_level_y)),
         ("LM_FOG_CAP_M", f(js.rules.fog_cap_m)),
         ("LM_WIRE_MIN_PIXELS", f(js.surfaces.wire_min_pixels)),
@@ -772,7 +856,7 @@ pub fn cull_constants_wgsl() -> String {
 /// the landmark surfaces, then the shore's ground and wall surfaces
 /// (`shore_surface.wgsl`, which uses the former's helpers).
 pub fn city_wgsl() -> String {
-    landmarks_constants_wgsl() + include_str!("landmarks_surface.wgsl") + include_str!("shore_surface.wgsl")
+    landmarks_constants_wgsl() + &authored_constants_wgsl() + include_str!("landmarks_surface.wgsl") + include_str!("shore_surface.wgsl")
 }
 
 /// The wire members on the GPU.

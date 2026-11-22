@@ -81,7 +81,15 @@ fn deck_lamp(at: [f64; 2], deck_y: f64) -> LandmarkLight {
     light([at[0], deck_y + head, at[1]], [at[0], deck_y, at[1]], [c[0] as f32, c[1] as f32, c[2] as f32], eo_sky::photometry::nadir_candela_for_pool(head), head * 2.6, cutoff, 1.0 - peak / cutoff)
 }
 
-fn aviation(at: [f64; 2], top_y: f64) -> LandmarkLight {
+/// A post-top luminaire of the street slice's pool photometry from a `head` m head (the grove's parking loop).
+pub(crate) fn pool_lamp(at: [f64; 2], ground_y: f64, head: f64) -> LandmarkLight {
+    let cutoff = eo_sky::lights::STREET_CUTOFF_DEG.to_radians();
+    let peak = eo_sky::lights::STREET_PEAK_DEG.to_radians();
+    let c = eo_sky::lights::street_lamp_color();
+    light([at[0], ground_y + head, at[1]], [at[0], ground_y, at[1]], [c[0] as f32, c[1] as f32, c[2] as f32], eo_sky::photometry::nadir_candela_for_pool(head), head * 2.6, cutoff, 1.0 - peak / cutoff)
+}
+
+pub(crate) fn aviation(at: [f64; 2], top_y: f64) -> LandmarkLight {
     light([at[0], top_y + 0.6, at[1]], [at[0], top_y, at[1]], unit_luminance(AVIATION_RED_SRGB), AVIATION_RED_CD, 160.0, PI / 2.0, 0.0)
 }
 
