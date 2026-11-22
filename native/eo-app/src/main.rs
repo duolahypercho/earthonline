@@ -636,7 +636,6 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-water-shore" => a.look.water_features &= !eo_render::water::FEAT_SHORE, // the earlier waterline and wall collar
             "--no-water-foam-lit" => a.look.water_features &= !eo_render::water::FEAT_FOAM_LIT, // the earlier whitecap shapes and foam light
             "--no-water-ppr" => a.look.water_features &= !eo_render::water::FEAT_PPR, // the reflection march alone
-            "--no-water-wind-texture" => a.look.water_features &= !eo_render::water::FEAT_WIND, // the earlier gusts, no tidal current, no rotated chop
             "--no-water-grazing" => a.look.water_features &= !eo_render::water::FEAT_GRAZE, // one mean Fresnel times the sky in one raised direction
             // agents
             "--no-agents" => a.agents = false,
@@ -707,7 +706,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // (the bridges' own are in eo_landmarks::suspension::SWITCHES, above).
             "--no-gg2-camera" | "--no-camera-look" | "--no-scene-meter" | "--no-lamp-photocell" => {} // read by its crate (the camera)
             "--no-gg2-daylight" | "--no-ground-albedo" | "--no-photo-date" | "--no-cirrus" | "--no-clear-sky-state" | "--no-terminator-bias" | "--no-spectral-sky" => {} // read by its crate (the daylight)
-            "--no-gg2-water" | "--no-water-exposure" | "--no-water-current" | "--no-water-lean" | "--no-water-ppr-blur" | "--no-beach-profiles" | "--no-water-streak-caps" | "--no-water-far-calm" | "--no-baker-surf" | "--no-swash-line" => {} // read by its crate (the water)
+            "--no-gg2-water" | "--no-water-exposure" | "--no-water-current" | "--no-water-ppr-blur" | "--no-beach-profiles" | "--no-water-streak-caps" | "--no-water-far-calm" | "--no-baker-surf" | "--no-swash-line" => {} // read by its crate (the water)
             "--no-gg2-ground" | "--no-beach-sand-limit" | "--no-sand-albedo" | "--no-rocks" | "--no-riprap" | "--no-pier-lines" | "--no-ground-steps" | "--no-season-seam" => {} // read by its crate (the shore ground)
             "--no-gg2-far" | "--no-far-fallback" | "--no-landmark-far-models" | "--no-far-tree-density" | "--no-presidio-rule" | "--no-far-paint" => {} // read by its crate (the far layer)
             "--no-corridor-traffic" | "--no-deck-walkers" => {} // read by its crate (the corridor traffic)

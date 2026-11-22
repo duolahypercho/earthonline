@@ -13,10 +13,18 @@
 //! | --- | --- |
 //! | low | `--shadow-map 2048`, `--no-ssr`, `--no-contact-shadows`, `--sky-quality low`, `--no-ao`, `--no-shafts`, `--no-bloom`, `--surveyed-furniture`, `--tree-basins` |
 //! | medium | `--grime 1`, `--stand-ins`, `--surveyed-furniture`, `--tree-basins` (the street look, made the default with the owner's approval of 2026-11-20) |
-//! | high | `--cascade-blend`, `--far-shadows 1`, `--ambient-volume 1` (with `--ground-bounce`), `--light-shadows 16`, `--headlight-shadows 2`, `--lit-fog 1`, `--smooth-time`, `--shadow-slope-bias`, `--grime 1`, `--street-life 1`, `--stand-ins`, `--photo-finish 1`, `--facade-clutter 1`, `--shop-light 1`, `--car-detail 1`, `--surveyed-furniture`, `--tree-basins`, `--look cinematic` |
+//! | high | `--cascade-blend`, `--far-shadows 1`, `--ambient-volume 1` (with `--ground-bounce`), `--light-shadows 16`, `--headlight-shadows 2`, `--lit-fog 1`, `--smooth-time`, `--shadow-slope-bias`, `--grime 1`, `--street-life 1`, `--stand-ins`, `--photo-finish 1`, `--facade-clutter 1`, `--shop-light 1`, `--car-detail 1`, `--surveyed-furniture`, `--tree-basins`, `--look cinematic`, `--water-wind-texture`, `--water-lean` |
 //! | hyper | high, then `--shadow-map 4096`, `--sky-quality high`, `--far-shadows 2`, `--ambient-volume 2`, `--probe-grid 2`, `--light-shadows 48`, `--light-shadow-moving`, `--headlight-shadows 8`, `--lit-fog 2`, `--grime 2`, `--street-life 2`, `--photo-finish 2`, `--facade-clutter 2`, `--shop-light 2`, `--car-detail 2`, `--surveyed-furniture`, `--tree-basins`, `--look cinematic` |
 //!
 //! Each tier has its own frame budget for the bench's checks (`budget_ms`).
+//! `--water-wind-texture` (the sea's cat's-paw gust patches, the tidal jet's
+//! rough water through the Golden Gate and the rotated re-read of the chop
+//! cascade; eo-render water.rs `FEAT_WIND`) and `--water-lean` (the
+//! anisotropic cascade fade and the sub-pixel slope variance; eo-water
+//! `switches::LEAN`) are sea detail the high and hyper tiers turn on; each
+//! `--no-` form turns it off wherever it stands. Together they cost the
+//! medium water pass about 0.5 ms on `bay` (3.1 -> 2.6 ms without them,
+//! with the features compiled in as constants), so medium leaves them out.
 //! The tiers are tuned to those budgets on the bench paths (stage T2): the
 //! probe grid is hyper's alone, because every lit pixel reading two probes
 //! cost high 4.9 ms on `city_overview` (20.3 -> 15.4 ms median without it);
@@ -139,6 +147,10 @@ pub struct Tier {
     pub car_detail: Option<u8>,
     /// `--look` (`LookOptions::look`, the look profile: cinematic in high and hyper).
     pub look: Option<LookProfile>,
+    /// `--water-wind-texture` (eo-render water.rs `FEAT_WIND` in `LookOptions::water_features`: high and hyper).
+    pub water_wind: Option<bool>,
+    /// `--water-lean` (eo-water `switches::LEAN`, left out through `LookOptions::water_parts_off` below high).
+    pub water_lean: Option<bool>,
     pub lighting: LightingOptions,
 }
 
@@ -185,13 +197,13 @@ impl Quality {
     /// What the tier sets. The sky quality and the shadow map only where they
     /// differ from the defaults (the default sky quality is 1, the map 3072).
     pub fn tier(self) -> Tier {
-        let none = Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, surveyed_furniture: None, tree_basins: None, photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, lighting: LightingOptions::OFF };
+        let none = Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, surveyed_furniture: None, tree_basins: None, photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, water_wind: None, water_lean: None, lighting: LightingOptions::OFF };
         let high = LightingOptions { cascade_blend: true, far_shadows: 1, ambient_volume: 1, probe_grid: 0, light_shadows: 1, light_shadow_moving: false, headlight_shadows: 2, lit_fog: 1, smooth_time: true, ground_bounce: true, rt_gi: false, rt_reflect: false };
         match self {
             Quality::Low => Tier { shadow_map: Some(2048), ssr: Some(false), contact_shadows: Some(false), sky_quality: Some(0), ao: Some(false), shafts: Some(false), bloom: Some(false), surveyed_furniture: Some(true), tree_basins: Some(true), ..none },
             // the street look, the default since the owner's approval of 2026-11-20 (citywide street audit).
             Quality::Medium => Tier { grime: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), ..none },
-            Quality::High => Tier { shadow_slope_bias: Some(true), grime: Some(1), street_life: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: Some(1), facade_clutter: Some(1), shop_light: Some(1), car_detail: Some(1), look: Some(LookProfile::Cinematic), lighting: high, ..none },
+            Quality::High => Tier { shadow_slope_bias: Some(true), grime: Some(1), street_life: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: Some(1), facade_clutter: Some(1), shop_light: Some(1), car_detail: Some(1), look: Some(LookProfile::Cinematic), water_wind: Some(true), water_lean: Some(true), lighting: high, ..none },
             Quality::Hyper => Tier {
                 shadow_map: Some(4096),
                 sky_quality: Some(2),
@@ -206,6 +218,8 @@ impl Quality {
                 shop_light: Some(2),
                 car_detail: Some(2),
                 look: Some(LookProfile::Cinematic),
+                water_wind: Some(true),
+                water_lean: Some(true),
                 lighting: LightingOptions { far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, ..high },
                 ..none
             },
@@ -255,6 +269,9 @@ pub struct Switches {
     car_detail: Option<u8>,
     // the look profile (`--look default|cinematic`, `--no-look`; wins over the tier).
     look: Option<LookProfile>,
+    // the sea's wind texture and lean (`--water-wind-texture`, `--water-lean` and their `--no-` forms; win over the tier).
+    water_wind: Option<bool>,
+    water_lean: Option<bool>,
     // the world switches (no tier sets them).
     structures: Option<bool>,
     tunnels: Option<bool>,
@@ -458,6 +475,24 @@ impl Switches {
                 self.lit_fog = Some(0);
                 0
             }
+            // the sea's wind texture and lean: a `--no-` form wins wherever it stands
+            // (`--no-water-lean` is also read by eo-water itself, `switches`)
+            "--water-wind-texture" => {
+                self.water_wind = Some(self.water_wind != Some(false));
+                0
+            }
+            "--no-water-wind-texture" => {
+                self.water_wind = Some(false);
+                0
+            }
+            "--water-lean" => {
+                self.water_lean = Some(self.water_lean != Some(false));
+                0
+            }
+            "--no-water-lean" => {
+                self.water_lean = Some(false);
+                0
+            }
             "--structures" | "--no-structures" => {
                 self.structures = Some(flag == "--structures");
                 0
@@ -553,6 +588,13 @@ impl Switches {
             a.look.look = v;
             a.look.sky.cinematic = v.is_cinematic();
         }
+        // the sea's wind texture and lean: off below high unless given (each compiled out of the water's shaders when off).
+        if self.water_wind.or(t.water_wind).unwrap_or(false) {
+            a.look.water_features |= eo_render::water::FEAT_WIND;
+        } else {
+            a.look.water_features &= !eo_render::water::FEAT_WIND;
+        }
+        a.look.water_parts_off = if self.water_lean.or(t.water_lean).unwrap_or(false) { 0 } else { eo_water::switches::LEAN };
         let mut l = t.lighting;
         let given = |v: &mut u8, s: Option<u8>| *v = s.unwrap_or(*v);
         let given_b = |v: &mut bool, s: Option<bool>| *v = s.unwrap_or(*v);
@@ -746,7 +788,7 @@ mod tests {
         assert!(same(&parse(&["--bench", "--no-ssr"]), &parse(&["--bench", "--no-ssr", "--quality", "medium"])));
         let t = Quality::Medium.tier();
         // medium is the street look (the owner's approval of 2026-11-20) and nothing else.
-        assert_eq!(t, Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: Some(1), street_life: None, stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, lighting: LightingOptions::OFF });
+        assert_eq!(t, Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: Some(1), street_life: None, stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, water_wind: None, water_lean: None, lighting: LightingOptions::OFF });
         assert_eq!((none.look.grime, none.props2.stand_ins, none.props2.surveyed_furniture), (1, true, true), "no flag is the street look");
     }
 
@@ -786,6 +828,8 @@ mod tests {
             assert!(t.facade_clutter != Some(d.facade_clutter), "{q:?}");
             assert!(t.shop_light != Some(d.look.sky.shop_light), "{q:?}");
             assert!(t.car_detail != Some(d.car_detail), "{q:?}");
+            assert!(t.water_wind != Some(d.look.water_features & eo_render::water::FEAT_WIND != 0), "{q:?}");
+            assert!(t.water_lean != Some(d.look.water_parts_off & eo_water::switches::LEAN == 0), "{q:?}");
         }
         let budgets: Vec<f64> = Quality::ALL.iter().map(|q| q.budget_ms()).collect();
         assert_eq!(budgets, vec![8.0, 10.0, 16.6, 33.3]);
@@ -1257,5 +1301,34 @@ mod tests {
         let j = shop_light_json(&parse(&["--shop-light", "2"]), None);
         assert_eq!((j["on"].as_bool(), j["level"].as_u64(), j["reach_m"].as_f64()), (Some(true), Some(2), Some(300.0)));
         assert_eq!(shop_light_json(&parse(&[]), None)["on"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn the_sea_wind_texture_and_lean_come_with_high_and_hyper_and_their_switches_win() {
+        use eo_render::water::FEAT_WIND;
+        use eo_water::switches::LEAN;
+        let parts = |a: &Args| (a.look.water_features & FEAT_WIND != 0, a.look.water_parts_off & LEAN == 0);
+        let d = parse(&[]);
+        assert_eq!(parts(&d), (false, false), "medium leaves both out");
+        assert_eq!(d.look.water_features | FEAT_WIND, eo_render::water::FEAT_ALL, "and only the wind texture of the features");
+        assert_eq!(d.look.water_parts_off, LEAN, "and only the lean of the parts");
+        for (line, want) in [
+            (&["--quality", "low"][..], (false, false)),
+            (&["--quality", "medium"], (false, false)),
+            (&["--quality", "high"], (true, true)),
+            (&["--quality", "hyper"], (true, true)),
+            (&["--water-wind-texture"], (true, false)),
+            (&["--water-lean"], (false, true)),
+            (&["--quality", "high", "--no-water-wind-texture"], (false, true)),
+            (&["--no-water-lean", "--quality", "hyper"], (true, false)), // wherever it stands
+            (&["--quality", "low", "--water-wind-texture", "--water-lean"], (true, true)),
+            (&["--water-lean", "--no-water-lean"], (false, false)), // a `--no-` form wins wherever it stands
+            (&["--no-water-wind-texture", "--water-wind-texture", "--quality", "hyper"], (false, true)),
+        ] {
+            assert_eq!(parts(&parse(line)), want, "{line:?}");
+        }
+        // the other features and switches are untouched by the tier.
+        let a = parse(&["--quality", "high", "--no-water-glint"]);
+        assert_eq!(a.look.water_features, eo_render::water::FEAT_ALL & !eo_render::water::FEAT_GLINT);
     }
 }

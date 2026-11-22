@@ -667,7 +667,8 @@ impl WaterGpu {
         let detail_view = detail_tex.create_view(&Default::default());
         // (iteration 2, exposure) the sea's exposure (eo-water exposure.rs), RGBA8,
         // clamp-sampled; a 1 x 1 stand-in without one (the shader then keeps the ramp)
-        let gg2 = eo_water::switches::on();
+        // the parts the command line keeps, less those the quality tier leaves out (`LookOptions::water_parts_off`).
+        let gg2 = eo_water::switches::on() & !look.options.water_parts_off;
         let expo = eo_water::exposure::installed().filter(|_| gg2 & eo_water::switches::EXPOSURE != 0);
         // (beach profiles) each beach's slope in A, as 55 x the slope / 10 (water.wgsl `w_surf_k`)
         let slopes = eo_water::beaches::installed().filter(|_| gg2 & eo_water::switches::BEACH_PROFILES != 0);
