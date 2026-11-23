@@ -542,7 +542,7 @@ selection:
 | Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
-| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)), `--no-city-classes` (the city's opaque pass as one pipeline and one list pair, as before the split), `--no-motion-bounds` (the count emulation's late opaque lists always floored by their early lists' bounds and the early lists at their reserve, as before the motion-aware bounds), `--no-probe-face-counts` (the count emulation draws the scene probe's faces to the read-back history's bound alone, as before; by default a capture's faces wait for its count pass and each is drawn to at least its own count) |
+| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)), `--no-city-classes` (the city's opaque pass as one pipeline and one list pair, as before the split), `--no-motion-bounds` (the count emulation's late opaque lists always floored by their early lists' bounds and the early lists at their reserve, as before the motion-aware bounds), `--no-probe-face-counts` (the count emulation draws the scene probe's faces to the read-back history's bound alone, as before; by default a capture's faces wait for its count pass and each is drawn to at least its own count), `--no-cut-window` (the count emulation keeps the view before a camera cut in its read-back window until 64 newer read-backs push it out, and the cut's own frame in it, and the occlusion turning on or off is no cut, as before; by default a cut starts the window afresh from the frame after its own) |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
 | Optional assets | `--no-external` (read each set only from the folder its variable names, not from `external/`: the output before that folder was read) |
 | Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-player-contact` (no ground contact under their bodies, and its shading compiled out of the agents' shaders: `SF_PLAYER_CONTACT`), `--no-shared-sky` (the client's own hour and weather) |
@@ -1079,7 +1079,15 @@ frame's count zeroed to empty draws. The paths, in this precedence
    its counts a few frames late: its recent peak plus half again and 256
    commands. After a camera cut, before the first read-back or when a count
    outran its bound, a conservative cull is submitted and waited for to
-   measure the bound. A late opaque list is floored by its early list's
+   measure the bound. A cut also starts each list's read-back window
+   afresh: the first read-back of a frame after the cut's own replaces the
+   view before it, which would otherwise bound the new view for 64
+   read-backs, and the cut's own frame (its early pass drew the old view's
+   visible set, so its late pass finds nearly everything in view) is in
+   neither window. The occlusion turning on or off is a cut too: without it
+   every object in the frustum draws, which no occluded frame's count bounds
+   (`--no-cut-window` keeps the old view's read-backs and makes no cut of the
+   occlusion, as before). A late opaque list is floored by its early list's
    bound (after a fast turn every visible object can be late), except in a
    frame where only a small rotation can change what is visible: the eye
    still, the same lens, nothing streamed or written that selects objects,
@@ -1432,7 +1440,7 @@ night-lighting merge too.
 | `eo-look` `tone::camera::tests::the_virtual_chart_renders_neutral_greys_and_keeps_hues` | The Aces2 camera style keeps 0.80 of the saturated patches' chroma, under the 0.85 the test allows |
 | `eo-render` `landmarks::landmark_lights_join_the_sky_gather` | 244 bridge deck lamps on the x1.25 ground plan (110 on the Golden Gate, 134 on the Bay Bridge), under the 250 the test expects: the test assumes a lamp every 50 m on both decks, but the Golden Gate's cable detail places them at the published 150 ft pitch on the plan, a count that does not grow with the plan's scale |
 | `eo-app` `occlusion_check` (`--bench --occlusion-check`) | One coarse street tile (object 193566, `LOD_STREET_COARSE`, `elevated_sweep` frame 155) that the occlusion-off frame draws is not in the occlusion-on late cull's LOD and frustum set in any of the three histories (649 pixels each). Between two identical frames a few pixels also differ by one f16 step in the HDR scene (2,438 over the 90 cameras and three histories), and 23 single pixels by more than the colour tolerance |
-| `eo-app` `frame_budget` (`--check-max`) | The medians pass; worst frames reach 12 to 19 ms on three paths. The first measured frames (60 to 64) of `city_overview` and `authored_street` still carry the path start's cut: the motion-aware bounds come back only when its read-backs leave the 64-frame window (5 to 6 ms of command encoding). The drive's worst frame is 14 to 15 ms of command encoding in a recovery after a city or far-tree list overflow, or once 13.5 ms of render-thread CPU outside every named phase. `fog_elevated_sweep` (a 3.9 MB streaming frame that refits all three cascades) and `turn_around` end within 0.6 ms of the budget in some runs |
+| `eo-app` `frame_budget` (`--check-max`) | The medians pass; the drive's worst frame is over the budget in every run (16 to 36 ms): 10 to 12 ms of `props_pump` on the render thread, 15 ms of command encoding (`finish`), once a 17 ms `submit`, or a GPU frame of 10 to 23 ms whose water-copy timestamp comes back garbled. `fog_elevated_sweep` (mid-path frames split between CPU and GPU, 9.4 to 11.5 ms) and, in single runs, `night_waterfront` (10.7 ms, GPU) and `city_overview` (10.1 ms, mid-path) end near the budget |
 
 The `eo-server` network test
 `loss_reorder_and_duplicates_lose_no_input_and_keep_prediction_exact` is
