@@ -65,6 +65,12 @@ Other folders:
   their tests read. Some were exported from the earlier browser
   implementation of the game, whose exporters are no longer in this
   repository; treat them as fixed test fixtures.
+- `vendor/wgpu-hal/` is wgpu-hal 30.0.2 with one change to its Metal
+  backend: a shader module whose label contains `[relaxed-math]` is compiled
+  in Metal's relaxed math mode instead of fast math (the agents' draw shader
+  with the cinematic look; every other shader as upstream). The workspace
+  uses it through `[patch.crates-io]`; its `EARTH-ONLINE.md` records the
+  source, the change and how to carry it to a new wgpu.
 - `bench-out/`, `cache/` and `target/` are generated per machine and
   ignored by Git.
 
@@ -542,6 +548,7 @@ selection:
 | Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
+| Shader compilation | `--no-agents-relaxed-math` (fly-through and `--bench`): with the cinematic look, the agents' draw shader compiled with Metal's fast math, as before, instead of the relaxed math mode. With fast math, Apple's compiler drew cyan speckles on car paint once the cinematic look, `--grime`, `--ambient-volume`, lamp or headlight shadows, `--far-shadows` and `--cascade-blend` were all on (the `high` and `hyper` tiers); see `vendor/wgpu-hal/EARTH-ONLINE.md`. Without the cinematic look and on other backends it changes nothing |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)), `--no-city-classes` (the city's opaque pass as one pipeline and one list pair, as before the split), `--no-motion-bounds` (the count emulation's late opaque lists always floored by their early lists' bounds and the early lists at their reserve, as before the motion-aware bounds) |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
 | Optional assets | `--no-external` (read each set only from the folder its variable names, not from `external/`: the output before that folder was read) |

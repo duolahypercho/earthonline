@@ -44,6 +44,36 @@ pub const STATS_WORDS: usize = 12;
 /// Timestamps this module writes per frame: cull begin/end, casters begin/end.
 pub const QUERIES_PER_FRAME: u32 = 4;
 
+/// The draw module's label. On Metal, a label carrying the vendored wgpu-hal's
+/// mark `[relaxed-math]` (native/vendor/wgpu-hal/EARTH-ONLINE.md) compiles the
+/// module in the relaxed math mode instead of fast math: with fast math,
+/// Apple's compiler miscompiled this shader (the clearcoat's sun colour lost
+/// red: cyan speckles on car paint) once the cinematic look, grime, the
+/// ambient volume, lamp shadows, far shadows and the cascade blend were all
+/// compiled in. Other backends ignore the mark.
+pub const DRAW_MODULE_LABEL: &str = "agents_draw.wgsl [relaxed-math]";
+/// The label as before (`eo-app --no-agents-relaxed-math`: Metal's fast math).
+pub const DRAW_MODULE_LABEL_FAST_MATH: &str = "agents_draw.wgsl";
+static RELAXED_MATH: AtomicBool = AtomicBool::new(true);
+
+/// Whether the agents' draw module made after this call is compiled in
+/// Metal's relaxed math mode (default true; `eo-app --no-agents-relaxed-math`
+/// sets false).
+pub fn set_relaxed_math(on: bool) {
+    RELAXED_MATH.store(on, Ordering::Relaxed);
+}
+
+/// The draw module's label for the features compiled in now: the mark only
+/// with the cinematic look, whose car-paint clearcoat is what went wrong
+/// (without it the module compiles exactly as before).
+pub fn draw_module_label() -> &'static str {
+    draw_module_label_for(RELAXED_MATH.load(Ordering::Relaxed), crate::look::shader_features().cinematic)
+}
+
+pub fn draw_module_label_for(relaxed: bool, cinematic: bool) -> &'static str {
+    if relaxed && cinematic { DRAW_MODULE_LABEL } else { DRAW_MODULE_LABEL_FAST_MATH }
+}
+
 /// Distance tiers and caps (`HERO_OVERLAY` / the crowd's bands and budget), metres.
 #[derive(Clone, Copy, Debug)]
 pub struct Tiers {
@@ -492,7 +522,7 @@ impl AgentsGpu {
             include_str!("agents_draw.wgsl"),
             include_str!("sky_velocity.wgsl") // sky
         );
-        let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
+        let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(draw_module_label()), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("agent-draw-layout"),
             bind_group_layouts: &[Some(&draw_bgl), Some(look.main_bind_group_layout()), Some(&data_bgl)],

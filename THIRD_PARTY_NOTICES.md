@@ -35,6 +35,18 @@ Some crates are licensed under the Apache License 2.0 alone (the
 code, so the licence text they require is kept in
 [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
 
+### wgpu-hal (modified copy)
+
+`native/vendor/wgpu-hal/` is a copy of the `wgpu-hal` 30.0.2 crate from the
+wgpu project (<https://github.com/gfx-rs/wgpu>), MIT OR Apache-2.0, used in
+place of the crates.io release. Earth Online changed its Metal backend so
+that one shader module can be compiled in Metal's relaxed math mode instead
+of fast math; the changed places are marked "Earth Online change", and
+[native/vendor/wgpu-hal/EARTH-ONLINE.md](native/vendor/wgpu-hal/EARTH-ONLINE.md)
+lists them with the source crate's SHA-256. Licence texts:
+[LICENSE.MIT](native/vendor/wgpu-hal/LICENSE.MIT),
+[LICENSE.APACHE](native/vendor/wgpu-hal/LICENSE.APACHE).
+
 ### ez-tree (port)
 
 `native/eo-props/src/eztree/` is a Rust port of ez-tree's tree generator.
