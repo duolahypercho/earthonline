@@ -420,6 +420,8 @@ pub struct FarTrees {
     pub bytes: u64,
     /// Frames updated (the fade dither's phase).
     frame: std::sync::atomic::AtomicU32,
+    /// The phase held (`set_phase_frozen`): every update draws the same screen door.
+    phase_frozen: std::sync::atomic::AtomicBool,
 }
 
 pub struct FarTreesInit<'a> {
@@ -582,7 +584,15 @@ impl FarTrees {
             pending: std::sync::Mutex::new(None),
             bytes: bytes + if i.canopy { cove_canopy::BYTES } else { 4 },
             frame: std::sync::atomic::AtomicU32::new(0),
+            phase_frozen: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Hold the fade dither's phase (no step a frame) while `on`, so frames
+    /// rendered in turn draw the same screen door (`--bench --occlusion-check`
+    /// compares such frames pixel by pixel). Off by default: the phase steps.
+    pub fn set_phase_frozen(&self, on: bool) {
+        self.phase_frozen.store(on, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// The tree list (gathered and ordered off the render thread, `into_blocks`); written by `pump`.
@@ -659,7 +669,11 @@ impl FarTrees {
         // (`--no-far-tree-light`) 1 + this frame's dither phase (a golden-ratio
         // step a frame, so the temporal resolve averages the fade band's screen door).
         let w = if eo_landmarks::vegetation::gg3().far_tree_light {
-            let f = self.frame.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let f = if self.phase_frozen.load(std::sync::atomic::Ordering::Relaxed) {
+                self.frame.load(std::sync::atomic::Ordering::Relaxed)
+            } else {
+                self.frame.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            };
             1.0 + (f as f32 * 0.618_034).fract()
         } else {
             0.0

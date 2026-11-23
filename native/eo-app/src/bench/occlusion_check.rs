@@ -20,7 +20,9 @@
 //!
 //! Every frame is preceded by a forced refit of all three shadow cascades, so
 //! the compared frames have identical shadow maps; the AO pass is off (bench.rs:
-//! it differs between two identical frames on its own). Exit code 1 on any failure.
+//! it differs between two identical frames on its own); the far trees' fade
+//! dither holds its phase (with the leaf-volume light it steps a frame, so two
+//! frames' screen doors differ). Exit code 1 on any failure.
 
 use super::{Segment, settle};
 use crate::World;
@@ -207,6 +209,9 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
             renderer.ambient.set_frozen(false); // the ambient volume (lighting; idle without --ambient-volume)
             renderer.far_shadow.set_frozen(false); // the far sun shadow maps (lighting; idle without --far-shadows)
             renderer.probe_grid.set_frozen(false); // the probe grid (lighting; idle without --probe-grid)
+            if let Some(t) = renderer.hlod_trees.get() {
+                t.set_phase_frozen(false); // the far trees' fade dither steps again while settling
+            }
             settle(ctx, renderer, world, models, &cam, 600.0)?;
             // finish any scene-probe capture at this camera, then hold it,
             // so every render below sees the same environment.
@@ -235,6 +240,9 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
             renderer.ambient.set_frozen(true); // no re-centring or upload between the compared frames
             renderer.far_shadow.set_frozen(true); // no redraw or swap of the far maps either
             renderer.probe_grid.set_frozen(true); // no capture or fade of the probe grid either
+            if let Some(t) = renderer.hlod_trees.get() {
+                t.set_phase_frozen(true); // nor a step of the far trees' fade dither (its screen door moves a frame)
+            }
             // Ground truth, twice (the second measures draw-order ties alone).
             renderer.set_occlusion(false);
             render(ctx, renderer, &t, &cam);
@@ -350,6 +358,9 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
     renderer.ambient.set_frozen(false); // the ambient volume (lighting)
     renderer.far_shadow.set_frozen(false); // the far sun shadow maps (lighting)
     renderer.probe_grid.set_frozen(false); // the probe grid (lighting)
+    if let Some(t) = renderer.hlod_trees.get() {
+        t.set_phase_frozen(false); // the far trees' fade dither
+    }
     renderer.set_occlusion(true);
     println!(
         "\nocclusion check: {} cameras x 3 histories, {} visible objects in all; visible but not drawn {}; id pixels that differ {} (not depth ties {}); same-object pixels: output colour over {COLOR_TOLERANCE}/255 {}, HDR not bit-equal {}: {}",
