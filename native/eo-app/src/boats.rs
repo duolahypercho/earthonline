@@ -9,7 +9,6 @@
 
 use eo_player::harbour::{self, Fleet, Moored, Sea};
 use eo_render::props::GpuPropInstance;
-use eo_render::upload::Target;
 use eo_render::{GpuContext, Renderer};
 use glam::{DQuat, DVec3, EulerRot, Vec3};
 use std::collections::HashMap;
@@ -88,7 +87,9 @@ impl BoatMotion {
                 self.instances[i] = instance(p, q, self.models[i]);
             }
         }
-        renderer.write(&ctx.queue, Target::PropInstances, block.0 as u64 * 48, bytemuck::cast_slice(&self.instances));
+        // a pose write, not a visibility one: the city's emulated lists keep their
+        // motion-aware bounds while the boats ride (eo-render `write_prop_poses`).
+        renderer.write_prop_poses(&ctx.queue, block.0 as u64 * 48, bytemuck::cast_slice(&self.instances));
     }
 }
 
