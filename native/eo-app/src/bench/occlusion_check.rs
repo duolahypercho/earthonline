@@ -214,8 +214,9 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
             }
             settle(ctx, renderer, world, models, &cam, 600.0)?;
             // finish any scene-probe capture at this camera, then hold it,
-            // so every render below sees the same environment.
-            for _ in 0..8 {
+            // so every render below sees the same environment (six faces, and
+            // in the count emulation the wait for the capture's count pass).
+            for _ in 0..8 + eo_render::probe::FACE_COUNT_WAIT_FRAMES as usize {
                 if !renderer.probe.capturing() {
                     break;
                 }

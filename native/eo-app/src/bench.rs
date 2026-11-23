@@ -1317,7 +1317,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
             let probe_json = {
                 let p = renderer.probe.stats(); // facade
-                json!({ "captures": p.captures, "faces": p.faces, "transfer": p.transfer, "frames_per_capture": p.last_capture_frames, "look_transfer_in_use": renderer.look.transfer() })
+                json!({ "captures": p.captures, "faces": p.faces, "transfer": p.transfer, "frames_per_capture": p.last_capture_frames, "look_transfer_in_use": renderer.look.transfer(), "face_count_passes": p.count_passes, "face_count_waits": p.count_waits, "faces_without_count": p.uncounted_faces })
             };
             let serial_json: serde_json::Map<String, serde_json::Value> = SERIAL.iter().zip(&serial).map(|((n, _), v)| (n.to_string(), json!(percentile(v, 50.0)))).collect();
             println!("  GPU serial shares (median ms, end minus the previous pass's end): {}", SERIAL.iter().zip(&serial).map(|((n, _), v)| format!("{n} {:.2}", percentile(v, 50.0))).collect::<Vec<_>>().join(", "));
