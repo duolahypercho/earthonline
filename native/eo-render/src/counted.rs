@@ -608,6 +608,23 @@ impl CountedLists {
     pub fn take_overflow(&self) -> bool {
         std::mem::take(&mut self.counts.state.lock().unwrap().entries[self.id].overflow_pending)
     }
+
+    /// Raise this frame's bound of list `list` to at least `n` (its capacity
+    /// at most), for an owner that knows the count ahead of the read-backs
+    /// (the scene probe's face, from its count pass: `probe::ProbeFaceCounts`).
+    /// Call it after `Counts::begin_frame` and before the frame's commands:
+    /// `encode_zero` zeroes each list up to its bound and `encode_copies`
+    /// records the bound the overflow check compares with. Never lowers one.
+    pub fn raise_bound(&self, list: usize, n: u32) {
+        let mut st = self.counts.state.lock().unwrap();
+        let e = &mut st.entries[self.id];
+        let n = n.min(e.lists[list].max);
+        e.stats.bounds[list] = e.stats.bounds[list].max(n);
+        // (`relax` puts the fallback back: it keeps the raise too)
+        if let Some(b) = e.fallback.get_mut(list) {
+            *b = (*b).max(n);
+        }
+    }
 }
 
 /// `multi_draw_indexed_indirect_count`, or with the emulation (`lists` set)
