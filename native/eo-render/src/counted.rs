@@ -21,6 +21,17 @@
 //! camera occlusion, so its opaque count bounds both early and late draws.
 //! Cuts and overflows recover for `FULL_FRAMES` frames while asynchronous
 //! history catches up. A failed read keeps the full-capacity fallback.
+//! A cut also starts a fresh window (`CutWindow`, on unless
+//! `--no-cut-window`): the first read-back of a frame encoded after the cut's
+//! replaces the counts of the view before it, which would otherwise bound the
+//! new view until `WINDOW` read-backs had pushed them out. The cut's own frame
+//! joins neither window: its early pass drew the old view's visible set, so its
+//! late lists hold nearly everything in view, a count that only another cut
+//! (recovered again) or a fast turn (which keeps the late lists' floor)
+//! reaches again. With the fresh window the occlusion turning on or off is a
+//! cut too: off, every object in the frustum draws, a count no read-back of
+//! an occluded frame bounds (the old window covered it only while it still
+//! held some earlier frame drawn without the occlusion).
 //! A list may take its floor from another list's bound (the late
 //! opaque list from the opaque list: after a fast turn every visible object
 //! can be late). A list can therefore miss objects only in the frames between
@@ -103,6 +114,41 @@ impl MotionBounds {
         impl Drop for Restore {
             fn drop(&mut self) {
                 MOTION_BOUNDS_SCOPE.with(|s| s.set(self.0));
+            }
+        }
+        let _restore = Restore(old);
+        body()
+    }
+}
+
+/// The fresh window on a cut's switch: `--no-cut-window` keeps the read-backs
+/// of the view before a cut in the window until `WINDOW` newer ones push them
+/// out, and the occlusion turning on or off is no cut, as before.
+pub struct CutWindow;
+
+thread_local! {
+    static CUT_WINDOW_SCOPE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+impl CutWindow {
+    /// The switch (eo-app accepts it; this crate reads it).
+    pub const SWITCH: &'static str = "--no-cut-window";
+
+    /// Whether a registry made now starts a fresh window on a cut (unless
+    /// `--no-cut-window`, or a `with` scope on this thread says otherwise).
+    pub fn wanted() -> bool {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        CUT_WINDOW_SCOPE.with(|s| s.get()).unwrap_or_else(|| *ON.get_or_init(|| !std::env::args().any(|a| a == Self::SWITCH)))
+    }
+
+    /// Runs `body` with registries made meanwhile on this thread starting one
+    /// or not (tests: the two side by side in one process).
+    pub fn with<R>(on: bool, body: impl FnOnce() -> R) -> R {
+        let old = CUT_WINDOW_SCOPE.with(|s| s.replace(Some(on)));
+        struct Restore(Option<bool>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                CUT_WINDOW_SCOPE.with(|s| s.set(self.0));
             }
         }
         let _restore = Restore(old);
@@ -216,6 +262,13 @@ struct Entry {
     chained: bool,
     /// Encoded frames still requiring conservative recovery counts.
     full_left: u64,
+    /// (`CutWindow`) The first frame (`State::seq`) of the view the window
+    /// describes: the one after the last cut's own frame. A read-back of an
+    /// earlier frame still counts its overflows and peaks but joins no window.
+    view_from: u64,
+    /// (`CutWindow`) The window still holds the view before the cut: the first
+    /// read-back from `view_from` on replaces it (the window never empties).
+    stale: bool,
     /// An overflow not yet taken by the owner (`take_overflow`).
     overflow_pending: bool,
     stats: Stats,
@@ -225,6 +278,10 @@ struct State {
     entries: Vec<Entry>,
     /// The motion-aware bounds are on (`MotionBounds`).
     motion: bool,
+    /// A cut starts a fresh window (`CutWindow`).
+    cut_window: bool,
+    /// (`CutWindow`) The last frame's `ViewStep::occlusion`: a change is a cut.
+    last_occlusion: Option<bool>,
     /// Frames encoded so far (`encode_copies`): the next one's number.
     seq: u64,
     /// This frame's view step (`begin_frame`), and the encodes since it.
@@ -325,7 +382,7 @@ fn early_reserve(early: u32, late: u32, capacity: u32) -> u32 {
 
 impl Counts {
     pub fn new(device: &wgpu::Device) -> Arc<Self> {
-        Arc::new(Self { device: device.clone(), state: Mutex::new(State { entries: vec![], motion: MotionBounds::wanted(), seq: 0, step: None, encodes: 0 }) })
+        Arc::new(Self { device: device.clone(), state: Mutex::new(State { entries: vec![], motion: MotionBounds::wanted(), cut_window: CutWindow::wanted(), last_occlusion: None, seq: 0, step: None, encodes: 0 }) })
     }
 
     /// Register a count buffer (it needs `COPY_SRC`) and the lists it counts.
@@ -362,6 +419,8 @@ impl Counts {
             steady: false,
             chained: false,
             full_left: 0,
+            view_from: 0,
+            stale: false,
             overflow_pending: false,
             stats: Stats { label, bounds: full, peak_counts: vec![0; n], peak_bounds: vec![0; n], encoded: vec![0; n], ..Default::default() },
         });
@@ -376,6 +435,12 @@ impl Counts {
         let st = &mut *guard;
         st.step = step;
         st.encodes = 0;
+        if let Some(occlusion) = step.map(|s| s.occlusion) {
+            if st.cut_window && st.last_occlusion.is_some_and(|o| o != occlusion) {
+                Self::cut(st); // the occlusion turned on or off: another view's counts
+            }
+            st.last_occlusion = Some(occlusion);
+        }
         let (seq, motion) = (st.seq, st.motion);
         for e in st.entries.iter_mut() {
             for k in 0..e.readbacks.len() {
@@ -407,6 +472,14 @@ impl Counts {
                         let (at, turn) = (e.readbacks[k].seq, e.readbacks[k].turn);
                         if e.newest.as_ref().is_none_or(|(s, _)| at > *s) {
                             e.newest = Some((at, counts.clone()));
+                        }
+                        if at < e.view_from {
+                            continue; // a frame of the view before the last cut, or the cut's own
+                        }
+                        if std::mem::take(&mut e.stale) {
+                            // the first read-back since the cut: the window starts with it.
+                            e.history.clear();
+                            e.turns.clear();
                         }
                         e.history.push_back(counts);
                         e.turns.push_back(turn);
@@ -583,11 +656,20 @@ impl Counts {
         }
     }
 
-    /// After a cut, recover every list until the read-backs see the new view.
+    /// After a cut, recover every list until the read-backs see the new view
+    /// (and with `CutWindow`, start each list's window afresh with them).
     pub fn force_full(&self) {
-        let mut st = self.state.lock().unwrap();
+        Self::cut(&mut self.state.lock().unwrap());
+    }
+
+    /// A cut (`force_full`, or with `CutWindow` the occlusion turning on or off).
+    fn cut(st: &mut State) {
         for e in st.entries.iter_mut() {
             e.full_left = e.full_left.max(FULL_FRAMES);
+            if st.cut_window {
+                e.view_from = st.seq + 1; // the next frame encoded is the cut's own
+                e.stale = !e.history.is_empty();
+            }
         }
     }
 
