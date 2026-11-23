@@ -1743,8 +1743,22 @@ impl Renderer {
     /// One budgeted write (see `upload::UploadQueue`). Object writes are
     /// repeated for every stress copy.
     pub fn write(&self, queue: &wgpu::Queue, target: upload::Target, offset: u64, data: &[u8]) {
-        let t = std::time::Instant::now(); // hitch
         self.note_vis_write();
+        self.write_quiet(queue, target, offset, data);
+    }
+
+    /// Props moved within their own culling spheres (eo-app's moored boats, posed
+    /// on the sea every frame): budgeted, counted and timed like `write`, but not a
+    /// `note_vis_write`. No emulated list reads the props' instances (their cull and
+    /// lists are the props' own), and an afloat boat's sphere already holds its roll
+    /// and pitch (props_cull.wgsl `pr_sphere`), so a still view stays quiet
+    /// (counted.rs `ViewStep::quiet`) and keeps its motion-aware bounds.
+    pub fn write_prop_poses(&self, queue: &wgpu::Queue, offset: u64, data: &[u8]) {
+        self.write_quiet(queue, upload::Target::PropInstances, offset, data);
+    }
+
+    fn write_quiet(&self, queue: &wgpu::Queue, target: upload::Target, offset: u64, data: &[u8]) {
+        let t = std::time::Instant::now(); // hitch
         self.frame_upload_bytes.fetch_add(data.len() as u64, std::sync::atomic::Ordering::Relaxed);
         self.write_untimed(queue, target, offset, data);
         hitch::note_write_to(hitch_target(target), data.len() as u64, t.elapsed().as_secs_f64() * 1e3); // hitch // hitch2: per target

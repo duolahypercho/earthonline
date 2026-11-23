@@ -442,4 +442,17 @@ fn props2_boats_drawn_in_their_pose_only_with_their_switch() {
     assert!(changed(&p2, &s) <= still, "--no-boat-motion: drawn at rest ({} channels)", changed(&p2, &s));
     let h = draw(boat(heeled), on);
     assert!(changed(&s, &h) > 10 * still, "a roll and a pitch turn the hull ({} channels)", changed(&s, &h));
+    // eo-app's boats write their poses every frame through `write_prop_poses`: the same
+    // pose as a write, but not a visibility write, so a still view stays quiet and the
+    // city's emulated lists keep their motion-aware bounds.
+    let rest = draw(boat(0), on);
+    let seen = r.vis_writes();
+    r.write_prop_poses(&ctx.queue, 0, bytemuck::cast_slice(&[boat(heeled)]));
+    assert_eq!(r.vis_writes(), seen, "a pose write is not a visibility write");
+    let q = frame(&ctx, &r, &cam, 3);
+    // (the frames' noise grows with their count, so the pose is checked against the hull at rest)
+    assert!(changed(&rest, &q) > 10 * still, "a pose write turns the hull as a write does ({} channels)", changed(&rest, &q));
+    let seen = r.vis_writes();
+    r.write(&ctx.queue, Target::PropInstances, 0, bytemuck::cast_slice(&[boat(heeled)]));
+    assert!(r.vis_writes() > seen, "a write is a visibility write");
 }
