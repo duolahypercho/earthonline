@@ -53,7 +53,10 @@ fn lk_far_street_light(world: vec3<f32>, eye: vec3<f32>) -> vec3<f32> {
         return vec3<f32>(0.0);
     }
     let vz = dot(world - skyu.eye.xyz, skyu.cam_fwd.xyz);
-    let w = smoothstep(skyu.cluster.y - 2.0, skyu.cluster.y + 2.0, vz);
+    var w = smoothstep(skyu.cluster.y - 2.0, skyu.cluster.y + 2.0, vz);
+    if (frame.copy_step.z > 0.5) {
+        w = 1.0; // the probe pass draws no clustered lights (`sky_local_lights_ao`): the map is the lamps' light in every face
+    }
     if (w <= 0.0) {
         return vec3<f32>(0.0);
     }
