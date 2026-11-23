@@ -1411,15 +1411,17 @@ What the tests cover, in short:
   fixtures blown out, little of the pane white), each trade its own, the
   same twice.
 - **Frame budget** (`eo-app` `frame_budget`): the real bench, under the
-  10 ms budget at the median on the standard paths, and no frame over the
-  upload budget. It needs a GPU and a quiet machine; a loaded machine can
-  fail it.
+  10 ms budget at the median on the standard paths, no frame over the
+  upload budget, and (`--check-max`) every path's worst frame under 10 ms.
+  It needs a GPU and a quiet machine; a loaded machine can fail it.
 
 ### Known failing tests
 
-Six tests fail today. They are open defects, not flaky tests; do not
-loosen them to make them pass. The last four came with the Golden Gate
-branch and fail on it alone too.
+Eight tests fail today. They are open defects, not flaky tests; do not
+loosen them to make them pass. The three `eo-look` tests and the deck-lamp
+count came with the Golden Gate branch and fail on it alone too. The two
+`eo-app` bench tests fail on Metal (Apple M5 Ultra), and did before the
+night-lighting merge too.
 
 | Test | What fails |
 | --- | --- |
@@ -1428,7 +1430,9 @@ branch and fail on it alone too.
 | `eo-look` `atmosphere::cie_sky_tests::the_sky_near_the_horizon_within_the_cie_clear_skies` | Near the horizon the physical sky is brighter than the CIE clear-sky range (up to x1.5 at 5 degrees elevation) |
 | `eo-look` `atmosphere::cie_sky_tests::the_sky_gradient_away_from_the_horizon_within_the_cie_clear_skies` | The gradient away from the horizon leaves the CIE range at some sun positions (up to x1.12) |
 | `eo-look` `tone::camera::tests::the_virtual_chart_renders_neutral_greys_and_keeps_hues` | The Aces2 camera style keeps 0.80 of the saturated patches' chroma, under the 0.85 the test allows |
-| `eo-render` `landmarks::landmark_lights_join_the_sky_gather` | 244 bridge deck lamps on the x1.25 ground plan, under the 250 the test expects: the Golden Gate's cable detail places them at the published 150 ft pitch on the plan |
+| `eo-render` `landmarks::landmark_lights_join_the_sky_gather` | 244 bridge deck lamps on the x1.25 ground plan (110 on the Golden Gate, 134 on the Bay Bridge), under the 250 the test expects: the test assumes a lamp every 50 m on both decks, but the Golden Gate's cable detail places them at the published 150 ft pitch on the plan, a count that does not grow with the plan's scale |
+| `eo-app` `occlusion_check` (`--bench --occlusion-check`) | One coarse street tile (object 193566, `LOD_STREET_COARSE`, `elevated_sweep` frame 155) that the occlusion-off frame draws is not in the occlusion-on late cull's LOD and frustum set in any of the three histories (649 pixels each). Between two identical frames a few pixels also differ by one f16 step in the HDR scene (2,438 over the 90 cameras and three histories), and 23 single pixels by more than the colour tolerance |
+| `eo-app` `frame_budget` (`--check-max`) | The medians pass; worst frames reach 10 to 19 ms. The count emulation's recovery after the scene probe's counted list overflows (14 to 16 times on `waterfront`, `bay_bridge` and `night_waterfront`) waits for the GPU inside `Renderer::update` (`CountedLists::prepare_recovery`), 3.5 to 6 ms, for the 9 frames of each recovery (63 frames a path, so the p95 too). The first measured frames (60 to 64) of `city_overview` and `authored_street` still carry the path start's cut: the motion-aware bounds come back only when its read-backs leave the 64-frame window (5 to 6 ms of command encoding). The drive's worst frame is 14 to 15 ms of command encoding in a recovery after a city or far-tree list overflow, or once 13.5 ms of render-thread CPU outside every named phase. `bay` (a probe capture's last face, 7.7 ms of GPU) and `fog_elevated_sweep` (a 3.9 MB streaming frame that refits all three cascades) end within 0.5 ms of the budget |
 
 The `eo-server` network test
 `loss_reorder_and_duplicates_lose_no_input_and_keep_prediction_exact` is
@@ -1439,7 +1443,7 @@ order).
 
 ## Known issues
 
-- The six failing tests and the flaky network test above.
+- The eight failing tests and the flaky network test above.
 - The sign-art manifest records the first ZIP of the FHWA Standard Highway
   Signs 2024 Release 3 as the source of six signs (S1-1, W8-1, W11-2,
   W16-7PL, W16-9P, W17-1), but the published first ZIP does not hold them;
