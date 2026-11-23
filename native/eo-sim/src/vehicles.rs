@@ -237,6 +237,12 @@ pub fn cross_corridor_gap(ax: f64, az: f64, ayaw: f64, alen: f64, awid: f64, bx:
 }
 
 impl Fleet {
+    /// Diagnostic flags from the most recent sensing pass, before cars and
+    /// walkers moved. This is an observation, not a braking-reason decision.
+    pub fn pedestrian_observation(&self, i: usize) -> (bool, bool) {
+        (self.person_gap[i].is_finite(), self.crossing_hold[i].is_finite())
+    }
+
     pub fn len(&self) -> usize {
         self.cars.len()
     }

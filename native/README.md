@@ -41,7 +41,7 @@ new blind review can change it.
 | `eo-farshore` | The land beyond the city out to the horizon, cooked from elevation tiles. No GPU. |
 | `eo-structures` | Grade-separated roads (freeways, ramps, road bridges, tunnels): their vertical profiles, deck, support and portal meshes and collision triangles, behind `--structures`; the joins a host builds the street again with (`build_joined`: junction legs, capped, raised and lowered stubs), the tunnels' bores, lights and terrain cuts (`--tunnels`). It reads the street plan and never edits the street surface itself (eo-street draws the joins). No GPU. |
 | `eo-props` | Street furniture, traffic and pedestrian signals, signs and sign atlases, street trees, parked cars, placed per tile by rule. No GPU. |
-| `eo-sim` | The headless world simulation: traffic, signals, pedestrians, population and level of detail, tile-keyed and multi-threaded. No GPU. |
+| `eo-sim` | The headless world simulation: traffic, signals, pedestrians, population and level of detail, tile-keyed and multi-threaded. No GPU. Its `traffic_lab` example writes an offline top-down replay of the traffic rules on synthetic junctions ([Docs/TRAFFIC-LAB.md](../Docs/TRAFFIC-LAB.md)). |
 | `eo-agents` | Vehicle bodies and people cooked into one GPU-ready library (wheel rigs, lamps, skeletal motion, atlases), and the feed from the simulation to the renderer. No GPU. |
 | `eo-player` | The on-foot controller, walk and drive cameras, the player's car, input mapping and the streamed collision world, on Rapier. No GPU. |
 | `eo-render` | Scene build and the wgpu renderer: GPU culling and LOD, occlusion, streaming and uploads, and every render pass. |
