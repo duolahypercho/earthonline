@@ -9,6 +9,7 @@
 
 pub mod camera;
 pub mod character;
+pub mod harbour; // moored boats floating on the drawn sea
 pub mod input;
 pub mod lift;
 pub mod momentum;

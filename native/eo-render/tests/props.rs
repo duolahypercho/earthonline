@@ -392,3 +392,67 @@ fn props2_boats_cook_only_with_their_bodies() {
         assert!(m.radius >= b.loa as f32 / 2.0 - 0.05 && m.radius < (b.loa + b.height + b.draft) as f32, "{}: radius {}", b.name, m.radius);
     }
 }
+
+/// A moored boat drawn in its pose on the sea (props_types.wgsl `pr_afloat`; the pose is
+/// eo-player's physics, eo-app boats.rs): a roll and a pitch in its instance word turn it;
+/// with the switch off (eo-app `--no-boat-motion`) it is drawn at rest whatever the word
+/// says. The shader's constants are the Rust ones.
+#[test]
+fn props2_boats_drawn_in_their_pose_only_with_their_switch() {
+    let src = include_str!("../src/props_types.wgsl");
+    assert!(src.contains(&format!("const PR_F_AFLOAT: u32 = {}u;", eo_render::props::F_AFLOAT)), "PR_F_AFLOAT is F_AFLOAT");
+    assert!(src.contains(&format!("const PR_AFLOAT_BIT: u32 = 0x{:08x}u;", eo_props::boats::AFLOAT_BIT)), "PR_AFLOAT_BIT is boats::AFLOAT_BIT");
+    assert!(eo_render::props::F_ALL & eo_render::props::F_AFLOAT != 0, "on by default");
+    let ctx = ctx();
+    let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+    boxed(&mut v, &mut i, &mut o, Vec3::new(-300.0, -3.0, -300.0), Vec3::new(300.0, -2.0, 300.0));
+    let r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let js = eo_props::JsProps::load().unwrap();
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let lens = ca.metric_key("signal-lens-size", "circularNewFaces").unwrap();
+    let bodies = eo_props::boats::load_bodies(&paths.repo_root).unwrap();
+    let x = LibExtras { boats: Some(&bodies), ..Default::default() };
+    let lib = PropLibrary::cook_full(&paths.repo_root, &js, lens, &x, lib2::dome_standards(&ca).unwrap()).unwrap();
+    r.attach_props(&ctx, &lib).unwrap();
+    // each frame on its own: no resolve history, no exposure adaptation.
+    r.look.set_sky_options(eo_render::sky::SkyOptions { taa: false, adaptation: false, rain: false, wet: false, ssr: false, ..Default::default() });
+    let p = r.props.get().unwrap();
+    // The sail yacht side on, 16 m off, its mast in view.
+    let cam = Camera::new(Vec3::new(0.0, 4.0, 0.0), 0.0, 0.15, W as f32 / H as f32);
+    let boat = |pad: u32| GpuPropInstance { pos: [0.0, 0.0, -16.0], yaw: std::f32::consts::FRAC_PI_2, scale: [1.0; 3], model: lib2::BOAT_BASE, variant: 0, lamp: 0, slope: 0.0, pad };
+    let heeled = eo_props::boats::afloat_word(0.08, 0.03);
+    let draw = |inst: GpuPropInstance, features: u32| {
+        r.write(&ctx.queue, Target::PropInstances, 0, bytemuck::cast_slice(&[inst]));
+        p.set_high_water(1);
+        p.set_features(features);
+        frame(&ctx, &r, &cam, 3)
+    };
+    // This renderer's frames carry a little noise that turns with the frame count (dither,
+    // shadow and sky sampling): a channel counts as changed past 0.1 (HDR), and two draws of
+    // one still scene set the bound a still boat keeps (20 to 40 channels of 172,800 here).
+    let changed = |a: &[f32], b: &[f32]| a.iter().zip(b).filter(|(x, y)| (*x - *y).abs() > 0.1).count();
+    let on = eo_render::props::F_ALL;
+    let off = on & !eo_render::props::F_AFLOAT;
+    let (p1, p2) = (draw(boat(0), on), draw(boat(0), on));
+    let noise = changed(&p1, &p2);
+    assert!(noise < 200, "two draws of a still scene differ in {noise} channels");
+    let still = 2 * noise + 20;
+    let s = draw(boat(heeled), off);
+    assert!(changed(&p2, &s) <= still, "--no-boat-motion: drawn at rest ({} channels)", changed(&p2, &s));
+    let h = draw(boat(heeled), on);
+    assert!(changed(&s, &h) > 10 * still, "a roll and a pitch turn the hull ({} channels)", changed(&s, &h));
+    // eo-app's boats write their poses every frame through `write_prop_poses`: the same
+    // pose as a write, but not a visibility write, so a still view stays quiet and the
+    // city's emulated lists keep their motion-aware bounds.
+    let rest = draw(boat(0), on);
+    let seen = r.vis_writes();
+    r.write_prop_poses(&ctx.queue, 0, bytemuck::cast_slice(&[boat(heeled)]));
+    assert_eq!(r.vis_writes(), seen, "a pose write is not a visibility write");
+    let q = frame(&ctx, &r, &cam, 3);
+    // (the frames' noise grows with their count, so the pose is checked against the hull at rest)
+    assert!(changed(&rest, &q) > 10 * still, "a pose write turns the hull as a write does ({} channels)", changed(&rest, &q));
+    let seen = r.vis_writes();
+    r.write(&ctx.queue, Target::PropInstances, 0, bytemuck::cast_slice(&[boat(heeled)]));
+    assert!(r.vis_writes() > seen, "a write is a visibility write");
+}

@@ -1050,6 +1050,11 @@ impl WaterGpu {
     /// (a still frame must not depend on the frames before it).
     /// with it on, a change of the clock or of the sea rebuilds the
     /// whitecap foam from nothing over `WARM_S` in one frame.
+    /// The clock the waves are drawn at, given the world's (a fixed test time wins).
+    pub fn clock(&self, world_time: f64) -> f64 {
+        self.state.lock().unwrap().time.unwrap_or(world_time)
+    }
+
     pub fn set_always(&self, always: bool) {
         self.state.lock().unwrap().always = always;
     }
