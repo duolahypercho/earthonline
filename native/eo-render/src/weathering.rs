@@ -208,6 +208,27 @@ pub const PAINT_SPECK: [f64; 2] = [0.1, 0.3];
 pub const PAINT_CHIP: [f64; 2] = [0.015, 0.08];
 pub const PAINT_SCAN_BARE: f64 = 0.3;
 
+/// `--area-paint` (on unless `--no-area-paint`, read when the shaders are
+/// built): a marking at least `AREA_PAINT_MIN_W` wide (a green bike lane; the
+/// widest line or bar is 24 in, 0.61 m) is an area of coloured paint, not a
+/// line: it takes neither the scanned single-line mask (mirrored across every
+/// stripe width, a field of slots over a lane) nor the line's wear (its noise
+/// thresholds at a stripe's scale read as camouflage across 1.2-2 m), but an
+/// area's (`wx_area_paint`): a slow fade toward grey in the sun (`AREA_FADE`),
+/// an even film of road dust (`AREA_SOIL` young and old) heavier at its edges
+/// (`AREA_EDGE_DIRT`), darker soft streaks along the wheel path down its
+/// middle (`AREA_TYRE`), the lines' aggregate specks at half their share and
+/// chips at its edges only. INFERRED from the reference's notes on worn
+/// coloured pavement.
+pub fn area_paint() -> bool {
+    !std::env::args().any(|a| a == "--no-area-paint")
+}
+pub const AREA_PAINT_MIN_W: f64 = 0.8;
+pub const AREA_FADE: f64 = 0.15;
+pub const AREA_SOIL: [f64; 2] = [0.06, 0.14];
+pub const AREA_EDGE_DIRT: f64 = 0.2;
+pub const AREA_TYRE: f64 = 0.25;
+
 /// Facades: per building, the share left fresh (repainted lately) and the
 /// share filthy, and their weathering gains. INFERRED ("no two neighbours
 /// weather alike").
@@ -468,6 +489,8 @@ pub fn wgsl() -> String {
     s.push_str("const WX_KD_MAX: f32 = 6.3;\n");
     // the road's cracks and the markings' wear, or the earlier ones under `EO_GRIME_STREET_V1=1`.
     s.push_str(&format!("const WX_STREET_V1: bool = {};\n", street_v1()));
+    // (`--area-paint`) a wide marking's own wear.
+    s.push_str(&format!("const WX_AREA_PAINT: bool = {};\n", area_paint()));
     let a = sun_axis();
     for (k, v) in [
         ("WX_WALK_FOLD", walk_fold()),
@@ -537,6 +560,12 @@ pub fn wgsl() -> String {
         ("WX_PAINT_CHIP", PAINT_CHIP[0]),
         ("WX_PAINT_CHIP_OLD", PAINT_CHIP[1]),
         ("WX_PAINT_SCAN_BARE", PAINT_SCAN_BARE),
+        ("WX_AREA_MIN_W", AREA_PAINT_MIN_W),
+        ("WX_AREA_FADE", AREA_FADE),
+        ("WX_AREA_SOIL", AREA_SOIL[0]),
+        ("WX_AREA_SOIL_OLD", AREA_SOIL[1]),
+        ("WX_AREA_EDGE_DIRT", AREA_EDGE_DIRT),
+        ("WX_AREA_TYRE", AREA_TYRE),
         ("WX_BLDG_FRESH_SHARE", BLDG_FRESH_SHARE),
         ("WX_BLDG_FRESH", BLDG_FRESH),
         ("WX_BLDG_HEAVY_SHARE", BLDG_HEAVY_SHARE),

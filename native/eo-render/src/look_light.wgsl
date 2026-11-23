@@ -38,6 +38,32 @@ const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
 // the atmosphere's sky-view table (sky_atmo.wgsl), read for the physical daylight's sky
 // (group 1 binding 20, look.rs `B_ATMO_VIEW`: after the lighting additions' 12-19, look_ext.wgsl)
 @group(1) @binding(20) var lk_atmo_view: texture_2d<f32>;
+// (`--far-street-light`) the street lamps' pools on the ground, lux (sky.rs `bake_lamp_map`, `LAMP_MAP_*`).
+@group(1) @binding(22) var lk_lamp_map: texture_2d<f32>;
+const LK_LAMP_MAP_SIZE: f32 = 3072.0;
+const LK_LAMP_MAP_TEXEL_M: f32 = 8.0;
+const LK_LAMP_MAP_ORIGIN_M: f32 = -12288.0;
+
+// (`--far-street-light`) a street's light from its lamps' pools past the frame's
+// lamp lights: the map's lux at the point, as outgoing Lambert radiance per albedo,
+// where the clustered lights stop (sky_light.wgsl `sky_local_lights_ao`: past the
+// clusters' far plane in forward depth, `skyu.cluster.y`), over a band of a few metres.
+fn lk_far_street_light(world: vec3<f32>, eye: vec3<f32>) -> vec3<f32> {
+    if (skyu.spare.w <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let vz = dot(world - skyu.eye.xyz, skyu.cam_fwd.xyz);
+    var w = smoothstep(skyu.cluster.y - 2.0, skyu.cluster.y + 2.0, vz);
+    if (frame.copy_step.z > 0.5) {
+        w = 1.0; // the probe pass draws no clustered lights (`sky_local_lights_ao`): the map is the lamps' light in every face
+    }
+    if (w <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let uv = (world.xz - vec2<f32>(LK_LAMP_MAP_ORIGIN_M)) / (LK_LAMP_MAP_TEXEL_M * LK_LAMP_MAP_SIZE);
+    let lux = textureSampleLevel(lk_lamp_map, lk_ao_samp, uv, 0.0).r;
+    return skyu.spare.rgb * (lux * w / LK_PI);
+}
 
 // the physical daylight's weight in this frame (eo-look `phys`; 0 with the rig's light,
 // and compiled out with `--no-phys-sky` at start: look.rs `ShaderFeatures::phys_sky`)

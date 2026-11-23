@@ -81,8 +81,8 @@ pub const CINEMATIC_DEVIATIONS: &[Deviation] = &[
     },
     Deviation {
         name: "CINE_NIGHT_UNLIT_DISPLAY_255",
-        cinematic: "3.5 / 255 (unlit ground of albedo 0.18 at full night, solved through the cinematic display)",
-        default: "8 / 255 (eo-sky night::NIGHT_UNLIT_DISPLAY_255, owner-approved 2026-11-17)",
+        cinematic: "3.5 / 255, 7 / 255 under --night-lift (unlit ground of albedo 0.18 at full night, solved through the cinematic display)",
+        default: "8 / 255 (eo-sky night::NIGHT_UNLIT_DISPLAY_255, owner-approved 2026-11-17), 14 / 255 under --night-lift (2026-11-22)",
         reason: "deeper blacks so lamp pools, windows and signs carry the night frame; unlit ground no longer sits in a flat grey toe",
     },
     Deviation {

@@ -91,7 +91,7 @@ struct Sky {
     atmo_o: vec4<f32>,
     // the second high deck (eo_sky::clouds::Decks::cirrus): x height (m), y opacity; unread
     cirrus: vec4<f32>,
-    // spare; zero
+    // (`--far-street-light`) the far streets' lamp light: rgb colour x units per lux x lamps on, w on (sky.rs)
     spare: vec4<f32>,
 };
 

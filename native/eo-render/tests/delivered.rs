@@ -239,8 +239,8 @@ fn night_lamps_and_weather_against_physical_references() {
         assert!(t.lamps_on > 0.9, "{name}: street lamps not on at sun {:.1} deg", f.model.sun.altitude_deg);
         assert!(peak / unlit > 2.0, "{name}: the lamp pool is not 2x the unlit walk");
         if name == "night" {
-            // at the owner-approved darker night solve (eo-sky `night::NIGHT_UNLIT_DISPLAY_255`, 8; the JS 16)
-            assert!((card(unlit, f.exposure, 0.18) - eo_sky::night::NIGHT_UNLIT_DISPLAY_255).abs() < 1.5, "night: unlit card off the night solve's target");
+            // at the night solve's target (eo-sky `night::unlit_display_255`: 14 under `--night-lift`, else the owner-approved 8; the JS 16)
+            assert!((card(unlit, f.exposure, 0.18) - eo_sky::night::unlit_display_255()).abs() < 1.5, "night: unlit card off the night solve's target");
             assert!(ph::GREY_CARD_MIDDLE.holds(card(peak, f.exposure, 0.18)), "night: the card under the lamp outside middle grey +-1 EV");
             assert!(ph::STREET_UNIFORMITY_MAX_MIN.holds(peak / out), "night: pool uniformity {:.2} outside RP-8", peak / out);
         } else {

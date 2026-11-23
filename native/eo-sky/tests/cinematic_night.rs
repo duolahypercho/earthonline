@@ -35,7 +35,7 @@ fn the_cinematic_night_lands_unlit_ground_low_and_lamp_pools_high_but_unclipped(
         let got = night::target_exposure(&fh, &c.weather) + night::cinematic_night_shift(&fh);
         assert!((want - got).abs() < 1e-9 * want, "{h}: {want} vs {got}");
     }
-    assert!((unlit - night::CINE_NIGHT_UNLIT_DISPLAY_255).abs() < 0.2, "unlit ground at {unlit}");
+    assert!((unlit - night::cine_unlit_display_255()).abs() < 0.2, "unlit ground at {unlit}"); // (7 under `--night-lift`, else 3.5)
     // a lamp's pool lands high in the mid tones, under white; between lamps darker but readable.
     assert!(pool > 120.0 && pool < 235.0, "pool at {pool}");
     assert!(between < pool && between > unlit, "{between}");

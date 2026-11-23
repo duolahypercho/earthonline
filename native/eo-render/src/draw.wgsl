@@ -1574,6 +1574,8 @@ fn shade(in: VOut) -> vec4<f32> {
         if (sx_in_bore(in.object)) {
             return sx_bore_light(ss, m, v, in.world, in.object); // a tunnel bore's roadway (structures.wgsl)
         }
+        // (`--far-street-light`) past the frame's lamp lights, the street lit from its lamps' pools.
+        rm_emit = ss.albedo * lk_far_street_light(in.world, frame.cam_pos.xyz);
         return look_light(ss, m, v, in.world, n, in.object);
     }
     if (CITY_CLASS == CITY_STREET) {
@@ -1641,9 +1643,19 @@ fn shade(in: VOut) -> vec4<f32> {
                 // worn paint inside the geometric marking (an ambientCG road-line scan as the wear mask only).
                 // (`--grime`) the scan's holes toned down: the markings' own wear (`wx_paint`) does the wearing.
                 let scan_bare = select(1.0, WX_PAINT_SCAN_BARE, wx_level() != 0u && paint_kind == 7u && !WX_STREET_V1);
-                cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry, scan_bare);
+                // (`--area-paint`) a marking as wide as a lane is an area of colour, worn as one.
+                let gp = wx_kerb_grad();
+                let gg = dot(gp, gp);
+                let area = WX_AREA_PAINT && paint_kind == 7u && gg > 0.0 && gg < 1.0 / (WX_AREA_MIN_W * WX_AREA_MIN_W);
+                if (!area) {
+                    cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry, scan_bare);
+                }
                 if (wx_level() != 0u && paint_kind == 7u) {
-                    wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
+                    if (area) {
+                        wx_area_paint(&s, in.world, in.aux.y * 6.35, gp, dpx, dpy);
+                    } else {
+                        wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
+                    }
                 }
             } else {
                 s.rough = ST_CONCRETE_ROUGHNESS;
@@ -1785,7 +1797,9 @@ fn shade(in: VOut) -> vec4<f32> {
             through = select(1.0, min(tv * tv / (RM_PANE_TV_REFERENCE * RM_PANE_TV_REFERENCE), 1.0), tv > 0.0);
         }
         s.albedo = mix(s.albedo, r.day.xyz * through, r.day.w);
-        s.metal = mix(s.metal, s.metal * 0.3, r.day.w);
+        // (`--room-lit-runs`) a dark pane keeps its glass's reflection as the light fades.
+        let keep_reflection = select(0.0, look.rooms_env.x, RM_LIT_RUNS);
+        s.metal = mix(s.metal, s.metal * 0.3, r.day.w * (1.0 - keep_reflection));
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
@@ -2256,6 +2270,11 @@ fn shade(in: VOut) -> vec4<f32> {
         // (the playable house) source-lit joinery: its baked finish traced through the windows
         let finish = (m.flags >> 8u) & 7u;
         joinery_diffuse = window_trace(in.world + .012*n, -n, .024, finish);
+    }
+    // (`--far-street-light`) past the frame's lamp lights, a street lit from its lamps' pools.
+    let street_kind = objects[in.object].kind & 255u;
+    if (street_kind == 6u || street_kind == 7u || street_kind == 2u) {
+        rm_emit += s.albedo * lk_far_street_light(in.world, frame.cam_pos.xyz);
     }
     return look_light(s, m, v, in.world, n, in.object);
 }
