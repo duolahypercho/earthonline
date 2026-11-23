@@ -26,6 +26,21 @@
 //! carries a 16-byte header (where it came from, and the offset to its base),
 //! so any thread can free any block.
 //!
+//! On macOS (`VmBlocks`, on unless `--no-vm-blocks`) only V is kept: blocks
+//! of 1 MiB and more come from the virtual memory manager (`mmap`) through
+//! the same size-class cache, one freed on the render thread going to the
+//! janitor, and everything smaller from the system allocator. Measured (the
+//! drive, sampled): the Metal driver's command-encoder contexts take a large
+//! allocation of their own each time an encoder opens, and the system
+//! allocator now and then clears the chunk it hands back in the kernel
+//! (`madvise`), 10-15 ms on the render thread, in whichever phase opened an
+//! encoder; the streamed packs and tiles of 1 MiB and more churned the same
+//! chunks. With them out of it, the drive's such frames (`props_pump` over
+//! 5 ms or `finish` over 8 ms) fell from 12 in 10 runs to 2 in 11, for about
+//! 200-270 MB more peak memory (the cache). No header is needed: `dealloc`
+//! has the block's layout, and the switch is read once, at the first such
+//! block.
+//!
 //! Elsewhere `EoAlloc` is the system allocator, and the heaps, lists and
 //! classes below are unused.
 #![cfg_attr(not(windows), allow(dead_code))]
@@ -126,6 +141,115 @@ fn v_release(from: usize, base: *mut u8) {
     if !(k < V_CLASSES && v_keep(k, base)) {
         // SAFETY: a block from VirtualAlloc.
         unsafe { sys::VirtualFree(base, 0, sys::MEM_RELEASE) };
+    }
+}
+
+/// The macOS V path's switch: `--no-vm-blocks` leaves every block to the
+/// system allocator, as before.
+pub struct VmBlocks;
+
+/// (macOS) 0: not decided yet; 1: on; 2: off (`--no-vm-blocks`).
+static VM_STATE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+impl VmBlocks {
+    /// The switch (eo-app accepts it; this module reads it).
+    pub const SWITCH: &'static str = "--no-vm-blocks";
+
+    /// Whether blocks of 1 MiB and more come from the VM (macOS; elsewhere
+    /// false). Decided once, at the first such block, from the process's
+    /// arguments as the C runtime holds them (reading them allocates nothing).
+    pub fn on() -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            match VM_STATE.load(Ordering::Acquire) {
+                1 => return true,
+                2 => return false,
+                _ => {}
+            }
+            let off = {
+                // SAFETY: the C runtime's argc/argv, valid for the process's life.
+                let (argc, argv) = unsafe { (*libc::_NSGetArgc(), *libc::_NSGetArgv()) };
+                (0..argc.max(0) as usize).any(|i| {
+                    let a = unsafe { *argv.add(i) };
+                    !a.is_null() && unsafe { std::ffi::CStr::from_ptr(a) }.to_bytes() == Self::SWITCH.as_bytes()
+                })
+            };
+            let want = if off { 2 } else { 1 };
+            match VM_STATE.compare_exchange(0, want, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => want == 1,
+                Err(v) => v == 1,
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            false
+        }
+    }
+}
+
+/// (macOS) Page size the VM blocks are rounded to (16 KiB on Apple silicon; a
+/// multiple of 4 KiB).
+#[cfg(target_os = "macos")]
+const VM_PAGE: usize = 16 << 10;
+
+/// (macOS) A block of `size` bytes at `align` comes from the VM.
+#[cfg(target_os = "macos")]
+fn is_v(size: usize, align: usize) -> bool {
+    size >= VIRTUAL_MIN && align <= 4096 && VmBlocks::on()
+}
+
+/// (macOS) A V block's class (`V_CLASSES`: larger than every class, never
+/// cached) and its mapped bytes.
+#[cfg(target_os = "macos")]
+fn v_extent(size: usize) -> (usize, usize) {
+    match v_class(size) {
+        Some(k) => (k, v_class_size(k)),
+        None => (V_CLASSES, size.next_multiple_of(VM_PAGE)),
+    }
+}
+
+/// (macOS) A V block of `size` bytes: a cached one, or fresh pages (zero).
+#[cfg(target_os = "macos")]
+unsafe fn v_alloc(size: usize, zero: bool) -> *mut u8 {
+    let (k, bytes) = v_extent(size);
+    if k < V_CLASSES {
+        let c = v_take(k, is_render());
+        if !c.is_null() {
+            if zero {
+                // SAFETY: the block holds at least `size` bytes, all ours.
+                unsafe { std::ptr::write_bytes(c, 0, size) };
+            }
+            return c;
+        }
+    }
+    // SAFETY: an anonymous private mapping; fresh pages are zero.
+    let p = unsafe { libc::mmap(null_mut(), bytes, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0) };
+    if p == libc::MAP_FAILED { null_mut() } else { p as *mut u8 }
+}
+
+/// (macOS) Return a V block of class `k` and `bytes`: to the cache, or unmapped.
+#[cfg(target_os = "macos")]
+fn v_release(k: usize, bytes: usize, base: *mut u8) {
+    if !(k < V_CLASSES && v_keep(k, base)) {
+        // SAFETY: a mapping of `bytes` from `v_alloc`.
+        unsafe { libc::munmap(base as *mut libc::c_void, bytes) };
+    }
+}
+
+/// (macOS) Free a V block of `size` bytes: on the render thread (with the
+/// janitor running) handed to the janitor, which may unmap it; elsewhere now.
+#[cfg(target_os = "macos")]
+unsafe fn v_free(base: *mut u8, size: usize) {
+    let (k, bytes) = v_extent(size);
+    if is_render() && JANITOR.load(Ordering::Relaxed) {
+        // The class and size ride in the block's second and third words (the first links it).
+        unsafe {
+            (base as *mut usize).add(1).write(k);
+            (base as *mut usize).add(2).write(bytes);
+        }
+        push(&V_DEFERRED, base);
+    } else {
+        v_release(k, bytes, base);
     }
 }
 
@@ -296,7 +420,37 @@ unsafe impl GlobalAlloc for EoAlloc {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+unsafe impl GlobalAlloc for EoAlloc {
+    unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+        if is_v(l.size(), l.align()) { unsafe { v_alloc(l.size(), false) } } else { unsafe { std::alloc::System.alloc(l) } }
+    }
+    unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
+        if is_v(l.size(), l.align()) { unsafe { v_alloc(l.size(), true) } } else { unsafe { std::alloc::System.alloc_zeroed(l) } }
+    }
+    unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+        if is_v(l.size(), l.align()) { unsafe { v_free(p, l.size()) } } else { unsafe { std::alloc::System.dealloc(p, l) } }
+    }
+    unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
+        let (was_v, will_v) = (is_v(l.size(), l.align()), is_v(new, l.align()));
+        if !was_v && !will_v {
+            return unsafe { std::alloc::System.realloc(p, l, new) };
+        }
+        if was_v && will_v && v_extent(l.size()) == v_extent(new) {
+            return p; // the same mapping holds it (and `dealloc` will find the same class)
+        }
+        // SAFETY: `new` and the old alignment form a valid layout (the caller's contract).
+        let q = unsafe { self.alloc(Layout::from_size_align_unchecked(new, l.align())) };
+        if !q.is_null() {
+            // SAFETY: both blocks hold at least min(old, new) bytes.
+            unsafe { std::ptr::copy_nonoverlapping(p, q, l.size().min(new)) };
+            unsafe { self.dealloc(p, l) };
+        }
+        q
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 unsafe impl GlobalAlloc for EoAlloc {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
         unsafe { std::alloc::System.alloc(l) }
@@ -336,6 +490,19 @@ pub fn claim_render_thread() {
                 })
                 .expect("spawn allocator janitor");
         }
+    }
+    #[cfg(target_os = "macos")]
+    if !JANITOR.swap(true, Ordering::AcqRel) {
+        std::thread::Builder::new()
+            .name("eo-alloc-janitor".into())
+            .spawn(|| {
+                loop {
+                    // SAFETY: V bases pushed by `v_free`, their class and size in words 1 and 2.
+                    drain(&V_DEFERRED, |base| unsafe { v_release((base as *const usize).add(1).read(), (base as *const usize).add(2).read(), base) });
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            })
+            .expect("spawn allocator janitor");
     }
     let _ = RENDER.try_with(|r| r.set(true));
 }
@@ -412,6 +579,88 @@ mod tests {
         let t = std::time::Instant::now();
         while !(W_DEFERRED.load(Ordering::Acquire).is_null() && V_DEFERRED.load(Ordering::Acquire).is_null()) {
             assert!(t.elapsed().as_secs() < 5, "the janitor returned the deferred blocks");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod mac_tests {
+    use super::*;
+
+    fn fill(p: *mut u8, n: usize, seed: u8) {
+        for i in (0..n).step_by(4093) {
+            unsafe { p.add(i).write(seed.wrapping_add(i as u8)) };
+        }
+        unsafe { p.add(n - 1).write(seed) };
+    }
+    fn check(p: *const u8, n: usize, seed: u8) -> bool {
+        (0..n).step_by(4093).all(|i| unsafe { p.add(i).read() } == seed.wrapping_add(i as u8))
+    }
+
+    /// Blocks on both sides of 1 MiB at every alignment, made on the render
+    /// thread and on a worker, grown and shrunk across the line, freed on the
+    /// other thread; a cached block handed out zeroed is zero; the render
+    /// thread's freed VM blocks reach the janitor.
+    #[test]
+    fn vm_blocks_keep_their_bytes_alignment_and_zeroes() {
+        assert!(VmBlocks::on(), "on without {}", VmBlocks::SWITCH);
+        let a = EoAlloc;
+        let sizes = [1usize, 1000, 300_000, (1 << 20) - 1, 1 << 20, (1 << 20) + 1, 3 << 20, 40 << 20];
+        let aligns = [1usize, 16, 4096, 16384];
+        let make = |seed: u8| -> Vec<(usize, usize, usize)> {
+            let mut v = vec![];
+            for (k, &s) in sizes.iter().enumerate() {
+                for &al in &aligns {
+                    let p = unsafe { a.alloc(Layout::from_size_align(s, al).unwrap()) };
+                    assert!(!p.is_null() && p as usize % al == 0, "size {s} align {al}");
+                    fill(p, s, seed.wrapping_add(k as u8));
+                    v.push((p as usize, s, al));
+                }
+            }
+            v
+        };
+        let grow = |v: Vec<(usize, usize, usize)>, seed: u8| -> Vec<(usize, usize, usize)> {
+            v.into_iter()
+                .enumerate()
+                .map(|(i, (p, s, al))| {
+                    let k = (i / aligns.len()) as u8;
+                    let n = if i % 2 == 0 { s * 2 + 7 } else { (s / 2).max(1) };
+                    let q = unsafe { a.realloc(p as *mut u8, Layout::from_size_align(s, al).unwrap(), n) };
+                    assert!(!q.is_null() && q as usize % al == 0);
+                    assert!(check(q, s.min(n), seed.wrapping_add(k)), "realloc kept the bytes (size {s} -> {n}, align {al})");
+                    (q as usize, n, al)
+                })
+                .collect()
+        };
+        let free = |v: Vec<(usize, usize, usize)>| {
+            for (p, s, al) in v {
+                unsafe { a.dealloc(p as *mut u8, Layout::from_size_align(s, al).unwrap()) };
+            }
+        };
+        // a cached block (dirty) handed out again zeroed.
+        let l = Layout::from_size_align(2 << 20, 8).unwrap();
+        let p = unsafe { a.alloc(l) };
+        unsafe { std::ptr::write_bytes(p, 0xAB, l.size()) };
+        unsafe { a.dealloc(p, l) };
+        let z = unsafe { a.alloc_zeroed(l) };
+        assert!((0..l.size()).step_by(997).all(|i| unsafe { z.add(i).read() } == 0), "a reused block handed out zeroed is zero");
+        unsafe { a.dealloc(z, l) };
+        std::thread::scope(|sc| {
+            sc.spawn(|| {
+                claim_render_thread();
+                assert!(is_render_thread());
+                let mine = grow(make(1), 1);
+                let theirs = std::thread::scope(|sc| sc.spawn(|| grow(make(7), 7)).join().unwrap());
+                std::thread::scope(|sc| sc.spawn(|| free(mine)).join().unwrap());
+                free(theirs); // VM blocks freed here go to the janitor
+            })
+            .join()
+            .unwrap()
+        });
+        let t = std::time::Instant::now();
+        while !V_DEFERRED.load(Ordering::Acquire).is_null() {
+            assert!(t.elapsed().as_secs() < 5, "the janitor returned the render thread's VM blocks");
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
     }
