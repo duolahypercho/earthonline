@@ -2,7 +2,9 @@
 //! agents in the frustum, applies the JS tier caps nearest first, a car casts
 //! a sun shadow through the agent caster path (gone with the agents off), and
 //! a skinned person and a car put pixels on screen. Needs a GPU and the
-//! game's vehicle and character GLBs (or the agent cache).
+//! game's vehicle and character GLBs (or the agent cache); the two tests that
+//! draw people need the Rocketbox people set too (`external/people`, filled by
+//! `scripts/setup-assets.py --only people`, or `EO_PEOPLE_ROOT`).
 
 use eo_agents::library::Library;
 use eo_agents::{GpuAgent, CLIP_IDLE};
@@ -51,7 +53,8 @@ fn car(lib: &Library, name: &str, pos: Vec3, heading: f32) -> GpuAgent {
 }
 
 fn person(lib: &Library, pos: Vec3, speed: f32) -> GpuAgent {
-    GpuAgent { pos: pos.to_array(), model: lib.meta.people_models[0], rot: Quat::IDENTITY.to_array(), color: 0xffffffff, speed, anim: 0.3, scale: 1.0, clip: CLIP_IDLE, clip_phase: 0.2, ..Default::default() }
+    let model = *lib.meta.people_models.first().unwrap_or_else(|| panic!("the agent library has no people: these tests need the Rocketbox people, looked for at {}", eo_data::external::PEOPLE.looked_in()));
+    GpuAgent { pos: pos.to_array(), model, rot: Quat::IDENTITY.to_array(), color: 0xffffffff, speed, anim: 0.3, scale: 1.0, clip: CLIP_IDLE, clip_phase: 0.2, ..Default::default() }
 }
 
 /// Render frames and read back the HDR target's luminance.
