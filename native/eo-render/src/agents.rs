@@ -87,16 +87,59 @@ pub fn people_contact() -> bool {
     PEOPLE_CONTACT.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// `--people-capsules`: the ground round each person darkened by their whole
+/// body as capsules, for the sky and for each street lamp and headlamp
+/// (people_capsules.wgsl, in people_contact.wgsl's place and pipeline; the
+/// library's capsules, eo-agents `people::add_capsule_anchors`), made with
+/// the agents' pipelines after this is set; off, nothing of it is compiled,
+/// made or drawn and `--people-contact` draws as before.
+static PEOPLE_CAPSULES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_people_capsules(on: bool) {
+    PEOPLE_CAPSULES.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn people_capsules() -> bool {
+    PEOPLE_CAPSULES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The people's ground pass (its own pipeline after the agents' opaque list):
+/// with `--people-capsules` or `--people-contact`.
+pub fn people_ground_pass() -> bool {
+    people_capsules() || people_contact()
+}
+
+/// `--people-lamps`: the street lamps', headlamps' and shop windows' skin,
+/// cloth and hair terms on the people (agents_draw.wgsl `pl_person`),
+/// compiled into the agents' pipelines made after this is set; off, compiled
+/// out and the frame is as before.
+static PEOPLE_LAMPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_people_lamps(on: bool) {
+    PEOPLE_LAMPS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn people_lamps() -> bool {
+    PEOPLE_LAMPS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The generated constants agents_draw.wgsl reads (`SF_PEOPLE_SHADING`,
-/// `SF_PEOPLE_BOUNCE`).
+/// `SF_PEOPLE_BOUNCE`, `SF_PEOPLE_LAMPS`).
 pub fn people_shading_wgsl() -> String {
-    format!("const SF_PEOPLE_SHADING: bool = {};\nconst SF_PEOPLE_BOUNCE: bool = {};", people_shading(), people_bounce())
+    format!("const SF_PEOPLE_SHADING: bool = {};\nconst SF_PEOPLE_BOUNCE: bool = {};\nconst SF_PEOPLE_LAMPS: bool = {};", people_shading(), people_bounce(), people_lamps())
 }
 
 /// The people's ground occlusion's shader, appended to the agents' colour
-/// shader only with `--people-contact` (empty without it).
+/// shader only with `--people-contact` (empty without it); with
+/// `--people-capsules` the capsules' in its place.
 pub fn people_contact_wgsl() -> &'static str {
-    if people_contact() { include_str!("people_contact.wgsl") } else { "" }
+    if people_capsules() {
+        include_str!("people_capsules.wgsl")
+    } else if people_contact() {
+        include_str!("people_contact.wgsl")
+    } else {
+        ""
+    }
 }
 
 /// The city's shader source the agents' module is made on: the full set but the
@@ -617,7 +660,7 @@ impl AgentsGpu {
         // (`--people-contact`) the people's ground occlusion: a quad on the
         // ground round each person within reach, multiplying the lit frame
         // (dst x src), depth-tested and not written, after the opaque agents.
-        let people_contact_pipe = people_contact().then(|| {
+        let people_contact_pipe = people_ground_pass().then(|| {
             let color = wgpu::ColorTargetState {
                 format: crate::look::HDR_FORMAT,
                 blend: Some(wgpu::BlendState {
@@ -1113,20 +1156,25 @@ mod tests {
         assert!(!inside(s + (c - s) / 3.0, skin));
     }
 
-    /// (`--people-shading`, `--people-bounce`, `--people-contact`) the
-    /// agents' colour shader validates with each of the people's switches
-    /// compiled in and out, the constants say which, and the contact shader
-    /// is there only with its switch.
+    /// (`--people-shading`, `--people-bounce`, `--people-contact`,
+    /// `--people-capsules`, `--people-lamps`) the agents' colour shader validates with each of
+    /// the people's switches compiled in and out, the constants say which,
+    /// and the ground pass's shader is there only with one of its switches
+    /// (the capsules' in the contact's place).
     #[test]
     fn the_people_shading_compiles_in_and_out() {
-        for mask in 0..8u32 {
-            let (shading, bounce, contact) = (mask & 1 != 0, mask & 2 != 0, mask & 4 != 0);
+        for mask in 0..32u32 {
+            let (shading, bounce, contact, capsules, lamps) = (mask & 1 != 0, mask & 2 != 0, mask & 4 != 0, mask & 8 != 0, mask & 16 != 0);
             super::set_people_shading(shading);
             super::set_people_bounce(bounce);
             super::set_people_contact(contact);
+            super::set_people_capsules(capsules);
+            super::set_people_lamps(lamps);
             let konst = super::people_shading_wgsl();
-            assert_eq!(konst, format!("const SF_PEOPLE_SHADING: bool = {shading};\nconst SF_PEOPLE_BOUNCE: bool = {bounce};"));
-            assert_eq!(super::people_contact_wgsl().contains("fn agent_contact_vs"), contact);
+            assert_eq!(konst, format!("const SF_PEOPLE_SHADING: bool = {shading};\nconst SF_PEOPLE_BOUNCE: bool = {bounce};\nconst SF_PEOPLE_LAMPS: bool = {lamps};"));
+            assert_eq!(super::people_contact_wgsl().contains("fn agent_contact_vs"), contact || capsules);
+            assert_eq!(super::people_contact_wgsl().contains("fn pk_sky"), capsules);
+            assert_eq!(super::people_ground_pass(), contact || capsules);
             let src = format!(
                 "{}\n{}\n{}\n{}\n{}\n{}\n{}",
                 crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
@@ -1143,6 +1191,8 @@ mod tests {
         super::set_people_shading(false);
         super::set_people_bounce(false);
         super::set_people_contact(false);
+        super::set_people_capsules(false);
+        super::set_people_lamps(false);
     }
 
     /// (`--soft-shadows` with `--car-materials`) the agents' module takes the tent, not the penumbra
@@ -1154,6 +1204,89 @@ mod tests {
         assert!(soft(crate::look::ShaderFeatures { soft_shadows: true, ..none }), "the penumbra alone");
         assert!(soft(crate::look::ShaderFeatures { car_materials: true, ..none }), "(the constant is declared either way)");
         assert!(!soft(crate::look::ShaderFeatures { soft_shadows: true, car_materials: true, ..none }), "the two together: the tent");
+    }
+
+    /// (`--people-capsules`) the shader's joints are eo-agents' capsule joints, in order.
+    #[test]
+    fn the_capsule_joints_are_the_libraries() {
+        let src = include_str!("people_capsules.wgsl");
+        let j = eo_agents::people::CAPSULE_JOINTS;
+        let list = j.iter().map(|j| format!("{j}u")).collect::<Vec<_>>().join(", ");
+        assert!(src.contains(&format!("const PK_JOINTS: array<u32, {}> = array<u32, {}>({list});", j.len(), j.len())), "PK_JOINTS");
+        assert!(src.contains(&format!("const PK_PARTS: u32 = {}u;", j.len())), "PK_PARTS");
+        assert!(src.contains(&format!("var<private> pk_a: array<vec4<f32>, {}>;", j.len())), "pk_a");
+        // two packed ends a capsule and a radius byte each fit the eight flat words' 32
+        assert!(2 * j.len() + j.len().div_ceil(4) <= 32);
+    }
+
+    /// (`--people-capsules`) the closed form the shader's `pk_sky` evaluates
+    /// (the share of the cosine-weighted sky a capsule hides from a ground
+    /// point) against a brute-force integral over the hemisphere: a standing
+    /// body, a thigh, a shoe, at distances from beside it to 1.2 m.
+    #[test]
+    fn the_capsules_sky_share_is_the_hemisphere_integral() {
+        use glam::Vec3;
+        // the shader's closed form, transcribed
+        let prim = |t: f32, c: f32| t / (c * (t * t + c * c)) + (t / c).atan() / (c * c);
+        let closed = |g: Vec3, a: Vec3, b: Vec3, r: f32| {
+            let ab = b - a;
+            let len = ab.length();
+            let u = if len > 1e-4 { ab / len } else { Vec3::Y };
+            let ext = std::f32::consts::FRAC_PI_4 * r;
+            let p0 = a - u * ext - g;
+            let t0 = p0.dot(u);
+            let t1 = t0 + len + 2.0 * ext;
+            let perp = p0 - u * t0;
+            let c = perp.length().max(r);
+            let h = perp.y;
+            let f = |t: f32| h * prim(t, c) - u.y * c / (t * t + c * c);
+            (r / std::f32::consts::PI * (f(t1) - f(t0))).clamp(0.0, 1.0)
+        };
+        // the capsule's hit along a ray from g
+        let hit = |g: Vec3, d: Vec3, a: Vec3, b: Vec3, r: f32| {
+            let n = 400;
+            (0..n).any(|i| {
+                let s = (i as f32 + 0.5) / n as f32 * 3.0;
+                let p = g + d * s;
+                let ab = b - a;
+                let t = ((p - a).dot(ab) / ab.length_squared().max(1e-9)).clamp(0.0, 1.0);
+                (p - (a + ab * t)).length() < r
+            })
+        };
+        let brute = |g: Vec3, a: Vec3, b: Vec3, r: f32| {
+            // cosine-weighted directions on a stratified grid (Malley: a disc lifted onto the hemisphere)
+            let k = 160;
+            let mut hidden = 0usize;
+            let mut all = 0usize;
+            for i in 0..k {
+                for j in 0..k {
+                    let (x, z) = ((i as f32 + 0.5) / k as f32 * 2.0 - 1.0, (j as f32 + 0.5) / k as f32 * 2.0 - 1.0);
+                    if x * x + z * z >= 1.0 {
+                        continue;
+                    }
+                    all += 1;
+                    let d = Vec3::new(x, (1.0 - x * x - z * z).sqrt(), z);
+                    if hit(g, d, a, b, r) {
+                        hidden += 1;
+                    }
+                }
+            }
+            hidden as f32 / all as f32
+        };
+        let body = (Vec3::new(0.0, 0.2, 0.0), Vec3::new(0.0, 1.5, 0.0), 0.16);
+        let thigh = (Vec3::new(0.0, 0.5, 0.0), Vec3::new(0.05, 0.9, 0.08), 0.07);
+        let shoe = (Vec3::new(0.0, 0.045, -0.08), Vec3::new(0.0, 0.045, 0.12), 0.045);
+        for (name, (a, b, r)) in [("body", body), ("thigh", thigh), ("shoe", shoe)] {
+            for d in [0.25f32, 0.4, 0.6, 0.9, 1.2] {
+                let g = Vec3::new(d, 0.0, 0.03);
+                let (c, f) = (closed(g, a, b, r), brute(g, a, b, r));
+                eprintln!("{name} at {d} m: closed {c:.4}, integral {f:.4}");
+                assert!((c - f).abs() < 0.005 + 0.1 * f, "{name} at {d} m: closed {c:.4}, integral {f:.4}");
+            }
+        }
+        // a standing body hides a soft halo: about a tenth of the sky half a metre out, a few hundredths at a metre
+        let at = |d: f32| closed(Vec3::new(d, 0.0, 0.0), body.0, body.1, body.2);
+        assert!((0.05..0.2).contains(&at(0.5)) && at(1.0) < 0.06 && at(0.3) > at(0.5), "{} {} {}", at(0.3), at(0.5), at(1.0));
     }
 
     /// (`--people-contact`) the shader's joints are eo-agents' contact joints, in order.
