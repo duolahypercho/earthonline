@@ -31,7 +31,8 @@
 //! * **the ambient term and the environment's diffuse** take the visible sky
 //!   and the ground's share at `v_g` (their blocked share is in `M`), and
 //!   **the rig's rim** (a directional stand-in for the sky opposite the sun,
-//!   never shadowed) is hidden as the sky along it is (`rim_hidden`).
+//!   never shadowed) is hidden as the sky along it is (`rim_hidden`), taken
+//!   from the fill it stands for.
 //!
 //! With the open sky and open ground (`v_s = t`, `v_g = 1`) this is the rig's
 //! hemisphere, ambient and environment exactly: an open plaza is unchanged.
@@ -48,10 +49,9 @@ pub const WALL_ALBEDO: Rgb = crate::sun_bounce::WALL_ALBEDO;
 pub const GROUND_SKY_H_M: f64 = 1.0;
 /// The most of a wall's irradiance a vertical surface's sky can be (the open sky's share on a vertical surface).
 pub const SIDE_OPEN: f64 = 0.5;
-/// Shares under this are left out (the shader's skips): a surface with no lower
+/// Shares under this are left out (the shader's skip): a surface with no lower
 /// hemisphere and at most this much of its sky blocked does not read the
-/// street's sky (it counts as open), and a rim at most this much hidden is
-/// left whole.
+/// street's sky (it counts as open).
 pub const SKIP_SHARE: f64 = 0.01;
 /// The street's sky visibility is read between these for the canyon relation
 /// (a street seeing 2 % of the sky lies between walls 25 x its width high; one
