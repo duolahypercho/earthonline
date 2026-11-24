@@ -24,6 +24,12 @@ const FG_OFFICE_DEPTH: vec2<f32> = vec2<f32>(6.5, 11.0);
 const FG_OFFICE_CEILING: vec3<f32> = vec3<f32>(0.80, 0.80, 0.78);
 // the daylight thrown up onto an office ceiling near the glass (added to the room's 0.38);
 const FG_OFFICE_CEILING_DAY: f32 = 0.22;
+// by night an office's surfaces by what its downlights give them, against the work plane's: its
+// walls and its ceiling (the room's inter-reflection only; ~0.3-0.5 for recessed troffers), and
+// the gain that keeps a lit floor's mean as it was (INFERRED from office lighting practice);
+const FG_OFFICE_WALL_K: f32 = 0.7;
+const FG_OFFICE_CEILING_K: f32 = 0.4;
+const FG_OFFICE_FILL: f32 = 1.3;
 // an office's troffers by day, against the default's 1.1, and the share of offices with them on;
 const FG_TROFFER_DAY: f32 = 0.7;
 const FG_OFFICE_LIT: f32 = 0.85;
@@ -44,10 +50,12 @@ const FG_GLASS_TINT: f32 = 0.25;
 // eye adapted to the street's 3000 K lamps and the lit rooms round it (white
 // at FG_NIGHT_WHITE_K): homes mostly warm (2300-3400 K, incandescent and warm
 // LED), some cool LED (3800-4500 K) and a few daylight tubes (5000-6200 K);
-// offices 3400-4300 K. INFERRED shares.
+// offices 3400-4300 K. INFERRED shares: most lamps sold for homes are warm
+// (2700-3000 K), so a street's lit rooms read amber with a cool one here and
+// there (at 22 % and 8 % a street's rooms read grey and cold).
 const FG_NIGHT_WHITE_K: f32 = 4300.0;
-const FG_HOME_COOL_SHARE: f32 = 0.22;
-const FG_HOME_COLD_SHARE: f32 = 0.08;
+const FG_HOME_COOL_SHARE: f32 = 0.12;
+const FG_HOME_COLD_SHARE: f32 = 0.03;
 // glass at the packing's limit (a ribbon or curtain wall): its 1.5 m mullion
 // module (rooms of two or three modules, by building), the storeys' vision
 // glass from the floor to the ceiling and the opaque spandrel over it to the
@@ -241,6 +249,14 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let to_lamp = lamp_pos - vec3<f32>(px, py, pz);
     let lamp_fall = 1.0 / (1.0 + dot(to_lamp, to_lamp) * mix(0.22, 0.06, shop));
     var illum = mix(lamp_fall * 0.9 + 0.1, lamp_fall * 0.35 + 0.55, office);
+    if (fg_on()) {
+        // (`--facade-glass`) an office's troffers throw their light down: the desks and floor take
+        // it whole, the walls about FG_OFFICE_WALL_K of it, the ceiling only what the room throws
+        // back up (FG_OFFICE_CEILING_K), so a lit floor seen from the street is an even glow under
+        // its bright fittings, not a white ceiling over a dark room (the hard wedges).
+        let face_k = floor_face + (back + side) * FG_OFFICE_WALL_K + ceiling * FG_OFFICE_CEILING_K;
+        illum = mix(illum, illum * face_k * FG_OFFICE_FILL, office);
+    }
 
     // ---- surfaces ----
     let paint = rm_h(seed, 8.0);
