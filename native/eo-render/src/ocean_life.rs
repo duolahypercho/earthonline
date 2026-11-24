@@ -1,6 +1,7 @@
 //! A small camera-local window onto stable habitat tiles across the SF sea.
 //! Model buffers are permanent. Only a tile crossing uploads new placements.
 pub mod field;
+mod materials;
 pub(crate) mod canopy;
 use crate::{GpuContext, camera::Camera, look};
 use anyhow::{Context, Result, ensure};
@@ -45,6 +46,8 @@ pub(crate) struct HabitatView {
 
 pub struct OceanLife {
     reef: bool,
+    materials: Option<materials::Materials>,
+    rock_extent: [glam::Vec3; KINDS.len()],
     coastal_habitat: bool,
     vary_kelp: bool,
     rock_aprons: bool,
@@ -90,6 +93,7 @@ impl OceanLife {
         let mut indices = Vec::new();
         let mut ranges = Vec::new();
         let mut leaf_area = std::array::from_fn(|_| Vec::new());
+        let mut rock_extent = [glam::Vec3::ZERO; KINDS.len()];
         for (kind, base_name) in KINDS.iter().copied().enumerate() {
             if ((21..field::LEDGE).contains(&kind) && !look.options.reef_kelp)
                 || (kind >= field::LEDGE && !look.options.reef_rocks)
@@ -138,6 +142,11 @@ impl OceanLife {
                 for id in reader.read_indices().context("habitat indices")?.into_u32() {
                     ensure!(id < nv, "invalid habitat index");
                     indices.push(base + id);
+                }
+            }
+            if look.options.reef_materials && materials::STONE_KINDS.contains(&kind) {
+                for &index in &indices[start as usize..] {
+                    rock_extent[kind] = rock_extent[kind].max(glam::Vec3::from(vertices[index as usize].pos).abs());
                 }
             }
             if look.options.reef_canopy_light
@@ -189,18 +198,22 @@ impl OceanLife {
                 resource: view.as_entire_binding(),
             }],
         });
+        let materials = look.options.reef_materials.then(|| materials::Materials::new(ctx,root)).transpose()?;
+        let mut layouts = vec![Some(&layout), Some(look.main_bind_group_layout())];
+        if let Some(m) = &materials { layouts.push(Some(&m.layout)); }
         let pl = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("marine life"),
-            bind_group_layouts: &[Some(&layout), Some(look.main_bind_group_layout())],
+            bind_group_layouts: &layouts,
             immediate_size: 0,
         });
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("marine life"),
-            source: wgpu::ShaderSource::Wgsl(format!(
-                "const DIVE_DETAIL: bool = {};\nconst COASTAL_HABITAT: bool = {};\nconst REEF_ROCKS: bool = {};\nconst CANOPY_LIGHT: bool = {};\nconst SWELL_DIR: f32 = {:.7};\nconst SWELL_OMEGA: f32 = {:.7};\n{}",
-                look.options.dive_detail, look.options.coastal_habitat, look.options.reef_rocks, look.options.reef_canopy_light, eo_water::waves::SWELL_DIR,
+            source: wgpu::ShaderSource::Wgsl((format!(
+                "const REEF_MATERIALS: bool = {};\nconst DIVE_DETAIL: bool = {};\nconst COASTAL_HABITAT: bool = {};\nconst REEF_ROCKS: bool = {};\nconst CANOPY_LIGHT: bool = {};\nconst SWELL_DIR: f32 = {:.7};\nconst SWELL_OMEGA: f32 = {:.7};\n{}",
+                materials.is_some(), look.options.dive_detail, look.options.coastal_habitat, look.options.reef_rocks, look.options.reef_canopy_light, eo_water::waves::SWELL_DIR,
                 std::f64::consts::TAU / eo_water::waves::SWELL_TP[0], include_str!("ocean_life/habitat.wgsl"),
-            ).into()),
+            ) + materials.as_ref().map(|m|m.shader.as_str()).unwrap_or(
+                "fn reef_material(k:u32,p:vec3f,local:vec3f,dx:vec3f,dy:vec3f,s:ReefSurface,b:f32)->ReefSurface{return s;}")).into()),
         });
         let pipeline=d.create_render_pipeline(&wgpu::RenderPipelineDescriptor{
             label:Some("marine life in the opaque underwater scene"),layout:Some(&pl),
@@ -218,6 +231,8 @@ impl OceanLife {
         };
         Ok(Self {
             reef: reef.is_some(),
+            materials,
+            rock_extent,
             coastal_habitat: look.options.coastal_habitat,
             vary_kelp: look.options.reef_kelp,
             rock_aprons: look.options.reef_rocks,
@@ -270,6 +285,8 @@ impl OceanLife {
             }),
         })
     }
+
+    pub fn texture_bytes(&self) -> u64 { self.materials.as_ref().map_or(0, |m| m.bytes) }
 
     pub(crate) fn update(&self, q: &wgpu::Queue, cam: &Camera, clock: f64, canopy_map: Option<&wgpu::Texture>) -> HabitatView {
         let mut w = self.window.lock().unwrap();
@@ -340,6 +357,11 @@ impl OceanLife {
                 &all[r.start as usize..r.end as usize]
             };
             shade_plant_beds(&mut v, plants(3), field::CROWN_KINDS.into_iter().flat_map(plants));
+            if self.materials.is_some() {
+                for kind in materials::STONE_KINDS {
+                    materials::bed_contact(&mut v, plants(kind), self.rock_extent[kind]);
+                }
+            }
             if let Some(texture) = canopy_map {
                 w.canopy_bands = canopy::write(q, texture, (cell.as_vec2()+0.5)*TILE,
                     self.leaf_area.iter().zip(field::CROWN_KINDS.map(plants)).map(|(leaves, stands)| (leaves.as_slice(), stands)));
@@ -362,6 +384,7 @@ impl OceanLife {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.group, &[]);
         look.bind_main(pass);
+        if let Some(m) = &self.materials { pass.set_bind_group(2,&m.group,&[]); }
         if w.sediment_indices > 0 {
             pass.set_vertex_buffer(0, self.sediment.slice(..));
             pass.set_vertex_buffer(1, self.sediment_instance.slice(..));

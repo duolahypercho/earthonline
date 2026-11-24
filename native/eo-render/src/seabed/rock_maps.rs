@@ -8,13 +8,17 @@ use std::path::Path;
 pub const NAME: &str = "black-point-coastal-rock";
 
 pub fn load(root: &Path) -> Result<BakedMaps> {
+    load_named(root, "seaside-rock")
+}
+
+pub(crate) fn load_named(root: &Path, name: &str) -> Result<BakedMaps> {
     let dir = root.join("public/assets/shore");
     let record: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(dir.join("seaside-rock.provenance.json"))?)?;
-    let bytes = std::fs::read(dir.join("seaside-rock.png"))?;
+        serde_json::from_slice(&std::fs::read(dir.join(format!("{name}.provenance.json")))?)?;
+    let bytes = std::fs::read(dir.join(format!("{name}.png")))?;
     ensure!(
         record["sha256"] == eo_assets::glb::sha256_hex(&bytes),
-        "coastal rock checksum mismatch"
+        "{name} scan checksum mismatch"
     );
     let (w, h, mut panels) = crate::props_lib::decode_png(&bytes)?;
     ensure!(

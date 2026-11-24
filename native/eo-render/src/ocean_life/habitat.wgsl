@@ -88,9 +88,12 @@ fn rotate_xz(p:vec3f,a:f32)->vec3f {
         }
     }
     if COASTAL_HABITAT && kind==255u { surface_coord.z = color.a; }
+    if REEF_MATERIALS && ((kind>=7u && kind<=9u) || kind==14u || kind==15u || kind==24u || kind==25u) {
+        surface_coord=pos*size.xyz;
+    }
     let world=rotate_xz(loc*size.xyz,yaw)+root;
     var out:Out;out.clip=view.vp*vec4f(world,1.);out.world=world;
-    if REEF_ROCKS || CANOPY_LIGHT { out.world=world-view.eye_time.xyz; }
+    if REEF_ROCKS || CANOPY_LIGHT || REEF_MATERIALS { out.world=world-view.eye_time.xyz; }
     out.normal=rotate_xz(norm/max(size.xyz,vec3f(.001)),yaw);out.color=color.rgb*traits.w;out.kind=kind;out.local=surface_coord;
     return out;
 }
@@ -108,12 +111,13 @@ fn stone_noise(p:vec3f)->f32 {
     let e=mix(grain(cell+vec3f(0,1,1)),grain(cell+vec3f(1,1,1)),u.x);
     return mix(mix(a,b,u.y),mix(c,e,u.y),u.z);
 }
+struct ReefSurface { colour:vec3f, n:vec3f, ao:f32, rough:f32 };
 @fragment fn fs(i:Out,@builtin(front_facing) front:bool)->@location(0) vec4f {
     let eye=view.eye_time.xyz;
     // Interpolating positions relative to the swimmer preserves derivatives
     // on small rock faces several kilometres from the city origin.
-    let world=select(i.world, i.world+eye, REEF_ROCKS || CANOPY_LIGHT);
-    let to_eye=select(eye-i.world, -i.world, REEF_ROCKS || CANOPY_LIGHT);
+    let world=select(i.world, i.world+eye, REEF_ROCKS || CANOPY_LIGHT || REEF_MATERIALS);
+    let to_eye=select(eye-i.world, -i.world, REEF_ROCKS || CANOPY_LIGHT || REEF_MATERIALS);
     let d=length(to_eye);
     let up=normalize(cross(dpdy(i.world),dpdx(i.world))+vec3f(0.,.00000001,0.));
     let footprint=max(length(dpdx(i.world)),length(dpdy(i.world)));
@@ -140,7 +144,7 @@ fn stone_noise(p:vec3f)->f32 {
             alb*=.86+.10*sin(20.*p.x+6.*p.y+sin(12.*p.z))+.10*grain(floor(p*60.))*exp(-25.*footprint);
         }
     }
-    if REEF_ROCKS && ((i.kind>=7u && i.kind<=9u) || i.kind==14u || i.kind==15u || i.kind==24u || i.kind==25u) {
+    if REEF_ROCKS && !REEF_MATERIALS && ((i.kind>=7u && i.kind<=9u) || i.kind==14u || i.kind==15u || i.kind==24u || i.kind==25u) {
         let p=i.local;
         let inclusion=stone_noise(p*5.6);
         let cleft=stone_noise(p*vec3f(5.,17.,6.)+inclusion*2.8);
@@ -164,6 +168,15 @@ fn stone_noise(p:vec3f)->f32 {
         let tissue = alb * select(vec3f(1.19,0.84,0.72),vec3f(1.05,0.99,0.93),COASTAL_HABITAT) * (0.94 + 0.12*groove*resolved)
             + vec3f(0.092,0.036,0.010)*midrib;
         alb = mix(alb,tissue,i.local.z);
+        if REEF_MATERIALS && i.local.z>0.5 {
+            // The ribbon folds across its midrib. Recover its cross-blade
+            // direction from the mesh coordinates after bending in the current.
+            let dx=dpdx(i.world); let dy=dpdy(i.world);
+            let a=cross(dy,n); let b=cross(n,dx); let det=dot(dx,a);
+            let across=sign(det)*(dpdx(side)*a+dpdy(side)*b);
+            let axis=across*inverseSqrt(max(dot(across,across),1e-16));
+            n=normalize(n+axis*(0.12*sin(phase)*resolved+0.06*side));
+        }
     }
     if DIVE_DETAIL && i.kind==20u {
         let belly = 1.-smoothstep(-0.10,0.08,i.local.y);
@@ -201,6 +214,12 @@ fn stone_noise(p:vec3f)->f32 {
     if i.kind>=16u && i.kind<=18u {
         alb*=0.84+0.25*grain(floor(i.local*64.))*exp(-8.*footprint);
     }
+    var material=ReefSurface(alb,n,1.,1.);
+    let mineral=(i.kind>=7u && i.kind<=9u) || i.kind==14u || i.kind==15u || i.kind==24u || i.kind==25u;
+    if REEF_MATERIALS && (mineral || i.kind==255u) {
+        material=reef_material(i.kind,world,i.local,dpdx(i.world),dpdy(i.world),material,i.color.g);
+        n=material.n; alb=material.colour;
+    }
     if !front && i.kind!=255u {n=-n;}
     let lambert=max(dot(n,sun),0.);
     var ambient=mix(light.ground.rgb,light.sky.rgb,clamp(.52+.46*n.y,0.,1.))+light.ambient.rgb;
@@ -208,7 +227,17 @@ fn stone_noise(p:vec3f)->f32 {
         ambient += reef_sky(n)*light.ambient.w*light.environment.w;
     }
     if COASTAL_HABITAT && i.kind==255u { ambient *= i.local.z; }
-    var radiance=alb*(ambient+light.key.rgb*lambert)/3.14159;
+    var radiance=alb*(ambient*material.ao+light.key.rgb*lambert)/3.14159;
+    if REEF_MATERIALS && (mineral || i.kind==255u) {
+        // Dielectric reflection at the water/mineral boundary (1.333 and 1.52).
+        let h=normalize(sun+v); let nv=max(dot(n,v),0.001); let nh=max(dot(n,h),0.);
+        let a2=pow(clamp(material.rough,0.28,1.),4.);
+        let g=nh*nh*(a2-1.)+1.;
+        let distribution=a2/(3.14159*g*g);
+        let visibility=0.5/max(nv*sqrt(a2+(1.-a2)*lambert*lambert) + lambert*sqrt(a2+(1.-a2)*nv*nv),0.001);
+        let fresnel=0.0043+0.9957*pow(1.-clamp(dot(v,h),0.,1.),5.);
+        radiance+=light.key.rgb*(lambert*distribution*visibility*fresnel);
+    }
     if i.kind<=1u || i.kind==20u {
         let h=normalize(sun+v);radiance+=light.key.rgb*.11*pow(max(dot(n,h),0.),24.)*(.32+.68*alb);
     }
@@ -219,6 +248,10 @@ fn stone_noise(p:vec3f)->f32 {
         // A thin lamina receives diffuse sky on both faces. Its backlit warm
         // pigment goes through the same water transport as its reflected light.
         let backside = max(-dot(n,sun), 0.);
+        if REEF_MATERIALS && i.local.z>0.5 {
+            let thin=smoothstep(0.16,0.89,abs(i.local.y));
+            radiance+=vec3f(0.038,0.025,0.006)*thin*backside*light.key.rgb;
+        }
         radiance += alb * vec3f(1.0, 0.80, 0.43)
             * (0.11*light.sky.rgb + 0.18*backside*light.key.rgb);
     }
