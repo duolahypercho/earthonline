@@ -190,6 +190,13 @@ pub struct SkyOptions {
     /// traced as well (sky_light.wgsl `sky_sr_*`). Off by default (its code
     /// compiled out: `SF_SCREEN_REFLECT`); off, the frame is as before.
     pub screen_reflect: bool,
+    /// (`--probe-sky`, the reflect track) the probe grid's sky is the one the
+    /// frame draws (the atmosphere tables over the drawn dome, the city's
+    /// glow, greyed by the cloud cover) instead of the analytic dome alone, and
+    /// its levels are GGX-prefiltered instead of box-filtered (probe_sky.wgsl,
+    /// probe_grid.rs `SkyFill`). Off by default (made only with
+    /// `SF_PROBE_SKY` compiled in); off, the probes are as before.
+    pub probe_sky: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -265,6 +272,7 @@ impl Default for SkyOptions {
             cloud_depth_haze: false,
             wet_surfaces: false,
             screen_reflect: false,
+            probe_sky: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -308,6 +316,7 @@ impl SkyOptions {
             cloud_depth_haze: false,
             wet_surfaces: false,
             screen_reflect: false,
+            probe_sky: false,
             ..Self::default()
         }
     }
