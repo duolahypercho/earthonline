@@ -390,6 +390,9 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-cloud-shadows" => a.look.sky.cloud_shadows = false,
             "--cloud-depth-haze" => a.look.sky.cloud_depth_haze = true,
             "--no-cloud-depth-haze" => a.look.sky.cloud_depth_haze = false,
+            // the cars' materials and lamps (eo-render agents_draw.wgsl `ag_car_*`; off by default).
+            "--car-materials" => a.look.car_materials = 1,
+            "--no-car-materials" => a.look.car_materials = 0,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
