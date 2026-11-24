@@ -940,6 +940,8 @@ fn ag_car_fog(world: vec3<f32>, m: Material) -> f32 {
 // is hidden where its map says the point does not see it (read 15 cm off
 // the body, `AG_CAR_FAR_MAP_OFFSET`).
 const AG_CAR_FAR_MAP_OFFSET: f32 = 0.15;
+// A light's reflection under this share of the exposure's white skips its map.
+const AG_CAR_FAR_MAP_MIN: f32 = 0.002;
 // The specular anti-aliasing's variance for the far lights' lobe on paint, x AG_CAR_AA_VARIANCE.
 const AG_CAR_FAR_AA: f32 = 4.0;
 fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
@@ -982,18 +984,21 @@ fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>
             src = 0.5 * sqrt(max(li.size, 0.0));
         }
         src = max(src, 0.02);
-        var e = li.intensity * shape * rest / d2 * nl;
-        if (LS_SHADER && li.pad >= 1.0 && e > 0.0) {
-            // looked up off the body: the car is in the lamp's map, and its own
-            // depth there (a 10 cm texel) would speckle a sharp highlight
-            e = e * ls_light_visibility(u32(li.pad) - 1u, world + n * AG_CAR_FAR_MAP_OFFSET, n);
-        }
+        let e = li.intensity * shape * rest / d2 * nl;
         if (e <= 0.0) {
             continue;
         }
         let rc = sqrt(min(rough * rough + src / (2.0 * dist), 1.0));
         let bound = d2 / (LK_PI * src * src * nl);
-        out = out + li.color * e * min(lk_ggx(n, v, l, f0, rc), vec3<f32>(bound));
+        var c = li.color * e * min(lk_ggx(n, v, l, f0, rc), vec3<f32>(bound));
+        // the lamp's map only where its highlight shows (most lights leave a
+        // sharp lacquer nothing: four compares a light were the term's cost),
+        // looked up off the body: the car is in the map, and its own depth
+        // there (a 10 cm texel) would speckle a sharp highlight
+        if (LS_SHADER && li.pad >= 1.0 && lk_luma(c) * look.key.w > AG_CAR_FAR_MAP_MIN) {
+            c = c * ls_light_visibility(u32(li.pad) - 1u, world + n * AG_CAR_FAR_MAP_OFFSET, n);
+        }
+        out = out + c;
     }
     return out;
 }
