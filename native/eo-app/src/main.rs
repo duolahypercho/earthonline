@@ -453,6 +453,13 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // (camera track) the camera model under `--look cinematic` (eo-render cine_post.rs); off by default
             "--cine-camera" => a.look.sky.cine_camera = true,
             "--no-cine-camera" => a.look.sky.cine_camera = false,
+            // (camera track, round 2) the camera model's later features (each needs `--cine-camera`; off by default)
+            "--camera-tone" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_TONE,
+            "--no-camera-tone" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_TONE,
+            "--white-balance" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_WB,
+            "--no-white-balance" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_WB,
+            "--lens-halation" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_HALATION,
+            "--no-lens-halation" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_HALATION,
             "--no-meter" => a.look.sky.meter = false, // the camera meter off (the hour's exposure curve alone)
             "--no-atmosphere" => a.look.sky.atmosphere = false, // the JS analytic dome instead of the atmosphere tables
             "--no-contact-shadows" => a.look.sky.contact = false,
