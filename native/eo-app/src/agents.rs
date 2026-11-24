@@ -6,6 +6,32 @@
 //!
 //! `--no-agents` turns all of it off; `--agent-density N` multiplies the
 //! default population (42 moving cars, People `medium`) N times in one region.
+//!
+//! `--crowd` (off by default; `--no-crowd` as before, the frame unchanged):
+//! the street's population follows the place and the hour, and a camera cut
+//! arrives at a street already lived in.
+//!
+//! * The people by place and hour (eo-sim `CrowdDensity`, consts.rs's crowd
+//!   density model) in place of the People setting's fixed 40 bodies in 55 m:
+//!   each footway holds people by its street class, the storeys fronting it,
+//!   its share of walk-in shops and of bars and restaurants (the frontage
+//!   survey: every building edge of the city file with its storeys and its
+//!   street-level use, `frontage_edges`), at the day's footfall or the
+//!   evening economy's, within 150 m of the focus (the renderer's crowd
+//!   tiers draw to 240 m), at most 400 bodies.
+//! * The simulation's hour is the drawn hour (`--time-of-day`, and each
+//!   cut's): without the switch it starts at noon whatever is drawn.
+//! * A cut (the focus jumping more than `CUT_JUMP_M` between two frames, or
+//!   the drawn hour jumping more than `CUT_HOUR_H`: a teleport, a capture
+//!   card, a menu's time change) rebuilds the simulation round the new focus
+//!   at the new hour from the network source already loaded, off the render
+//!   thread, and runs `CUT_WARMUP_STEPS` fixed steps (walkers mid-walk, cars
+//!   in flow and queued at the lights) before it replaces the running one:
+//!   the street fills in one step, already settled, instead of ramping in
+//!   from the disc's edge (or, in a capture that does not step the clock,
+//!   never: the cards drew the simulation of the bench's first path, metres
+//!   to kilometres away). The same focus, hour and network give the same
+//!   street. `settle` waits for a pending cut (the captures call it).
 
 use crate::{Args, World};
 use anyhow::Result;
@@ -27,6 +53,79 @@ const RESTREAM_M: f64 = 32.0;
 /// Fixed steps run before the first frame so the population has filled in.
 const WARMUP_STEPS: usize = 600;
 pub const SEED_INT: u32 = 1;
+/// `--crowd`: a focus jump (m, between two pumps) or a drawn-hour jump (h)
+/// this large is a cut, and the steps a cut's new simulation runs before it
+/// is shown (10 s: a walker 13 m on, a car through a signal cycle's start).
+const CUT_JUMP_M: f64 = eo_sim::consts::CROWD_RADIUS_M;
+const CUT_HOUR_H: f64 = 0.25;
+const CUT_WARMUP_STEPS: usize = 600;
+
+/// `--crowd` (main.rs sets it before the runtime starts; see the module's head).
+pub static CROWD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn crowd_on() -> bool {
+    CROWD.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The walk-in rule of the decal survey (streets.rs `cc0_survey`): a shop or
+/// food `amenity`, or a retail / commercial `building`; not worship,
+/// schools, services behind a lobby or parking. The evening economy's uses
+/// count as `night` instead.
+const NOT_SHOPS: &[&str] = &["place_of_worship", "school", "university", "kindergarten", "college", "parking", "fire_station", "police", "company", "social_facility", "clinic", "hospital", "doctors", "dentist", "toilets", "grave_yard", "prison", "townhall", "courthouse"];
+const SHOP_BUILDINGS: &[&str] = &["retail", "commercial", "supermarket", "kiosk"];
+const NIGHT_USES: &[&str] = &["bar", "pub", "restaurant", "nightclub", "biergarten", "theatre", "cinema", "arts_centre", "events_venue", "music_venue"];
+
+/// `--crowd`: the walks of their own (eo-sim `NativeSource::with_paths`):
+/// the city file's `pedestrian`, `footway` and `path` ways at grade (no
+/// bridge, tunnel or layer) that are not a street's sidewalk or crossing (the
+/// file lists those apart, `sidewalkWays` and `crossingWays`: the streets'
+/// own footways stand for them): a plaza's, a promenade's, a park's paths.
+pub fn walk_paths(paths: &eo_data::DataPaths, city: &eo_data::City) -> Vec<eo_sim::native::PathWay> {
+    #[derive(serde::Deserialize)]
+    struct Id {
+        id: eo_data::RecordId,
+    }
+    #[derive(serde::Deserialize)]
+    struct Lists {
+        #[serde(rename = "sidewalkWays", default)]
+        sidewalks: Vec<Id>,
+        #[serde(rename = "crossingWays", default)]
+        crossings: Vec<Id>,
+    }
+    let street_walks: std::collections::HashSet<String> = eo_data::read_maybe_gzip(&paths.sf("sf-city.json.gz"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Lists>(&b).ok())
+        .map(|l| l.sidewalks.iter().chain(&l.crossings).map(|i| i.id.key()).collect())
+        .unwrap_or_default();
+    city.roads
+        .iter()
+        .filter(|r| matches!(r.highway.as_str(), "pedestrian" | "footway" | "path") && !r.bridge && !r.tunnel && r.layer == 0 && r.points64.len() >= 2 && !street_walks.contains(&r.id))
+        .map(|r| eo_sim::native::PathWay { id: r.id.clone(), highway: r.highway.clone(), points: r.points64.clone() })
+        .collect()
+}
+
+/// `--crowd`: every building edge of the city file as a front the footways
+/// are measured against (eo-sim `NativeSource::with_frontage`): its storeys
+/// (the `levels` tag, else the resolved height over the kit's storey) and
+/// its street-level use.
+pub fn frontage_edges(city: &eo_data::City) -> Vec<eo_sim::native::FrontEdge> {
+    let mut out = Vec::with_capacity(city.buildings.len() * 6);
+    for b in &city.buildings {
+        let n = b.ring.len();
+        if n < 3 {
+            continue;
+        }
+        let storeys = b.tags.levels.filter(|l| *l >= 1.0).unwrap_or(b.height as f64 / eo_kit::classify::STOREY_METRES).max(1.0) as f32;
+        let am = b.tags.amenity.as_str();
+        let night = NIGHT_USES.contains(&am);
+        let shops = !night && ((!am.is_empty() && !NOT_SHOPS.contains(&am)) || SHOP_BUILDINGS.contains(&b.tags.building.as_str()));
+        for i in 0..n {
+            let (p, q) = (b.ring[i], b.ring[(i + 1) % n]);
+            out.push(eo_sim::native::FrontEdge { a: [p[0] as f64, p[1] as f64], b: [q[0] as f64, q[1] as f64], storeys, shops, night });
+        }
+    }
+    out
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct AgentOpts {
@@ -34,11 +133,13 @@ pub struct AgentOpts {
     pub density: u32,
     /// `--car-detail` (0 as before): the library's far bodies and the renderer's vehicle tiers.
     pub car_detail: u8,
+    /// `--crowd` (false as before): the population by place and hour, cuts settled.
+    pub crowd: bool,
 }
 
 impl Default for AgentOpts {
     fn default() -> Self {
-        Self { on: true, density: 1, car_detail: 0 }
+        Self { on: true, density: 1, car_detail: 0, crowd: false }
     }
 }
 
@@ -87,15 +188,34 @@ pub struct AgentRuntime {
     /// (a traffic car driven through the player's car or the lens; the simulation does
     /// not see the player's car).
     pub hide_near: Vec<([f32; 3], f32)>,
+    /// `--crowd`: the city file (the frontage survey's buildings), the
+    /// network source once loaded (a cut builds from it), the hour the
+    /// simulation starts at, the last pump's focus and drawn hour, the cut
+    /// being built (its focus and hour), and the feed post the cut's first
+    /// frame went out as (cleared once its instances are back).
+    city: Option<Arc<eo_data::City>>,
+    source: Option<Arc<eo_sim::native::NativeSource>>,
+    start_hour: f64,
+    last_focus: Option<([f64; 3], f64)>,
+    cut_rx: Option<(Receiver<Result<SimWorld, String>>, [f64; 3], f64)>,
+    cut_post: Option<u64>,
+    /// `--crowd`: cuts made (the capture JSON reports them).
+    pub cuts: u64,
 }
 
-/// One region around `focus` at `density` times the default population.
-fn region_config(density: u32) -> RegionConfig {
+/// One region around `focus` at `density` times the default population;
+/// with `crowd` (`--crowd`) the people by place and `hour` instead of the
+/// People setting's disc, the clock starting at `hour` (else noon, as before).
+fn region_config(density: u32, crowd: Option<f64>) -> RegionConfig {
     let mut cfg = RegionConfig::game_default(SEED_INT);
     let n = density.max(1) as usize;
     cfg.vehicle_pool *= n;
     if let People::Bubble(b) = &mut cfg.people {
         b.max_bodies *= n;
+    }
+    if let Some(hour) = crowd {
+        cfg.hour = hour.rem_euclid(24.0);
+        cfg.crowd = Some(eo_sim::consts::CrowdDensity::standard(n as f64));
     }
     cfg
 }
@@ -112,7 +232,7 @@ impl AgentRuntime {
     }
 
     fn start_mode(world: &World, args: &Args, focus: [f64; 3], remote_mode: bool) -> Self {
-        let opts = AgentOpts { on: args.agents, density: args.agent_density, car_detail: args.car_detail };
+        let opts = AgentOpts { on: args.agents, density: args.agent_density, car_detail: args.car_detail, crowd: crowd_on() };
         let ground = match &world.street {
             Some(s) => Ground::Street(s.world.clone()),
             None => Ground::Elevation(Arc::new(world.elevation.clone())),
@@ -141,6 +261,14 @@ impl AgentRuntime {
             remote_mode,
             hide_people: false, // people
             clock: None, // smooth time
+            // `--crowd`
+            city: opts.crowd.then(|| world.city.clone()),
+            source: None,
+            start_hour: args.time_of_day,
+            last_focus: None,
+            cut_rx: None,
+            cut_post: None,
+            cuts: 0,
         };
         if !opts.on {
             return rt;
@@ -173,6 +301,12 @@ impl AgentRuntime {
         self.last_steps = 0;
         self.sim_ready_ms = None;
         self.opts.density = density;
+        // `--crowd`: the start hour, and the frontage survey (none without the switch).
+        self.cut_rx = None;
+        self.cut_post = None;
+        self.last_focus = None;
+        let crowd = self.opts.crowd.then_some(self.start_hour);
+        let city = self.city.clone();
         let paths = world.paths.clone();
         // The structure level of each way (`--structures`; empty otherwise, which leaves the sim as it was).
         let levels = self.structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
@@ -181,18 +315,13 @@ impl AgentRuntime {
             .name("eo-agents-sim-build".into())
             .spawn(move || {
                 let r = (|| -> Result<(SimWorld, Arc<eo_sim::native::NativeSource>)> {
-                    let source = eo_sim::native::load(&paths)?.with_levels(levels);
-                    let tiles = eo_sim::native::tiles_around(focus[0], focus[1], SIM_RADIUS_M);
-                    let mut net = Network::new(source.timing.clone());
-                    net.add(source.build(&tiles));
-                    let mut w = SimWorld::new(net);
-                    let f = Focus { x: focus[0], z: focus[1], yaw: focus[2] };
-                    let r = Region::new(&w.net, 0, region_config(density), f);
-                    w.regions.push(r);
-                    for _ in 0..WARMUP_STEPS {
-                        w.step();
+                    let mut source = eo_sim::native::load(&paths)?.with_levels(levels);
+                    if let Some(c) = &city {
+                        source = source.with_frontage(frontage_edges(c)).with_paths(walk_paths(&paths, c)); // `--crowd`
                     }
-                    Ok((w, Arc::new(source)))
+                    let source = Arc::new(source);
+                    let w = build_sim(&source, focus, density, crowd, WARMUP_STEPS);
+                    Ok((w, source))
                 })();
                 let _ = tx.send(r.map_err(|e| format!("{e:#}")));
             })
@@ -250,16 +379,10 @@ impl AgentRuntime {
                 self.sim_rx = None;
                 match r {
                     Ok((w, src)) => {
-                        let source = Some(src);
-                        let mut last = [f64::NAN; 2];
-                        self.sim = Some(AsyncSim::start_with(w, move |w| {
-                            let Some(src) = &source else { return };
-                            let f = w.regions.first().map(|r| [r.focus.x, r.focus.z]).unwrap_or([0.0; 2]);
-                            if !((f[0] - last[0]).hypot(f[1] - last[1]) < RESTREAM_M) {
-                                last = f;
-                                eo_sim::native::stream(w, src, SIM_RADIUS_M);
-                            }
-                        }));
+                        if self.opts.crowd {
+                            self.source = Some(src.clone()); // `--crowd`: a cut builds from it
+                        }
+                        self.sim = Some(start_async(w, src));
                         self.sim_ready_ms = Some(self.started.elapsed().as_secs_f64() * 1e3);
                     }
                     Err(e) => {
@@ -278,6 +401,9 @@ impl AgentRuntime {
                 }
             }
         }
+        if self.opts.crowd && !self.remote_mode {
+            self.cut_check(focus, renderer.look.time_of_day()); // `--crowd`
+        }
         let gpu = renderer.agents.get();
         if let Some(g) = gpu {
             g.set_enabled(self.opts.on);
@@ -291,7 +417,10 @@ impl AgentRuntime {
             if fr.steps != self.last_steps {
                 self.last_steps = fr.steps;
                 if let Some(feed) = &self.feed {
-                    feed.post(fr.clone());
+                    let seq = feed.post(fr.clone());
+                    if self.cut_post == Some(0) {
+                        self.cut_post = Some(seq); // `--crowd`: the cut's first frame
+                    }
                 }
             }
         } else if let Some(fr) = self.remote.take() {
@@ -306,9 +435,12 @@ impl AgentRuntime {
             self.follow_clock(renderer);
         }
         if let Some(feed) = &self.feed {
-            let (out, ms) = feed.take();
-            if let Some(o) = out {
+            let (out, ms) = feed.take_seq();
+            if let Some((o, seq)) = out {
                 self.last = Some(o);
+                if self.cut_post.is_some_and(|p| p > 0 && seq >= p) {
+                    self.cut_post = None; // `--crowd`: the cut's street is what is drawn
+                }
             }
             st.feed_ms = ms;
         }
@@ -348,6 +480,98 @@ impl AgentRuntime {
         }
         st.cpu_ms = t0.elapsed().as_secs_f64() * 1e3;
         st
+    }
+
+    /// `--crowd`: start a cut when the focus or the drawn hour jumps; swap a
+    /// finished cut in (or build it again when the focus moved on meanwhile).
+    fn cut_check(&mut self, focus: [f64; 3], hour: f64) {
+        let jumped = |a: &[f64; 3], ha: f64, b: &[f64; 3], hb: f64| {
+            let dh = (ha - hb).rem_euclid(24.0);
+            (a[0] - b[0]).hypot(a[1] - b[1]) > CUT_JUMP_M || dh.min(24.0 - dh) > CUT_HOUR_H
+        };
+        if let Some((rx, at, h)) = &self.cut_rx {
+            match rx.try_recv() {
+                Ok(Ok(w)) => {
+                    let stale = jumped(at, *h, &focus, hour);
+                    self.cut_rx = None;
+                    if !stale {
+                        if let Some(src) = self.source.clone() {
+                            self.sim = Some(start_async(w, src));
+                            self.last_steps = 0;
+                            self.cut_post = Some(0); // the next post is the cut's first frame
+                            self.cuts += 1;
+                        }
+                    } else {
+                        self.start_cut(focus, hour);
+                    }
+                }
+                Ok(Err(e)) => {
+                    eprintln!("agents: cut failed: {e}");
+                    self.errors.push(e);
+                    self.cut_rx = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.cut_rx = None,
+            }
+        } else if self.sim.is_some() {
+            if let Some((f, h)) = self.last_focus {
+                if jumped(&f, h, &focus, hour) {
+                    self.start_cut(focus, hour);
+                }
+            }
+        }
+        self.last_focus = Some((focus, hour));
+    }
+
+    /// Build the simulation round `focus` at `hour` on a thread (`--crowd`).
+    fn start_cut(&mut self, focus: [f64; 3], hour: f64) {
+        let Some(src) = self.source.clone() else { return };
+        let density = self.opts.density;
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("eo-agents-sim-cut".into())
+            .spawn(move || {
+                let _ = tx.send(Ok(build_sim(&src, focus, density, Some(hour), CUT_WARMUP_STEPS)));
+            })
+            .expect("spawn simulation cut");
+        self.cut_rx = Some((rx, focus, hour));
+    }
+
+    /// Whether a cut is being built or its street is not drawn yet (`--crowd`; always false without it).
+    pub fn cut_pending(&self) -> bool {
+        self.cut_rx.is_some() || self.cut_post.is_some()
+    }
+
+    /// Pump (time held) until a pending cut's street is drawn, at most
+    /// `timeout_s` (`--crowd`; returns at once without it or without a cut).
+    pub fn settle(&mut self, ctx: &GpuContext, renderer: &Renderer, focus: [f64; 3], timeout_s: f64) {
+        if !self.opts.crowd {
+            return;
+        }
+        let t = Instant::now();
+        self.pump(ctx, renderer, focus, 0.0);
+        while self.cut_pending() && t.elapsed().as_secs_f64() < timeout_s {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            self.pump(ctx, renderer, focus, 0.0);
+        }
+        if self.cut_pending() {
+            eprintln!("agents: cut still pending after {timeout_s:.0} s");
+        }
+    }
+
+    /// `--crowd` (captures): the simulated people and vehicles drawn now,
+    /// all and within 50 / 150 m of `eye`, and the cuts made so far.
+    pub fn census_json(&self, eye: Vec3) -> serde_json::Value {
+        let lib = self.lib.as_deref();
+        let person = |a: &GpuAgent| lib.and_then(|l| l.models.get(a.model as usize)).is_some_and(|m| m.class == eo_agents::CLASS_PERSON);
+        let list = self.last.as_deref().map(|v| v.as_slice()).unwrap_or(&[]);
+        let near = |a: &GpuAgent, r: f32| Vec3::from(a.pos).distance(eye) < r;
+        let count = |p: bool, r: f32| list.iter().filter(|a| person(a) == p && near(a, r)).count();
+        serde_json::json!({
+            "people": count(true, f32::INFINITY), "people_50m": count(true, 50.0), "people_150m": count(true, 150.0),
+            "vehicles": count(false, f32::INFINITY), "vehicles_50m": count(false, 50.0), "vehicles_150m": count(false, 150.0),
+            "parked": self.parked.len(), "cuts": self.cuts,
+        })
     }
 
     /// `--smooth-time`: the drawn hour follows the simulation's clock (eo-sim's
@@ -416,6 +640,43 @@ impl AgentRuntime {
     }
 }
 
+/// A simulation round `focus`: the network within `SIM_RADIUS_M` from the
+/// source, one region (`region_config`), `steps` fixed steps run.
+fn build_sim(source: &eo_sim::native::NativeSource, focus: [f64; 3], density: u32, crowd: Option<f64>, steps: usize) -> SimWorld {
+    let tiles = eo_sim::native::tiles_around(focus[0], focus[1], SIM_RADIUS_M);
+    let mut net = Network::new(source.timing.clone());
+    net.add(source.build(&tiles));
+    let mut w = SimWorld::new(net);
+    let f = Focus { x: focus[0], z: focus[1], yaw: focus[2] };
+    let r = Region::new(&w.net, 0, region_config(density, crowd), f);
+    w.regions.push(r);
+    for _ in 0..steps {
+        w.step();
+    }
+    if let (Some(hour), Some(r)) = (crowd, w.regions.first()) {
+        if let Some(d) = r.cfg.crowd {
+            let c = r.crowd_census(&w.net, d, hour);
+            eprintln!(
+                "crowd: ({:.0}, {:.0}) at {hour:.2} h: {} footways, {:.0} m within {:.0} m; shops {:.2}, nightlife {:.2}, storeys {:.1}, class {:.2} (length-weighted); {:.0} people expected, {} walkers and {} cars after {steps} steps",
+                focus[0], focus[1], c.footways, c.length_m, d.radius_m, c.shops, c.night, c.storeys, c.class_weight, c.people, r.crowd.walkers.len(), r.fleet.len()
+            );
+        }
+    }
+    w
+}
+
+/// The simulation on its own thread, streaming the network round its focus.
+fn start_async(w: SimWorld, src: Arc<eo_sim::native::NativeSource>) -> AsyncSim {
+    let mut last = [f64::NAN; 2];
+    AsyncSim::start_with(w, move |w| {
+        let f = w.regions.first().map(|r| [r.focus.x, r.focus.z]).unwrap_or([0.0; 2]);
+        if !((f[0] - last[0]).hypot(f[1] - last[1]) < RESTREAM_M) {
+            last = f;
+            eo_sim::native::stream(w, &src, SIM_RADIUS_M);
+        }
+    })
+}
+
 /// The player's drawn state between frames: the walk phase (`advanceGaitPhase`;
 /// eo-player does not phase the body) and each car's wheel spin.
 #[derive(Default)]
@@ -454,5 +715,46 @@ impl PlayerVisual {
                 out.push(c);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `--crowd`'s population at the capture cards' places and hours (a
+    /// diagnostic: `cargo test --release -p eo-app crowd_at_the_cards -- --ignored --nocapture`).
+    #[test]
+    #[ignore]
+    fn crowd_at_the_cards() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let city = eo_data::City::load(&paths).unwrap();
+        let walks = walk_paths(&paths, &city);
+        eprintln!("walks of their own: {} ({} pedestrian)", walks.len(), walks.iter().filter(|w| w.highway == "pedestrian").count());
+        let source = eo_sim::native::load(&paths).unwrap().with_frontage(frontage_edges(&city)).with_paths(walks);
+        for (name, x, z, hour) in [
+            ("alley", 1712.0, -1439.0, 12.0),
+            ("plaza", 2606.0, -2366.0, 12.0),
+            ("castro-night", -1710.0, 2353.0, 21.0),
+            ("mission-wet", 100.0, 3520.0, 22.0),
+            ("downtown-golden", 1883.0, -1799.0, 18.5),
+            ("viaduct-golden", 135.0, 1136.0, 18.5),
+            ("embarcadero-blue", 3087.0, -2068.0, 19.25),
+        ] {
+            let t = std::time::Instant::now();
+            let _ = build_sim(&source, [x, z, 0.0], 1, Some(hour), 60);
+            eprintln!("  {name}: {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
+        }
+    }
+
+    /// The frontage survey reads every building edge, its storeys and its use.
+    #[test]
+    fn frontage_edges_carry_use_and_storeys() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let city = eo_data::City::load(&paths).unwrap();
+        let edges = frontage_edges(&city);
+        assert!(edges.len() > city.buildings.len() * 3, "every ring's edges");
+        assert!(edges.iter().any(|e| e.night) && edges.iter().any(|e| e.shops), "both uses found");
+        assert!(edges.iter().all(|e| e.storeys >= 1.0 && !(e.shops && e.night)));
     }
 }

@@ -468,6 +468,10 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
             "--no-rocketbox" => a.rocketbox = false, // people
             "--no-rocketbox-motions" => eo_agents::motion::set_enabled(false), // no motion, so no people
+            "--crowd" => agents::CROWD.store(true, std::sync::atomic::Ordering::Relaxed), // the population by place and hour (agents.rs)
+            "--no-crowd" => agents::CROWD.store(false, std::sync::atomic::Ordering::Relaxed),
+            "--people-shading" => eo_render::agents::set_people_shading(true), // skin, cloth and hair (agents_draw.wgsl `pp_person`)
+            "--no-people-shading" => eo_render::agents::set_people_shading(false),
             // read by eo_render::hlod::HlodOptions::from_env and bench/hlod_shots.rs
             "--hlod-shots" => {}
             "--far-shots" | "--far-diag" => {} // bench/far_shots.rs reads them

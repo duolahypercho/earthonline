@@ -1067,11 +1067,12 @@ impl PropsRuntime {
 
 /// Settle-time helper: the parked cars for this camera into the agents, one frozen agent pump.
 pub fn sync_parked(ctx: &GpuContext, renderer: &Renderer, props: &mut PropsRuntime, agents: &mut crate::agents::AgentRuntime, cam: &eo_render::camera::Camera) {
-    if !props.on {
-        return;
+    let focus = crate::agents::AgentRuntime::focus_of(cam.eye, cam.forward());
+    if props.on {
+        agents.parked = props.parked_agents(agents.lib.as_deref(), cam.eye).to_vec();
+        agents.pump(ctx, renderer, focus, 0.0);
     }
-    agents.parked = props.parked_agents(agents.lib.as_deref(), cam.eye).to_vec();
-    agents.pump(ctx, renderer, crate::agents::AgentRuntime::focus_of(cam.eye, cam.forward()), 0.0);
+    agents.settle(ctx, renderer, focus, 120.0); // `--crowd`: a cut's street, settled (nothing without it)
 }
 
 // ---- one runtime for the modes that hold their GPU state behind shared references (window, agents captures)

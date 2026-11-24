@@ -459,6 +459,9 @@ pub fn run(
         if args.look.sky.shop_light > 0 {
             card["shop_lights"] = shop_census_json(ctx, renderer); // (`--shop-light`) only with the option
         }
+        if crate::agents::crowd_on() {
+            card["crowd"] = agents.census_json(cam.eye); // (`--crowd`) only with the option
+        }
         if args.look.lighting.light_shadows > 0 || args.look.lighting.headlight_shadows > 0 {
             card["light_shadows"] = light_shadows_json(ctx, renderer); // (lighting) only with the options
             if std::env::var_os("EO_LIGHT_SHADOW_ATLAS").is_some() {
