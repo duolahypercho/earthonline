@@ -558,6 +558,45 @@ const PR_PALM_LEAN: f32 = 0.3; // how far a leaflet's shading normal leans to th
 // axes and the 30 % lean toward the crown's outward normal, ~0.07 a component)
 const PR_PALM_NORMAL_VAR: f32 = 0.07;
 
+// sf:end
+// sf:PALM&PALM_VARIETY+
+// ---- palm variety (`--palm-variety`, with `--palm-detail`; in the shader only with both) ----
+// The city's Canary Island date palms are not clones: the crowns differ in their
+// green (a deficient palm yellower, a vigorous one bluer and darker), the
+// unpruned ones keep a skirt of dead fronds hanging under the live crown (grey-
+// brown, drier with each year), about a third carry the orange date clusters
+// on their stalks among the lower leaf bases, the bark weathers to its own tone,
+// and many have the lower trunk skinned smooth by the city's pruning crews (the
+// old leaf bases cut off flush, a pale fibrous column). Each palm draws its own
+// from hashes of where it stands.
+struct PrPalmVariety {
+    hue: vec3<f32>,
+    skirt: f32, // 0 pruned .. 1 a full skirt
+    skirt_y: f32, // how far under the crown's heart the skirt starts (model m)
+    fruit: f32, // 0 or 1: dates
+    bark: vec3<f32>,
+    skin: f32, // 0 or 1: the lower trunk skinned
+    skin_h: f32, // up to here (model m)
+};
+
+fn pr_palm_variety(inst: PrInstance) -> PrPalmVariety {
+    let h1 = st_hash(inst.pos.xz * 0.71 + vec2<f32>(9.1, 2.3));
+    let h2 = st_hash(inst.pos.xz * 1.13 + vec2<f32>(4.4, 8.8));
+    let h3 = st_hash(inst.pos.xz * 0.29 + vec2<f32>(1.7, 6.2));
+    let h4 = st_hash(inst.pos.xz * 0.53 + vec2<f32>(7.3, 3.9));
+    var o: PrPalmVariety;
+    // the crown's green: yellower and paler to bluer and darker (about +-8 % in r and b)
+    o.hue = mix(vec3<f32>(1.14, 1.04, 0.8), vec3<f32>(0.88, 0.96, 1.14), h1) * (0.82 + 0.36 * h2);
+    o.skirt = select(0.0, mix(0.7, 1.0, h2), h3 < 0.5);
+    o.skirt_y = mix(1.4, 0.4, h2);
+    o.fruit = select(0.0, 1.0, h4 < 0.35);
+    o.bark = mix(vec3<f32>(0.88, 0.93, 1.04), vec3<f32>(1.1, 0.99, 0.88), h3) * (0.85 + 0.3 * h4);
+    o.skin = select(0.0, 1.0, h1 > 0.8);
+    o.skin_h = mix(0.7, 1.6, h4);
+    return o;
+}
+// sf:end
+// sf:PALM+
 // the lattice's height (0 groove .. 1 boss top) at (a round, b up) in bases: each
 // base its own (`j`, three hashes 0..1): its size, how far its cut was rounded
 // (a sharp diamond to a worn oval), how high it stands out of the fibre, and a
@@ -623,6 +662,22 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
         let mean_tone = mix(bark, fibre, 0.15);
         var alb = mix(mean_tone, near_tone, k);
         alb = alb * mix(0.7, 1.0, smoothstep(0.0, 0.7, local.y)); // splash and grime at the foot
+// sf:end
+// sf:PALM&PALM_VARIETY+
+        // (`--palm-variety`) this palm's bark, and on some the lower trunk skinned smooth
+        let pv = pr_palm_variety(inst);
+        alb = alb * pv.bark;
+        let skin = pv.skin * (1.0 - smoothstep(pv.skin_h - 0.25, pv.skin_h + 0.25, local.y + 0.3 * (st_noise(vec2<f32>(uv.x * 20.0, seed * 3.0)) - 0.5)));
+        if (skin > 0.0) {
+            // the cut leaf bases' scars: shallow rings a base's height apart, fibre between
+            let ring = 0.9 + 0.1 * st_noise(vec2<f32>(local.y * 9.0, uv.x * 3.0 + seed * 7.0));
+            let scar = sin(local.y / PR_PALM_BASE_H * 6.2831853 + 2.0 * st_noise(vec2<f32>(uv.x * 10.0, seed)));
+            alb = mix(alb, vec3<f32>(0.205, 0.182, 0.152) * ring * (0.92 + 0.08 * scar) * mix(0.75, 1.0, smoothstep(0.0, 0.6, local.y)), skin);
+            let nsk = normalize(ng + vec3<f32>(0.0, 0.22 * scar * k, 0.0));
+            (*s).n = normalize(mix((*s).n, nsk, skin * 0.85));
+        }
+// sf:end
+// sf:PALM+
         (*s).albedo = alb;
         (*s).rough = 0.92;
         (*s).metal = 0.0;
@@ -691,6 +746,24 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
     let yellow = smoothstep(0.55, 0.95, seed * 0.6 + frond * 0.55) * select(0.0, 1.0, band == 2 && leaflet);
     alb = mix(alb, vec3<f32>(0.105, 0.098, 0.040), yellow * 0.45);
     alb = alb * (0.86 + 0.28 * frond) * (1.0 + 0.12 * lv);
+// sf:end
+// sf:PALM&PALM_VARIETY+
+    // (`--palm-variety`) this palm's crown: its own green, a skirt of dead fronds on
+    // some, and on others the orange date clusters hanging under the crown's heart
+    let pvc = pr_palm_variety(inst);
+    alb = alb * pvc.hue;
+    let low = 1.0 - smoothstep(-pvc.skirt_y - 0.35, -pvc.skirt_y + 0.35, rel.y + 0.5 * (frond - 0.5));
+    let dead = pvc.skirt * low * smoothstep(0.15, 0.4, frond + 0.3 * (st_noise(vec2<f32>(bearing * 2.3, seed * 7.0)) - 0.5));
+    let dry = vec3<f32>(0.150, 0.122, 0.090) * (0.85 + 0.3 * frond) * (1.0 + 0.1 * lv);
+    alb = mix(alb, dry, dead);
+    thin = mix(thin, 0.3, dead);
+    let heart = (1.0 - smoothstep(0.6, 1.5, rh)) * smoothstep(-1.9, -1.3, rel.y) * (1.0 - smoothstep(-0.5, 0.0, rel.y));
+    let bunch = smoothstep(0.55, 0.75, st_noise(vec2<f32>(bearing * 1.1 + 3.0, rel.y * 4.0 + seed * 11.0)));
+    let fruit = pvc.fruit * heart * bunch;
+    alb = mix(alb, vec3<f32>(0.42, 0.17, 0.025) * (0.8 + 0.4 * frond), fruit);
+    thin = thin * (1.0 - fruit);
+// sf:end
+// sf:PALM+
     (*s).albedo = alb;
     (*s).metal = 0.0;
     // the leaflets' normals: toward the crown's outward normal, each turned its own way

@@ -253,8 +253,24 @@ mod tests {
         sets.push(("urban sky".into(), look::ShaderFeatures { urban_sky: true, night_photometry: true, ..none })); // (`--urban-sky`)
         sets.push(("office floors".into(), look::ShaderFeatures { office_floors: true, ..none })); // (`--office-floors`)
         sets.push(("room depth".into(), look::ShaderFeatures { room_depth: true, ..none })); // (`--room-depth`)
-        for bit in [look::NATURE_FOLIAGE, look::NATURE_LOD_FADE, look::NATURE_TURF, look::NATURE_PALM, look::NATURE_HILLS, look::NATURE_COVER, look::NATURE_FOLIAGE | look::NATURE_PALM, look::NATURE_TURF | look::NATURE_COVER, look::NATURE_ALL] {
-            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`)
+        for bit in [
+            look::NATURE_FOLIAGE,
+            look::NATURE_LOD_FADE,
+            look::NATURE_TURF,
+            look::NATURE_PALM,
+            look::NATURE_HILLS,
+            look::NATURE_COVER,
+            look::NATURE_BARE,
+            look::NATURE_PALM_VARIETY,
+            look::NATURE_FOLIAGE | look::NATURE_PALM,
+            look::NATURE_TURF | look::NATURE_COVER,
+            look::NATURE_TURF | look::NATURE_BARE,
+            look::NATURE_COVER | look::NATURE_BARE,
+            look::NATURE_PALM | look::NATURE_PALM_VARIETY,
+            look::NATURE_FOLIAGE | look::NATURE_PALM | look::NATURE_PALM_VARIETY,
+            look::NATURE_ALL,
+        ] {
+            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`, `--palm-variety`)
         }
         sets.push(("all + nature".into(), look::ShaderFeatures { nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL }));
         sets
@@ -287,10 +303,23 @@ mod tests {
                     assert!(props.contains(&format!("const PR_PALM: u32 = {}u;", eo_props::Model::Palm as u32)), "PR_PALM is eo_props::Model::Palm");
                 }
                 assert_eq!(props.contains("var palm_leaf"), foliage || palm, "{name}: the shared block is in with either bit");
+                // (`--palm-variety`) with `--palm-detail` only: the joined blocks (`// sf:A&B`)
+                let variety = f.nature & look::NATURE_PALM_VARIETY != 0 && palm;
+                assert_eq!(props.contains("fn pr_palm_variety("), variety, "{name}: the variety block follows both bits");
+                assert_eq!(props.contains("let pv = pr_palm_variety(inst);"), variety, "{name}: the trunk's hook follows both bits");
+                assert_eq!(props.contains("let pvc = pr_palm_variety(inst);"), variety, "{name}: the crown's hook follows both bits");
                 // (`--ground-cover`) the terrain's mosaic and its hook follow the bit
                 let city = look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false);
                 assert_eq!(city.contains("fn nt_cover("), f.nature & look::NATURE_COVER != 0, "{name}: the cover block follows its bit");
                 assert_eq!(city.contains("nt_cover(&s, nc_w"), f.nature & look::NATURE_COVER != 0, "{name}: the cover hook follows its bit");
+                // (`--bare-ground`) the bare ground and the revetments, their hooks, and the ground scans skipped under them
+                let bare = f.nature & look::NATURE_BARE != 0;
+                assert_eq!(city.contains("fn nt_bare("), bare, "{name}: the bare ground's block follows its bit");
+                assert_eq!(city.contains("nt_bare(&s, nb_w"), bare, "{name}: the bare ground's hook follows its bit");
+                assert_eq!(city.contains("nb_w.x < 0.999"), bare, "{name}: the scans' skip follows its bit");
+                assert_eq!(city.matches("cc0_ground(&s, in.world, n, dpx, dpy);").count(), 1, "{name}: one ground-scan call either way");
+                assert_eq!(city.contains("nt_w = nt_w * (1.0 - nb_w.x);"), bare && f.nature & look::NATURE_TURF != 0, "{name}: the turf's share joins both bits");
+                assert_eq!(city.contains("nc_w.x = nc_w.x * (1.0 - nb_w.x);"), bare && f.nature & look::NATURE_COVER != 0, "{name}: the cover's share joins both bits");
                 assert!(!city.contains("// sf:"), "{name}: no marker is left in the city shader");
                 let far_trees = format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{}", look::city_shader_source_far(), crate::cove_canopy::VIEWS, crate::cove_canopy::LAYERS, look::sf_select(crate::hlod_trees::WGSL));
                 parse(&format!("{name}: far trees"), &far_trees);

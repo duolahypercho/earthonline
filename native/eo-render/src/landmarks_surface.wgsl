@@ -821,3 +821,372 @@ fn nt_cover(s: ptr<function, Surface>, wt: vec2<f32>, world: vec3<f32>, n: vec3<
     (*s).rough = mix((*s).rough, 0.9, w);
 }
 // sf:end
+// sf:BARE+
+
+// ---- bare ground (`--bare-ground`; this block is in the shader only with it) ----
+// The ground WorldCover calls bare or sparsely vegetated (never over a tenth
+// green in a year: the city's lots, fills and works yards, the strips the
+// paving and the landmarks leave, the waterfront's made land) and the bay's
+// revetments, which the land cover's placeholder tones drew as flat beige and
+// mint (ground2.rs `bare_ground` marks their vertices with alpha 254 and tells
+// the two apart by the tone: rock under 1.35 in r/b; bare ground 0.71 in g/r,
+// 0.93 at its weediest).
+//
+// Bare ground: compacted fines (silty fill and decomposed granite, dry, about
+// 0.17 in luminance: Post et al. 2000 measured dry soils at 0.1-0.3) with gravel
+// worked into it in drifts, each stone its own (Franciscan greywacke, sandstone,
+// red chert, serpentine, a little quartz), darker humus in the low spots, and the
+// ruderal weeds of the city's waste ground in clumps (wild oats and foxtail dried
+// to straw by late summer, a few green mallow and dock), denser along the margins
+// where the ground meets the paving (the run-off collects there and nothing
+// treads them), where the fines also spill a little onto the paving. A clump is
+// dark at its heart and casts its shadow along the sun's path. Every scale fades
+// to its mean where a pixel spans it, so from the air the ground keeps its tone.
+//
+// A revetment: quarry rock of about a metre laid at the shore, blocky with
+// rounded arrises and dark voids between the stones, in the bay's zones by
+// height over the sea (Ricketts and Calvin's zonation for the outer coast, the
+// bay's own species): wet and dark with green sea lettuce and brown rockweed up to
+// about high water, white with acorn barnacles a little above it, a band of black
+// tar lichen (Verrucaria) where the spray reaches, then dry grey stone with
+// orange Xanthoria on the tops and the gulls' white streaks along the crest.
+const NB_FINES: vec3<f32> = vec3<f32>(0.205, 0.168, 0.128);
+const NB_HUMUS: vec3<f32> = vec3<f32>(0.098, 0.080, 0.060);
+const NB_STONES: vec3<f32> = vec3<f32>(0.180, 0.152, 0.124); // the stones' mean (nb_stone_tone's mix)
+const NB_STRAW: vec3<f32> = vec3<f32>(0.300, 0.245, 0.135);
+const NB_WEED: vec3<f32> = vec3<f32>(0.055, 0.085, 0.032);
+const NB_PEBBLE_CELL: f32 = 0.055;
+const NB_TUFT_CELL: f32 = 0.9;
+const NB_TUFT_H: f32 = 0.2; // a clump's mid height (m): where its shadow is cast from
+const NB_TUFT_TALL: f32 = 0.35; // a clump's height (m), 0.6-1.4 of it
+const NB_ROCK_CELL: f32 = 1.15;
+const NB_ROCK_MEAN: vec3<f32> = vec3<f32>(0.165, 0.160, 0.148);
+const NB_LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
+
+// x how much of the pixel's vertex tone is marked (the vertex alpha 254 against 255),
+// y rock (1) or bare ground (0), z how weedy the bare ground is; zero unmarked.
+fn nt_bare_weight(c: vec3<f32>, a: f32) -> vec3<f32> {
+    if (a < 253.5) {
+        return vec3<f32>(0.0);
+    }
+    let w = clamp(255.0 - a, 0.0, 1.0);
+    let rb = c.r / max(c.b, 1e-4);
+    let gr = c.g / max(c.r, 1e-4);
+    let rock = (1.0 - smoothstep(1.3, 1.45, rb)) * smoothstep(0.86, 0.9, gr);
+    let weedy = clamp((gr - 0.71) / 0.22, 0.0, 1.0);
+    return vec3<f32>(w, rock, weedy);
+}
+
+// a surface tilt `t` in the ground's plane (world x, z) bent onto the normal `n`
+fn nb_bend(n: vec3<f32>, t: vec2<f32>, up: f32) -> vec3<f32> {
+    let w = vec3<f32>(t.x, 0.0, t.y);
+    return normalize(n * up + (w - n * dot(n, w)));
+}
+
+struct NbBlob {
+    cover: f32, // 0..1, antialiased by the footprint
+    q: f32, // distance from its centre in radii
+    d: vec2<f32>, // offset from its centre (radii)
+    seed: f32,
+};
+
+// The blob of a grid's cell at p (m): a stone or a clump, `density` of the cells
+// holding one, each kept inside its own cell (so one cell is looked at), elongated
+// by its own seed; `rmin`..`rmax` of the cell.
+fn nb_blob(p: vec2<f32>, cell: f32, density: f32, rmin: f32, rmax: f32, salt: f32, fw: f32) -> NbBlob {
+    var o: NbBlob;
+    o.cover = 0.0;
+    o.q = 9.0;
+    o.d = vec2<f32>(0.0);
+    o.seed = 0.0;
+    let g = p / cell;
+    let id = floor(g);
+    if (st_hash(id + vec2<f32>(salt, 3.7)) >= density) {
+        return o;
+    }
+    let seed = st_hash(id + vec2<f32>(salt * 2.0, 5.5));
+    let r = mix(rmin, rmax, seed);
+    let j = (vec2<f32>(st_hash(id + vec2<f32>(1.3, salt)), st_hash(id + vec2<f32>(salt, 8.1))) - 0.5) * (1.0 - 2.0 * r);
+    let a = seed * 6.2831853;
+    let ax = vec2<f32>(cos(a), sin(a));
+    let rel = (g - id - vec2<f32>(0.5) - j) / r;
+    let d = vec2<f32>(dot(rel, ax), dot(rel, vec2<f32>(-ax.y, ax.x)) * mix(1.0, 1.6, fract(seed * 13.7)));
+    o.q = length(d);
+    o.d = d;
+    o.seed = seed;
+    o.cover = clamp((1.0 - o.q) * r * cell / max(fw, 1e-4) + 0.5, 0.0, 1.0);
+    return o;
+}
+
+// a stone's tone by its seed: greywacke, sandstone, red chert, serpentine, quartz
+fn nb_stone_tone(h: f32) -> vec3<f32> {
+    if (h < 0.45) {
+        return vec3<f32>(0.170, 0.158, 0.140);
+    }
+    if (h < 0.7) {
+        return vec3<f32>(0.235, 0.190, 0.140);
+    }
+    if (h < 0.85) {
+        return vec3<f32>(0.190, 0.108, 0.078);
+    }
+    if (h < 0.98) {
+        return vec3<f32>(0.080, 0.090, 0.078);
+    }
+    return vec3<f32>(0.330, 0.320, 0.300);
+}
+
+// the weed clumps at p: the two grids' (0.9 m and 1.3 m, the second turned) nearer clump
+fn nb_tufts(p: vec2<f32>, density: f32, fw: f32) -> NbBlob {
+    let a = nb_blob(p, NB_TUFT_CELL, density, 0.16, 0.3, 11.0, fw);
+    let q = vec2<f32>(p.x * 0.8 - p.y * 0.6, p.x * 0.6 + p.y * 0.8) + vec2<f32>(17.3, 4.1);
+    let b = nb_blob(q, NB_TUFT_CELL * 1.46, density * 0.7, 0.14, 0.26, 23.0, fw);
+    if (b.cover > a.cover) {
+        return b;
+    }
+    return a;
+}
+
+// A revetment's stones round p (m): x the distance to the nearest stone's edge
+// (m), y its seed, zw the way to that edge (unit, world x z).
+fn nb_rock(p: vec2<f32>) -> vec4<f32> {
+    let g = p / NB_ROCK_CELL;
+    let i0 = floor(g);
+    var f1 = 1e9;
+    var c1 = vec2<f32>(0.0);
+    var id1 = vec2<f32>(0.0);
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let id = i0 + vec2<f32>(f32(x), f32(y));
+            let c = id + vec2<f32>(0.2) + 0.6 * vec2<f32>(st_hash(id + vec2<f32>(4.1, 7.3)), st_hash(id + vec2<f32>(9.7, 1.9)));
+            let d = dot(g - c, g - c);
+            if (d < f1) {
+                f1 = d;
+                c1 = c;
+                id1 = id;
+            }
+        }
+    }
+    // the edge: the nearest bisector with the stones round it
+    var e = 1e9;
+    var dir = vec2<f32>(1.0, 0.0);
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let id = id1 + vec2<f32>(f32(x), f32(y));
+            if (x == 0 && y == 0) {
+                continue;
+            }
+            let c = id + vec2<f32>(0.2) + 0.6 * vec2<f32>(st_hash(id + vec2<f32>(4.1, 7.3)), st_hash(id + vec2<f32>(9.7, 1.9)));
+            let k = c - c1;
+            let kl = length(k);
+            if (kl < 1e-4) {
+                continue;
+            }
+            let u = k / kl;
+            let de = dot((c1 + c) * 0.5 - g, u);
+            if (de < e) {
+                e = de;
+                dir = u;
+            }
+        }
+    }
+    return vec4<f32>(max(e, 0.0) * NB_ROCK_CELL, st_hash(id1 + vec2<f32>(2.9, 6.1)), dir);
+}
+
+fn nt_bare(s: ptr<function, Surface>, wt: vec3<f32>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let p = world.xz;
+    let fw = max(length(dpx), length(dpy));
+    // the margin: an irregular edge where the bare ground meets the paving or the grass
+    // (the vertices' 8 m blend broken by noise at 3 m and 0.8 m, cut a pixel wide)
+    let en = 0.62 * st_noise(p / 3.1 + vec2<f32>(5.1, 2.3)) + 0.38 * st_noise(p / 0.83 + vec2<f32>(1.7, 9.2));
+    let wv = wt.x + 0.5 * (en - 0.5);
+    let ew = clamp(fw / 8.0, 0.01, 0.3);
+    let w = smoothstep(0.5 - ew, 0.5 + ew, wv);
+    let margin = 1.0 - smoothstep(0.55, 1.0, wv);
+    // the sun's share of the light here (its shadow taken), for the shadows the clumps and stones cast
+    let l = look.key_dir.xyz;
+    var key = dot(look.key.xyz, NB_LUMA) * max(dot(n, l), 0.0);
+    if (key > 0.0) {
+        key = key * lk_shadow(world, n) * sky_cloud_transmittance(world);
+    }
+    let amb = dot(look.hemi_sky.xyz + look.ambient.xyz, NB_LUMA);
+    let share = key / max(key + amb, 1e-6);
+    // the fines spilled onto the paving beyond the edge
+    let stain = (1.0 - w) * smoothstep(0.2, 0.5, wv);
+    if (w <= 0.0) {
+        (*s).albedo = mix((*s).albedo, (*s).albedo * 0.8 + NB_FINES * 0.15, stain * 0.5);
+        return;
+    }
+    var alb_sky: vec3<f32>;
+    var alb_sun: vec3<f32>;
+    var nn = n;
+    var ao = 1.0;
+    var rough = 0.95;
+    let rock = smoothstep(0.4, 0.6, wt.y + 0.3 * (st_noise(p / 2.3 + vec2<f32>(3.0, 3.0)) - 0.5));
+    if (rock >= 0.5) {
+        // ---- a revetment ----
+        let kr = 1.0 - smoothstep(0.12, 0.45, fw / NB_ROCK_CELL); // its stones resolved
+        let rk = nb_rock(p);
+        let edge = rk.x;
+        let seed = rk.y;
+        // each stone: a block tilted its own way, its shoulders rounded over 35 cm down
+        // into the voids between the stones (dark: the light does not reach them)
+        let tilt = (vec2<f32>(st_hash(vec2<f32>(seed * 91.0, 2.0)), st_hash(vec2<f32>(5.0, seed * 77.0))) - 0.5) * 0.9;
+        let bev = 0.35;
+        let u = clamp(edge / bev, 0.0, 1.0);
+        let fall = 1.0 - u; // 1 at the edge, 0 on the top
+        // the shoulder's slope: a quarter circle (steep at the void, flat on the top)
+        let sl = fall / max(sqrt(max(1.0 - fall * fall, 0.0)), 0.25);
+        let slope = tilt * u + rk.zw * sl * 0.9;
+        nn = normalize(mix(n, nb_bend(n, slope, 1.0), kr));
+        let void_k = 1.0 - smoothstep(0.03, 0.1, edge);
+        var tone: vec3<f32>;
+        if (seed < 0.5) {
+            tone = vec3<f32>(0.195, 0.192, 0.180); // granite
+        } else if (seed < 0.8) {
+            tone = vec3<f32>(0.150, 0.150, 0.128); // greywacke
+        } else if (seed < 0.92) {
+            tone = vec3<f32>(0.185, 0.155, 0.122); // sandstone
+        } else {
+            tone = vec3<f32>(0.075, 0.075, 0.072); // basalt
+        }
+        // weathered faces: blotched at 30 cm and 8 cm
+        let kb = 1.0 - smoothstep(0.03, 0.12, fw);
+        tone = tone * (0.85 + 0.3 * st_noise(p / 0.3 + vec2<f32>(seed * 40.0, 1.0))) * mix(1.0, 0.9 + 0.2 * st_noise(p / 0.08 + vec2<f32>(seed * 17.0, 3.0)), kb);
+        var a = mix(tone, tone * 0.08, void_k);
+        a = mix(NB_ROCK_MEAN * 0.8, a, kr);
+        ao = mix(0.7, mix(0.15, 1.0, smoothstep(0.0, 0.25, edge)), kr);
+        rough = 0.86;
+        // the zones by height over the sea (game m), their edges broken over each stone
+        let z = world.y - LM_SEA_LEVEL_Y + 0.35 * (st_noise(p / 1.7 + vec2<f32>(8.0, 2.0)) - 0.5) + 0.15 * (1.0 - fall);
+        let top = smoothstep(0.6, 0.9, nn.y) * (1.0 - fall);
+        // wet up to about high water, with sea lettuce and below it rockweed
+        let wet = 1.0 - smoothstep(0.8, 1.2, z);
+        let algae = (1.0 - smoothstep(0.5, 0.9, z)) * smoothstep(0.45, 0.65, st_noise(p / 0.6 + vec2<f32>(4.0, 9.0)));
+        let weed = (1.0 - smoothstep(0.15, 0.45, z));
+        a = mix(a, mix(vec3<f32>(0.045, 0.072, 0.030), vec3<f32>(0.062, 0.046, 0.022), weed), algae);
+        // acorn barnacles a little above it: white specks on the stones (1.5 cm), their mean beyond
+        let barn = smoothstep(0.5, 0.75, z) * (1.0 - smoothstep(1.2, 1.5, z)) * (1.0 - void_k);
+        let kbn = 1.0 - smoothstep(0.006, 0.02, fw);
+        let speck = step(0.62, st_hash(floor(p / 0.015) + vec2<f32>(seed * 31.0, 0.0)));
+        a = mix(a, vec3<f32>(0.42, 0.41, 0.38), barn * mix(0.3, speck, kbn));
+        a = a * mix(1.0, 0.55, wet);
+        rough = mix(rough, 0.4, wet);
+        // black tar lichen where the spray reaches
+        let tar = smoothstep(1.2, 1.5, z) * (1.0 - smoothstep(2.2, 2.7, z)) * smoothstep(0.35, 0.55, st_noise(p / 0.45 + vec2<f32>(seed * 9.0, 7.0)));
+        a = mix(a, vec3<f32>(0.040, 0.040, 0.037), tar * 0.85);
+        // above it the dry stone's lichens on the tops: orange Xanthoria, grey-green crusts; the gulls' streaks on the crest
+        let dry_z = smoothstep(2.1, 2.6, z);
+        let lich = smoothstep(0.7, 0.78, st_noise(p / 0.05 + vec2<f32>(seed * 23.0, 4.0))) * smoothstep(0.5, 0.7, st_noise(p / 0.4 + vec2<f32>(1.0, seed * 5.0))) * top * dry_z;
+        let crust = smoothstep(0.5, 0.7, st_noise(p / 0.35 + vec2<f32>(2.0, seed * 29.0))) * dry_z * (1.0 - void_k);
+        a = mix(a, vec3<f32>(0.24, 0.25, 0.21), crust * 0.5);
+        a = mix(a, vec3<f32>(0.30, 0.15, 0.045), lich * mix(0.15, 0.8, kb));
+        let guano = smoothstep(3.0, 3.6, z) * top * smoothstep(0.7, 0.8, st_noise(vec2<f32>(p.x / 0.25, p.y / 0.9) + vec2<f32>(seed * 13.0, 0.0)));
+        a = mix(a, vec3<f32>(0.55, 0.54, 0.50), guano * 0.7);
+        alb_sky = a;
+        // a low sun casts the next stone's shadow over the arris on the far side from it
+        let toward = dot(normalize(l.xz + vec2<f32>(1e-5, 0.0)), rk.zw);
+        let cast_sh = fall * smoothstep(0.0, 0.5, toward) * (1.0 - smoothstep(0.25, 0.7, l.y));
+        alb_sun = a * (1.0 - 0.75 * cast_sh * kr);
+    } else {
+        // ---- bare ground ----
+        // drifts of gravel and fines (6 m and 1.4 m); damp humus in the low spots
+        let drift = 0.65 * st_noise(p / 6.0 + vec2<f32>(3.3, 8.8)) + 0.35 * st_noise(p / 1.4 + vec2<f32>(7.7, 0.4));
+        let gravel = smoothstep(0.3, 0.75, drift);
+        let hollow = smoothstep(0.55, 0.85, st_noise(p / 2.6 + vec2<f32>(4.2, 6.6)));
+        let kg = 1.0 - smoothstep(0.03, 0.12, fw);
+        let grit = mix(1.0, 0.82 + 0.36 * st_noise(p / 0.11 + vec2<f32>(2.0, 1.0)), kg);
+        var a = mix(NB_FINES, NB_HUMUS, hollow * 0.55 + margin * 0.15) * grit;
+        // the stones: two grids (5.5 cm and 3.7 cm, the second turned), their mean where a pixel spans them
+        let dens = mix(0.2, 0.8, gravel) * (1.0 - 0.6 * hollow);
+        let kp = 1.0 - smoothstep(0.012, 0.04, fw);
+        let mean_cover = dens * 0.3;
+        var stone_k = 0.0;
+        if (kp > 0.0) {
+            let s1 = nb_blob(p, NB_PEBBLE_CELL, dens, 0.26, 0.42, 1.0, fw);
+            let q2 = vec2<f32>(p.x * 0.87 - p.y * 0.5, p.x * 0.5 + p.y * 0.87);
+            let s2 = nb_blob(q2, NB_PEBBLE_CELL * 0.68, dens * 0.8, 0.26, 0.42, 2.0, fw);
+            var pb = s1;
+            if (s2.cover > s1.cover) {
+                pb = s2;
+            }
+            let tone = nb_stone_tone(pb.seed) * (0.9 + 0.2 * fract(pb.seed * 7.3));
+            a = mix(a, tone, pb.cover * kp);
+            stone_k = pb.cover * kp;
+            // a stone's dome, and the fines darkened round its foot
+            let dome = sqrt(max(1.0 - pb.q * pb.q, 0.0));
+            nn = nb_bend(n, pb.d * 0.9 * pb.cover * kp, max(dome, 0.35));
+            ao = 1.0 - 0.35 * (1.0 - smoothstep(1.0, 1.35, pb.q)) * (1.0 - pb.cover) * kp;
+        }
+        a = mix(a, mix(a, NB_STONES, mean_cover), 1.0 - kp);
+        rough = mix(0.95, 0.8, stone_k);
+        // the weeds: sparse clumps, weedier with the measured share and along the margins
+        let dens_t = clamp(mix(0.14, 0.42, wt.z) + 0.4 * margin, 0.0, 0.75);
+        let green_f = mix(0.15, 0.4, wt.z);
+        let kt = 1.0 - smoothstep(0.08, 0.3, fw);
+        let mean_t = dens_t * 0.17;
+        let mean_c = mix(NB_STRAW, NB_WEED, green_f) * 0.75;
+        alb_sky = mix(a, mean_c, mean_t * (1.0 - kt));
+        alb_sun = alb_sky;
+        if (kt > 0.0) {
+            // The clumps stand up: the eye's ray is marched down through their height
+            // (relief mapping, six steps from 0.5 m to the ground, jittered per point for
+            // the temporal resolve), so near the eye a clump shows its side and hides the
+            // ground behind it instead of lying flat on it.
+            let v = normalize(frame.cam_pos.xyz - world);
+            let off = v.xz / max(dot(v, n), 0.03);
+            let jit = st_hash(p * 731.0 + vec2<f32>(frame.cam_pos.x * 3.1, 0.0));
+            var hit = vec4<f32>(0.0);
+            var hit_d = vec2<f32>(0.0);
+            for (var k = 0; k < 6; k = k + 1) {
+                let h = NB_TUFT_TALL * 1.4 * (1.0 - (f32(k) + jit) / 6.0);
+                let pk = p + off * h;
+                let t = nb_tufts(pk, dens_t, fw);
+                if (t.cover > 0.0) {
+                    // a tussock: an ellipsoid of blades, ragged and gappy toward its rim and top
+                    let tall = NB_TUFT_TALL * mix(0.6, 1.4, fract(t.seed * 3.3));
+                    let rel = h / tall;
+                    let ang = atan2(t.d.y, t.d.x);
+                    let blade = st_noise(vec2<f32>(ang * 16.0 + t.seed * 40.0, rel * 3.0 + t.q));
+                    let reach = sqrt(max(1.0 - rel * rel, 0.0)) * (0.55 + 0.55 * blade);
+                    let inside = (1.0 - smoothstep(reach - 0.08, reach, t.q)) * mix(1.0, smoothstep(0.3, 0.55, blade), smoothstep(0.3, 0.8, max(rel, t.q)));
+                    if (t.cover * inside * kt > 0.5) {
+                        hit = vec4<f32>(1.0, rel, t.q, t.seed);
+                        hit_d = t.d;
+                        break;
+                    }
+                }
+            }
+            var t_sun = a;
+            if (hit.x > 0.0) {
+                // its blades: dark at the heart and the foot, lit toward the tips, straw or green
+                let green = step(1.0 - green_f, fract(hit.w * 5.31));
+                var c = mix(NB_STRAW * (0.8 + 0.4 * fract(hit.w * 3.7)), NB_WEED * (0.85 + 0.3 * fract(hit.w * 9.1)), green);
+                let lit = smoothstep(0.0, 0.9, hit.y) * 0.6 + smoothstep(0.2, 0.9, hit.z) * 0.4;
+                c = c * mix(0.3, 1.2, lit);
+                alb_sky = c;
+                t_sun = c;
+                nn = nb_bend(n, hit_d * (0.4 + 0.6 * hit.y), 0.8);
+                ao = mix(0.45, 1.0, lit);
+                rough = 0.8;
+            } else {
+                t_sun = alb_sky;
+            }
+            // the clumps' shadows on the ground, cast along the sun's path from their mid height
+            var sh = 1.0;
+            if (key > 0.0 && hit.x <= 0.0) {
+                let ly = max(l.y, 0.08);
+                let ct = nb_tufts(p + l.xz / ly * NB_TUFT_H, dens_t, fw);
+                sh = 1.0 - 0.65 * ct.cover * (1.0 - smoothstep(0.4, 0.75, ct.q)) * kt;
+            }
+            alb_sun = mix(alb_sky, t_sun * sh, kt);
+            alb_sky = mix(mix(a, mean_c, mean_t), alb_sky, kt);
+        }
+    }
+    let alb = mix(alb_sky, alb_sun, share);
+    (*s).albedo = mix((*s).albedo * mix(1.0, 0.8, stain) + NB_FINES * 0.15 * stain, alb, w);
+    (*s).n = normalize(mix((*s).n, nn, w));
+    (*s).ao = (*s).ao * mix(1.0, ao, w);
+    (*s).rough = mix((*s).rough, rough, w);
+    (*s).metal = mix((*s).metal, 0.0, w);
+}
+// sf:end

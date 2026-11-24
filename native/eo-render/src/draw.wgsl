@@ -1053,6 +1053,12 @@ fn shade(in: VOut) -> vec4<f32> {
     // the terrain's ground scans around its tone (not the beach sand: below), before the wet margin.
     let cc0_terrain = (m.flags & F_VERTEX_COLOUR) != 0u && (objects[in.object].kind & 255u) == 1u;
     let cc0_sand = cc0_terrain && (m.flags & LM_F_WET_GROUND) != 0u && in.aux.x < 253.5;
+// sf:BARE+
+    var nb_w = vec3<f32>(0.0);
+    if (cc0_terrain && !cc0_sand) {
+        nb_w = nt_bare_weight(s.albedo, in.aux.x); // (`--bare-ground`) a vertex marked bare ground or rock (ground2.rs `bare_ground`)
+    }
+// sf:end
 // sf:TURF+
     var nt_w = vec2<f32>(0.0);
     if (cc0_terrain && !cc0_sand) {
@@ -1065,9 +1071,22 @@ fn shade(in: VOut) -> vec4<f32> {
         nc_w = nt_cover_weight(s.albedo); // (`--ground-cover`) the hills' cover in the tone, before the scans
     }
 // sf:end
+// sf:TURF&BARE+
+    nt_w = nt_w * (1.0 - nb_w.x); // (`--bare-ground`) its tones are not grass
+// sf:end
+// sf:COVER&BARE+
+    nc_w.x = nc_w.x * (1.0 - nb_w.x);
+// sf:end
+// sf:BARE-
     if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
+// sf:end
+// sf:BARE+
+    if (cc0_terrain && !cc0_sand && nb_w.x < 0.999) {
+        cc0_ground(&s, in.world, n, dpx, dpy); // (`--bare-ground`) not under the bare ground and the rock: they draw their own
+    }
+// sf:end
 // sf:TURF+
     if (cc0_terrain && !cc0_sand) {
         nt_turf(&s, nt_w, in.world, n, dpx, dpy); // (`--turf`) the grass as a canopy (landmarks_surface.wgsl)
@@ -1076,6 +1095,11 @@ fn shade(in: VOut) -> vec4<f32> {
 // sf:COVER+
     if (cc0_terrain && !cc0_sand) {
         nt_cover(&s, nc_w, in.world, n, dpx, dpy); // (`--ground-cover`) grass, brush, groves and chert (landmarks_surface.wgsl)
+    }
+// sf:end
+// sf:BARE+
+    if (cc0_terrain && !cc0_sand && nb_w.x > 0.0) {
+        nt_bare(&s, nb_w, in.world, n, dpx, dpy); // (`--bare-ground`) gravel, fines and weeds; a revetment's rock (landmarks_surface.wgsl)
     }
 // sf:end
     if (((m.flags >> LM_SURFACE_SHIFT) & 7u) != 0u) {

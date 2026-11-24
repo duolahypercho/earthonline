@@ -239,7 +239,8 @@ pub struct LookOptions {
     /// code sits behind `SF_CAR_REFLECTIONS` (`ShaderFeatures::car_reflections`).
     pub car_reflections: u8,
     /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
-    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`): 0 (the default) is the frame as before,
+    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`,
+    /// `--palm-variety`): 0 (the default) is the frame as before,
     /// and each bit's shader code is compiled out while it is off (`sf_select`).
     pub nature: u32,
 }
@@ -261,8 +262,15 @@ pub const NATURE_HILLS: u32 = 16;
 /// (landmarks_surface.wgsl `nt_cover`), and their tones without the per-vertex
 /// jitter (ground2.rs `hill_tone`).
 pub const NATURE_COVER: u32 = 32;
+/// `--bare-ground`: WorldCover's bare ground and the shore's revetments drawn as
+/// gravel, fines and weeds, and as riprap with its tide zones (landmarks_surface.wgsl
+/// `nt_bare`), the vertices marked by ground2.rs `bare_ground`.
+pub const NATURE_BARE: u32 = 64;
+/// `--palm-variety`: each palm its own crown, skirt, fruit and trunk (props_draw.wgsl
+/// `pr_palm_variety`).
+pub const NATURE_PALM_VARIETY: u32 = 128;
 /// Every natural-detail bit.
-pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER;
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER | NATURE_BARE | NATURE_PALM_VARIETY;
 
 impl Default for LookOptions {
     fn default() -> Self {
@@ -997,9 +1005,9 @@ fn night_gain(on: bool, f: &LookFrame) -> f32 {
 
 /// A shader file's natural-detail blocks for the features compiled in now: the
 /// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
-/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`: `NATURE_*`) in, those between `// sf:NAME-`
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`, `BARE`, `PALM_VARIETY`: `NATURE_*`) in, those between `// sf:NAME-`
 /// and `// sf:end` only without it, and the marker lines are dropped (`NAME|OTHER`:
-/// either bit; blocks do not nest). With every
+/// either bit; `NAME&OTHER`: both; blocks do not nest). With every
 /// bit out the text is the file as it was before the bits existed, so a shader
 /// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
 /// before, and with a bit in it holds its code alone, not the code it replaces.
@@ -1012,8 +1020,12 @@ pub fn sf_select(src: &str) -> String {
         "PALM" => f.nature & NATURE_PALM != 0,
         "HILLS" => f.nature & NATURE_HILLS != 0,
         "COVER" => f.nature & NATURE_COVER != 0,
+        "BARE" => f.nature & NATURE_BARE != 0,
+        "PALM_VARIETY" => f.nature & NATURE_PALM_VARIETY != 0,
         _ => false,
     };
+    // `A|B`: either bit in (code two features share); `A&B`: both (code that joins them).
+    let any_on = |names: &str| names.split('|').any(|n| n.split('&').all(on));
     let mut out = String::with_capacity(src.len());
     let mut keep = true;
     for line in src.split_inclusive('\n') {
@@ -1022,13 +1034,12 @@ pub fn sf_select(src: &str) -> String {
                 keep = true;
                 continue;
             }
-            // `A|B`: kept with either bit in (code two features share).
             if let Some(names) = rest.strip_suffix('+') {
-                keep = names.split('|').any(on);
+                keep = any_on(names);
                 continue;
             }
             if let Some(names) = rest.strip_suffix('-') {
-                keep = !names.split('|').any(on);
+                keep = !any_on(names);
                 continue;
             }
         }
