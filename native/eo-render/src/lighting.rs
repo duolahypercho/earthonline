@@ -248,6 +248,7 @@ mod tests {
         sets.push(("car materials".into(), look::ShaderFeatures { car_materials: true, ..none })); // (`--car-materials`)
         sets.push(("car materials, cinematic, grime".into(), look::ShaderFeatures { car_materials: true, cinematic: true, grime: true, ..none }));
         sets.push(("car reflections, cinematic".into(), look::ShaderFeatures { car_materials: true, car_reflections: true, cinematic: true, ..none })); // (`--car-reflections`)
+        sets.push(("car lamps and wet, cinematic".into(), look::ShaderFeatures { car_materials: true, car_reflections: true, car_lamps: true, car_wet: true, cinematic: true, ..none })); // (`--car-lamps`, `--car-wet`)
         sets.push(("night photometry".into(), look::ShaderFeatures { night_photometry: true, ..none })); // (`--night-photometry`)
         sets.push(("lamp bounce".into(), look::ShaderFeatures { lamp_bounce: true, ..none })); // (`--lamp-bounce`)
         sets.push(("urban sky".into(), look::ShaderFeatures { urban_sky: true, night_photometry: true, ..none })); // (`--urban-sky`)

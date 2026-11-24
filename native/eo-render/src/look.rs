@@ -238,6 +238,15 @@ pub struct LookOptions {
     /// `--car-materials` only): 0 off (the frame as before), 1 on. Its shader
     /// code sits behind `SF_CAR_REFLECTIONS` (`ShaderFeatures::car_reflections`).
     pub car_reflections: u8,
+    /// The cars' lamps as a driver works them and as lights of the street
+    /// (`--car-lamps`; agents_draw.wgsl `ag_lamp`, agents_lamps.wgsl in the
+    /// light gather, with `--car-materials` only): 0 off (the frame as before),
+    /// 1 on. Its shader code sits behind `SF_CAR_LAMPS` (`ShaderFeatures::car_lamps`).
+    pub car_lamps: u8,
+    /// The cars in the wet (`--car-wet`; agents_contact.wgsl `ag_ct_wet`, with
+    /// `--car-materials` and `--car-contact`): 0 off (the frame as before), 1 on.
+    /// Its shader code sits behind `SF_CAR_WET` (`ShaderFeatures::car_wet`).
+    pub car_wet: u8,
     /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
     /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`): 0 (the default) is the frame as before,
     /// and each bit's shader code is compiled out while it is off (`sf_select`).
@@ -266,7 +275,7 @@ pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NAT
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, car_materials: 0, car_contact: 0, car_reflections: 0, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, car_materials: 0, car_contact: 0, car_reflections: 0, car_lamps: 0, car_wet: 0, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -768,6 +777,12 @@ pub struct ShaderFeatures {
     /// The cars' reflections of the street's brightest lights (`--car-reflections`;
     /// `SF_CAR_REFLECTIONS`, agents_draw.wgsl `ag_car_far_lights`): the agents' pipelines only.
     pub car_reflections: bool,
+    /// The cars' lamps (`--car-lamps`; `SF_CAR_LAMPS`, agents_draw.wgsl `ag_lamp`, the
+    /// light gather's `LT_CAR_LAMPS`, agents.rs `car_lamps_wgsl`). New code with no
+    /// runtime test in the gather: `ALL` leaves it out.
+    pub car_lamps: bool,
+    /// The cars in the wet (`--car-wet`; `SF_CAR_WET`, agents_contact.wgsl). `ALL` leaves it out.
+    pub car_wet: bool,
     /// The night's photometric scale (`--night-photometry`; `SF_NIGHT_PHOTOMETRY`):
     /// the practicals' gain on the emission the shaders carry in the rig's units.
     pub night_photometry: bool,
@@ -797,7 +812,7 @@ impl ShaderFeatures {
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
         wet_surfaces: true, screen_reflect: true, // the reflect track
         camera: true, // the camera track
-        car_materials: true, car_reflections: true, // the vehicles track
+        car_materials: true, car_reflections: true, car_lamps: false, car_wet: false, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, // the night track
         nature: 0, // the nature track
     };
@@ -809,7 +824,7 @@ impl ShaderFeatures {
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
         wet_surfaces: false, screen_reflect: false, // the reflect track
         camera: false, // the camera track
-        car_materials: false, car_reflections: false, // the vehicles track
+        car_materials: false, car_reflections: false, car_lamps: false, car_wet: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, // the night track
         nature: 0, // the nature track
     };
@@ -841,6 +856,8 @@ impl ShaderFeatures {
             camera: o.look.is_cinematic() && o.sky.cine_camera,
             car_materials: o.car_materials > 0,
             car_reflections: o.car_materials > 0 && o.car_reflections > 0,
+            car_lamps: o.car_materials > 0 && o.car_lamps > 0,
+            car_wet: o.car_materials > 0 && o.car_wet > 0,
             night_photometry: o.sky.night_photometry,
             lamp_bounce: o.sky.lamp_bounce,
             urban_sky: o.sky.urban_sky,
@@ -914,6 +931,12 @@ impl ShaderFeatures {
         if !self.car_reflections {
             l.car_reflections = 0;
         }
+        if !self.car_lamps {
+            l.car_lamps = 0;
+        }
+        if !self.car_wet {
+            l.car_wet = 0;
+        }
         l.sky.night_photometry &= self.night_photometry;
         l.sky.lamp_bounce &= self.lamp_bounce;
         l.sky.urban_sky &= self.urban_sky;
@@ -956,6 +979,8 @@ impl ShaderFeatures {
                 // the vehicles track
                 ("SF_CAR_MATERIALS", self.car_materials),
                 ("SF_CAR_REFLECTIONS", self.car_reflections),
+                ("SF_CAR_LAMPS", self.car_lamps),
+                ("SF_CAR_WET", self.car_wet),
                 // the night track
                 ("SF_NIGHT_PHOTOMETRY", self.night_photometry),
                 ("SF_LAMP_BOUNCE", self.lamp_bounce),
