@@ -311,6 +311,13 @@ pub struct AgentsGpu {
     view_bg: wgpu::BindGroup,
     opaque: wgpu::RenderPipeline,
     glass: wgpu::RenderPipeline,
+    /// (`--car-finish`) the people's own opaque and glass pipelines and the
+    /// first of their meshes (`person_mesh_split`): the cars' (`opaque`,
+    /// `glass`, `AG_PIPE` 1) and the people's (`AG_PIPE` 2) each compiled
+    /// without the other's code, the two ranges of the one command list drawn
+    /// one after the other. None (the switch off, or a library without people):
+    /// `opaque` and `glass` draw every mesh, as before.
+    people_pipes: Option<(u32, wgpu::RenderPipeline, wgpu::RenderPipeline)>,
     /// (`--tunnels`) the agents in a tunnel's bore drawn by pipelines of their
     /// own (agents_draw.wgsl `agent_bore_fs`: opaque, glass), made by
     /// `enable_bores` when the world has bores; and whether this frame's
@@ -356,7 +363,15 @@ impl AgentPipes {
 
     /// A camera pipeline over the agent vertices with fragment entry `fs` (`blend`: the glass list's).
     fn make(&self, label: &str, fs: &str, blend: bool) -> wgpu::RenderPipeline {
+        self.make_for(label, fs, blend, 0)
+    }
+
+    /// `make` for the cars alone (`pipe` 1) or the people alone (2), agents_draw.wgsl
+    /// `AG_PIPE` (0: every agent, as `make`).
+    fn make_for(&self, label: &str, fs: &str, blend: bool, pipe: u32) -> wgpu::RenderPipeline {
         let d = &self.device;
+        let constants = [("AG_PIPE", pipe as f64)];
+        let fs_options = wgpu::PipelineCompilationOptions { constants: if pipe == 0 { &[] } else { &constants }, ..Default::default() };
         let stride = std::mem::size_of::<AgentVertex>() as u64;
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: blend.then_some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: if blend { wgpu::ColorWrites::empty() } else { wgpu::ColorWrites::ALL } };
@@ -380,11 +395,22 @@ impl AgentPipes {
                 bias: Default::default(),
             }),
             multisample: wgpu::MultisampleState { count: self.sample_count, ..Default::default() },
-            fragment: Some(wgpu::FragmentState { module: &self.module, entry_point: Some(fs), compilation_options: Default::default(), targets: if self.debug_ids { &targets_ids } else { &targets } }),
+            fragment: Some(wgpu::FragmentState { module: &self.module, entry_point: Some(fs), compilation_options: fs_options, targets: if self.debug_ids { &targets_ids } else { &targets } }),
             multiview_mask: None,
             cache: None,
         })
     }
+}
+
+/// (`--car-finish`) The first person mesh, where every vehicle's meshes lie
+/// before it and every person's from it (the library cooks the bodies before
+/// the people): the people's pipelines draw the command list from there. None
+/// when the library has no people or does not hold them apart.
+pub fn person_mesh_split(lib: &Library) -> Option<u32> {
+    let meshes = |class: u32| lib.models.iter().filter(move |m| m.class == class).flat_map(|m| m.meshes.iter().copied().filter(|&k| k != eo_agents::NO_MESH));
+    let first_person = meshes(eo_agents::CLASS_PERSON).min()?;
+    let last_body = meshes(eo_agents::CLASS_VEHICLE).max().unwrap_or(0);
+    (last_body < first_person && first_person < lib.meshes.len() as u32).then_some(first_person)
 }
 
 impl AgentsGpu {
@@ -668,9 +694,14 @@ impl AgentsGpu {
         let contact = contact_on.then(|| crate::agents_contact::Contact::new(d, &draw_module, [&draw_bgl, look.main_bind_group_layout(), &data_bgl]));
         let attrs = AgentPipes::ATTRS;
         let stride = std::mem::size_of::<AgentVertex>() as u64;
-        let make = |label: &str, blend: bool| pipes.make(label, if debug_ids { "agent_fs_ids" } else { "agent_fs" }, blend);
-        let opaque = make("agent-opaque", false);
-        let glass = make("agent-glass", true);
+        // (`--car-finish`) the cars and the people in pipelines of their own (each
+        // without the other's code: the two in one were more than Apple's compiler takes)
+        let split = if crate::look::shader_features().car_finish { person_mesh_split(lib) } else { None };
+        let fs = if debug_ids { "agent_fs_ids" } else { "agent_fs" };
+        let cars = if crate::look::shader_features().car_finish && (split.is_some() || lib.meta.people_models.is_empty()) { 1 } else { 0 };
+        let opaque = pipes.make_for("agent-opaque", fs, false, cars);
+        let glass = pipes.make_for("agent-glass", fs, true, cars);
+        let people_pipes = split.map(|k| (k, pipes.make_for("agent-opaque-people", fs, false, 2), pipes.make_for("agent-glass-people", fs, true, 2)));
         // the agents' screen motion for the temporal resolve (single-sample, no ids).
         let velocity = (sample_count == 1 && !debug_ids).then(|| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -819,6 +850,7 @@ impl AgentsGpu {
             view_bg,
             opaque,
             glass,
+            people_pipes,
             bore: std::sync::OnceLock::new(),
             bore_live: AtomicBool::new(false),
             pipes,
@@ -918,8 +950,8 @@ impl AgentsGpu {
             // before the shadows the cascades, and the camera only
             // without an occlusion pass this frame.
             // y: (`--car-materials`) the cars' materials' level (agents_draw.wgsl `ag_car_on`; 0 as before).
-            // z: (`--car-lamps`) bit 0, (`--car-wet`) bit 1 (agents_draw.wgsl `ag_car_lamps_on`, `ag_car_wet_on`; 0 as before).
-            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, look.options.car_materials as u32, (look.options.car_lamps > 0) as u32 | ((look.options.car_wet > 0) as u32) << 1, 0],
+            // z: (`--car-lamps`) bit 0, (`--car-wet`) bit 1, (`--car-finish`) bit 2 (agents_draw.wgsl `ag_car_lamps_on`, `ag_car_wet_on`, `ag_car_finish_on`; 0 as before).
+            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, look.options.car_materials as u32, (look.options.car_lamps > 0) as u32 | ((look.options.car_wet > 0) as u32) << 1 | ((look.options.car_finish > 0) as u32) << 2, 0],
             view_proj: vp.to_cols_array_2d(),
         };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
@@ -1039,7 +1071,14 @@ impl AgentsGpu {
         pass.set_bind_group(2, &self.data_bg, &[]);
         pass.set_vertex_buffer(0, self.vbuf.slice(..));
         pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
-        pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+        if let Some((k, people, _)) = &self.people_pipes {
+            // (`--car-finish`) the cars' meshes, then the people's in their own pipeline
+            pass.multi_draw_indexed_indirect(&self.cmds, 0, *k);
+            pass.set_pipeline(people);
+            pass.multi_draw_indexed_indirect(&self.cmds, *k as u64 * DRAW_ARGS_BYTES, self.mesh_count - k);
+        } else {
+            pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+        }
         // (`--tunnels`) the same list again for the agents in a bore (the first draw discarded them).
         if let Some(b) = self.bore.get().filter(|_| self.bore_live.load(Ordering::Relaxed)) {
             pass.set_pipeline(&b[0]);
@@ -1100,7 +1139,14 @@ impl AgentsGpu {
         pass.set_bind_group(2, &self.data_bg, &[]);
         pass.set_vertex_buffer(0, self.vbuf.slice(..));
         pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
-        pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
+        if let Some((k, _, people)) = &self.people_pipes {
+            // (`--car-finish`) the cars' glass and lenses, then the people's in their own pipeline
+            pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, *k);
+            pass.set_pipeline(people);
+            pass.multi_draw_indexed_indirect(&self.cmds, (self.mesh_count + k) as u64 * DRAW_ARGS_BYTES, self.mesh_count - k);
+        } else {
+            pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
+        }
         if let Some(b) = self.bore.get().filter(|_| self.bore_live.load(Ordering::Relaxed)) {
             pass.set_pipeline(&b[1]);
             pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
