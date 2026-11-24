@@ -529,6 +529,12 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-people-bounce" => eo_render::agents::set_people_bounce(false),
             "--people-contact" => eo_render::agents::set_people_contact(true), // the ground round a person occluded by them (people_contact.wgsl)
             "--no-people-contact" => eo_render::agents::set_people_contact(false),
+            "--people-capsules" => eo_render::agents::set_people_capsules(true), // the ground round a person darkened by their body's capsules, for the sky and each lamp (people_capsules.wgsl)
+            "--no-people-capsules" => eo_render::agents::set_people_capsules(false),
+            "--people-lamps" => eo_render::agents::set_people_lamps(true), // the lamps' skin, cloth and hair terms on a person (agents_draw.wgsl `pl_person`)
+            "--no-people-lamps" => eo_render::agents::set_people_lamps(false),
+            "--people-space" => eo_agents::feed::set_personal_space(true), // with --crowd: strangers keep Fruin's no-touch zone (eo-agents feed `keep_personal_space`)
+            "--no-people-space" => eo_agents::feed::set_personal_space(false),
             "--people-motion" => eo_agents::motion::set_steady_heads(true), // the people's heads held steady, phones at the ear (eo-agents rocketbox.rs `steady_head`)
             "--no-people-motion" => eo_agents::motion::set_steady_heads(false),
             // read by eo_render::hlod::HlodOptions::from_env and bench/hlod_shots.rs

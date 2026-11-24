@@ -402,9 +402,12 @@ impl AgentRuntime {
         std::thread::Builder::new()
             .name("eo-agents-load".into())
             .spawn(move || {
-                // (`--people-contact`) the people's contact anchors, made at load (never cached).
+                // (`--people-contact`) the people's contact anchors, made at load (never cached);
+                // (`--people-capsules`) their body capsules in their place.
                 let lib = Library::load_opts(&repo, cache.as_deref(), &people, cook).map(|mut l| {
-                    if eo_render::agents::people_contact() {
+                    if eo_render::agents::people_capsules() {
+                        eo_agents::people::add_capsule_anchors(&mut l);
+                    } else if eo_render::agents::people_contact() {
                         eo_agents::people::add_contact_anchors(&mut l);
                     }
                     l
