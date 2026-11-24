@@ -6,7 +6,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { coastalKelp } from './coastal-kelp.mjs';
-import { bullKelpBed, eelgrassBed } from './coastal-plants.mjs';
+import { bullKelpBed, eelgrassBed, streamingCrown, openCrown, clusteredCrown } from './coastal-plants.mjs';
+
+import { bedrockLedge, fracturedBoulder } from './reef-rocks.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const out = path.join(root, 'public/assets/ocean');
@@ -116,6 +118,11 @@ const recipes = [
   ['coastal-kelp', null, null],
   ['bull-kelp-crown', bullKelpBed, null],
   ['eelgrass-shoots', eelgrassBed, null],
+  ['streaming-crown', streamingCrown, null],
+  ['open-crown', openCrown, null],
+  ['clustered-crown', clusteredCrown, null],
+  ['bedrock-ledge', bedrockLedge, null],
+  ['fractured-boulder', fracturedBoulder, null],
 ];
 const gltf={asset:{version:'2.0',generator:'Earth Online reef cook'},scene:0,scenes:[{nodes:[]}],nodes:[],meshes:[],bufferViews:[],accessors:[],buffers:[]};
 const chunks=[];let length=0;
@@ -170,6 +177,12 @@ await writeFile(path.join(out,'reef-forms.provenance.json'),JSON.stringify({
   originalPlantMeshes: {
     'bull-kelp-crown': {author:'Earth Online contributors',reference:'https://farallones.noaa.gov/media/docs/201904-bull-kelp-recovery-plan.pdf'},
     'eelgrass-shoots': {author:'Earth Online contributors',reference:'https://plants.sc.egov.usda.gov/DocumentLibrary/factsheet/pdf/fs_zoma.pdf'},
+  },
+  originalReefMeshes: {
+    kelp: ['streaming-crown','open-crown','clustered-crown'],
+    rock: ['bedrock-ledge','fractured-boulder'],
+    author:'Earth Online contributors',
+    geologyReference:'https://pubs.usgs.gov/ds/781/OffshoreSanFrancisco/metadata/Habitat_OffshoreSanFrancisco_metadata_faq.html',
   },
   adaptation:'Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. The coastal variant joins blades and gas bladders to continuous sampled stipes, with per-vertex blade flex. Vertex pigments and game-scale placement are adapted to the Pacific coast.'
 },null,2)+'\n');

@@ -38,11 +38,13 @@ function strip(m, rows, sides, closed, point) {
     previous = ring;
   }
 }
-export function bullKelpBed() {
-  const m = mesh(), next = random(491);
+const pairedStipes = [[0.06, -0.04, 0.985, 0.18, 32], [-0.055, 0.053, 0.68, 0.11, 15]];
+export function bullKelpBed(seed = 491, stipes = pairedStipes, form = {}) {
+  const m = mesh(), next = random(seed);
+  const {trail = 1, drape: drapeScale = 1, curtainShare = 0.38, bladeScale = 1, widthScale = 1} = form;
   // The two individuals attach separately to the same rock. One reaches the
   // canopy and the younger one streams below it. Each has just one float.
-  for (const [ox, oz, h, sway, count] of [[0.06, -0.04, 0.985, 0.18, 32], [-0.055, 0.053, 0.68, 0.11, 15]]) {
+  for (const [ox, oz, h, sway, count] of stipes) {
     const phase = next()*tau;
     function axis(t) {
       return [ox + sway*t*t + 0.027*Math.sin(5*t+phase)*t,
@@ -62,9 +64,9 @@ export function bullKelpBed() {
     for (let k=0;k<count;k++) {
       const angle = k*2.399963 + (next()-0.5)*0.66;
       const dx = Math.cos(angle), dz = Math.sin(angle);
-      const length = (0.24 + 0.48*next())*h;
-      const width = (0.007 + 0.0065*next())*h;
-      const curtain = next() < 0.38;
+      const length = (0.24 + 0.48*next())*h*bladeScale;
+      const width = (0.007 + 0.0065*next())*h*widthScale;
+      const curtain = next() < curtainShare;
       const hang = curtain ? 0.49+0.34*next() : 0.04+0.28*next();
       const ripple = next()*tau, pitch = 7+next()*6;
       const age = next(), torn = next() < 0.30;
@@ -75,8 +77,8 @@ export function bullKelpBed() {
       strip(m, 29, 5, false, (t, side) => {
         const reach = length*t*((curtain ? 0.46 : 0.65) - 0.20*t);
         const flutter = 0.041*Math.sin(pitch*t+ripple) + 0.019*Math.sin(1.8*pitch*t+widthPhase);
-        const drape = length*(t*flutter - hang*t**1.50);
-        const drift = length*(curtain ? 0.27 : 0.61)*t*t;
+        const drape = length*(t*flutter - hang*t**1.50*drapeScale);
+        const drift = length*(curtain ? 0.27 : 0.61)*t*t*trail;
         const lateral = length*(0.082*Math.sin(pitch*0.45*t+ripple)+0.021*Math.sin(8.8*t+widthPhase))*t;
         // A long, nearly parallel-sided tape opens after the narrow base.
         // Old blades retain a truncated end; the opposite margin stays intact.
@@ -97,6 +99,20 @@ export function bullKelpBed() {
   }
   return m;
 }
+// Single current-swept adult, a shorter abraded crown and a staggered cluster.
+export function streamingCrown() {
+  return bullKelpBed(951, [[0,0,0.98,0.28,26]],
+    {trail:1.85, drape:0.47, curtainShare:0.15, bladeScale:1.27, widthScale:1.25});
+}
+export function openCrown() {
+  return bullKelpBed(713, [[0,0,0.96,-0.12,12]],
+    {trail:0.52, drape:1.38, curtainShare:0.74, bladeScale:0.91, widthScale:1.32});
+}
+export function clusteredCrown() {
+  return bullKelpBed(1571, [[0,0,0.96,0.08,22],[-0.09,0.03,0.77,-0.17,13],[0.12,0.07,0.52,0.06,8]],
+    {trail:0.72, drape:1.17, curtainShare:0.64, widthScale:1.16});
+}
+
 export function eelgrassBed() {
   const m = mesh(), next = random(283);
   for (let shoot=0;shoot<8;shoot++) {

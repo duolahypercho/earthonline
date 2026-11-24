@@ -345,7 +345,7 @@ baitfish use mesh generators by Maksymilian Dendura, copyright 2026, licensed
 under MIT. The source leaf shader supplies the kelp's taper, curl, width, twist,
 edge ruffling and pigment. Earth Online bakes the geometry, adds a midrib and
 adapts the animation and placement to the coastal habitat. Earth Online contributors
-modeled the separate bull-kelp crowns and eelgrass shoots. Their biological
+modeled the bull-kelp forms, eelgrass shoots, bedrock ledges and fractured boulders. Their biological
 references are listed in the provenance record. The shipped model includes
 [the original license](public/assets/ocean/reef-forms.LICENSE.txt) and a
 [provenance record](public/assets/ocean/reef-forms.provenance.json).
