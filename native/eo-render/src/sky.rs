@@ -57,6 +57,8 @@ pub const SKY_DAMP_BIT: u32 = 1 << 18;
 pub const SKY_WET_SURFACES_BIT: u32 = 1 << 23;
 /// (`--screen-reflect`) the reflection's runtime bit (sky_light.wgsl `SKY_SCREEN_REFLECT`).
 pub const SKY_SCREEN_REFLECT_BIT: u32 = 1 << 24;
+/// (`--wet-relief`) the relief's water's runtime bit (sky_light.wgsl `SKY_WET_RELIEF`).
+pub const SKY_WET_RELIEF_BIT: u32 = 1 << 22;
 /// (`--night-photometry`) sky_lights.wgsl `LT_NIGHT_PHOTOMETRY_BIT`: the gather
 /// marks each street luminaire's intensity toward the eye on its sprite.
 pub const SKY_NIGHT_PHOTOMETRY_BIT: u32 = 1 << 25; // (1 << 24 is `--screen-reflect`'s, the reflect track)
@@ -197,6 +199,13 @@ pub struct SkyOptions {
     /// probe_grid.rs `SkyFill`). Off by default (made only with
     /// `SF_PROBE_SKY` compiled in); off, the probes are as before.
     pub probe_sky: bool,
+    /// (`--wet-relief`, the reflect track; over `--wet-surfaces`) the water
+    /// stands where the street's relief holds it (the street pass's ruts,
+    /// birdbaths and flow line, not the switch's noise hollows on the road),
+    /// the film as smooth as the surface under it (the streaks' lobes with
+    /// it), and Lekner & Dorf's darkening (sky_light.wgsl `sky_wr_*`). Off by
+    /// default (its code compiled out: `SF_WET_RELIEF`); off, the frame is as before.
+    pub wet_relief: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -273,6 +282,7 @@ impl Default for SkyOptions {
             wet_surfaces: false,
             screen_reflect: false,
             probe_sky: false,
+            wet_relief: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -317,6 +327,7 @@ impl SkyOptions {
             wet_surfaces: false,
             screen_reflect: false,
             probe_sky: false,
+            wet_relief: false,
             ..Self::default()
         }
     }
@@ -357,6 +368,7 @@ impl SkyOptions {
             (self.cinematic, 1 << 17), // SKY_CINEMATIC (`--look cinematic`, stage L4: the golden haze and shafts)
             (self.wet_surfaces, SKY_WET_SURFACES_BIT), // SKY_WET_SURFACES (`--wet-surfaces`, sky_light.wgsl)
             (self.screen_reflect, SKY_SCREEN_REFLECT_BIT), // SKY_SCREEN_REFLECT (`--screen-reflect`, sky_light.wgsl)
+            (self.wet_relief, SKY_WET_RELIEF_BIT), // SKY_WET_RELIEF (`--wet-relief`, sky_light.wgsl)
             (self.night_photometry, SKY_NIGHT_PHOTOMETRY_BIT), // (`--night-photometry`) sky_lights.wgsl LT_NIGHT_PHOTOMETRY_BIT
             (self.lamp_bounce, SKY_LAMP_BOUNCE_BIT), // (`--lamp-bounce`) sky_lights.wgsl LT_LAMP_BOUNCE_BIT
             (self.urban_sky, SKY_URBAN_SKY_BIT), // (`--urban-sky`) look_sky.wgsl's stars

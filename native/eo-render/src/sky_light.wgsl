@@ -176,8 +176,10 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     t = normalize(t);
     // (`--wet-surfaces`) a puddle's own lobe, and in rain its rings' (`sky_w2_lobe`; 0 without)
     let a_pud = select(SKY_CINE_PUDDLE_ALPHA, max(SKY_CINE_PUDDLE_ALPHA, sky_w2_pud_alpha), SKY_W2_FULL);
-    let a_along = mix(SKY_CINE_STREAK_ALONG, a_pud, sky_streak_pud);
-    let a_across = mix(SKY_CINE_STREAK_ACROSS, a_pud, sky_streak_pud);
+    // (`--wet-relief`) the film's lobes as smooth as the surface under it (`sky_wr_film_k`; 1 without)
+    let a_k = select(1.0, sky_wr_alpha_k, SKY_WR_FULL);
+    let a_along = mix(SKY_CINE_STREAK_ALONG * a_k, a_pud, sky_streak_pud);
+    let a_across = mix(SKY_CINE_STREAK_ACROSS * a_k, a_pud, sky_streak_pud);
     let ring_w = select(0.0, sky_w2_ring * sky_streak_pud, SKY_W2_FULL);
     let r_along = mix(SKY_CINE_STREAK_ALONG, SKY_W2_RING_LOBE.y, sky_streak_pud);
     let r_across = mix(SKY_CINE_STREAK_ACROSS, SKY_W2_RING_LOBE.y, sky_streak_pud);
@@ -897,8 +899,15 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
     }
     let fp = sky_w2_footprint(world, n_geom);
     var ph = vec2<f32>(0.0);
+    // (`--wet-relief`) where the street pass measured its relief's water: the ponds it holds
+    let relief = sky_wr_on();
+    let held = relief && SF_STREET_PBR && sp_pond_water > -1.0;
     if (n_geom.y > 0.95) {
-        ph = sky_w2_puddle(world.xz, k, skyu.wet.y * select(SKY_W2_WALK_FILL, 1.0, asphalt), fp);
+        if (held) {
+            ph = sky_wr_pond(fp);
+        } else {
+            ph = sky_w2_puddle(world.xz, k, skyu.wet.y * select(SKY_W2_WALK_FILL, 1.0, asphalt), fp);
+        }
     }
     let pud = ph.x;
     // the halo is saturated ground: as wet as the film can be
@@ -908,10 +917,23 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
         sky_streak_pud = pud;
     }
     sky_w2_water = max(soak, pud);
-    (*s).albedo = (*s).albedo * mix(1.0, darken, soak) * mix(1.0, SKY_W2_UNDER_WATER, pud) * mix(1.0, SKY_W2_HALO_DARKEN, ph.y);
+    if (held) {
+        // (`--wet-relief`) Lekner & Dorf: the film and the ground under a pond alike
+        (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), sky_wr_darken((*s).albedo), max(soak, pud));
+    } else {
+        (*s).albedo = (*s).albedo * mix(1.0, darken, soak) * mix(1.0, SKY_W2_UNDER_WATER, pud) * mix(1.0, SKY_W2_HALO_DARKEN, ph.y);
+    }
     let v = normalize(skyu.eye.xyz - world);
     let graze = smoothstep(0.26, 0.05, abs(dot(n_geom, v))) * select(0.0, 1.0, n_geom.y > 0.95);
-    let film = mix(wet_rough, 0.06, graze * 0.92);
+    var film = mix(wet_rough, 0.06, graze * 0.92);
+    if (held) {
+        // (`--wet-relief`) the film as smooth as the surface under it, at every
+        // angle: GGX and Fresnel make it a sheet seen low (its roughness does
+        // not fall with the view; the grazing drop toward 0.06 made the whole
+        // road as sharp a mirror as a pond, and the ponds could not be told
+        // from it)
+        film = wet_rough * sky_wr_film_k((*s).rough, asphalt);
+    }
     (*s).rough = mix(mix((*s).rough, film, soak), min(film, SKY_W2_WATER_ROUGH * 2.0), ph.y * 0.5);
     var n = normalize(mix((*s).n, n_geom, clamp(soak * select(0.70, 0.75, asphalt), 0.0, 1.0)));
     if (pud > 0.01) {
@@ -965,6 +987,95 @@ fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
     (*s).albedo = (*s).albedo * mix(1.0, mix(1.0, SKY_W2_WALL.z, porosity), ww);
     (*s).rough = mix((*s).rough, min((*s).rough, SKY_W2_WALL.w), ww);
     sky_w2_water = ww * 0.5;
+}
+
+// ---- (`--wet-relief`, the reflect track; sky.rs `SkyOptions::wet_relief`,
+// `SKY_WET_RELIEF_BIT`; compiled out without SF_WET_RELIEF, and with it only
+// over `--wet-surfaces` in the street's pipelines) ----
+// The water stands where the street's own relief holds it, and the film is
+// as smooth as the surface under it lets it be:
+// Only where the street pass measured its relief (with `--street-pbr`: the
+// carriageway and the gutter pan); walks and plazas keep `--wet-surfaces`'
+// film and puddles (their noise hollows are the only ponds there, and a
+// rougher film seen low made them dark holes in a bright sheet):
+// * the carriageway and the gutter pan: the wheel
+//   paths' ruts (laid out from the standards' lane, parking lane and design
+//   vehicle), the settled birdbaths and the pan's flow line hold water deeper
+//   than what has drained since the rain (street_pbr.wgsl `sp_wet_relief`,
+//   its water depth `sp_pond_water`); the switch's value-noise hollows stay
+//   off the road (on a crowned carriageway they drew blobs either side of the
+//   centre line and, in a narrow street, a canal from kerb to kerb). The shore
+//   is anti-aliased by the pixel's footprint over the relief's slope; a ring
+//   of saturated ground half a millimetre of depth wide lies round each pond
+//   where the water has just drawn back;
+// * the film's roughness and the streaks' lobes follow the surface's own
+//   (its scan, the polished wheel paths, the oil band, the sealant, the
+//   patches): the film fills the texture's valleys and what stays rough is
+//   the texture's tops, so a polished path is glossier wet than the open
+//   binder beside it. The look's calibrated film (`SKY_CINE_WET_ROUGH`) is the
+//   open texture's; each pixel takes it times its own roughness over the
+//   street's mean (never more than the look's film),
+//   the streak lobes' alphas times that squared, at every angle of view (no
+//   drop toward a mirror seen low: GGX and Fresnel make the sheet; the drop
+//   made the film as sharp as the ponds, which then could not be told from
+//   it). Lamps and headlamps break into bands along the wheel paths and
+//   glints on the sealant instead of one uniform bar per light, and a pond is
+//   a sharp mirror in a rougher film;
+// * the darkening is Lekner & Dorf's (1988): a rough surface under water
+//   keeps (1 - r_e)(1 - r_i) / (1 - r_i A) of its albedo A (r_e water's
+//   normal-incidence reflectance 0.0204, r_i the film's mean internal
+//   reflectance 1 - (1 - 0.066) / 1.333^2 = 0.474): 0.53-0.55 for asphalt
+//   (the street pass has already taken the dry aggregate's lighter tone,
+//   `SP_WET_DARKEN`), 0.6 for concrete; the ground under a pond the same
+//   (saturated), not a further fixed share. Wet asphalt kept a third of its
+//   albedo before (x 0.45 over the street pass's x 0.7): a black sheet in
+//   which the ponds read as stains.
+const SKY_WET_RELIEF: u32 = 4194304u;
+const SKY_WR_FULL: bool = SF_WET_RELIEF && SKY_W2_FULL;
+/// Lekner & Dorf: (1 - r_e)(1 - r_i), r_i.
+const SKY_WR_LEKNER: vec2<f32> = vec2<f32>(0.5149, 0.4744);
+/// The saturated ring round a pond: its width in water depth (m; over a
+/// rut's or a birdbath's sides, a few centimetres on the ground).
+const SKY_WR_HALO_M: f32 = 0.0005;
+/// The shore's width in depth (m) and per metre of the pixel's footprint
+/// (the relief's slope, street_pbr.wgsl `sp_wet_relief`).
+const SKY_WR_SHORE: vec2<f32> = vec2<f32>(3e-4, 0.015);
+/// The film's roughness over the look's, as the surface's own over its mean:
+/// held within x..y (the sealant's cast film at the low end; never rougher
+/// than the look's film, the open texture's own, so a rough patch's film
+/// stays inside the reflection's roughness range, 0.3-0.5).
+const SKY_WR_FILM_K: vec2<f32> = vec2<f32>(0.45, 1.0);
+
+/// (`--wet-relief`) the streak lobes' alphas over the look's at the fragment
+/// (the film's roughness ratio squared; 1 elsewhere).
+var<private> sky_wr_alpha_k: f32 = 1.0;
+
+fn sky_wr_on() -> bool {
+    return SKY_WR_FULL && sky_on(skyu.flags.x, SKY_WET_RELIEF) && sky_w2_on();
+}
+
+/// The pond (x) and its saturated ring (y) where the street pass measured
+/// the relief's water (`sp_pond_water`, m over the drained level); the shore
+/// over the footprint `fp` (m).
+fn sky_wr_pond(fp: f32) -> vec2<f32> {
+    let water = sp_pond_water;
+    let pud = smoothstep(0.0, SKY_WR_SHORE.x + fp * SKY_WR_SHORE.y, water);
+    let ring = smoothstep(-SKY_WR_HALO_M, 0.0, water) * (1.0 - pud);
+    return vec2<f32>(pud, ring);
+}
+
+/// Lekner & Dorf's wet albedo over the dry one, for albedo `a`.
+fn sky_wr_darken(a: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(SKY_WR_LEKNER.x) / (vec3<f32>(1.0) - SKY_WR_LEKNER.y * clamp(a, vec3<f32>(0.0), vec3<f32>(1.0)));
+}
+
+/// The film's roughness over the look's at a surface of roughness `rough`
+/// (asphalt or concrete), and the streak lobes' factor (`sky_wr_alpha_k`).
+fn sky_wr_film_k(rough: f32, asphalt: bool) -> f32 {
+    let mean = select(ST_CONCRETE_ROUGHNESS, select(ST_ASPHALT_ROUGHNESS, SP_ASPHALT_ROUGH, SF_STREET_PBR), asphalt);
+    let k = clamp(rough / max(mean, 0.05), SKY_WR_FILM_K.x, SKY_WR_FILM_K.y);
+    sky_wr_alpha_k = k * k;
+    return k;
 }
 
 // ---- (`--screen-reflect`, the reflect track; sky.rs `SkyOptions::screen_reflect`,
@@ -1408,8 +1519,9 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     // across (x n.v on the ground) and along the plane of incidence
     let ground = n.y >= SKY_SR_EXTEND_NY;
     let a_pud = max(SKY_CINE_PUDDLE_ALPHA, sky_w2_pud_alpha);
-    let a_along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG, a_pud, sky_streak_pud), sky_streak_w);
-    let a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS, a_pud, sky_streak_pud), sky_streak_w);
+    let a_k = select(1.0, sky_wr_alpha_k, SKY_WR_FULL); // (`--wet-relief`) the film's lobes by the surface under it
+    let a_along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG * a_k, a_pud, sky_streak_pud), sky_streak_w);
+    let a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS * a_k, a_pud, sky_streak_pud), sky_streak_w);
     let cw = select(1.0, max(dot(n, v), 0.02), ground);
     // pixels a radian at the frame's centre
     let ppr = skyu.res.y / (2.0 * max(skyu.cluster.z, 0.1));

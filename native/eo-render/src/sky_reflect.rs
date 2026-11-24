@@ -196,9 +196,9 @@ mod tests {
         let whole = super::sky_light_source(true);
         assert_eq!(whole, include_str!("sky_light.wgsl"));
         let lean = super::sky_light_source(false);
-        assert!(lean.len() < whole.len() && !lean.contains("fn sky_sr_trace") && !lean.contains("fn sky_w2_puddle"));
+        assert!(lean.len() < whole.len() && !lean.contains("fn sky_sr_trace") && !lean.contains("fn sky_w2_puddle") && !lean.contains("fn sky_wr_pond"));
         // every reflect-track name the rest of the city shader calls has a stand-in
-        for name in ["fn sky_w2_on(", "fn sky_w2_env(", "fn sky_w2_street(", "fn sky_w2_generic(", "fn sky_sr_on(", "fn sky_sr_glass_mix(", "fn sky_sr_ssr(", "fn sky_sr_spec(", "const SKY_W2_FULL", "const SKY_W2_RING_LOBE", "var<private> sky_w2_pud_alpha", "var<private> sky_w2_ring", "var<private> sky_w2_water", "var<private> sky_sr_glass"] {
+        for name in ["fn sky_w2_on(", "fn sky_w2_env(", "fn sky_w2_street(", "fn sky_w2_generic(", "fn sky_sr_on(", "fn sky_sr_glass_mix(", "fn sky_sr_ssr(", "fn sky_sr_spec(", "const SKY_W2_FULL", "const SKY_W2_RING_LOBE", "var<private> sky_w2_pud_alpha", "var<private> sky_w2_ring", "var<private> sky_w2_water", "var<private> sky_sr_glass", "const SKY_WR_FULL", "var<private> sky_wr_alpha_k"] {
             assert!(whole.contains(name) && lean.contains(name), "{name}");
         }
     }

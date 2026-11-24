@@ -233,6 +233,7 @@ fn sp_wet_relief(a: ptr<function, vec3<f32>>, rough: ptr<function, f32>, q: vec2
     // a few tenths of a millimetre of edge, wider as the pixel grows (the relief's slope ~1.5 %)
     let pond = smoothstep(0.0, 3e-4 + fw * 0.015, water);
     sp_pond = max(sp_pond, pond * w);
+    sp_pond_water = max(sp_pond_water, water); // (`--wet-relief`, the reflect track: sky_light.wgsl `sky_wr_pond`)
 }
 
 // The patch quilt (weathering.wgsl `wx_road` with `--grime`, in place of
@@ -586,6 +587,9 @@ var<private> sp_sun_vis: f32 = 1.0;
 // Standing water the street's relief holds (0..1, already scaled by the
 // film's wetness): sky_wet_street takes it as its puddle with `--street-pbr`.
 var<private> sp_pond: f32 = 0.0;
+// (`--wet-relief`, the reflect track) the water's depth over the relief's
+// drained level where `sp_wet_relief` ran (m; < 0 dry, -1 where it did not run).
+var<private> sp_pond_water: f32 = -1.0;
 
 struct SpHex {
     // the three tiles' barycentric weights and offsets into the scan (uv)
