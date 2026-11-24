@@ -1152,6 +1152,8 @@ fn shade(in: VOut) -> vec4<f32> {
     // the pane's colour mixes to the room's albedo by its share and gives up
     // 70 % of its metalness there, by night the lit room is its emission).
     let room = (m.flags >> 8u) & 7u;
+    // the normal the light takes as the surface's own (a `--facade-glass` pane's: its bow and tilt).
+    var n_light = n;
     if ((m.flags & F_GLASS) != 0u && room != 0u && kit_object && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
         let ng_out = select(face, normalize(in.normal), dot(in.normal, in.normal) > 0.25);
         if (sl_level() != 0u) {
@@ -1163,6 +1165,28 @@ fn shade(in: VOut) -> vec4<f32> {
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
+        if (fg_on()) {
+            // (`--facade-glass`) the pane as glass is: a dielectric whose two
+            // faces each reflect (F0 0.04 each, Schlick: the base layer and the
+            // clearcoat layer), never the room's colour as a metal's tint; opaque
+            // over its room, which shows through what the faces do not reflect
+            // (`r.day.w`, rooms.wgsl), tinted a little by the glass (the kit's
+            // glass colour is a blended pane's look, not its transmission); each pane on its own
+            // normal (rooms.wgsl `rm_pane_normal`), so its reflection and the
+            // sun's glint break pane by pane.
+            let tint = mix(vec3<f32>(1.0), m.base.rgb / max(max(m.base.r, max(m.base.g, m.base.b)), 1e-3), FG_GLASS_TINT);
+            s.albedo = r.day.xyz * r.day.w * tint;
+            s.metal = 0.0;
+            s.rough = FG_ROUGH;
+            s.alpha = 1.0;
+            m.emissive.w = 1.0;
+            rm_emit = r.night * tint;
+            n_light = rm_pane_normal(vec4<f32>(in.color, in.aux.y), in.world, ng_out);
+            if (dot(n_light, v) < 0.0) {
+                n_light = -n_light;
+            }
+            s.n = n_light;
+        }
         if (wx_level() != 0u || sl_level() != 0u) {
             wx_window(&s, &m, vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room, dpx, dpy); // stage W5: dirty glass (`--grime`); stickers, scratched tags (`--street-life`)
         }
@@ -1220,7 +1244,7 @@ fn shade(in: VOut) -> vec4<f32> {
     if (sx_in_bore(in.object)) {
         return sx_bore_light(s, m, v, in.world, in.object); // a tunnel bore's paint and luminaire (structures.wgsl)
     }
-    return look_light(s, m, v, in.world, n, in.object);
+    return look_light(s, m, v, in.world, n_light, in.object);
 }
 
 @fragment

@@ -46,6 +46,17 @@ fn fa_run() -> u32 {
     return u32(frame.copy_step.y);
 }
 
+// The facades track's features: compiled in (`SF_*`, look.rs ShaderFeatures)
+// and switched on (facade.rs `RUN_FACADE_GLASS`, `RUN_FAR_FACADES`, bits 20
+// and 21 of the frame switches). Off, every term behind them is compiled out.
+fn fg_on() -> bool {
+    return SF_FACADE_GLASS && (fa_run() & 1048576u) != 0u;
+}
+
+fn ff_on() -> bool {
+    return SF_FAR_FACADES && (fa_run() & 2097152u) != 0u;
+}
+
 // smoothstep with the TSL/JS meaning for either edge order.
 fn fa_ss(e0: f32, e1: f32, x: f32) -> f32 {
     let t = clamp((x - e0) / (e1 - e0), 0.0, 1.0);

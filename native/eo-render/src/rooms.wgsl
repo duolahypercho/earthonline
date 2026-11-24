@@ -16,6 +16,31 @@
 // draws its shop's own room by trade instead (shop_rooms.wgsl,
 // `rm_shop_pane`). The window frame comes from the vertex (rooms.rs).
 
+// (`--facade-glass`, `fg_on()`; facade.rs) the rooms behind the glass and the
+// pane. INFERRED from office practice and glazing physics:
+// an office floor's lease depth from the glass to the core, metres;
+const FG_OFFICE_DEPTH: vec2<f32> = vec2<f32>(6.5, 11.0);
+// a suspended ceiling's white acoustic tile (reflectance ~0.8);
+const FG_OFFICE_CEILING: vec3<f32> = vec3<f32>(0.80, 0.80, 0.78);
+// the daylight thrown up onto an office ceiling near the glass (added to the room's 0.38);
+const FG_OFFICE_CEILING_DAY: f32 = 0.22;
+// an office's troffers by day, against the default's 1.1, and the share of offices with them on;
+const FG_TROFFER_DAY: f32 = 0.7;
+const FG_OFFICE_LIT: f32 = 0.85;
+// the share of office windows with a blind or screen, and of those a dark solar screen (its weave's openness);
+const FG_OFFICE_BLINDS: f32 = 0.62;
+const FG_SOLAR_SCREENS: f32 = 0.35;
+const FG_SCREEN_COL: vec3<f32> = vec3<f32>(0.09, 0.09, 0.10);
+const FG_SCREEN_OPEN: f32 = 0.14;
+// a pane's tilt out of the wall's plane about each axis, and an insulating
+// unit's bow at its edges, radians (~0.46 and ~0.4 degrees at most).
+const FG_TILT: f32 = 0.008;
+const FG_BOW: f32 = 0.007;
+// float glass's own roughness, before the dirt film (weathering.wgsl `wx_glass`).
+const FG_ROUGH: f32 = 0.04;
+// how much of the kit glass's colour (hue only) the room and its light take through the pane.
+const FG_GLASS_TINT: f32 = 0.25;
+
 fn rm_h(seed: f32, salt: f32) -> f32 {
     return fract(sin(seed * 91.3458 + salt * 17.1373) * 43758.5453);
 }
@@ -115,7 +140,13 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let sill = mix(0.85, 0.35, shop);
     let ceil_y = H + mix(0.4, 0.7, shop);
     let floor_y = -sill;
-    let depth = mix(mix(2.8, 4.8, rm_h(seed, 6.0)), mix(4.5, 7.5, rm_h(seed, 6.0)), shop);
+    var depth = mix(mix(2.8, 4.8, rm_h(seed, 6.0)), mix(4.5, 7.5, rm_h(seed, 6.0)), shop);
+    // (`--facade-glass`) an office floor runs back to its core: 6.5-11 m of
+    // lease depth seen through the glass, not a 3-5 m box.
+    let fg = fg_on();
+    if (fg) {
+        depth = mix(depth, mix(FG_OFFICE_DEPTH.x, FG_OFFICE_DEPTH.y, rm_h(seed, 6.0)), office);
+    }
     let pad_x = mix(mix(clamp(W * 0.6, 0.6, 2.2), 0.45, shop), 0.2, split);
     let along = dir.x;
     let up = dir.y;
@@ -160,17 +191,24 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     );
     let wall = mix(mix(wall_col, shop_wall, shop), office_wall, office);
     let floor_col = mix(mix(vec3<f32>(0.36, 0.24, 0.15), vec3<f32>(0.34, 0.33, 0.31), step(0.5, rm_h(seed, 9.0))), vec3<f32>(0.17, 0.18, 0.21), office);
-    let ceil_col = mix(vec3<f32>(0.86, 0.85, 0.83), vec3<f32>(0.56, 0.56, 0.55), office);
+    var ceil_col = mix(vec3<f32>(0.86, 0.85, 0.83), vec3<f32>(0.56, 0.56, 0.55), office);
+    // (`--facade-glass`) each office its own ceiling layout (the troffers' and
+    // the T-bar grid's offset in the room), its acoustic tile a white (~0.8).
+    var t_off = vec2<f32>(0.0);
+    if (fg) {
+        t_off = vec2<f32>(rm_h(seed, 50.0) * 2.4, rm_h(seed, 51.0) * 1.8);
+        ceil_col = mix(ceil_col, FG_OFFICE_CEILING, office);
+    }
     var albedo = wall * (back + side * 0.72) + ceil_col * ceiling + floor_col * floor_face;
     let fixture_disc = rm_ss(0.32, 0.12, length(vec2<f32>(px - lamp_pos.x, pz - lamp_pos.z))) * ceiling;
     let grid_u = fract(px / 1.2);
     let grid_v = fract(pz / 1.8);
     let shop_panel = rm_filtered(step(0.32, grid_u) * step(grid_u, 0.68) * step(0.4, grid_v) * step(grid_v, 0.6), 0.072, footprint, 0.36) * ceiling;
-    let t_u = fract(px / 2.4);
-    let t_v = fract(pz / 1.8 + 0.25);
+    let t_u = fract((px + t_off.x) / 2.4);
+    let t_v = fract((pz + t_off.y) / 1.8 + 0.25);
     let troffer = rm_filtered(rm_ss(0.37, 0.385, t_u) * rm_ss(0.63, 0.615, t_u) * rm_ss(0.16, 0.18, t_v) * rm_ss(0.84, 0.82, t_v), 0.167, footprint, 0.6) * ceiling;
-    let tbar_u = abs(fract(px / 0.6 + 0.5) - 0.5);
-    let tbar_v = abs(fract(pz / 0.6 + 0.5) - 0.5);
+    let tbar_u = abs(fract((px + t_off.x) / 0.6 + 0.5) - 0.5);
+    let tbar_v = abs(fract((pz + t_off.y) / 0.6 + 0.5) - 0.5);
     let tbar = rm_filtered(1.0 - rm_ss(0.02, 0.035, tbar_u) * rm_ss(0.02, 0.035, tbar_v), 0.1, footprint, 0.12) * ceiling * office;
     albedo = albedo * (1.0 - tbar * 0.45);
     let fixture = mix(mix(fixture_disc, shop_panel, shop), troffer, office);
@@ -238,6 +276,16 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let day_illum = day_face * day_fall;
     // the room is lit by the daylight that reaches into it (RM_DAY_DEPTH of the facade's).
     var day_room = (albedo * day_illum + glow * max(shop, office) * 1.1) * RM_DAY_DEPTH;
+    if (fg) {
+        // (`--facade-glass`) an office ceiling near the glass takes the light
+        // the floor and desks throw up; its troffers are on in most rooms
+        // (FG_OFFICE_LIT) and read by day as a lit diffuser does against the
+        // daylight, a few times the tile round it, not as a lamp (the
+        // default's gain drew every office's troffers as white shards).
+        let fg_illum = (day_face + ceiling * office * FG_OFFICE_CEILING_DAY) * day_fall;
+        let fg_glow = shop * 1.1 + office * FG_TROFFER_DAY * step(rm_h(seed, 52.0), FG_OFFICE_LIT);
+        day_room = (albedo * fg_illum + glow * fg_glow) * RM_DAY_DEPTH;
+    }
 
     // ---- at the glass: curtains, blinds, sheers ----
     var light_radiance = lamp_color * level * 0.3 * mix(1.0, 0.72, office);
@@ -265,14 +313,39 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         let curtain = curtain_col * folds * 0.5 * light_radiance * max(illum, 0.5);
         radiance = mix(radiance, curtain, in_curtain);
         day_room = mix(day_room, curtain_col * folds * 0.62, in_curtain);
-        let blind_style = max(step(0.26, style) * step(style, 0.46) * (1.0 - shop), step(style, 0.3) * office);
-        let blind_to = mix(0.2, 0.95, rm_h(seed, 34.0));
+        var blind_style = max(step(0.26, style) * step(style, 0.46) * (1.0 - shop), step(style, 0.3) * office);
+        var blind_to = mix(0.2, 0.95, rm_h(seed, 34.0));
+        var blind_col = vec3<f32>(0.82, 0.8, 0.76);
+        var screen = 0.0;
+        if (fg) {
+            // (`--facade-glass`) most office windows carry a blind or a solar
+            // screen, each at its own height, some all the way down: the
+            // grid of a tower's windows broken window by window, as a street
+            // sees it.
+            blind_style = max(blind_style, step(style, FG_OFFICE_BLINDS) * office);
+            let b = rm_h(seed, 34.0);
+            blind_to = select(mix(0.1, 0.85, b / 0.8), 1.0, b > 0.8);
+            screen = step(rm_h(seed, 35.0), FG_SOLAR_SCREENS) * office;
+            blind_col = mix(mix(blind_col, vec3<f32>(0.66, 0.66, 0.64), step(0.6, rm_h(seed, 36.0))), FG_SCREEN_COL, screen);
+        }
         let covered = step(1.0 - blind_to, uy) * blind_style;
         let slat = fract(local.y / 0.045);
-        let gap = rm_filtered(rm_ss(0.78, 0.86, slat), 0.17, glass_footprint, 0.045) * detail;
-        let blind = mix(vec3<f32>(0.82, 0.8, 0.76) * 0.42 * light_radiance, radiance * 0.7, gap);
+        // a solar screen's open weave lets FG_SCREEN_OPEN of the room through, with no slats.
+        let gap = mix(rm_filtered(rm_ss(0.78, 0.86, slat), 0.17, glass_footprint, 0.045) * detail, FG_SCREEN_OPEN, screen);
+        let blind = mix(blind_col * 0.42 * light_radiance, radiance * 0.7, gap);
         radiance = mix(radiance, blind, covered);
-        day_room = mix(day_room, mix(vec3<f32>(0.82, 0.8, 0.76) * 0.7, day_room * 0.7, gap), covered);
+        day_room = mix(day_room, mix(blind_col * 0.7, day_room * 0.7, gap), covered);
+        if (fg) {
+            // (`--facade-glass`) a home's roller shade: an opaque fabric pulled
+            // part way down, pale by day, glowing in its lamp's colour by night.
+            let shade_style = step(0.58, style) * step(style, 0.72) * (1.0 - shop) * (1.0 - office);
+            let shade_to = mix(0.15, 0.9, rm_h(seed, 37.0));
+            let hem = step(1.0 - shade_to, uy);
+            let shade_col = mix(mix(vec3<f32>(0.86, 0.82, 0.72), vec3<f32>(0.78, 0.78, 0.76), step(0.5, rm_h(seed, 38.0))), vec3<f32>(0.42, 0.46, 0.52), step(0.85, rm_h(seed, 38.0)));
+            let shaded = hem * shade_style;
+            radiance = mix(radiance, shade_col * light_radiance * 0.34 * max(illum, 0.6), shaded);
+            day_room = mix(day_room, shade_col * 0.72, shaded);
+        }
         let sheer_style = step(0.46, style) * step(style, 0.58) * (1.0 - shop) * (1.0 - office);
         radiance = mix(radiance, radiance * 0.45 + light_radiance * 0.18, sheer_style);
         day_room = mix(day_room, day_room * 0.5 + vec3<f32>(0.25), sheer_style);
@@ -461,4 +534,45 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
         wx_room_life(&r, local, max(size, vec2<f32>(0.05)), dir, seed, shop, office * (1.0 - shop), work.y, distance);
     }
     return r;
+}
+
+// (`--facade-glass`) a kit pane's own normal. A pane of glass is never quite
+// in the wall's plane: glazed in putty or a gasket it sits a fraction of a
+// degree off (FG_TILT about each axis), and a sealed unit bows in or out with
+// the air in it, a few millimetres at its centre over a metre or so, so its
+// slope grows from the centre to about FG_BOW at the edges. The reflections
+// break pane by pane and curve within each pane, as a street of real windows
+// does. A window wider or taller than a pane is cut into panes of about
+// 1.25 x 1.7 m (its sashes or lights); a ribbon (the frame at the packing's
+// limit) into panes anchored in the world.
+fn rm_pane_normal(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>) -> vec3<f32> {
+    let b = u32(round(pane.z * 255.0));
+    let qw = f32(b & 127u);
+    let nwq = round(pane.w * 127.0);
+    var size = max(vec2<f32>(qw, abs(nwq)) / 8.0, vec2<f32>(0.05));
+    var local = pane.xy * size;
+    let n = normalize(ng + vec3<f32>(0.0, 0.0, 1e-5));
+    let tangent = normalize(vec3<f32>(-n.z, 0.0, n.x) + vec3<f32>(1e-5, 0.0, 0.0));
+    if (qw >= 127.0) {
+        let a = dot(pos, tangent);
+        local.x = a - floor(a / 1.5) * 1.5;
+        size.x = 1.5;
+    }
+    if (abs(nwq) >= 127.0) {
+        local.y = pos.y - floor(pos.y / 1.8) * 1.8;
+        size.y = 1.8;
+    }
+    let cells = max(vec2<f32>(1.0), floor(size / vec2<f32>(1.25, 1.7) + 0.5));
+    let cs = size / cells;
+    let ci = min(floor(local / cs), cells - 1.0);
+    let q = clamp((local - (ci + 0.5) * cs) / (0.5 * cs), vec2<f32>(-1.0), vec2<f32>(1.0));
+    let corner = pos - tangent * local.x - vec3<f32>(0.0, local.y, 0.0);
+    let key = floor(corner * 2.0 + 0.5) + vec3<f32>(ci.x * 7.0, ci.y * 13.0, 0.0);
+    let h1 = fract(sin(dot(key, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
+    let h2 = fract(h1 * 31.7 + 0.13);
+    let h3 = fract(h1 * 57.3 + 0.71);
+    let tilt = (vec2<f32>(h1, h2) - 0.5) * (2.0 * FG_TILT);
+    let bow = (h3 - 0.5) * (2.0 * FG_BOW);
+    let d = tilt + q * bow;
+    return normalize(n + tangent * d.x + vec3<f32>(0.0, d.y, 0.0));
 }
