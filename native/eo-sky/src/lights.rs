@@ -286,9 +286,104 @@ pub fn street_lamp_lux(l: &LampLight, r: f64) -> f64 {
     l.candela * shape / d2 * cos_t
 }
 
+// ---- (`--rear-lamps`) a vehicle's rear lamps as lights ----
+//
+// | Lamp | Value | Source |
+// | --- | --- | --- |
+// | Tail lamp | 10 cd toward the rear | SAE J585 (tail lamps): 2-18 cd at H-V for a single lighted section |
+// | Stop lamp | 120 cd toward the rear | SAE J586 (stop lamps): 80-300 cd at H-V; a vehicle held at a junction (under `REAR_STOP_SPEED_MS`) shows it |
+// | Colour | SAE red, x 0.69 y 0.30 | SAE J578 red boundary; as linear sRGB at unit luminance |
+// | Reach | where it gives `REAR_REACH_LUX` | INFERRED: a tenth of a lux, an eighth of the night's unlit ground (`night_photometry::NIGHT_UNLIT_PHYSICAL_LUX`) |
+// | Spread | full to 20 deg off the rear axis, none past 70 deg | SAE J585/J586 photometric test points (H-V, 10 deg up and down, 20 deg left and right at about half) |
+
+/// A tail lamp's intensity toward the rear (cd; SAE J585).
+pub const REAR_TAIL_CD: f64 = 10.0;
+/// A stop lamp's intensity toward the rear (cd; SAE J586).
+pub const REAR_STOP_CD: f64 = 120.0;
+/// Under this speed (m/s) a moving vehicle is held at a junction with its stop lamps lit.
+pub const REAR_STOP_SPEED_MS: f64 = 0.5;
+/// A rear lamp's light is drawn out to where it gives this illuminance (lux).
+pub const REAR_REACH_LUX: f64 = 0.1;
+/// A rear lamp's spread: full within `REAR_INNER_DEG` of the rear axis, none past
+/// `REAR_OUTER_DEG` (SAE J585/J586 test points reach 20 deg left and right at about
+/// half the axis value and 45 deg at a few per cent; past them its own body).
+pub const REAR_INNER_DEG: f64 = 20.0;
+pub const REAR_OUTER_DEG: f64 = 70.0;
+/// A rear lamp's lit lens (m^2; its reflections' source size).
+pub const REAR_LENS_AREA_M2: f64 = 0.03;
+
+/// SAE red (x 0.69, y 0.30) in linear sRGB at unit luminance.
+pub fn rear_lamp_color() -> [f64; 3] {
+    xy_unit_color(0.69, 0.30)
+}
+
+/// How far (m) a rear lamp of `candela` reaches (`REAR_REACH_LUX`).
+pub fn rear_lamp_reach_m(candela: f64) -> f64 {
+    (candela / REAR_REACH_LUX).sqrt()
+}
+
+// ---- (`--signal-spill`) a traffic signal's lit lens as a light ----
+//
+// | Lens (300 mm LED) | Intensity on its axis | Colour | Source |
+// | --- | --- | --- | --- |
+// | Red | 365 cd | x 0.69 y 0.30 | ITE VTCSH Part 2 (LED circular signal supplement), minimum maintained intensity at H-V, 12-inch; ITE / CIE signal red |
+// | Yellow | 910 cd | x 0.57 y 0.42 | the same table; ITE yellow |
+// | Green | 475 cd | x 0.17 y 0.70 | the same table; ITE green (the blue-green of the LED lenses) |
+// | Beam | from the axis to none past 25 deg | the VTCSH distribution's points (about 0.8 of the axis value at 7.5 deg, half at 12.5, a quarter at 17.5, a few per cent past 25 deg) as a spot's smoothstep in cos | |
+// | Reach | where it gives `SIGNAL_REACH_LUX` | INFERRED: a quarter of a lux |
+
+/// A lit lens's intensity on its axis (cd): red, yellow, green (ITE VTCSH, 12-inch LED).
+pub const SIGNAL_CD: [f64; 3] = [365.0, 910.0, 475.0];
+/// The lenses' chromaticities (x, y): red, yellow, green.
+pub const SIGNAL_XY: [[f64; 2]; 3] = [[0.69, 0.30], [0.57, 0.42], [0.17, 0.70]];
+/// The beam: full on the axis (`SIGNAL_INNER_DEG`), nothing past `SIGNAL_OUTER_DEG`.
+pub const SIGNAL_INNER_DEG: f64 = 0.0;
+pub const SIGNAL_OUTER_DEG: f64 = 25.0;
+/// A lens's light is drawn out to where it gives this illuminance (lux).
+pub const SIGNAL_REACH_LUX: f64 = 0.25;
+/// The 300 mm lens's area (m^2): the light's size for its reflections.
+pub const SIGNAL_LENS_AREA_M2: f64 = std::f64::consts::PI * 0.15 * 0.15;
+
+/// A chromaticity (x, y) in linear sRGB at unit luminance (out of gamut clipped).
+pub fn xy_unit_color(x: f64, y: f64) -> [f64; 3] {
+    let (cx, cz) = (x / y, (1.0 - x - y) / y);
+    let r = 3.2406 * cx - 1.5372 - 0.4986 * cz;
+    let g = -0.9689 * cx + 1.8758 + 0.0415 * cz;
+    let b = 0.0557 * cx - 0.2040 + 1.0570 * cz;
+    let c = [r.max(0.0), g.max(0.0), b.max(0.0)];
+    let l = eo_look::math::luminance(c);
+    c.map(|v| v / l)
+}
+
+/// A lit lens's colour (aspect 0 red, 1 yellow, 2 green).
+pub fn signal_color(aspect: usize) -> [f64; 3] {
+    let [x, y] = SIGNAL_XY[aspect.min(2)];
+    xy_unit_color(x, y)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rear_lamps_are_red_and_reach_by_their_light() {
+        let c = rear_lamp_color();
+        assert!((eo_look::math::luminance(c) - 1.0).abs() < 1e-9);
+        assert!(c[0] > 3.0 && c[1] < 0.5 && c[2] < 0.5, "red: {c:?}");
+        assert!((rear_lamp_reach_m(REAR_TAIL_CD) - 10.0).abs() < 1e-9);
+        assert!(rear_lamp_reach_m(REAR_STOP_CD) > 30.0);
+    }
+
+    #[test]
+    fn signal_lenses_are_their_colours() {
+        let (r, y, g) = (signal_color(0), signal_color(1), signal_color(2));
+        assert!(r[0] > r[1] && r[0] > r[2], "red {r:?}");
+        assert!(y[0] > y[2] && y[1] > y[2], "yellow {y:?}");
+        assert!(g[1] > g[0] && g[2] > g[0], "blue-green {g:?}");
+        for c in [r, y, g] {
+            assert!((eo_look::math::luminance(c) - 1.0).abs() < 1e-9);
+        }
+    }
+
     #[test]
     fn lamps_follow_the_js_spacing_and_sides() {
         let pts = [[0.0, 0.0], [200.0, 0.0]];

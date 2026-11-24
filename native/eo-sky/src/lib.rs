@@ -13,6 +13,7 @@ pub mod clouds;
 pub mod frame;
 pub mod hash;
 pub mod lamp_bounce;
+pub mod lamp_units;
 pub mod lights;
 pub mod lit_fog;
 pub mod moon;
