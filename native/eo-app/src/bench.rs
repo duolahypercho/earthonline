@@ -1800,6 +1800,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     out["tree_basins"] = crate::quality::tree_basins_json(args); // the street trees' basins (`--tree-basins`)
     out["street_pbr"] = serde_json::json!(crate::street_pbr()); // the street's physically based surface (`--street-pbr`)
     out["street_wear"] = serde_json::json!(crate::street_wear()); // the carriageway's distress by its causes (`--street-wear`)
+    out["street_aggregate"] = serde_json::json!(crate::street_aggregate()); // the hot mix's stones near the eye (`--street-aggregate`)
+    out["plaza_setts"] = serde_json::json!(crate::plaza_setts()); // the grey-stone plazas sett by sett (`--plaza-setts`)
     out["street_glare"] = serde_json::json!(crate::street_glare()); // the polished binder's layer toward grazing (`--street-glare`)
     out["quay_fill"] = serde_json::json!(crate::quay_fill()); // the promenade paved on to the street's walk (`--quay-fill`)
     out["car_detail"] = crate::quality::car_detail_json(args); // far bodies and nearer full-detail cars (`--car-detail`)
