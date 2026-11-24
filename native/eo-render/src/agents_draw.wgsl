@@ -922,7 +922,9 @@ fn ag_car_fog(world: vec3<f32>, m: Material) -> f32 {
 // toward the point at least the share the eye sees of it (as the streaks).
 // What the clusters' loop already gave inside a light's reach (its window
 // squared) is left out, so nothing counts twice; a lamp with a shadow map
-// is hidden where its map says the point does not see it.
+// is hidden where its map says the point does not see it (read 15 cm off
+// the body, `AG_CAR_FAR_MAP_OFFSET`).
+const AG_CAR_FAR_MAP_OFFSET: f32 = 0.15;
 fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
     if (!SF_CAR_REFLECTIONS || !SKY_CINE_FULL || !sky_on(skyu.flags.x, SKY_LIGHTS) || !sky_on(skyu.flags.x, SKY_CINEMATIC) || skyu.lights.x == 0u || frame.copy_step.z > 0.5) {
         return vec3<f32>(0.0);
@@ -965,7 +967,9 @@ fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>
         src = max(src, 0.02);
         var e = li.intensity * shape * rest / d2 * nl;
         if (LS_SHADER && li.pad >= 1.0 && e > 0.0) {
-            e = e * ls_light_visibility(u32(li.pad) - 1u, world, n);
+            // looked up off the body: the car is in the lamp's map, and its own
+            // depth there (a 10 cm texel) would speckle a sharp highlight
+            e = e * ls_light_visibility(u32(li.pad) - 1u, world + n * AG_CAR_FAR_MAP_OFFSET, n);
         }
         if (e <= 0.0) {
             continue;
