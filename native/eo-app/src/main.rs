@@ -404,6 +404,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-wet-surfaces" => a.look.sky.wet_surfaces = false,
             "--screen-reflect" => a.look.sky.screen_reflect = true, // (the reflect track) the jittered, lobe-filtered trace, the frame's sky, glass
             "--no-screen-reflect" => a.look.sky.screen_reflect = false,
+            "--probe-sky" => a.look.sky.probe_sky = true, // (the reflect track) the probe grid's sky as the frame draws it, its levels GGX-prefiltered
+            "--no-probe-sky" => a.look.sky.probe_sky = false,
             // the cars' materials and lamps (eo-render agents_draw.wgsl `ag_car_*`; off by default).
             "--car-materials" => a.look.car_materials = 1,
             "--no-car-materials" => a.look.car_materials = 0,

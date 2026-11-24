@@ -218,6 +218,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "street_pbr" => features.street_pbr = true, // (`--street-pbr`)
             "wet_surfaces" => features.wet_surfaces = true, // (`--wet-surfaces`)
             "screen_reflect" => features.screen_reflect = true, // (`--screen-reflect`)
+            "probe_sky" => features.probe_sky = true, // (`--probe-sky`)
             _ => {}
         }
     }
