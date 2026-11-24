@@ -535,8 +535,16 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-people-lamps" => eo_render::agents::set_people_lamps(false),
             "--people-space" => eo_agents::feed::set_personal_space(true), // with --crowd: strangers keep Fruin's no-touch zone (eo-agents feed `keep_personal_space`)
             "--no-people-space" => eo_agents::feed::set_personal_space(false),
+            "--people-groups" => agents::PEOPLE_GROUPS.store(true, std::sync::atomic::Ordering::Relaxed), // with --crowd: social groups keep together (eo-sim `Crowd::keep_parties`)
+            "--no-people-groups" => agents::PEOPLE_GROUPS.store(false, std::sync::atomic::Ordering::Relaxed),
+            "--people-crosswalks" => agents::PEOPLE_CROSSWALKS.store(true, std::sync::atomic::Ordering::Relaxed), // with --crowd: crossings on the drawn zebras (eo-sim `NativeSource::with_zebras`)
+            "--no-people-crosswalks" => agents::PEOPLE_CROSSWALKS.store(false, std::sync::atomic::Ordering::Relaxed),
+            "--people-near" => agents::PEOPLE_NEAR.store(true, std::sync::atomic::Ordering::Relaxed), // captures: people hidden only round the lens, not the warmed card's 8 m
+            "--no-people-near" => agents::PEOPLE_NEAR.store(false, std::sync::atomic::Ordering::Relaxed),
             "--people-motion" => eo_agents::motion::set_steady_heads(true), // the people's heads held steady, phones at the ear (eo-agents rocketbox.rs `steady_head`)
             "--no-people-motion" => eo_agents::motion::set_steady_heads(false),
+            "--people-idles" => eo_agents::motion::set_more_idles(true), // the wider standing repertoire baked (eo-agents motion.rs `MORE_IDLES`)
+            "--no-people-idles" => eo_agents::motion::set_more_idles(false),
             // read by eo_render::hlod::HlodOptions::from_env and bench/hlod_shots.rs
             "--hlod-shots" => {}
             "--far-shots" | "--far-diag" => {} // bench/far_shots.rs reads them
