@@ -130,16 +130,17 @@ pub const GLARE_TOPS: f64 = 0.28;
 pub const GLARE_TOPS_WHEEL: f64 = 0.45;
 pub const GLARE_POLISH: f64 = 0.4;
 pub const GLARE_POLISH_WHEEL: f64 = 0.85;
-/// The polished tops' roughness (perceptual; 0.5 and over the screen-space
-/// trace leaves them to the sky: no trace on the road's whole area).
+/// The polished tops' roughness (perceptual; at 0.5 and over the screen-space
+/// trace leaves them to the sky: no trace over the road's whole area, which
+/// cost up to a millisecond on the wheel paths at 0.46).
 pub const GLARE_COAT_ROUGH: f64 = 0.5;
-pub const GLARE_COAT_ROUGH_WHEEL: f64 = 0.46;
+pub const GLARE_COAT_ROUGH_WHEEL: f64 = 0.5;
 /// The coarse aggregate's size (m): near the eye, the tops polished stone by stone.
 pub const GLARE_AGGREGATE_M: f64 = 0.009;
 /// Granite setts' crowns polished by feet (the share of the crown's layer)
 /// and their roughness; the setts' own relief spread is SP_PAVE_SLOPE.
 pub const GLARE_SETT_POLISH: f64 = 0.55;
-pub const GLARE_SETT_ROUGH: f64 = 0.44;
+pub const GLARE_SETT_ROUGH: f64 = 0.5;
 
 /// (`--street-glare`) The share of what the eye sees that is the macrotexture's
 /// tops at the view's cosine `mu` to the surface (street_pbr.wgsl `sg_top_share`):

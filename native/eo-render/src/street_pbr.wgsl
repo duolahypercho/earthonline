@@ -202,7 +202,9 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         // where that distance has no gradient (a dark line between two polished bands)
         let wp = sw_wheel * (1.0 - lane_k);
         a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp);
-        rough = mix(rough, SP_ASPHALT_ROUGH_POLISHED, 0.85 * wp);
+        // (in the wet the film's water is the surface over the polished path: no smoother
+        // lane down the middle for the trace to stretch a car's dark reflection along)
+        rough = mix(rough, SP_ASPHALT_ROUGH_POLISHED, 0.85 * wp * (1.0 - sw_wet()));
         lean = lean + sw_wheel_lean * (1.0 - lane_k);
         dip = max(dip, sw_wheel_dip * (1.0 - lane_k));
         wpath = max(wpath, wp);
@@ -233,7 +235,7 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         let k = mix(SG_POLISH, SG_POLISH_WHEEL, wpath) * tau * mix(1.0, stone, wx_keep(SG_AGGREGATE_M * 1.5, fw));
         // (the sealant and a lid keep their own finish)
         let fresh_fill = select(0.0, 0.7 * sw_patch, SF_STREET_WEAR);
-        sg_coat(k * (1.0 - lid) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)) * (1.0 - fresh_fill), mix(SG_COAT_ROUGH, SG_COAT_ROUGH_WHEEL, wpath));
+        sg_coat(k * (1.0 - lid) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)) * (1.0 - fresh_fill), mix(SG_COAT_ROUGH, SG_COAT_ROUGH_WHEEL, wpath), n_geom, v);
     }
     if (any(lean != vec2<f32>(0.0))) {
         sp_lean(s, lean * (1.0 - lid));
@@ -876,7 +878,7 @@ fn sp_pave(la: i32, p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, world: vec3<f32>
     if (SF_STREET_GLARE) {
         // (`--street-glare`) the crowns the feet polish, a layer that grows toward grazing (the setts' relief masks the joints)
         let tau = sg_top_share(SP_UP, v, SP_PAVE_SLOPE, 0.4);
-        sg_coat(SG_SETT_POLISH * crown * (0.4 + 0.6 * traffic) * tau, SG_SETT_ROUGH);
+        sg_coat(SG_SETT_POLISH * crown * (0.4 + 0.6 * traffic) * tau, SG_SETT_ROUGH, SP_UP, v);
     }
     o.ao = clamp(t.ao / max(lx.y, 0.05), 0.0, 1.5);
     o.tn = vec2<f32>(t.nrm.x, -t.nrm.y);
@@ -1004,7 +1006,7 @@ fn sp_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, an: f32, dpx: vec3
         // (`--street-glare`) the line's resin film fills the road's texture: a smooth layer over more of it,
         // so a marking keeps its glare where the polished road round it catches the low sun
         let v = normalize(frame.cam_pos.xyz - world);
-        sg_coat(SG_POLISH_WHEEL * sg_top_share(SP_UP, v, SG_MACRO_SLOPE, SG_TOPS_WHEEL) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)), SG_COAT_ROUGH_WHEEL);
+        sg_coat(SG_POLISH_WHEEL * sg_top_share(SP_UP, v, SG_MACRO_SLOPE, SG_TOPS_WHEEL) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)), SG_COAT_ROUGH_WHEEL, SP_UP, v);
     }
 }
 
@@ -1209,8 +1211,8 @@ fn sw_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, kd: f32,
             sp_note_crack(k + 0.4 * ravel);
         }
     }
-    if (framed && kd >= 0.0 && dist < 60.0) {
-        let fk = sw_fatigue(a, kd, fw) * present * (1.0 - smoothstep(40.0, 60.0, dist));
+    if (framed && kd >= 0.0 && dist < 45.0) {
+        let fk = sw_fatigue(a, kd, fw) * present * (1.0 - smoothstep(30.0, 45.0, dist));
         if (fk > 0.0) {
             (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * fk);
             sp_note_crack(fk);
@@ -1321,8 +1323,16 @@ fn sg_top_share(n_geom: vec3<f32>, v: vec3<f32>, slope: f32, tops: f32) -> f32 {
 // The layer look_light.wgsl draws over the surface (its coat: F0 0.04 on the
 // plane, its own roughness, the base under it by 1 - k F). Dry only: the wet
 // layer brings its own film.
-fn sg_coat(k: f32, rough: f32) {
-    let kk = k * (1.0 - sw_wet());
+// `n`/`v` the surface's plane and the view: the layer only toward grazing (at a
+// steeper view its Fresnel share is a few hundredths and the road's own lobe
+// carries the sun's highlight), and by daylight only (under the lamps the
+// road's own lobe carries their sheen). Elsewhere it is left out whole, so
+// the coat's lighting is not run at all there (its cost: the street seen from
+// above, and the night's per-lamp coat term).
+fn sg_coat(k: f32, rough: f32, n: vec3<f32>, v: vec3<f32>) {
+    let graze = smoothstep(0.5, 0.3, dot(n, v));
+    let day = smoothstep(-0.03, 0.04, look.sun.y);
+    let kk = k * (1.0 - sw_wet()) * graze * day;
     if (kk > sky_coat) {
         sky_coat = kk;
         sky_coat_rough = rough;
