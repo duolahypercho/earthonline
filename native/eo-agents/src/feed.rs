@@ -22,6 +22,58 @@ use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
+/// (`--crowd`) The paved plazas' outlines, gridded (32 m cells): a walker
+/// on one, off the street's own paving, stands on the plaza's paving, which
+/// the landmarks lay at the footway datum (the ground plus the street's
+/// footway lift, eo-app main.rs `add_plazas_with`), not on the open ground's
+/// carpet under it.
+pub struct Plazas {
+    rings: Vec<Vec<[f64; 2]>>,
+    cells: HashMap<(i32, i32), Vec<u32>>,
+}
+
+impl Plazas {
+    pub fn new(rings: Vec<Vec<[f64; 2]>>) -> Self {
+        let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+        for (i, r) in rings.iter().enumerate() {
+            let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+            for p in r {
+                for a in 0..2 {
+                    lo[a] = lo[a].min(p[a]);
+                    hi[a] = hi[a].max(p[a]);
+                }
+            }
+            if r.len() < 3 {
+                continue;
+            }
+            for gx in (lo[0] / 32.0).floor() as i32..=(hi[0] / 32.0).floor() as i32 {
+                for gz in (lo[1] / 32.0).floor() as i32..=(hi[1] / 32.0).floor() as i32 {
+                    cells.entry((gx, gz)).or_default().push(i as u32);
+                }
+            }
+        }
+        Self { rings, cells }
+    }
+
+    /// Whether (x, z) lies inside a plaza's outline (even-odd).
+    pub fn contains(&self, x: f64, z: f64) -> bool {
+        let Some(list) = self.cells.get(&((x / 32.0).floor() as i32, (z / 32.0).floor() as i32)) else { return false };
+        list.iter().any(|&i| {
+            let r = &self.rings[i as usize];
+            let mut inside = false;
+            let mut j = r.len() - 1;
+            for k in 0..r.len() {
+                let (a, b) = (r[k], r[j]);
+                if (a[1] > z) != (b[1] > z) && x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0] {
+                    inside = !inside;
+                }
+                j = k;
+            }
+            inside
+        })
+    }
+}
+
 /// What the agents stand on.
 #[derive(Clone)]
 pub enum Ground {
@@ -162,6 +214,123 @@ pub fn mark_in_bore(a: &mut GpuAgent, structures: Option<&eo_structures::Structu
     }
 }
 
+/// (`--crowd`, `Feeder::separate`) the people's bodies kept apart: a body is
+/// a disc of this radius on the ground (Fruin's body ellipse, 0.61 x 0.46 m
+/// with clothing, by its mean half axis), relaxed this many times a frame.
+pub const BODY_RADIUS_M: f64 = 0.27;
+const SEPARATE_ITERATIONS: usize = 4;
+/// (`--crowd`) no two people in the same body within this of each other
+/// when a walker first appears (its first `TWIN_DRAWS` keyed draws tried).
+pub const TWIN_RADIUS_M: f64 = 30.0;
+const TWIN_DRAWS: u32 = 8;
+/// A vehicle's footprint for the people standing clear of it, from its model
+/// (its wheels and bounding sphere: the body's half length the larger of the
+/// sphere's radius by this share, the sphere standing for the body's length
+/// and height together, and the wheelbase's half plus a wheel; its half width
+/// the wheels' track plus this share of a wheel's radius, the tyre and the
+/// body over it).
+const BODY_LENGTH_OF_RADIUS: f64 = 0.9;
+const BODY_WIDTH_PAST_WHEEL: f64 = 0.6;
+
+/// (`--crowd`) Keep the people's bodies apart and out of the vehicles: each
+/// walker a disc of `BODY_RADIUS_M`, every overlapping pair pushed apart
+/// along the line between them by half the overlap each (position-based
+/// dynamics, `SEPARATE_ITERATIONS` Jacobi passes over a 1 m grid), a walker
+/// inside a vehicle's footprint (`cars`: x, z, heading sin and cos, half
+/// length and width) pushed out across its nearest side. The simulation does
+/// not see the bodies (its walkers are lines' offsets, as the JS ambient pool,
+/// whose separation lived in a physics bridge not ported), so this is where
+/// they get their room. Positions in `pos` in place; deterministic in the
+/// input order.
+pub fn separate(pos: &mut [[f64; 2]], cars: &[(f64, f64, f64, f64, f64, f64)]) {
+    let n = pos.len();
+    if n == 0 {
+        return;
+    }
+    let r2 = 2.0 * BODY_RADIUS_M;
+    let cell = |p: [f64; 2]| ((p[0] / r2).floor() as i32, (p[1] / r2).floor() as i32);
+    let mut push = vec![[0.0f64; 2]; n];
+    for _ in 0..SEPARATE_ITERATIONS {
+        let mut grid: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+        for (i, p) in pos.iter().enumerate() {
+            grid.entry(cell(*p)).or_default().push(i as u32);
+        }
+        push.iter_mut().for_each(|d| *d = [0.0; 2]);
+        let mut any = false;
+        for i in 0..n {
+            let (cx, cz) = cell(pos[i]);
+            for gx in cx - 1..=cx + 1 {
+                for gz in cz - 1..=cz + 1 {
+                    let Some(list) = grid.get(&(gx, gz)) else { continue };
+                    for &j in list {
+                        let j = j as usize;
+                        if j <= i {
+                            continue;
+                        }
+                        let (dx, dz) = (pos[j][0] - pos[i][0], pos[j][1] - pos[i][1]);
+                        let d = dx.hypot(dz);
+                        if d >= r2 {
+                            continue;
+                        }
+                        // coincident bodies part along a direction fixed by their order
+                        let (ux, uz) = if d > 1e-6 { (dx / d, dz / d) } else { let a = (i * 7 + j * 13) as f64; (a.cos(), a.sin()) };
+                        let h = 0.5 * (r2 - d);
+                        push[i][0] -= ux * h;
+                        push[i][1] -= uz * h;
+                        push[j][0] += ux * h;
+                        push[j][1] += uz * h;
+                        any = true;
+                    }
+                }
+            }
+        }
+        for i in 0..n {
+            pos[i][0] += push[i][0];
+            pos[i][1] += push[i][1];
+        }
+        if !any {
+            break;
+        }
+    }
+    if cars.is_empty() {
+        return;
+    }
+    // Out of the vehicles: on a grid of 8 m cells by each footprint's reach.
+    const CAR_CELL: f64 = 8.0;
+    let mut grid: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+    for (k, c) in cars.iter().enumerate() {
+        let reach = c.4.hypot(c.5) + BODY_RADIUS_M;
+        for gx in ((c.0 - reach) / CAR_CELL).floor() as i32..=((c.0 + reach) / CAR_CELL).floor() as i32 {
+            for gz in ((c.1 - reach) / CAR_CELL).floor() as i32..=((c.1 + reach) / CAR_CELL).floor() as i32 {
+                grid.entry((gx, gz)).or_default().push(k as u32);
+            }
+        }
+    }
+    for p in pos.iter_mut() {
+        let Some(list) = grid.get(&((p[0] / CAR_CELL).floor() as i32, (p[1] / CAR_CELL).floor() as i32)) else { continue };
+        for &k in list {
+            let (x, z, s, c, hl, hw) = cars[k as usize];
+            // body frame: forward (sin, cos), right (cos, -sin)
+            let (dx, dz) = (p[0] - x, p[1] - z);
+            let lf = dx * s + dz * c;
+            let lr = dx * c - dz * s;
+            let (ef, er) = (hl + BODY_RADIUS_M - lf.abs(), hw + BODY_RADIUS_M - lr.abs());
+            if ef <= 0.0 || er <= 0.0 {
+                continue;
+            }
+            if er <= ef {
+                let m = er * lr.signum();
+                p[0] += c * m;
+                p[1] -= s * m;
+            } else {
+                let m = ef * lf.signum();
+                p[0] += s * m;
+                p[1] += c * m;
+            }
+        }
+    }
+}
+
 /// Turn signals blink at 1.5 Hz (CA Vehicle Code 24952: 60-120 flashes a minute).
 pub const BLINK_HZ: f64 = 1.5;
 /// Steer is limited to the catalogue's arcade lock.
@@ -187,6 +356,9 @@ struct Walker {
     /// its place in the people pool, its walk.
     pool: usize,
     motion: crate::motion::WalkerMotion,
+    /// (`--crowd`) where it was last drawn and when (the no-twin rule, the cleanup).
+    at: [f64; 2],
+    seen: f64,
 }
 
 pub struct Feeder {
@@ -208,6 +380,11 @@ pub struct Feeder {
     /// Walkers moved off a drawn carriageway onto its footway, last build.
     pub moved_to_footway: usize,
     pub last_ms: f64,
+    /// (`--crowd`; false as before) keep the people's bodies apart and out of
+    /// the vehicles (`separate`).
+    pub separate: bool,
+    /// (`--crowd`; None as before) the paved plazas a walker stands on (`Plazas`).
+    pub plazas: Option<Arc<Plazas>>,
 }
 
 fn fract(x: f64) -> f64 {
@@ -217,7 +394,19 @@ fn fract(x: f64) -> f64 {
 impl Feeder {
     /// `structures`: the grade-separated roads beside `ground` (None without `--structures`).
     pub fn new(lib: Arc<Library>, ground: Ground, structures: Option<Arc<eo_structures::StructureWorld>>, seed_int: u32) -> anyhow::Result<Self> {
-        Ok(Self { lib, js: AgentsJs::load()?, ground, structures, seed_int, on_decks: 0, in_bores: 0, cars: HashMap::new(), walkers: HashMap::new(), carriageways: None, moved_to_footway: 0, last_ms: 0.0 })
+        Ok(Self { lib, js: AgentsJs::load()?, ground, structures, seed_int, on_decks: 0, in_bores: 0, cars: HashMap::new(), walkers: HashMap::new(), carriageways: None, moved_to_footway: 0, last_ms: 0.0, separate: false, plazas: None })
+    }
+
+    /// Where a walker stands at (x, z): the street's drawn surface, or on a
+    /// paved plaza (`plazas`, off the street's paving) the plaza's paving.
+    fn walker_y(&self, x: f64, z: f64) -> f64 {
+        let y = self.ground.y(x, z);
+        if let (Some(p), Ground::Street(sw)) = (&self.plazas, &self.ground) {
+            if p.contains(x, z) && sw.paved_at(x, z).is_none() {
+                return y.max(sw.ground(x, z) + sw.o.footway_lift);
+            }
+        }
+        y
     }
 
     /// The grade-separated roads it was given.
@@ -238,6 +427,9 @@ impl Feeder {
         self.moved_to_footway = 0;
         self.on_decks = 0;
         self.in_bores = 0;
+        // (`--crowd`) the vehicles' footprints and the walkers' places in `out`, kept apart below.
+        let mut footprints: Vec<(f64, f64, f64, f64, f64, f64)> = vec![];
+        let mut walker_at: Vec<usize> = vec![];
         for (ri, r) in frame.regions.iter().enumerate() {
             let [ox, oz] = r.origin;
             for a in &r.vehicles {
@@ -306,6 +498,12 @@ impl Feeder {
                     cs.time = frame.time;
                     cs.steer = steer;
                 }
+                if self.separate {
+                    let m = &lib.models[car.model as usize];
+                    let track = m.wheel.iter().map(|w| w[0].abs()).fold(0.0f32, f32::max) as f64;
+                    let hl = (m.radius as f64 * BODY_LENGTH_OF_RADIUS).max(car.half_base + car.wheel_radius);
+                    footprints.push((x, z, s, c, hl, track + BODY_WIDTH_PAST_WHEEL * car.wheel_radius));
+                }
                 let rot = Quat::from_rotation_y(a.heading) * Quat::from_rotation_x(-pitch);
                 let spin = (a.anim as f64 / car.wheel_radius).rem_euclid(std::f64::consts::TAU) as f32;
                 // (the level rides in the instance flags; the renderer gets the lamp flags only.)
@@ -335,15 +533,36 @@ impl Feeder {
             }
             for a in &r.walkers {
                 let key = (ri, a.id);
-                let w = *self.walkers.entry(key).or_insert_with(|| {
+                let (sx, sz) = (ox + a.pos[0] as f64, oz + a.pos[2] as f64);
+                if !self.walkers.contains_key(&key) {
                     let k = format!("ambient-{}", a.id);
                     let fams = &lib.meta.people_models;
-                    let f = ((eo_sim::rng::keyed_random(&k, "civilian-family") * fams.len() as f64) as usize).min(fams.len() - 1);
+                    let pick = |salt: &str| ((eo_sim::rng::keyed_random(&k, salt) * fams.len() as f64) as usize).min(fams.len() - 1);
+                    let mut f = pick("civilian-family");
+                    if self.separate {
+                        // (`--crowd`) no twins in sight: the first of its keyed draws
+                        // no one within `TWIN_RADIUS_M` already wears (else the first).
+                        let near = |m: u32| self.walkers.iter().any(|(kk, o)| kk.0 == ri && o.model == m && (o.at[0] - sx).hypot(o.at[1] - sz) < TWIN_RADIUS_M);
+                        for n in 0..TWIN_DRAWS {
+                            let c = if n == 0 { f } else { pick(&format!("civilian-family-{n}")) };
+                            if !near(fams[c]) {
+                                f = c;
+                                break;
+                            }
+                        }
+                    }
                     // `NPC_HEIGHT_SHAPE_RANGE`: height x (1 +- 0.04 shape).
                     let shape = eo_sim::rng::keyed_random(&k, "civilian-height") * 2.0 - 1.0;
-                    Walker { model: fams[f], scale: ((1.0 + 0.04 * shape) * eo_data::groundscale::people()) as f32, offset: eo_sim::rng::keyed_random(&k, "civilian-clip") as f32, pool: f, motion: Default::default() } // * people(), the trial's visual people scale, 1.0 unless set
-                });
-                let (mut x, mut z) = (ox + a.pos[0] as f64, oz + a.pos[2] as f64);
+                    let w = Walker { model: fams[f], scale: ((1.0 + 0.04 * shape) * eo_data::groundscale::people()) as f32, offset: eo_sim::rng::keyed_random(&k, "civilian-clip") as f32, pool: f, motion: Default::default(), at: [sx, sz], seen: frame.time }; // * people(), the trial's visual people scale, 1.0 unless set
+                    self.walkers.insert(key, w);
+                }
+                let w = {
+                    let e = self.walkers.get_mut(&key).expect("inserted above");
+                    e.at = [sx, sz];
+                    e.seen = frame.time;
+                    *e
+                };
+                let (mut x, mut z) = (sx, sz);
                 // The simulation's footways come from the class street model
                 // (eo-sim `native`), narrower than the surveyed street the
                 // renderer draws: a walker it puts on a drawn carriageway away
@@ -355,7 +574,10 @@ impl Feeder {
                         self.moved_to_footway += 1;
                     }
                 }
-                let y = self.ground.y(x, z);
+                let y = self.walker_y(x, z);
+                if self.separate {
+                    walker_at.push(out.len());
+                }
                 let activity = a.kind.saturating_sub(KIND_WALKER_BASE);
                 let clip = match activity {
                     2 => CLIP_TALK,
@@ -395,11 +617,26 @@ impl Feeder {
                 });
             }
         }
+        if self.separate && !walker_at.is_empty() {
+            let mut pos: Vec<[f64; 2]> = walker_at.iter().map(|&i| [out[i].pos[0] as f64, out[i].pos[2] as f64]).collect();
+            separate(&mut pos, &footprints);
+            for (k, &i) in walker_at.iter().enumerate() {
+                let (x, z) = (pos[k][0], pos[k][1]);
+                if (x as f32, z as f32) != (out[i].pos[0], out[i].pos[2]) {
+                    out[i].pos = [x as f32, self.walker_y(x, z) as f32, z as f32];
+                }
+            }
+        }
         // Forget agents not seen for a while (ids are recycled).
         if self.cars.len() > 8 * out.len().max(64) {
             let t = frame.time;
             self.cars.retain(|_, c| t - c.time < 5.0);
-            self.walkers.clear();
+            if self.separate {
+                // (`--crowd`) keep the walkers still drawn: a model drawn again could differ (the no-twin rule).
+                self.walkers.retain(|_, w| t - w.seen < 5.0);
+            } else {
+                self.walkers.clear();
+            }
         }
         self.last_ms = t0.elapsed().as_secs_f64() * 1e3;
     }

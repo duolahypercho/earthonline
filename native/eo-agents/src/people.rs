@@ -83,3 +83,73 @@ impl Clip {
         }
     }
 }
+
+/// (`--people-contact`) The joint that poses each of a person's contact
+/// anchors, in eo-render's order (agents_contact.wgsl `PC_JOINTS`): the left
+/// shoe's heel and toe halves (both on the foot: the shoe is stiff), the
+/// right shoe's, the shins, the thighs and the pelvis (`rocketbox::JOINTS`
+/// indices: L Foot 49, R Foot 53, L Calf 48, R Calf 52, L Thigh 47, R Thigh
+/// 51, Pelvis 0).
+pub const CONTACT_JOINTS: [usize; 9] = [49, 49, 53, 53, 48, 52, 47, 51, 0];
+/// The vertices each anchor stands for: those carried most by these joints
+/// (a shoe: its foot and toe joints), and for a shoe's halves the rear or
+/// the front half of them along the foot (+z, the body's forward).
+const CONTACT_CARRIERS: [&[usize]; 9] = [&[49, 50], &[49, 50], &[53, 54], &[53, 54], &[48], &[52], &[47], &[51], &[0]];
+const CONTACT_HALF: [i8; 9] = [-1, 1, -1, 1, 0, 0, 0, 0, 0];
+
+/// (`--people-contact`) Each person model's contact anchors: for every
+/// `CONTACT_JOINTS` entry the centroid of the vertices of its near tier
+/// (LOD 1) that `CONTACT_CARRIERS` carry most (a shoe split at its median
+/// along z), in the bind pose and the cooked frame, and their RMS distance
+/// from it (a sphere of that radius has about their projected area),
+/// appended to the bone table after its matrices (`[x, y, z, radius]` each),
+/// its first index in `pad[0]` of the model and the count in `pad[1]`. Made
+/// at load, never cached; without it nothing is appended and the pads stay
+/// zero. An anchor nothing carries gets a zero radius: it hides nothing.
+pub fn add_contact_anchors(lib: &mut crate::library::Library) {
+    let n = CONTACT_JOINTS.len();
+    for mi in 0..lib.models.len() {
+        let m = lib.models[mi];
+        if m.class != crate::CLASS_PERSON {
+            continue;
+        }
+        let Some(mesh) = lib.meshes.get(m.meshes[1] as usize).copied() else { continue };
+        let (first, count) = (mesh.first_index as usize, mesh.index_count as usize);
+        let mut seen = std::collections::HashSet::new();
+        // each vertex's carrying joint, once
+        let mut verts: Vec<(usize, [f32; 3])> = vec![];
+        for &ix in lib.indices.get(first..first + count).unwrap_or(&[]) {
+            let vi = (mesh.base_vertex as i64 + ix as i64) as usize;
+            if !seen.insert(vi) {
+                continue;
+            }
+            let Some(v) = lib.vertices.get(vi) else { continue };
+            let (mut best, mut bw) = (0usize, 0u8);
+            for k in 0..4 {
+                if v.weights[k] > bw {
+                    bw = v.weights[k];
+                    best = v.joints[k] as usize;
+                }
+            }
+            verts.push((best, v.pos));
+        }
+        let at = lib.bones.len() as u32;
+        for k in 0..n {
+            let mut pts: Vec<[f32; 3]> = verts.iter().filter(|(j, _)| CONTACT_CARRIERS[k].contains(j)).map(|(_, p)| *p).collect();
+            if CONTACT_HALF[k] != 0 && !pts.is_empty() {
+                pts.sort_by(|a, b| a[2].total_cmp(&b[2]));
+                let h = pts.len() / 2;
+                pts = if CONTACT_HALF[k] < 0 { pts[..h.max(1)].to_vec() } else { pts[h..].to_vec() };
+            }
+            let c = if pts.is_empty() {
+                [0.0f64; 3]
+            } else {
+                let s = pts.iter().fold([0.0f64; 3], |a, p| [a[0] + p[0] as f64, a[1] + p[1] as f64, a[2] + p[2] as f64]);
+                [s[0] / pts.len() as f64, s[1] / pts.len() as f64, s[2] / pts.len() as f64]
+            };
+            let r = if pts.is_empty() { 0.0 } else { (pts.iter().map(|p| (0..3).map(|a| (p[a] as f64 - c[a]).powi(2)).sum::<f64>()).sum::<f64>() / pts.len() as f64).sqrt() };
+            lib.bones.push([c[0] as f32, c[1] as f32, c[2] as f32, r as f32]);
+        }
+        lib.models[mi].pad = [at, n as u32, 0, 0];
+    }
+}
