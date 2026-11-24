@@ -167,7 +167,7 @@ fn the_shaders_cinematic_lamp_constants_are_eo_skys() {
             include_str!("../src/sky_common.wgsl"),
             eo_render::sky::sea_wgsl(),
             eo_render::shop_lights::wgsl(),
-            eo_render::sky::cine_lamps_wgsl(flag) + &eo_render::sky::night_photometry_wgsl(),
+            eo_render::sky::cine_lamps_wgsl(flag) + &eo_render::sky::night_photometry_wgsl() + &eo_render::sky::lamp_bounce_wgsl(),
             include_str!("../src/sky_lights.wgsl")
         );
         let m = wgpu::naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
