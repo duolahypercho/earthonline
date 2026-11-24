@@ -595,7 +595,7 @@ impl PropsGpu {
             cc0_layers: empty("prop-cc0-layers-stand-in", 64, U::STORAGE),
         };
         let draw_bg = draw_parts.bind(d, "prop-draw-bg", None);
-        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), include_str!("props_draw.wgsl")); // the ambient volume's plane only, no single-probe lookups (their frame names none; lighting: ambient::ShaderLevels, room for the probe grid)
+        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), crate::look::sf_select(include_str!("props_draw.wgsl"))); // the ambient volume's plane only, no single-probe lookups (their frame names none; lighting: ambient::ShaderLevels, room for the probe grid)
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("prop-draw-layout"),

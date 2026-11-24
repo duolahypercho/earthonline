@@ -409,3 +409,99 @@ fn lm_fog_depth(m: Material, vd: f32) -> f32 {
     }
     return vd;
 }
+// sf:TURF+
+
+// ---- turf (`--turf`; this block is in the shader only with it): grass as a canopy ----
+// A lawn or a field of grass is not a painted plane: it is a layer of blades over
+// soil, and what the eye sees of it depends on where the sun and the eye stand.
+// Its reflectance follows the RPV model fitted to grass canopies (Rahman, Pinty
+// and Verstraete 1993): a Minnaert-like term (k < 1: brighter toward grazing, where
+// only lit blade sides show), a backward-peaked Henyey-Greenstein phase (theta < 0:
+// darker looking into the sun, where the shaded sides face the eye) and the hotspot
+// (the sun at the eye's back hides every shadow). It scales the ground's albedo by
+// its ratio to a Lambertian plane (1 at 45 degrees of sun and view, 90 degrees
+// apart), by the sun's share of the light for the direct part. Over it a mown
+// lawn's stripes (the mower's passes, the blades leaning along its path: light where
+// they lean away from the eye, dark where they lean toward it) and its tones at
+// every distance: irrigation patches, clumps, dry and worn patches.
+const NT_TURF_K: f32 = 0.75;
+const NT_TURF_THETA: f32 = -0.15;
+const NT_TURF_RHO0: f32 = 0.1;
+const NT_TURF_STRIPE_M: f32 = 1.6;
+const NT_TURF_STRIPE: f32 = 0.14;
+
+// How much of a ground tone is grass (x mown lawn: bright green; y any grass:
+// green or the dry summer straw), from the tone before the scans (cc0_ground_sets' kinds).
+fn nt_turf_weight(c: vec3<f32>) -> vec2<f32> {
+    let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let green = smoothstep(1.03, 1.12, c.g / max(c.r, 1e-4)) * smoothstep(1.12, 1.3, c.g / max(c.b, 1e-4));
+    let lawn = green * smoothstep(0.035, 0.06, l);
+    let warm = c.r / max(c.b, 1e-4);
+    let straw = (1.0 - smoothstep(0.1, 0.16, abs(c.r - c.g) / max(c.g, 1e-4))) * smoothstep(1.2, 1.35, warm);
+    return vec2<f32>(lawn, max(green, straw) * smoothstep(0.012, 0.02, l));
+}
+
+// The RPV reflectance (up to rho0) for sun cosine mi, view cosine mv, phase cosine cg and relative azimuth cosine cp.
+fn nt_rpv(mi: f32, mv: f32, cg: f32, cp: f32) -> f32 {
+    let k = NT_TURF_K;
+    let th = NT_TURF_THETA;
+    let m = pow(mi * mv * (mi + mv), k - 1.0);
+    let f = (1.0 - th * th) / pow(max(1.0 + 2.0 * th * cg + th * th, 1e-4), 1.5);
+    let ti = sqrt(max(1.0 - mi * mi, 0.0)) / mi;
+    let tv = sqrt(max(1.0 - mv * mv, 0.0)) / mv;
+    let g = sqrt(max(ti * ti + tv * tv - 2.0 * ti * tv * cp, 0.0));
+    return m * f * (1.0 + (1.0 - NT_TURF_RHO0) / (1.0 + g));
+}
+
+fn nt_turf(s: ptr<function, Surface>, w: vec2<f32>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    if (w.y <= 0.0 || n.y < 0.5) {
+        return;
+    }
+    let v = normalize(frame.cam_pos.xyz - world);
+    let l = look.key_dir.xyz;
+    // (the fits hold to about 78 degrees of view and 84 of sun: no further)
+    let mv = clamp(dot(n, v), 0.2, 1.0);
+    let mi = clamp(dot(n, l), 0.1, 1.0);
+    let lt = l - n * dot(n, l);
+    let vt = v - n * dot(n, v);
+    let cp = dot(lt, vt) / max(length(lt) * length(vt), 1e-4);
+    // reference: sun and view at 45 degrees, 90 degrees of azimuth apart (cos g 0.5, G sqrt 2).
+    let ref_rpv = nt_rpv(0.70710678, 0.70710678, 0.5, 0.0);
+    let sun = nt_rpv(mi, mv, clamp(dot(l, v), -1.0, 1.0), cp) / ref_rpv;
+    // the sky (an extended source): the view's part alone, the sky at 41 degrees, across.
+    let sky = nt_rpv(0.75, mv, 0.75 * mv, 0.0) / ref_rpv;
+    let key = dot(look.key.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) * max(dot(n, l), 0.0);
+    let amb = dot(look.hemi_sky.xyz + look.ambient.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let share = key / max(key + amb, 1e-6);
+    let canopy = clamp(mix(sky, sun, share), 0.55, 1.8);
+    var alb = (*s).albedo;
+    // The pixel's footprint (m): what is finer than it averages out.
+    let fw = max(length(dpx), length(dpy));
+    let p = world.xz;
+    // irrigation and soil patches (40 m and 13 m): lusher and bluer, or thinner and yellower.
+    let patchy = st_noise(p / 41.0 + vec2<f32>(7.1, 3.9)) * 0.6 + st_noise(p / 13.0 + vec2<f32>(1.3, 8.4)) * 0.4;
+    let lush = (patchy - 0.5) * 2.0;
+    alb = alb * mix(vec3<f32>(1.0), select(vec3<f32>(1.1, 1.02, 0.78), vec3<f32>(0.9, 1.04, 1.06), lush > 0.0), abs(lush) * 0.5);
+    alb = alb * (1.0 + 0.14 * lush);
+    // clumps and tufts (2.2 m and 0.7 m), gone where a pixel spans them.
+    let ck = 1.0 - smoothstep(0.4, 1.4, fw);
+    let tk = 1.0 - smoothstep(0.12, 0.45, fw);
+    let clump = (st_noise(p / 2.2 + vec2<f32>(4.4, 0.7)) - 0.5) * ck + (st_noise(p / 0.7 + vec2<f32>(9.2, 5.5)) - 0.5) * tk * 0.6;
+    alb = alb * (1.0 + 0.26 * clump);
+    // dry and worn patches (a mown lawn's under-watered spots, the trodden ground), ~15 %.
+    let dry_f = st_noise(p / 23.0 + vec2<f32>(2.7, 6.1)) * 0.65 + st_noise(p / 6.5 + vec2<f32>(5.3, 1.9)) * 0.35;
+    let dry = smoothstep(0.64, 0.8, dry_f) * w.x;
+    let straw = vec3<f32>(dot(alb, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(1.5, 1.12, 0.62);
+    alb = mix(alb, straw, dry * 0.75);
+    // the mower's stripes along the street grid's axis.
+    let d = GF_AXIS;
+    let across = dot(p, vec2<f32>(-d.y, d.x)) / NT_TURF_STRIPE_M;
+    let sk = (1.0 - smoothstep(0.25, 0.6, fw / NT_TURF_STRIPE_M)) * w.x * (1.0 - dry);
+    if (sk > 0.0) {
+        let lean = clamp(sin(across * 3.14159265) * 4.0, -1.0, 1.0);
+        let toward = dot(vec2<f32>(v.x, v.z), d); // + : the eye stands where the blades lean
+        alb = alb * (1.0 - NT_TURF_STRIPE * lean * toward * sk);
+    }
+    (*s).albedo = mix((*s).albedo, alb * canopy, w.y);
+}
+// sf:end

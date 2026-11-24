@@ -1040,9 +1040,20 @@ fn shade(in: VOut) -> vec4<f32> {
     // the terrain's ground scans around its tone (not the beach sand: below), before the wet margin.
     let cc0_terrain = (m.flags & F_VERTEX_COLOUR) != 0u && (objects[in.object].kind & 255u) == 1u;
     let cc0_sand = cc0_terrain && (m.flags & LM_F_WET_GROUND) != 0u && in.aux.x < 253.5;
+// sf:TURF+
+    var nt_w = vec2<f32>(0.0);
+    if (cc0_terrain && !cc0_sand) {
+        nt_w = nt_turf_weight(s.albedo); // (`--turf`) the grass in the tone, before the scans
+    }
+// sf:end
     if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
+// sf:TURF+
+    if (cc0_terrain && !cc0_sand) {
+        nt_turf(&s, nt_w, in.world, n, dpx, dpy); // (`--turf`) the grass as a canopy (landmarks_surface.wgsl)
+    }
+// sf:end
     if (((m.flags >> LM_SURFACE_SHIFT) & 7u) != 0u) {
         lm_surface(&s, m, in.world, n, dpx, dpy); // landmark-surface.js, the seawall's concrete
     } else if ((m.flags & LM_F_WET_GROUND) != 0u && (objects[in.object].kind & 255u) == 1u) {

@@ -82,8 +82,21 @@ fn pr_dither(p: vec2<f32>) -> f32 {
 }
 
 fn pr_fade_test(in: PrOut) {
+// sf:LOD_FADE-
     let n = pr_dither(floor(in.clip.xy));
     let t = in.fade.x;
+// sf:end
+// sf:LOD_FADE+
+    // (`--temporal-lod-fade`) the pattern moves every frame (Jimenez's
+    // interleaved gradient noise stepped 5.588238 px a frame over 64 frames),
+    // so the temporal anti-aliasing resolves the pair to a blend of the two
+    // levels instead of a fixed screen door; and the blend takes the middle of
+    // the band only, so an instance shows one level whole over most of it and
+    // two levels whose silhouettes differ (the palm's near and far models) are
+    // seen together over a short reach.
+    let n = pr_dither(floor(in.clip.xy) + vec2<f32>(5.588238 * look.post2.w));
+    let t = smoothstep(0.3, 0.7, in.fade.x);
+// sf:end
     if (in.fade.y > 0.5) {
         if (n >= t) {
             discard;
@@ -448,6 +461,54 @@ fn pr_basin(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, dlx: 
     (*s).ao = ao;
 }
 
+// sf:FOLIAGE+
+// ---- foliage light (`--foliage-light`; this block is in the shader only with it) ----
+// A leaf is a thin two-sided scatterer: of the light on the face the eye sees it
+// reflects R (look_light, with its normal turned to the eye), and of the light on
+// its far face it passes T through to the eye, nearly diffusely. T is R's own
+// pigment taken deeper: the ratio of transmittance to reflectance of mesophytic
+// leaves (LOPEX / PROSPECT spectra, about 0.3 at 450 nm, 0.85 at 550 nm, 0.55 at
+// 650 nm), so the light through a leaf is a more saturated yellow-green than the
+// light off it. The far face takes the sun (shadowed like the key light and
+// thinned by the clouds; a little of it in a forward lobe, Henyey-Greenstein
+// g 0.5, the direct light through thin blades and edges) and the sky and the
+// ground's light on the side the eye does not see (the ambient volume's sky
+// visibility when it is on, the screen-space occlusion of the crown's depth).
+const PR_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.55, 0.85, 0.3);
+const PR_LEAF_FWD_G: f32 = 0.5;
+const PR_LEAF_FWD_SHARE: f32 = 0.3;
+// a wet leaf's roughness (a water film on the cuticle: the glossy leaf of a wet tree).
+const PR_LEAF_WET_ROUGH: f32 = 0.3;
+const PR_PALM: u32 = 7u; // eo_props::Model::Palm
+
+// Light through a leaf toward the eye (radiance, before the fog): `n` the face the eye
+// sees, `sh` the key light's shadow on the far face.
+fn pr_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>, sh: f32) -> vec3<f32> {
+    let t = albedo * PR_LEAF_T_OVER_R;
+    let b = -n;
+    let l = look.key_dir.xyz;
+    var e = vec3<f32>(0.0);
+    let bl = dot(b, l);
+    if (bl > 0.0) {
+        let g = PR_LEAF_FWD_G;
+        let cs = dot(-v, l);
+        let hg = (1.0 - g * g) / (4.0 * LK_PI * pow(max(1.0 + g * g - 2.0 * g * cs, 1e-4), 1.5));
+        let phase = (1.0 - PR_LEAF_FWD_SHARE) / LK_PI + PR_LEAF_FWD_SHARE * hg;
+        e = look.key.xyz * bl * sh * sky_cloud_transmittance(world) * phase * LK_PI;
+    }
+    let env_i = look.ambient.w * look.env_class.x;
+    var irr = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, b.y * 0.5 + 0.5) + look.ambient.xyz + lk_sh(b) * env_i;
+    if (amb_on()) {
+        irr = amb_irradiance(amb_sample(world, b), b, lk_sh(b) * env_i);
+    }
+    var ao = 1.0;
+    if (frame.copy_step.z < 0.5) {
+        ao = ao_multi_bounce(ao_fetch(world).a);
+    }
+    return t * (e + irr * ao) / LK_PI;
+}
+
+// sf:end
 fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     var m = materials[in.material];
     let inst = pr_instances[in.inst];
@@ -564,7 +625,33 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         s.albedo = vec3<f32>(0.02);
     }
     s.rough = clamp(s.rough, 0.03, 1.0);
+// sf:FOLIAGE+
+    // (`--foliage-light`) a leaf card, or a palm's frond (the palm's one
+    // material: its green parts).
+    var leaf = select(0.0, 1.0, (m.flags & PR_LEAF) != 0u);
+    if (inst.model == PR_PALM) {
+        leaf = smoothstep(1.0, 1.3, s.albedo.g / max(s.albedo.r, 1e-4));
+    }
+    if (leaf > 0.0) {
+        // In the rain a leaf's waxy cuticle carries a film of water on both
+        // faces, whichever way it faces (the ground's wetting takes only what
+        // faces up): a smoother, glossier surface, a little darker.
+        let wet = skyu.wet.x * leaf;
+        if (sky_on(skyu.flags.x, SKY_WET) && wet > 0.02) {
+            s.rough = mix(s.rough, min(s.rough, PR_LEAF_WET_ROUGH), wet);
+            s.albedo = s.albedo * mix(1.0, 0.85, wet);
+        }
+        // it passes the light on its far face (in the emissive slot: look_light
+        // adds it before its fog); the sun's shadow there only when the sun is behind it.
+        var leaf_sh = 0.0;
+        if (dot(-n, look.key_dir.xyz) > 0.0) {
+            leaf_sh = lk_shadow(in.world, -n);
+        }
+        m.emissive = vec4<f32>(m.emissive.rgb + pr_foliage(s.albedo, n, v, in.world, leaf_sh) * leaf, m.emissive.w);
+    }
+// sf:end
     var c = look_light(s, m, v, in.world, n, 0u);
+// sf:FOLIAGE-
     if ((m.flags & PR_LEAF) != 0u && (pr.mode.z & PR_F_LEAF) != 0u) {
         // back-lit leaves. A thin leaf passes part of the sun it does not
         // reflect: a diffuse transmission through the card (the sun behind the
@@ -579,6 +666,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let trans = look.key.xyz * s.albedo * (through * 0.35 + lobe * 0.6) * sh / LK_PI;
         c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
     }
+// sf:end
     return c;
 }
 

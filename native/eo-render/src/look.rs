@@ -195,11 +195,26 @@ pub struct LookOptions {
     /// high and hyper tiers turn on. Its shader code sits behind `SF_CINEMATIC`
     /// (`ShaderFeatures::cinematic`); the sky reads `SkyOptions::cinematic`.
     pub look: eo_look::cinematic::LookProfile,
+    /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
+    /// `--temporal-lod-fade`, `--turf`): 0 (the default) is the frame as before,
+    /// and each bit's shader code is compiled out while it is off (`sf_select`).
+    pub nature: u32,
 }
+
+/// `--foliage-light`: leaves and palm fronds pass light through (props_draw.wgsl
+/// `pr_foliage`, hlod_trees.wgsl `ft_foliage`).
+pub const NATURE_FOLIAGE: u32 = 1;
+/// `--temporal-lod-fade`: the level cross-fades' dither moves every frame, so the
+/// temporal anti-aliasing resolves it to a blend (props_draw.wgsl, hlod_trees.wgsl).
+pub const NATURE_LOD_FADE: u32 = 2;
+/// `--turf`: lawns shaded as a grass canopy (landmarks_surface.wgsl `nt_turf`).
+pub const NATURE_TURF: u32 = 4;
+/// Every natural-detail bit.
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF;
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -628,13 +643,16 @@ pub struct ShaderFeatures {
     /// The cinematic look (`--look cinematic`; `SF_CINEMATIC`): every shader line of the
     /// cinematic look plan sits behind it, as well as behind its runtime test.
     pub cinematic: bool,
+    /// The natural-detail bits compiled in (`NATURE_*`; their `// sf:` blocks, `sf_select`).
+    /// New code with no runtime test: `ALL` leaves it out, as the shaders were before it.
+    pub nature: u32,
 }
 
 impl ShaderFeatures {
     /// Every feature compiled in (the shaders as before stage P1).
-    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true };
+    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true, nature: 0 };
     /// No feature compiled in (the default frame's pipelines).
-    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false };
+    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false, nature: 0 };
 
     /// The features the look's options ask for, with the world's (`structures`,
     /// `tunnels`, `facade_clutter`: eo-app's `--structures`, `--tunnels`,
@@ -649,6 +667,7 @@ impl ShaderFeatures {
             shop_light: o.sky.shop_light > 0,
             facade_clutter,
             cinematic: o.look.is_cinematic(),
+            nature: o.nature & NATURE_ALL,
         }
     }
 
@@ -699,6 +718,7 @@ impl ShaderFeatures {
             l.look = eo_look::cinematic::LookProfile::Default;
             l.sky.cinematic = false;
         }
+        l.nature &= self.nature;
         l
     }
 
@@ -709,6 +729,45 @@ impl ShaderFeatures {
             self.lx_bits, self.grime, self.street_life, self.structures, self.tunnels, self.shop_light, self.facade_clutter, self.cinematic
         )
     }
+}
+
+/// A shader file's natural-detail blocks for the features compiled in now: the
+/// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`: `NATURE_*`) in, those between `// sf:NAME-`
+/// and `// sf:end` only without it, and the marker lines are dropped. With every
+/// bit out the text is the file as it was before the bits existed, so a shader
+/// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
+/// before, and with a bit in it holds its code alone, not the code it replaces.
+pub fn sf_select(src: &str) -> String {
+    let f = shader_features();
+    let on = |name: &str| match name {
+        "FOLIAGE" => f.nature & NATURE_FOLIAGE != 0,
+        "LOD_FADE" => f.nature & NATURE_LOD_FADE != 0,
+        "TURF" => f.nature & NATURE_TURF != 0,
+        _ => false,
+    };
+    let mut out = String::with_capacity(src.len());
+    let mut keep = true;
+    for line in src.split_inclusive('\n') {
+        if let Some(rest) = line.trim().strip_prefix("// sf:") {
+            if rest == "end" {
+                keep = true;
+                continue;
+            }
+            if let Some(name) = rest.strip_suffix('+') {
+                keep = on(name);
+                continue;
+            }
+            if let Some(name) = rest.strip_suffix('-') {
+                keep = !on(name);
+                continue;
+            }
+        }
+        if keep {
+            out.push_str(line);
+        }
+    }
+    out
 }
 
 static SHADER_FEATURES: std::sync::RwLock<ShaderFeatures> = std::sync::RwLock::new(ShaderFeatures::ALL);
@@ -756,6 +815,10 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// at the edge of what Apple's compiler takes, have room for the probe grid
 /// (probe_grid.wgsl, compiled in everywhere but the far layer).
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
+    sf_select(&city_shader_parts(ambient, shadow, single_probe)) // the natural-detail blocks (`// sf:`) of the features compiled in
+}
+
+fn city_shader_parts(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
     format!(
         "{}\n{}\n{}\n{}\n{}\n{}\n{}",
         include_str!("draw.wgsl"),

@@ -107,7 +107,14 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     // lighting: discarded before it, every card in its fade band drew black on
     // Metal (the dither splits nearly every 2x2 quad, which likely leaves the
     // lighting's derivatives undefined for the pixels it keeps).
+// sf:LOD_FADE-
     let faded_out = in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade;
+// sf:end
+// sf:LOD_FADE+
+    // (`--temporal-lod-fade`) the pattern moves every frame, so the temporal
+    // anti-aliasing resolves the fade-in to a blend.
+    let faded_out = in.fade < 0.999 && hlod_dither(floor(in.clip.xy) + vec2<f32>(5.588238 * look.post2.w)) >= in.fade;
+// sf:end
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = vec3<f32>(0.0, 1.0, 0.0);
     var albedo = in.tint;
@@ -145,12 +152,56 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     m.thin_absorption = 0.0;
     rm_emit = vec3<f32>(0.0);
     let face = normalize(cross(dpx, dpy));
+// sf:FOLIAGE-
     let lit = look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+// sf:end
+// sf:FOLIAGE+
+    var lit = look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    if (crown || baked) {
+        // (`--foliage-light`) the crown passes light: what reaches its far side
+        // comes through the leaves toward the eye, most where the view's chord
+        // through the crown is short (its edge: the backlit rim), little through its depth.
+        lit = vec4<f32>(lit.rgb + ft_foliage(albedo, n, v, in.world), lit.a);
+    }
+// sf:end
     if (faded_out) {
         discard;
     }
     return lit;
 }
+// sf:FOLIAGE+
+
+// (`--foliage-light`) light through a far crown toward the eye (radiance, fogged
+// as look_light fogs): the leaves' transmittance (props_draw.wgsl
+// `PR_LEAF_T_OVER_R`, the same mesophytic ratio) of the sun on the far side (a
+// forward lobe, Henyey-Greenstein g 0.5) and of the sky and ground light there,
+// times the crown's own transmittance along the view's chord, exp(-2 z) with z
+// the crown normal's share toward the eye (1 at its centre, 0 at its edge).
+fn ft_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
+    let t = albedo * vec3<f32>(0.55, 0.85, 0.3);
+    let b = -n;
+    let chord = exp(-2.0 * max(dot(n, v), 0.0));
+    let l = look.key_dir.xyz;
+    var e = vec3<f32>(0.0);
+    let bl = dot(b, l);
+    if (bl > 0.0) {
+        let g = 0.5;
+        let cs = dot(-v, l);
+        let hg = (1.0 - g * g) / (4.0 * LK_PI * pow(max(1.0 + g * g - 2.0 * g * cs, 1e-4), 1.5));
+        e = look.key.xyz * bl * lk_shadow(world, b) * sky_cloud_transmittance(world) * (0.7 / LK_PI + 0.3 * hg) * LK_PI;
+    }
+    let irr = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, b.y * 0.5 + 0.5) + look.ambient.xyz + lk_sh(b) * look.ambient.w * look.env_class.x;
+    var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
+    if (skyu.flags.x != 0u) {
+        let u = max(abs(world.y - look.cam_pos.y) - 20.0, 0.0) / 400.0;
+        if (u > 1e-2) {
+            vd = vd * (1.0 - exp(-u)) / u;
+        }
+    }
+    let fog = lk_smooth(look.fog.x, look.fog.y, vd);
+    return t * (e + irr) / LK_PI * chord * (1.0 - fog);
+}
+// sf:end
 
 @fragment
 fn far_tree_fs(in: FtOut) -> @location(0) vec4<f32> {
