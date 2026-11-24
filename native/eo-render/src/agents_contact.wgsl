@@ -15,8 +15,15 @@
 // the car takes away is taken: the sky, the ambient light, the bounce and the
 // rig's rim (what the frame's screen-space occlusion did not already take:
 // the lesser visibility of the two), never the key light where its shadow map
-// lets it through, nor the street's lamps beside the car (under the body the
-// car blocks those too). The pixel's colour is multiplied by what is left.
+// lets it through. The street's lamps (each light of the pixel's cluster, as
+// the city's shading gathers them) are each taken where the car's bodies (the
+// lower and upper body and the nearest tyre) stand between the point and the
+// lamp: the ray to the lamp marched through the bodies' distance field, its
+// clearance over the lamp's penumbra there (the lamp a sphere of its
+// luminaire's size), so the shadow is hard at the contact and softens away
+// from it; where the lamp's own shadow map already darkens the point the
+// lesser of the two is kept. A lamp at or in the body (the car's own) is
+// never taken. The pixel's colour is multiplied by what is left.
 
 @group(3) @binding(0) var ag_ct_depth: texture_depth_2d;
 
@@ -157,6 +164,142 @@ fn ag_ct_inside(p: vec3<f32>, lo: vec3<f32>, hi: vec3<f32>) -> bool {
     return all(p > lo) && all(p < hi);
 }
 
+// A box's signed distance (m) at q.
+fn ag_ct_sdbox(q: vec3<f32>, lo: vec3<f32>, hi: vec3<f32>) -> f32 {
+    let d = abs(q - 0.5 * (lo + hi)) - 0.5 * (hi - lo);
+    return length(max(d, vec3<f32>(0.0))) + min(max(d.x, max(d.y, d.z)), 0.0);
+}
+
+// Within this of the body a light is the car's own lamp (m).
+const AG_CT_OWN_LAMP_M: f32 = 0.35;
+// The ray's samples through the bodies' bounds, and its least penumbra (m).
+const AG_CT_RAY_STEPS: u32 = 6u;
+const AG_CT_PEN_MIN: f32 = 0.015;
+
+// The share of a lamp at `lp` (the car's frame, `src` m across in radius) the
+// car's bodies leave to the point `p`: the ray's least clearance over the
+// lamp's penumbra along its stretch through the bodies' bounds.
+fn ag_ct_lamp_vis(p: vec3<f32>, lp: vec3<f32>, src: f32, b: array<vec3<f32>, 6>) -> f32 {
+    if (min(min(ag_ct_sdbox(lp, b[0], b[1]), ag_ct_sdbox(lp, b[2], b[3])), ag_ct_sdbox(lp, b[4], b[5])) < AG_CT_OWN_LAMP_M) {
+        return 1.0;
+    }
+    let dv = lp - p;
+    let dist = length(dv);
+    let dir = dv / max(dist, 1e-4);
+    let pen = src / max(dist, 1e-3);
+    let g = vec3<f32>(0.05 + pen * 6.0);
+    let blo = min(min(b[0], b[2]), b[4]) - g;
+    let bhi = max(max(b[1], b[3]), b[5]) + g;
+    let dd = select(dir, vec3<f32>(1e-6), abs(dir) < vec3<f32>(1e-6));
+    let ta = (blo - p) / dd;
+    let tb = (bhi - p) / dd;
+    let t0 = max(max(max(min(ta.x, tb.x), min(ta.y, tb.y)), min(ta.z, tb.z)), 0.0);
+    let t1 = min(min(min(max(ta.x, tb.x), max(ta.y, tb.y)), max(ta.z, tb.z)), dist);
+    if (t1 <= t0) {
+        return 1.0;
+    }
+    var m = 1e9;
+    for (var i = 0u; i < AG_CT_RAY_STEPS; i = i + 1u) {
+        let t = mix(t0, t1, (f32(i) + 0.5) / f32(AG_CT_RAY_STEPS));
+        let q = p + dir * t;
+        let sd = min(min(ag_ct_sdbox(q, b[0], b[1]), ag_ct_sdbox(q, b[2], b[3])), ag_ct_sdbox(q, b[4], b[5]));
+        m = min(m, sd / max(pen * t, AG_CT_PEN_MIN));
+    }
+    return smoothstep(-1.0, 1.0, m);
+}
+
+// A light's emission toward the point over its axis's (as sky_light.wgsl
+// `sky_local_lights_ao` shapes it) and its source's radius (m).
+fn ag_ct_lamp_shape(li: SkyLight, l: vec3<f32>, dist: f32, cine: bool) -> vec2<f32> {
+    let ca = dot(-l, li.dir);
+    if (li.kind == 0u) {
+        if (cine) {
+            return vec2<f32>(sky_cine_cobra(l, li.dir), SKY_CINE_SRC_STREET);
+        }
+        return vec2<f32>((1.0 + 1.5 * (1.0 - ca * ca)) * smoothstep(li.cos_outer, li.cos_inner, ca), SKY_CINE_SRC_STREET);
+    }
+    if (li.kind == 1u) {
+        let dep = asin(clamp(l.y, -1.0, 1.0)) * 57.29578;
+        var vert = 1.0;
+        if (dep < 0.6) {
+            vert = 0.031;
+        } else if (dep < 1.3) {
+            vert = mix(0.031, 1.0, (dep - 0.6) / 0.7);
+        } else if (dep > 2.5) {
+            vert = (2.5 / dep) * (2.5 / dep);
+        }
+        let hl = normalize(vec2<f32>(-l.x, -l.z) + vec2<f32>(1e-6, 0.0));
+        let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
+        let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
+        let near = clamp(max(dist, 0.4) / 6.5, 0.0, 1.0);
+        if (cine) {
+            let hr = vec2<f32>(-ha.y, ha.x);
+            vert = sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578);
+        }
+        return vec2<f32>(vert * side * near * near, SKY_CINE_SRC_HEADLAMP);
+    }
+    if (li.kind >= 3u) {
+        return vec2<f32>(smoothstep(li.cos_outer, li.cos_inner, ca), select(SKY_CINE_SRC_STREET, 0.5 * sqrt(max(li.size, 0.0)), li.kind >= 4u));
+    }
+    return vec2<f32>(1.0, SKY_CINE_SRC_STREET);
+}
+
+struct AgCtLamps {
+    // what the street's lamps gave the point (white, their maps' shadows in), what the car leaves of it
+    lit: vec3<f32>,
+    left: vec3<f32>,
+};
+
+// The street's lamps at a point facing `n` (the pixel's cluster, as the city's
+// shading gathers them), and what of them the car leaves (`p` the point in the
+// car's frame, `qi` the frame's inverse rotation, `b` its bodies' boxes).
+fn ag_ct_lamps(world: vec3<f32>, n: vec3<f32>, p: vec3<f32>, a: AgAgent, b: array<vec3<f32>, 6>) -> AgCtLamps {
+    var r = AgCtLamps(vec3<f32>(0.0), vec3<f32>(0.0));
+    if (!sky_on(skyu.flags.x, SKY_LIGHTS) || skyu.lights.x == 0u) {
+        return r;
+    }
+    let rel = world - skyu.eye.xyz;
+    let vz = dot(rel, skyu.cam_fwd.xyz);
+    if (vz < skyu.cluster.x || vz > skyu.cluster.y) {
+        return r;
+    }
+    let vx = dot(rel, skyu.cam_right.xyz);
+    let vy = dot(rel, skyu.cam_up.xyz);
+    let ndc = vec2<f32>(vx / (vz * skyu.cluster.z * skyu.cluster.w), vy / (vz * skyu.cluster.z));
+    let g = skyu.lights.yzw;
+    let tx = u32(clamp((ndc.x * 0.5 + 0.5) * f32(g.x), 0.0, f32(g.x) - 1.0));
+    let ty = u32(clamp((0.5 - ndc.y * 0.5) * f32(g.y), 0.0, f32(g.y) - 1.0));
+    let tz = u32(clamp(log(vz / skyu.cluster.x) / log(skyu.cluster.y / skyu.cluster.x) * f32(g.z), 0.0, f32(g.z) - 1.0));
+    let c = (tz * g.y + ty) * g.x + tx;
+    let count = min(sky_clusters[c], SKY_CLUSTER_CAP);
+    let base = g.x * g.y * g.z + c * SKY_CLUSTER_CAP;
+    let cine = SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC);
+    let qi = vec4<f32>(-a.rot.xyz, a.rot.w);
+    let inv = 1.0 / max(a.scale, 1e-3);
+    for (var k = 0u; k < count; k = k + 1u) {
+        let li = sky_lights[sky_clusters[base + k]];
+        let d = li.pos - world;
+        let d2 = max(dot(d, d), 0.04);
+        let dist = sqrt(d2);
+        let l = d / dist;
+        let w = clamp(1.0 - pow(dist / li.range, 4.0), 0.0, 1.0);
+        let nl = max(dot(n, l), 0.0);
+        if (nl <= 0.0 || w <= 0.0) {
+            continue;
+        }
+        let sh = ag_ct_lamp_shape(li, l, dist, cine);
+        let e = li.color * (li.intensity * sh.x * w * w / d2 * nl);
+        var map = 1.0;
+        if (LS_SHADER && li.pad >= 1.0) {
+            map = ls_light_visibility(u32(li.pad) - 1u, world, n);
+        }
+        let car = ag_ct_lamp_vis(p, ag_rotate(qi, li.pos - a.pos) * inv, sh.y * inv, b);
+        r.lit = r.lit + e * map;
+        r.left = r.left + e * min(map, car);
+    }
+    return r;
+}
+
 // The pixel's position (camera-relative world, as the occlusion pass's `ao_pos`).
 fn ag_ct_pos(px: vec2<i32>, dims: vec2<i32>) -> vec3<f32> {
     let p = clamp(px, vec2<i32>(0), dims - 1);
@@ -215,6 +358,10 @@ fn ag_contact_fs(in: AgCtOut) -> @location(0) vec4<f32> {
     let body = 1.0 - (1.0 - ag_ct_box(p, lower_lo, lower_hi)) * (1.0 - ag_ct_box(p, upper_lo, upper_hi));
     var tyres = 0.0;
     let wr = max(m.wheel_radius, 0.2);
+    // the nearest tyre's box (the lamps' shadows take it with the bodies)
+    var near_lo = vec3<f32>(0.0, -1.0, 0.0);
+    var near_hi = vec3<f32>(0.0, -0.9, 0.0);
+    var near_d = 1e9;
     for (var i = 0u; i < 4u; i = i + 1u) {
         let w = m.wheel[i].xyz;
         if (abs(p.z - w.z) > 1.5 || abs(p.x - w.x) > 1.5) {
@@ -226,19 +373,20 @@ fn ag_contact_fs(in: AgCtOut) -> @location(0) vec4<f32> {
             return none; // the tyre itself
         }
         tyres = tyres + ag_ct_box(p, tlo, thi);
+        let dw = distance(p.xz, w.xz);
+        if (dw < near_d) {
+            near_d = dw;
+            near_lo = tlo;
+            near_hi = thi;
+        }
     }
     let occ = (1.0 - (1.0 - body) * (1.0 - min(tyres, 1.0))) * up * fade;
-    if (occ < 0.004) {
-        return none;
-    }
     let vis = 1.0 - occ;
     // What lit the point (white, as look_light lights it): the key through its
     // shadow and the street's lamps stand (under the body the lamps are the
     // car's to block); the sky, the ambient, the rim and the bounce the car takes.
-    let v = normalize(-P);
-    let under = 1.0 - smoothstep(0.0, 0.3, away);
     let key = look.key.xyz * max(dot(n, look.key_dir.xyz), 0.0) * lk_shadow(world, n) * sky_cloud_transmittance(world);
-    let lamps = sky_local_lights_ao(world, n, v, vec3<f32>(LK_PI), vec3<f32>(0.0), 1.0, 1.0);
+    let lamps = ag_ct_lamps(world, n, p, a, array<vec3<f32>, 6>(lower_lo, lower_hi, upper_lo, upper_hi, near_lo, near_hi));
     let env_i = look.ambient.w * look.env_class.z;
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
     var irr = hemi + look.ambient.xyz + lk_sh(n) * env_i;
@@ -249,9 +397,14 @@ fn ag_contact_fs(in: AgCtOut) -> @location(0) vec4<f32> {
     let ao = ao_multi_bounce(ao4.a);
     let rim = look.rim.xyz * max(dot(n, look.rim_dir.xyz), 0.0);
     let bounce = ao4.rgb * LK_PI;
-    let stand = key + lamps * (1.0 - under);
-    let taken = irr * ao + rim + bounce + lamps * under;
-    let left = irr * min(ao, vis) + (rim + bounce + lamps * under) * vis;
+    let stand = key;
+    // the lamps' shadows of the car fade out with the reach as the occlusion does (the maps carry them on)
+    let lamps_left = mix(lamps.lit, lamps.left, up * fade);
+    let taken = irr * ao + rim + bounce + lamps.lit;
+    let left = irr * min(ao, vis) + (rim + bounce) * vis + lamps_left;
+    if (occ < 0.004 && all(lamps_left >= lamps.lit * 0.996)) {
+        return none;
+    }
     let k = (stand + left) / max(stand + taken, vec3<f32>(1e-6));
     return vec4<f32>(clamp(k, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
