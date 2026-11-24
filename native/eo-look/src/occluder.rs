@@ -200,13 +200,12 @@ pub fn irradiance_with(f: &Fill, t: f64, vs: f64, vg: f64, m: Rgb, env: Rgb) -> 
 }
 
 /// What the cars and people take for the blocked sky's light while the
-/// occluder light runs (eo-render agents.rs `agents_city_source`: their
-/// opaque pipeline with the cars' materials does not compile on Apple's GPU
-/// with the per-pixel model): the rig's stand-in (`AMB_OCCLUDER`, the ground
-/// lobe) scaled by the shaded walls' exitance over that lobe in a street that
-/// sees a quarter to two fifths of the sky, 0.26-0.38 at noon and at 18.5 h
-/// (test), so a walker or a bus in a canyon or under a deck darkens with the
-/// walls round it instead of keeping the sunlit street's light.
+/// occluder light runs (eo-render ambient.wgsl `amb_ol_pre`: their opaque
+/// pipeline with the cars' materials does not compile on Apple's GPU with the
+/// walls' or a deck's exitance worked out per pixel; the rest of the model they
+/// take): the ground lobe scaled by the shaded walls' exitance over that lobe
+/// in a street that sees a quarter to two fifths of the sky, 0.26-0.38 at noon
+/// and at 18.5 h (test).
 pub const AGENTS_OCCLUDER: f64 = 0.3;
 
 /// The same with the rig's stand-in (`AMB_OCCLUDER` = 1: the blocked sky at the ground lobe), as before.
