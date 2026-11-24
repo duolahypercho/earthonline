@@ -19,8 +19,15 @@ fn reef_transmission(p: vec3f, sun: vec3f) -> vec2f {
         let uv = (p.xz + ray*max(dz,0.) - origin - sway)/30.;
         let inside = min(uv,1.-uv);
         let edge = smoothstep(0.,0.075,min(inside.x,inside.y));
-        let cover = textureSampleLevel(reef_blades,w_clamp,uv,0.)[k]
-                    * edge * smoothstep(-0.45,0.45,dz);
+        var cover = textureSampleLevel(reef_blades,w_clamp,uv,0.)[k];
+        if UW_DIVE_DAYLIGHT {
+            // Angular spread accumulates between blade and receiver. The mip
+            // levels store mean covered area, so widening a shadow conserves it.
+            let span = max(dz,0.) * (1.-WO_PHASE_G) / max(sun.y,0.25);
+            let lod = 0.5 * log2(1. + span*span / (0.25*0.25));
+            cover = textureSampleLevel(reef_blades,w_clamp,uv,lod)[k];
+        }
+        cover *= edge * smoothstep(-0.45,0.45,dz);
         direct *= 1.-0.94*cover;
         // Scattered skylight arrives from the surrounding hemisphere as well.
         diffuse *= 1.-0.38*cover;

@@ -63,7 +63,11 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
         // travel preserve a dark deep field. At the interface the gain is exactly one.
         let cove = wo_cove(xz);
         let ext = mix(mix(WO_BAY_A + WO_BAY_S, WO_COAST_A + WO_COAST_S, wg_ocean(xz.x)), WO_COVE_A + WO_COVE_S, cove);
-        let depth = max(y - wu.cam.y, 0.0);
+        var depth = max(y - wu.cam.y, 0.0);
+        if UW_DIVE_DAYLIGHT {
+            // A passing crest at the camera cannot change the exposure of the whole reef.
+            depth = mix(depth, max(wu.grid.z-wu.cam.y,0.), smoothstep(0.08,1.5,depth));
+        }
         var light = exp(-(ext * mix(1.0, 0.63, cove)) * depth / 0.75);
         if (look.cove.y > 0.0 && cove > 0.0) {
             light = mix(light, exp(-ext * (wo_daylight_ratio(ext, look.cove.y) * depth)), cove);
@@ -76,6 +80,11 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
         // still carries its full spectral extinction and distance-dependent cast.
         let balance = clamp(sqrt(meter / max(light, vec3<f32>(0.015))), vec3<f32>(0.8), vec3<f32>(1.6));
         out.exposure = min(balance / meter, vec3<f32>(16.0));
+        if UW_DIVE_DAYLIGHT {
+            // The frame includes a brighter upper hemisphere, especially when looking up.
+            let adaptation = mix(0.82, 0.58, smoothstep(-0.5, 0.65, wu.fwd.y));
+            out.exposure = mix(vec3f(1.), balance, adaptation) / pow(meter, adaptation);
+        }
     }
     return out;
 }
@@ -90,6 +99,17 @@ fn uw_integral(ext: vec3<f32>, path: f32, d0: f32, d1: f32, mu: f32) -> vec3<f32
         return (a + b) * (path * 0.5);
     }
     return (a - b) / (ext * k);
+}
+
+// Integral of exp(-extinction * distance - Kd * depth) between the two
+// endpoints. Use the midpoint limit per wavelength when optical depths meet.
+fn uw_skylight_path(ext: vec3f, kd: vec3f, path: f32, d0: f32, d1: f32) -> vec3f {
+    let start = kd * d0;
+    let finish = ext * path + kd * d1;
+    let delta = finish - start;
+    let close = abs(delta) < vec3f(0.01);
+    let integral = (exp(-start) - exp(-finish)) / select(delta, vec3f(1.), close);
+    return path * select(integral, exp(-0.5*(start + finish)), close);
 }
 
 // Use the actual frame along the bent ray where it projects on screen.
@@ -162,9 +182,20 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let d_near = d0 - rise * length(to_near);
     // Rasterization clips the sea inside the near plane. Continue the
     // wave across that plane so a crossing can show both media in a frame.
-    if (d0 <= 0.0 && d_near <= 0.0) { discard; }
+    let dry = d0 <= 0.0 && d_near <= 0.0;
+    if !UW_DIVE_DAYLIGHT && dry { discard; }
     let start = select(0.0, max(d0 / min(rise, -1e-5), 0.0), d0 < 0.0);
     let origin = wu.cam.xyz + ray * start;
+    let hit = w_scene_depth(uv) / max(dot(ray, wu.fwd.xyz), 1e-4);
+    var receiver_normal = vec3f(0., 1., 0.);
+    if UW_DIVE_DAYLIGHT {
+        // Camera-relative derivatives keep centimetre detail far from the world origin.
+        let receiver = ray * min(hit, 200.);
+        let face = cross(dpdx(receiver), dpdy(receiver));
+        let oriented = face * select(-1., 1., dot(face, -ray) >= 0.);
+        receiver_normal = oriented * inverseSqrt(max(dot(face,face), 1e-18));
+        if dry { discard; }
+    }
     w_expo_set(origin.xz); // (iteration 2, exposure) the place's swell share and waves, as the surface's
     let ocean = wg_ocean(origin.x);
     let cove = wo_cove(origin.xz);
@@ -180,7 +211,6 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     }
     if look.cove.z > 0.5 { diffuse_depth=0.75*lk_luma(kd)/max(lk_luma(ext),0.001); }
     let limit = 10.0 / min(ext.r, min(ext.g, ext.b));
-    let hit = w_scene_depth(uv) / max(dot(ray, wu.fwd.xyz), 1e-4);
     var path = min(max(hit - start, 0.0), limit);
     var surface = false;
     if (d0 > 0.0 && rise > 0.001) {
@@ -190,8 +220,33 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
             surface = true;
         }
     }
+    if UW_DIVE_DAYLIGHT && d0 > 0. {
+        // The tangent over the eye is valid only near the waterline. Looking
+        // up from depth, solve against the swell at the ray's entry instead.
+        let near_surface = 1.-smoothstep(0.06,0.65,d0);
+        let projected_rise = mix(ray.y, rise, near_surface);
+        path = min(max(hit-start,0.),limit);
+        surface = false;
+        if projected_rise > 0.001 {
+            let initial_depth = mix(max(wu.grid.z-origin.y,0.), d0, near_surface);
+            var t = initial_depth/projected_rise;
+            // Beyond optical visibility the interface has negligible radiance.
+            if t < path + 2./projected_rise {
+                let projected = origin.xz + ray.xz*t;
+                let amp = wg_cascade_amp(projected.x);
+                let swell = textureSampleLevel(w_disp,w_repeat,w_casc_uv(projected,0u),0u,0.).y*amp.x
+                          + textureSampleLevel(w_disp,w_repeat,w_casc_uv(projected,1u),1u,0.).y*amp.y;
+                let height = wu.grid.z + swell * w_wave_ramp(w_field_at(projected)) * wu.flags.w;
+                t = max(0.,mix(height-origin.y,d0,near_surface))/projected_rise;
+                if t < path { path = t; surface = true; }
+            }
+        }
+    }
     let end = origin + ray * path;
-    let down0 = max(d0, 0.0);
+    var down0 = max(d0, 0.0);
+    if UW_DIVE_DAYLIGHT {
+        down0 = mix(down0,max(wu.grid.z-origin.y,0.),smoothstep(0.08,1.5,down0));
+    }
     let down1 = select(max(down0 - ray.y * path, 0.0), 0.0, surface);
     let sun = normalize(look.key_dir.xyz);
     let sun_up = wo_refracted_sun_up(sun);
@@ -222,30 +277,56 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let shade_near = reef_transmission(origin + ray*(0.45*scatter_t), sun_up);
     let shade_far = reef_transmission(origin + ray*min(path,1.65*scatter_t), sun_up);
     let volume_light = 0.5*(shade_near+shade_far);
-    let vol = volume_light.y * ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
+    var vol = volume_light.y * ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
         + direct * (volume_light.x * scatter * wo_phase(dot(ray, sun_up)) * beam_focus + volume_light.y * ext * multiple / WG_PI)
           * uw_integral(ext, path, down0, down1, max(sun_up.y, 0.1));
+    if UW_DIVE_DAYLIGHT {
+        // Broad skylight fills the stand through gaps in the canopy. Only the
+        // unscattered sun follows a narrow shadow. Use measured Kd for the fill.
+        let diffuse_source = (ambient + direct * multiple) / WG_PI;
+        let sky_path = uw_skylight_path(ext, kd, path, down0, down1);
+        let sun_path = uw_integral(ext, path, down0, down1, max(sun_up.y, 0.1));
+        vol = diffuse_source * scatter * sky_path
+            + direct * scatter * wo_phase(dot(ray, sun_up)) * beam_focus * volume_light.x * sun_path;
+    }
     var boundary = vec3<f32>(0.0);
     if (surface) {
         var slope = i.tilt;
         let amp = wg_cascade_amp(end.x);
         var foam = 0.0;
         var fine = 0.0;
-        for (var c = 1u; c < 4u; c++) {
+        var first_band = 1u;
+        if UW_DIVE_DAYLIGHT { slope = vec2f(0.); first_band = 0u; }
+        for (var c = first_band; c < 4u; c++) {
             let d = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(end.xz, c), c, 0.0);
-            slope += d.xy * amp[c];
+            var resolved = 1.;
+            if UW_DIVE_DAYLIGHT {
+                let footprint = 2.*pixel_cone*path/max(ray.y,0.06);
+                resolved = wg_band(footprint)[c] * w_wave_ramp(w_field_at(end.xz)) * wu.flags.w;
+            }
+            slope += d.xy * amp[c] * resolved;
             foam = max(foam, mix(d.w, d.z, ocean));
             if UW_COASTAL_HABITAT && c >= 2u { fine += (d.x+d.y)*amp[c]; }
         }
         // The same moving capillary chop bends both views of the interface.
         let rough = wv_ripple(end.x);
-        slope += w_chop(end.xz, wu.cam.w, path / dims.y, 1.0, rough) + w_capillary(end.xz) * rough;
+        var chop_footprint = path / dims.y;
+        var capillary_share = 1.;
+        if UW_DIVE_DAYLIGHT {
+            chop_footprint = 2.*pixel_cone*path/max(ray.y,0.06);
+            capillary_share = 1. - smoothstep(0.012,0.045,chop_footprint);
+        }
+        slope += w_chop(end.xz, wu.cam.w, chop_footprint, 1.0, rough) + w_capillary(end.xz) * (rough*capillary_share);
         let n = normalize(vec3<f32>(-slope.x, 1.0, -slope.y));
         // Above the critical angle the underside reflects only the water.
         let f = wo_fresnel(max(dot(ray, n), 0.0), 1.0 / WO_IOR);
         let mirror = reflect(ray, n);
         boundary = ambient * (0.25 * scatter / ext + multiple)
             + direct * (scatter / ext * wo_phase(dot(mirror, sun_up)) + multiple / WG_PI);
+        if UW_DIVE_DAYLIGHT {
+            // The water mirrored by a grazing facet sees the same diffuse sky as the dive.
+            boundary = scatter / ext * ((ambient + direct * multiple) / WG_PI + direct * wo_phase(dot(mirror,sun_up)));
+        }
         // A grazing facet can mirror a nearby submerged piling or seabed.
         // Use the opaque depth to reject samples in air and in front of the facet.
         if (f > 0.02 && mirror.y < -0.03) {
@@ -302,9 +383,23 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
         }
         let bed_light = reef_transmission(end,sun_up);
         incident *= mix(bed_light.y,bed_light.x,direct_share);
+        if UW_DIVE_DAYLIGHT {
+            let metres = down1 / max(sun_up.y, 0.1);
+            let flux = exp(-kd * down1);
+            let beam = min(flux, exp(-ext * metres));
+            let incidence = clamp(dot(receiver_normal, sun_up) / max(sun_up.y, 0.1), 0., 1.);
+            // Small-angle scattering widens the solar image and erases fine
+            // folds in the wave focus with depth, even on a sun-facing surface.
+            let baseline = 3. * wu.sizes.w / 256.;
+            let angular_spread = sqrt(1. - exp(-lk_luma(scatter)*metres)) * (1. - WO_PHASE_G);
+            let blur = metres * angular_spread / baseline;
+            let focus_change = (focus - 1.) / (1. + blur*blur);
+            let sun_part = beam * (direct_share * incidence);
+            incident = (flux - sun_part) * bed_light.y + sun_part * bed_light.x * (1. + focus_change);
+        }
         boundary = textureLoad(w_scene, vec2<i32>(i.clip.xy), 0).rgb * incident;
     }
-    let grains = uw_grains(origin, ray, path, lk_luma(ext), select(0.0, cove, look.cove.x > 0.0), pixel_cone);
+    let grains = uw_grains(origin, ray, path, lk_luma(ext), select(select(0.0, cove, look.cove.x > 0.0), 1., UW_DIVE_DAYLIGHT), pixel_cone);
     let radiance = boundary * exp(-ext * path) + vol
         + grains * scatter * (ambient + direct * 0.25) * exp(-ext * diffuse_depth * down0 / 0.75);
     // the dive exposure (`UW_DEPTH_EXPOSURE`; 1 without it), then the display transform

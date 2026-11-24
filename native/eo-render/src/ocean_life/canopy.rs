@@ -5,6 +5,8 @@ use glam::{Vec2, Vec3};
 use std::collections::BTreeMap;
 
 pub const SIDE: u32 = 120;
+/// 25 cm through 2 m footprints, with even 2x2 reduction at each step.
+pub const LEVELS: u32 = 4;
 const BANDS: [f32; 4] = [0.85, 2.55, 5.1, 8.2];
 const WIDTH: f32 = field::TILE * (field::RING * 2 + 1) as f32;
 const METRES: f32 = WIDTH / SIDE as f32;
@@ -102,7 +104,7 @@ pub(super) fn write<'a>(
             }
         }
     }
-    let mask: Vec<[u8; 4]> = density
+    let mut mask: Vec<[u8; 4]> = density
         .into_iter()
         .map(|bands| {
             bands.map(|area| {
@@ -114,15 +116,44 @@ pub(super) fn write<'a>(
             })
         })
         .collect();
-    q.write_texture(
-        texture.as_image_copy(),
-        bytemuck::cast_slice(&mask),
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * SIDE),
-            rows_per_image: None,
-        },
-        texture.size(),
-    );
+    let mut side = SIDE as usize;
+    for level in 0..texture.mip_level_count() {
+        let extent = wgpu::Extent3d {
+            width: side as u32,
+            height: side as u32,
+            depth_or_array_layers: 1,
+        };
+        q.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                mip_level: level,
+                ..texture.as_image_copy()
+            },
+            bytemuck::cast_slice(&mask),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(extent.width * 4),
+                rows_per_image: None,
+            },
+            extent,
+        );
+        if level + 1 == texture.mip_level_count() {
+            break;
+        }
+        let next_side = side / 2;
+        for z in 0..next_side {
+            for x in 0..next_side {
+                let i = 2 * z * side + 2 * x;
+                mask[z * next_side + x] = std::array::from_fn(|band| {
+                    let sum: u16 = [i, i + 1, i + side, i + side + 1]
+                        .map(|j| u16::from(mask[j][band]))
+                        .into_iter()
+                        .sum();
+                    ((sum + 2) / 4) as u8
+                });
+            }
+        }
+        side = next_side;
+        mask.truncate(side * side);
+    }
     occupied
 }

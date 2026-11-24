@@ -822,10 +822,11 @@ impl WaterGpu {
         let canopy_map = (look.options.reef_canopy_light && look.options.water_optics).then(|| {
             draw_entries.push(entry(20, fs, tex(filt, wgpu::TextureViewDimension::D2)));
             let side = crate::ocean_life::canopy::SIDE;
-            bytes += (side * side * 4) as u64;
+            let levels = if look.options.dive_daylight { crate::ocean_life::canopy::LEVELS } else { 1 };
+            bytes += (0..levels).map(|level| u64::from((side >> level).pow(2) * 4)).sum::<u64>();
             d.create_texture(&wgpu::TextureDescriptor {
                 label: Some("kelp projected blade area"), size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
-                mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm,
+                mip_level_count: levels, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, view_formats: &[],
             })
         });
@@ -847,7 +848,7 @@ impl WaterGpu {
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
             // + the dive exposure's switch, the display transforms (look.rs `DISPLAY_SHADER`, the camera look at group 0 bindings 16, 17)
-            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\nconst UW_DIVE_DETAIL: bool = {};\nconst UW_COASTAL_HABITAT: bool = {};\n", look.options.dive_exposure, look.options.dive_detail, look.options.coastal_habitat) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + if look.options.reef_canopy_light { include_str!("ocean_life/canopy.wgsl") } else { "\nfn reef_transmission(p:vec3f, sun:vec3f) -> vec2f { return vec2f(1.); }\n" } + include_str!("underwater.wgsl")
+            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\nconst UW_DIVE_DETAIL: bool = {};\nconst UW_COASTAL_HABITAT: bool = {};\nconst UW_DIVE_DAYLIGHT: bool = {};\n", look.options.dive_exposure, look.options.dive_detail, look.options.coastal_habitat, look.options.dive_daylight) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + if look.options.reef_canopy_light { include_str!("ocean_life/canopy.wgsl") } else { "\nfn reef_transmission(p:vec3f, sun:vec3f) -> vec2f { return vec2f(1.); }\n" } + include_str!("underwater.wgsl")
         } else {
             draw_src
         };
