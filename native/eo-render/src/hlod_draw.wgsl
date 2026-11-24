@@ -446,6 +446,9 @@ fn ff_pent_height(cell: vec2<f32>, g: u32) -> f32 {
     return 2.4 + 1.2 * ff_h(cell, g, 46u);
 }
 
+// the tallest a unit (`ff_unit_height`, 2.4 m) or a penthouse (`ff_pent_height`, 3.6 m) stands: the shade's march stops once its ray is over it.
+const FF_PLANT_TOP_M: f32 = 3.6;
+
 // a far flat roof (`--far-facades`): rgb its albedo over `base` (the
 // measured roof colour stays its mean), a its roughness.
 fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<f32>, plant: bool) -> vec4<f32> {
@@ -485,8 +488,11 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     if (sun > 0.0) {
         for (var i = 0; i < 10; i = i + 1) {
             let sd = 0.4 + 0.22 * f32(i * i) + 0.6 * f32(i);
-            let at = p + toward * sd;
             let ray = sd * rise;
+            if (ray > FF_PLANT_TOP_M) {
+                break; // the ray has risen over the tallest unit or penthouse: nothing further shades
+            }
+            let at = p + toward * sd;
             let cu = floor(at / FF_CELL_M);
             let bu = ff_unit_box(cu, g, share);
             let ru = at - cu * FF_CELL_M;
