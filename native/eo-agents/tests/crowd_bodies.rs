@@ -50,7 +50,7 @@ fn contact_anchors_stand_where_the_body_is() {
     let people = eo_agents::library::PeopleSource::from_env();
     // the shared cache when there is one (a cook from the GLBs takes minutes), with the hyper tier's far bodies
     let cache = eo_assets::default_cache_dir();
-    let opts = eo_agents::library::CookOptions { far_body: true };
+    let opts = eo_agents::library::CookOptions { far_body: true, ..Default::default() };
     let mut lib = eo_agents::library::Library::load_opts(&repo, Some(&cache), &people, opts).unwrap();
     let bones = lib.bones.len();
     let pads: Vec<[u32; 4]> = lib.models.iter().map(|m| m.pad).collect();
@@ -78,4 +78,24 @@ fn contact_anchors_stand_where_the_body_is() {
         // left and right on opposite sides of the body's middle.
         assert!((heels[0][0] - pelvis[0]) * (heels[1][0] - pelvis[0]) < 0.0, "the feet either side");
     }
+}
+
+/// (`--crowd`) a walker over the landmarks' paving (`feed::Decks`) stands on
+/// its top; off it, or over a steep face, nothing is found.
+#[test]
+fn decks_lift_walkers_onto_their_paving() {
+    use eo_agents::feed::Decks;
+    let quad = |y0: f32, y1: f32| vec![[[0.0, y0, 0.0], [10.0, y0, 0.0], [10.0, y1, 8.0]], [[0.0, y0, 0.0], [10.0, y1, 8.0], [0.0, y1, 8.0]]];
+    let mut tris = quad(2.0, 2.4);
+    // a wall (steep) over the same ground
+    tris.push([[0.0, 0.0, 4.0], [10.0, 0.0, 4.0], [10.0, 3.0, 4.01]]);
+    let d = Decks::new(tris);
+    assert_eq!(d.len(), 2, "the wall is not stood on");
+    let y = d.top(5.0, 4.0).unwrap();
+    assert!((y - 2.2).abs() < 1e-4, "{y}");
+    assert!(d.top(-0.5, 4.0).is_none() && d.top(5.0, 8.5).is_none());
+    // a deck across a cell boundary (16 m cells) is found from either side
+    let far = Decks::new(vec![[[14.0, 1.0, 0.0], [18.0, 1.0, 0.0], [18.0, 1.0, 4.0]]]);
+    assert_eq!(far.top(17.5, 1.0), Some(1.0));
+    assert_eq!(far.top(15.0, 0.5), Some(1.0));
 }

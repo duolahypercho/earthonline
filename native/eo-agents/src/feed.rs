@@ -74,6 +74,77 @@ impl Plazas {
     }
 }
 
+/// (`--crowd`) The walkable paving the landmarks lay above the ground (the
+/// quay's apron along the seawall at the wall's crest, the pier decks, the
+/// plazas' paving: eo-landmarks `Structure::footway`), as triangles facing up,
+/// gridded (16 m cells). A walker over one stands on its top, not on the
+/// carpet the paving was laid over (the Embarcadero's apron stands up to a
+/// metre over the pressed ground behind the wall).
+pub struct Decks {
+    tris: Vec<[[f32; 3]; 3]>,
+    cells: HashMap<(i32, i32), Vec<u32>>,
+}
+
+/// The least upward share of a deck triangle's normal (steeper faces are not stood on).
+pub const DECK_UP_MIN: f32 = 0.7;
+const DECK_CELL_M: f64 = 16.0;
+
+impl Decks {
+    pub fn new(tris: Vec<[[f32; 3]; 3]>) -> Self {
+        let mut kept = vec![];
+        let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+        for t in tris {
+            let (a, b, c) = (glam::Vec3::from(t[0]), glam::Vec3::from(t[1]), glam::Vec3::from(t[2]));
+            let n = (b - a).cross(c - a);
+            let len = n.length();
+            if !(len > 1e-6) || n.y.abs() / len < DECK_UP_MIN {
+                continue;
+            }
+            let id = kept.len() as u32;
+            let (lo_x, hi_x) = (a.x.min(b.x).min(c.x) as f64, a.x.max(b.x).max(c.x) as f64);
+            let (lo_z, hi_z) = (a.z.min(b.z).min(c.z) as f64, a.z.max(b.z).max(c.z) as f64);
+            for gx in (lo_x / DECK_CELL_M).floor() as i32..=(hi_x / DECK_CELL_M).floor() as i32 {
+                for gz in (lo_z / DECK_CELL_M).floor() as i32..=(hi_z / DECK_CELL_M).floor() as i32 {
+                    cells.entry((gx, gz)).or_default().push(id);
+                }
+            }
+            kept.push(t);
+        }
+        Self { tris: kept, cells }
+    }
+
+    pub fn len(&self) -> usize {
+        self.tris.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tris.is_empty()
+    }
+
+    /// The highest deck top over (x, z), if a deck triangle covers it.
+    pub fn top(&self, x: f64, z: f64) -> Option<f64> {
+        let list = self.cells.get(&((x / DECK_CELL_M).floor() as i32, (z / DECK_CELL_M).floor() as i32))?;
+        let mut best: Option<f64> = None;
+        for &i in list {
+            let [a, b, c] = self.tris[i as usize];
+            let (ax, az, bx, bz, cx, cz) = (a[0] as f64, a[2] as f64, b[0] as f64, b[2] as f64, c[0] as f64, c[2] as f64);
+            let d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+            if d.abs() < 1e-9 {
+                continue;
+            }
+            let u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d;
+            let v = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d;
+            let w = 1.0 - u - v;
+            if u < -1e-6 || v < -1e-6 || w < -1e-6 {
+                continue;
+            }
+            let y = u * a[1] as f64 + v * b[1] as f64 + w * c[1] as f64;
+            best = Some(best.map_or(y, |b: f64| b.max(y)));
+        }
+        best
+    }
+}
+
 /// What the agents stand on.
 #[derive(Clone)]
 pub enum Ground {
@@ -385,6 +456,8 @@ pub struct Feeder {
     pub separate: bool,
     /// (`--crowd`; None as before) the paved plazas a walker stands on (`Plazas`).
     pub plazas: Option<Arc<Plazas>>,
+    /// (`--crowd`; None as before) the landmarks' walkable paving (`Decks`).
+    pub decks: Option<Arc<Decks>>,
 }
 
 fn fract(x: f64) -> f64 {
@@ -394,17 +467,21 @@ fn fract(x: f64) -> f64 {
 impl Feeder {
     /// `structures`: the grade-separated roads beside `ground` (None without `--structures`).
     pub fn new(lib: Arc<Library>, ground: Ground, structures: Option<Arc<eo_structures::StructureWorld>>, seed_int: u32) -> anyhow::Result<Self> {
-        Ok(Self { lib, js: AgentsJs::load()?, ground, structures, seed_int, on_decks: 0, in_bores: 0, cars: HashMap::new(), walkers: HashMap::new(), carriageways: None, moved_to_footway: 0, last_ms: 0.0, separate: false, plazas: None })
+        Ok(Self { lib, js: AgentsJs::load()?, ground, structures, seed_int, on_decks: 0, in_bores: 0, cars: HashMap::new(), walkers: HashMap::new(), carriageways: None, moved_to_footway: 0, last_ms: 0.0, separate: false, plazas: None, decks: None })
     }
 
     /// Where a walker stands at (x, z): the street's drawn surface, or on a
     /// paved plaza (`plazas`, off the street's paving) the plaza's paving.
     fn walker_y(&self, x: f64, z: f64) -> f64 {
-        let y = self.ground.y(x, z);
+        let mut y = self.ground.y(x, z);
         if let (Some(p), Ground::Street(sw)) = (&self.plazas, &self.ground) {
             if p.contains(x, z) && sw.paved_at(x, z).is_none() {
-                return y.max(sw.ground(x, z) + sw.o.footway_lift);
+                y = y.max(sw.ground(x, z) + sw.o.footway_lift);
             }
+        }
+        // (`--crowd`) on the landmarks' paving where one is laid over the ground.
+        if let Some(top) = self.decks.as_ref().and_then(|d| d.top(x, z)) {
+            y = y.max(top);
         }
         y
     }
