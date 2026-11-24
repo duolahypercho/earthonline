@@ -303,6 +303,79 @@ const TWIN_DRAWS: u32 = 8;
 const BODY_LENGTH_OF_RADIUS: f64 = 0.9;
 const BODY_WIDTH_PAST_WHEEL: f64 = 0.6;
 
+/// (`--people-space`, with `--crowd`) the room each person keeps from the
+/// others: Fruin's no-touch zone (Pedestrian Planning and Design, 1971: a
+/// waiting pedestrian keeps a circle of 0.3-0.45 m radius free of others
+/// where the space allows, the touch zone being under 0.3 m), its outer
+/// radius, so strangers stand and pass 0.9 m apart centre to centre, about
+/// half a metre between shoulders, and a dense spot settles between that and
+/// the bodies' own breadth.
+pub const PERSONAL_RADIUS_M: f64 = 0.45;
+/// `keep_personal_space`'s relaxation passes a frame (Gauss-Seidel: each
+/// pair's correction applied at once, so a clump spreads in a few passes).
+const PERSONAL_ITERATIONS: usize = 8;
+
+static PERSONAL_SPACE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `--people-space`: the feed keeps each person's personal room
+/// (`keep_personal_space`) before it keeps the bodies apart (`separate`,
+/// with `--crowd`). Off, the bodies are kept apart as before.
+pub fn set_personal_space(on: bool) {
+    PERSONAL_SPACE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn personal_space() -> bool {
+    PERSONAL_SPACE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// (`--people-space`) Keep the people's personal room: each walker a disc of
+/// `PERSONAL_RADIUS_M`, every overlapping pair pushed apart along the line
+/// between them by half the overlap each (position-based dynamics,
+/// `PERSONAL_ITERATIONS` Gauss-Seidel passes over a grid of the discs'
+/// diameter). Positions in `pos` in place; deterministic in the input order.
+/// `separate` follows it (the bodies and the vehicles).
+pub fn keep_personal_space(pos: &mut [[f64; 2]]) {
+    let n = pos.len();
+    let r2 = 2.0 * PERSONAL_RADIUS_M;
+    let cell = |p: [f64; 2]| ((p[0] / r2).floor() as i32, (p[1] / r2).floor() as i32);
+    for _ in 0..PERSONAL_ITERATIONS {
+        let mut grid: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+        for (i, p) in pos.iter().enumerate() {
+            grid.entry(cell(*p)).or_default().push(i as u32);
+        }
+        let mut any = false;
+        for i in 0..n {
+            let (cx, cz) = cell(pos[i]);
+            for gx in cx - 1..=cx + 1 {
+                for gz in cz - 1..=cz + 1 {
+                    let Some(list) = grid.get(&(gx, gz)) else { continue };
+                    for &j in list {
+                        let j = j as usize;
+                        if j <= i {
+                            continue;
+                        }
+                        let (dx, dz) = (pos[j][0] - pos[i][0], pos[j][1] - pos[i][1]);
+                        let d = dx.hypot(dz);
+                        if d >= r2 {
+                            continue;
+                        }
+                        let (ux, uz) = if d > 1e-6 { (dx / d, dz / d) } else { let a = (i * 7 + j * 13) as f64; (a.cos(), a.sin()) };
+                        let h = 0.5 * (r2 - d);
+                        pos[i][0] -= ux * h;
+                        pos[i][1] -= uz * h;
+                        pos[j][0] += ux * h;
+                        pos[j][1] += uz * h;
+                        any = true;
+                    }
+                }
+            }
+        }
+        if !any {
+            break;
+        }
+    }
+}
+
 /// (`--crowd`) Keep the people's bodies apart and out of the vehicles: each
 /// walker a disc of `BODY_RADIUS_M`, every overlapping pair pushed apart
 /// along the line between them by half the overlap each (position-based
@@ -696,6 +769,9 @@ impl Feeder {
         }
         if self.separate && !walker_at.is_empty() {
             let mut pos: Vec<[f64; 2]> = walker_at.iter().map(|&i| [out[i].pos[0] as f64, out[i].pos[2] as f64]).collect();
+            if personal_space() {
+                keep_personal_space(&mut pos); // (`--people-space`) each one's room first
+            }
             separate(&mut pos, &footprints);
             for (k, &i) in walker_at.iter().enumerate() {
                 let (x, z) = (pos[k][0], pos[k][1]);
