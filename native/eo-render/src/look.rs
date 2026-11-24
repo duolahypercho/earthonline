@@ -967,10 +967,6 @@ impl ShaderFeatures {
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
             .collect::<String>(),
             penumbra_wgsl()
-                // (`--soft-shadows`) the agents' fragment keeps the bore test's discard
-                // (agents_draw.wgsl `ag_surface`): without one Apple's compiler failed the
-                // agents' opaque pipeline with the penumbra beside the cars' materials (r2i1).
-                + &format!("const AG_KEEP_DISCARD: bool = {};\n", self.soft_shadows)
         )
     }
 }

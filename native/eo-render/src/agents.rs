@@ -100,15 +100,23 @@ pub fn people_contact_wgsl() -> &'static str {
 }
 
 /// The city's shader source the agents' module is made on: the full set but the
-/// single probe's lookups. The sun's penumbra (`--soft-shadows`) is in it as
-/// in the city's (the cars and people take it): Apple's compiler failed the
-/// agents' opaque pipeline (XPC_ERROR_CONNECTION_INTERRUPTED) with it beside
-/// the cars' materials while the fragment held no discard, and builds it with the bore test's
-/// discard kept (agents_draw.wgsl `ag_surface`, look.rs `AG_KEEP_DISCARD`; measured
-/// in r2i1 on the round's whole switch set: a discard before the shading
-/// builds, an early return or a discard after it does not).
+/// single probe's lookups. With the cars' materials compiled in (`--car-materials`)
+/// the sun's penumbra (`--soft-shadows`, look.rs `shadow_wgsl` `LK_SHADOW_SOFT`) is
+/// left out of it: with both, Apple's compiler fails the agents' opaque pipeline
+/// (XPC_ERROR_CONNECTION_INTERRUPTED; bisected in r2i1 on the round's whole
+/// switch set: leaving out the canyon glass, the screen reflection, the cars'
+/// far lights or half the penumbra's taps does not help; a discard before the
+/// shading lets it build, but the discard costs the opaque agents Apple's
+/// hidden-surface removal, +4 ms of the late opaque draw on `street_walk`,
+/// +5 to 8 ms on `night_kit_street`, measured). The cars and people keep the
+/// tent filter; the street and the buildings keep the penumbra.
 fn agents_city_source() -> String {
-    crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false)
+    let src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
+    let f = crate::look::shader_features();
+    if f.car_materials && f.soft_shadows {
+        return src.replacen("const LK_SHADOW_SOFT: bool = true;", "const LK_SHADOW_SOFT: bool = false;", 1);
+    }
+    src
 }
 
 /// Distance tiers and caps (`HERO_OVERLAY` / the crowd's bands and budget), metres.
@@ -1141,23 +1149,15 @@ mod tests {
         super::set_people_contact(false);
     }
 
-    /// (`--soft-shadows`) the agents' module takes the penumbra with the cars'
-    /// materials too, and keeps the bore test's discard with it (what Apple's
-    /// compiler needs); without it the test is compiled out as before.
+    /// (`--soft-shadows` with `--car-materials`) the agents' module takes the tent, not the penumbra
+    /// (Apple's compiler fails the two together); either alone keeps its code as it was.
     #[test]
-    fn the_agents_take_the_penumbra_and_keep_the_discard_it_needs() {
+    fn the_agents_keep_the_tent_with_the_cars_materials() {
         let none = crate::look::ShaderFeatures::NONE;
-        let src = |f: crate::look::ShaderFeatures| crate::look::with_shader_features(f, super::agents_city_source);
-        for (f, keep) in [
-            (crate::look::ShaderFeatures { soft_shadows: true, car_materials: true, ..none }, true),
-            (crate::look::ShaderFeatures { car_materials: true, ..none }, false),
-            (none, false),
-        ] {
-            let s = src(f);
-            assert!(s.contains("const LK_SHADOW_SOFT: bool = true;"), "{f:?}: the penumbra's variant");
-            assert!(s.contains(&format!("const AG_KEEP_DISCARD: bool = {keep};")), "{f:?}");
-        }
-        assert!(include_str!("agents_draw.wgsl").contains("if ((SF_TUNNELS || AG_KEEP_DISCARD) && ((a.flags & AG_IN_BORE) != 0u) != bore) {"));
+        let soft = |f: crate::look::ShaderFeatures| crate::look::with_shader_features(f, || super::agents_city_source().contains("const LK_SHADOW_SOFT: bool = true;"));
+        assert!(soft(crate::look::ShaderFeatures { soft_shadows: true, ..none }), "the penumbra alone");
+        assert!(soft(crate::look::ShaderFeatures { car_materials: true, ..none }), "(the constant is declared either way)");
+        assert!(!soft(crate::look::ShaderFeatures { soft_shadows: true, car_materials: true, ..none }), "the two together: the tent");
     }
 
     /// (`--people-contact`) the shader's joints are eo-agents' contact joints, in order.
