@@ -201,7 +201,7 @@ struct WaterUniform {
     // the identity (0, 0, 1, 1) without a field
     wv_extra: [f32; 4],
     // x the sea's reach's extra run south (m; `CINEMATIC_SOUTH_REACH_M` under the
-    // cinematic look, stage L5, else 0: water_common.wgsl `wg_reach`); y, z, w 0
+    // cinematic look, stage L5, else 0: water_common.wgsl `wg_reach`); y the occupied canopy depth bands
     reach: [f32; 4],
 }
 
@@ -1306,7 +1306,7 @@ impl WaterGpu {
         self.update_at_time(queue, cam, probe, active, fog_far, 0.0, None);
     }
 
-    pub(crate) fn update_at_time(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32, world_time: f64, mapped_ocean: Option<bool>) {
+    pub(crate) fn update_at_time(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32, world_time: f64, mapped_ocean: Option<crate::ocean_life::HabitatView>) {
         let mut st = self.state.lock().unwrap();
         st.active = active;
         if !active {
@@ -1329,7 +1329,7 @@ impl WaterGpu {
             cam.eye.y <= sea + BOX_M + cam.near
                 && cam.eye.x >= self.extent[0] - 60000.0 && cam.eye.x <= self.extent[2] + 60000.0
                 && cam.eye.z >= self.extent[1] - 60000.0 && cam.eye.z <= self.extent[3] + if mapped_ocean.is_some() {st.south_m} else {0.0}
-                && mapped_ocean.unwrap_or_else(||field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > 0.0)
+                && mapped_ocean.map(|v| v.wet).unwrap_or_else(||field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > 0.0)
         });
         let recent = st.always || st.near_waterline
             || match st.seen {
@@ -1391,7 +1391,7 @@ impl WaterGpu {
             wv_gn: { let n = eo_water::waves::EXPO_WIND_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
             wv_xa: pg.xa,
             wv_extra: self.extra_frame,
-            reach: [st.south_m, 0.0, 0.0, 0.0],
+            reach: [st.south_m, mapped_ocean.map_or(0., |v| f32::from(v.canopy_bands)), 0.0, 0.0],
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0, self.index_count, 0, 0, 0, 0, 0, 0, 0]));

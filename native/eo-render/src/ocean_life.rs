@@ -30,12 +30,19 @@ struct Draw {
 }
 struct Window {
     cell: Option<(i32, i32)>,
+    canopy_bands: u8,
     visible: bool,
     groups: [Draw; KINDS.len()],
     sediment_indices: u32,
     bed: Vec<Vertex>,
     tiles: HashMap<(i32, i32), [Vec<Instance>; KINDS.len()]>,
 }
+#[derive(Clone, Copy)]
+pub(crate) struct HabitatView {
+    pub wet: bool,
+    pub canopy_bands: u8,
+}
+
 pub struct OceanLife {
     reef: bool,
     coastal_habitat: bool,
@@ -251,6 +258,7 @@ impl OceanLife {
             ),
             window: Mutex::new(Window {
                 cell: None,
+                canopy_bands: 0,
                 visible: false,
                 sediment_indices: 0,
                 bed: Vec::new(),
@@ -263,7 +271,7 @@ impl OceanLife {
         })
     }
 
-    pub fn update(&self, q: &wgpu::Queue, cam: &Camera, clock: f64, canopy_map: Option<&wgpu::Texture>) -> bool {
+    pub(crate) fn update(&self, q: &wgpu::Queue, cam: &Camera, clock: f64, canopy_map: Option<&wgpu::Texture>) -> HabitatView {
         let mut w = self.window.lock().unwrap();
         let p = Vec2::new(cam.eye.x, cam.eye.z);
         let column = (cam.eye.y < field::SEA + 4.)
@@ -272,7 +280,7 @@ impl OceanLife {
         let wet = column.is_some_and(|s| s.shore > 0. && cam.eye.y > s.floor - 1.);
         w.visible = column.is_some_and(|s| s.shore > -12. && cam.eye.y > s.floor - 1.);
         if !w.visible {
-            return wet;
+            return HabitatView { wet, canopy_bands: 0 };
         }
         q.write_buffer(
             &self.view,
@@ -284,7 +292,7 @@ impl OceanLife {
         );
         let cell = (p / TILE).floor().as_ivec2();
         if w.cell == Some((cell.x, cell.y)) {
-            return wet;
+            return HabitatView { wet, canopy_bands: w.canopy_bands };
         }
         w.tiles
             .retain(|&(x, z), _| (x - cell.x).abs() <= RING && (z - cell.y).abs() <= RING);
@@ -333,7 +341,7 @@ impl OceanLife {
             };
             shade_plant_beds(&mut v, plants(3), field::CROWN_KINDS.into_iter().flat_map(plants));
             if let Some(texture) = canopy_map {
-                canopy::write(q, texture, (cell.as_vec2()+0.5)*TILE,
+                w.canopy_bands = canopy::write(q, texture, (cell.as_vec2()+0.5)*TILE,
                     self.leaf_area.iter().zip(field::CROWN_KINDS.map(plants)).map(|(leaves, stands)| (leaves.as_slice(), stands)));
             }
         }
@@ -344,7 +352,7 @@ impl OceanLife {
         w.bed = v;
         w.sediment_indices = ix.len() as u32;
         w.cell = Some((cell.x, cell.y));
-        wet
+        HabitatView { wet, canopy_bands: w.canopy_bands }
     }
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, look: &look::LookGpu) -> bool {
         let w = self.window.lock().unwrap();

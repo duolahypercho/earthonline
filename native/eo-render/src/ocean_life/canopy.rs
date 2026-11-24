@@ -51,7 +51,16 @@ pub(super) fn write<'a>(
     texture: &wgpu::Texture,
     centre: Vec2,
     stands: impl Iterator<Item = (&'a [LeafArea], &'a [field::Instance])>,
-) {
+) -> u8 {
+    let mut stands = stands
+        .filter(|(leaves, plants)| !leaves.is_empty() && !plants.is_empty())
+        .peekable();
+    // An empty stand cannot intercept light. No texture upload is needed:
+    // the camera uniform makes the previous tile's map inaccessible.
+    if stands.peek().is_none() {
+        return 0;
+    }
+    let mut occupied = 0;
     let mut density = vec![[0f32; 4]; (SIDE * SIDE) as usize];
     let origin = centre - WIDTH * 0.5;
     for (leaves, plants) in stands {
@@ -79,6 +88,9 @@ pub(super) fn write<'a>(
                     .as_ivec2()
                     .min(glam::IVec2::splat(SIDE as i32 - 1));
                 let mass = leaf.area * scale.x * scale.z / (METRES * METRES * radius * radius);
+                if lo.x <= hi.x && lo.y <= hi.y {
+                    occupied |= 1 << band;
+                }
                 for z in lo.y..=hi.y {
                     let weight_z = 1. - (z as f32 - texel.y).abs() / radius;
                     for x in lo.x..=hi.x {
@@ -112,4 +124,5 @@ pub(super) fn write<'a>(
         },
         texture.size(),
     );
+    occupied
 }

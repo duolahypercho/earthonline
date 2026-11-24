@@ -3,6 +3,8 @@
 // Intersect the refracted sunlight with the four depths in the local canopy.
 // Coordinates follow the same world-aligned 6 m tile as the habitat instances.
 fn reef_transmission(p: vec3f, sun: vec3f) -> vec2f {
+    let occupied = u32(wu.reach.y);
+    if occupied == 0u { return vec2f(1.); }
     let water_depth = wu.grid.z - p.y;
     let origin = floor(wu.cam.xz/6.)*6. - 12.;
     let depth = vec4f(0.85,2.55,5.1,8.2);
@@ -13,6 +15,7 @@ fn reef_transmission(p: vec3f, sun: vec3f) -> vec2f {
     for (var k=0u; k<4u; k++) {
         let dz = water_depth-depth[k];
         if dz <= -0.45 { break; }
+        if (occupied & (1u << k)) == 0u { continue; }
         let uv = (p.xz + ray*max(dz,0.) - origin - sway)/30.;
         let inside = min(uv,1.-uv);
         let edge = smoothstep(0.,0.075,min(inside.x,inside.y));
