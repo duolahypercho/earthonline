@@ -1,17 +1,18 @@
 {
   "url": "/assets/ocean/reef-forms.glb",
-  "bytes": 121648,
-  "sha256": "af282868c41e1b078ae032cd2b5e4a050c1ad1820152c88786d82d97c7940360",
+  "bytes": 121628,
+  "sha256": "c387400862bec8b1a56bbd3a4a7f2347f8846681b709f595e54559649a25675c",
   "author": "Maksymilian Dendura and Earth Online contributors",
   "source": "https://github.com/Noniv/abyssal-garden",
   "revision": "a596354eff400d458bc2aeb9bdf5e0a9734b2bcf",
   "inputs": {
     "source/src/math.js": "a792e5547d7f8011e39231e979b8abb592e1ad306fad67ed583af5aa0e549cae",
     "source/src/world.js": "7fc2821ecc95c4284a29fab3a6d6db77998be1872a65c2831de76ccb83719e73",
+    "source/src/shaders.js": "a4744f7b16a2c3930e5097175937e6556fd3d82b668fbcb457154981eec87b29",
     "LICENSE": "b108a76735ab7cc0eab686fc3e85ca668bdb8866977093846d01bac5b6440453"
   },
   "license": "MIT",
   "licenseFile": "reef-forms.LICENSE.txt",
   "builder": "scripts/blender-ocean/cook-reef.mjs",
-  "adaptation": "Generated rock, sponge, fan and fish geometry. The original kelp-column generator supplies blade positions, sizes and bends. Vertex pigments and game-scale placement are adapted to the Pacific coast."
+  "adaptation": "Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. Vertex pigments and game-scale placement are adapted to the Pacific coast."
 }

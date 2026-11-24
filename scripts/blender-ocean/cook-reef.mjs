@@ -13,6 +13,7 @@ const upstream = 'https://github.com/Noniv/abyssal-garden';
 const hashes = {
   'source/src/math.js': 'a792e5547d7f8011e39231e979b8abb592e1ad306fad67ed583af5aa0e549cae',
   'source/src/world.js': '7fc2821ecc95c4284a29fab3a6d6db77998be1872a65c2831de76ccb83719e73',
+  'source/src/shaders.js': 'a4744f7b16a2c3930e5097175937e6556fd3d82b668fbcb457154981eec87b29',
   LICENSE: 'b108a76735ab7cc0eab686fc3e85ca668bdb8866977093846d01bac5b6440453',
 };
 const sha = data => createHash('sha256').update(data).digest('hex');
@@ -28,7 +29,8 @@ async function source(name) {
   if (sha(bytes) !== hashes[name]) throw Error('Source digest mismatch for ' + name);
   return bytes.toString('utf8');
 }
-const [math, world, license] = await Promise.all(Object.keys(hashes).map(source));
+const [math, world, shaders, license] = await Promise.all(Object.keys(hashes).map(source));
+if (!shaders.includes('const W_LEAF =')) throw Error('Missing source leaf shader');
 const context = vm.createContext({ LV: 0 });
 vm.runInContext(math + '\n' + world, context, { timeout: 5000 });
 const stem = world.indexOf('  const column = ');
@@ -46,19 +48,39 @@ function kelp() {
   for (const [x,y,z,length,yaw,tilt,width,height,type,s1,s2,bend] of leaves) {
     const cy=Math.cos(yaw), sy=Math.sin(yaw), ct=Math.cos(tilt), st=Math.sin(tilt);
     const first=pos.length/3, rows=type === 1 ? 4 : 7;
+    // The source leaf shader's close geometry at t=0. The game's vertex shader
+    // supplies the continuing current. A middle lane gives the blade its midrib.
+    const stipe = type === 1;
+    const wave = stipe ? 0.3 : 1.9;
+    const flex = stipe ? 0.3 : 1;
+    const k = ((bend-0.3)*2 + Math.sin(s2*40+height*0.25)*0.1*flex)*1.7;
+    const curve = Math.abs(k)<0.06 ? 0.06 : k;
+    const pigment = stipe ? [0.10,0.11,0.035] : s2>0.72 ? [0.25,0.17,0.025]
+      : [0.11-0.07*s1,0.125-0.025*s1,0.022+0.018*s1];
     for (let j=0;j<rows;j++) {
-      const t=j/(rows-1), a=(bend-0.30)*3.4, curve=Math.abs(a)<0.06?0.06:a;
-      const forward=Math.sin(curve*t)/curve, arch=(1-Math.cos(curve*t))/curve;
-      const sinShape=Math.max(0,Math.sin(Math.PI*t**0.75));
-      const profile = type===1 ? 0.42 : 0.02+0.98*sinShape**0.72;
+      const v = Math.sin(j/(rows-1)*Math.PI*0.5);
+      const phase = v*(3+5*s2)+s1*30;
+      const wobble = Math.sin(phase)*0.12*wave;
+      const swing = Math.sin(curve*v), lift = Math.cos(curve*v);
+      const arch = (1-lift)/curve+wobble*v;
+      const axial = swing/curve;
+      const slope = swing+wobble+Math.cos(phase)*0.10*wave*v*(3+5*s2);
+      const normLength = Math.hypot(lift,slope);
+      const nx = (ct*lift-st*slope)/normLength, ny=(-st*lift-ct*slope)/normLength;
+      const twist = (s1-0.5)*2.4*v + Math.sin(s2*20)*0.25*v;
+      const shape = Math.max(0,Math.sin(Math.PI*v**(stipe?0.05:0.5)))**(stipe?0.1:0.32);
       for (const side of [-1,0,1]) {
-        const edge=side*width*profile;
-        const ruffle=type===1 ? 0 : (Math.sin(10*t+s2*30)*0.26*side*side+0.20*(1-Math.abs(side)))*width*profile;
-        pos.push((x+length*(st*cy*forward+ct*cy*arch)-sy*edge+ct*cy*ruffle)/4,
-          (y+length*(ct*forward-st*arch)-st*ruffle)/4,
-          (z+length*(st*sy*forward+ct*sy*arch)+cy*edge+ct*sy*ruffle)/4);
-        const pigment=(0.65+0.28*t+0.18*s1)*(side===0?1.14:0.93);
-        rgb.push(...[0.21+0.10*s2,0.17+0.05*s1,0.038].map(c=>c*pigment));
+        const edge=side*width*0.5*shape;
+        const ruffle=Math.sin(v*10+s2*30)*width*0.36*side*Math.sin(Math.PI*v);
+        const rib=stipe?0:0.04*width*shape*(1-Math.abs(side));
+        const across=edge*Math.cos(twist)-(ruffle+rib)*Math.sin(twist);
+        const normal=edge*Math.sin(twist)+(ruffle+rib)*Math.cos(twist);
+        const radial=length*(st*axial+ct*arch)+nx*normal;
+        pos.push((x+cy*radial-sy*across)/4,
+          (y+length*(ct*axial-st*arch)+ny*normal)/4,
+          (z+sy*radial+cy*across)/4);
+        const shade=(0.80+0.20*v)*(side===0 ? 1.15 : 0.96);
+        rgb.push(...pigment.map(c=>c*shade));
       }
     }
     for (let j=0;j<rows-1;j++) for(let k=0;k<2;k++) {
@@ -123,6 +145,6 @@ await writeFile(path.join(out,'reef-forms.LICENSE.txt'),license);
 await writeFile(path.join(out,'reef-forms.provenance.json'),JSON.stringify({
   url:'/assets/ocean/reef-forms.glb',bytes:glb.length,sha256:sha(glb),author:'Maksymilian Dendura and Earth Online contributors',
   source:upstream,revision,inputs:hashes,license:'MIT',licenseFile:'reef-forms.LICENSE.txt',builder:'scripts/blender-ocean/cook-reef.mjs',
-  adaptation:'Generated rock, sponge, fan and fish geometry. The original kelp-column generator supplies blade positions, sizes and bends. Vertex pigments and game-scale placement are adapted to the Pacific coast.'
+  adaptation:'Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. Vertex pigments and game-scale placement are adapted to the Pacific coast.'
 },null,2)+'\n');
 console.log(gltf.meshes.map(x=>x.name).join(', '),glb.length,sha(glb));
