@@ -1534,7 +1534,8 @@ impl SkyGpu {
                     cos_outer: co,
                     cos_inner: ci,
                     kind: 4,
-                    size: eo_sky::lights::SIGNAL_LENS_AREA_M2 as f32,
+                    // (negative: the beam's clear near reach, sky_light.wgsl; a point for its reflections)
+                    size: -eo_sky::lights::SIGNAL_CLEAR_M as f32,
                     pad: SIGNAL_MARK,
                 }
             })

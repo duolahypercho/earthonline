@@ -308,6 +308,11 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
             // SpotLight: smoothstep(cos angle, cos (angle (1 - penumbra))));
             // a shop window's light (kind 4, `--shop-light`) its window's lobe the same way.
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+            if (SF_SIGNAL_SPILL && li.size < 0.0) {
+                // (`--signal-spill`, sky.rs `set_signal_lights`) a signal lens's beam lights
+                // nothing nearer it than -size (what stood there would hide the lens).
+                shape = shape * smoothstep(-0.75 * li.size, -li.size, dist);
+            }
         }
         let nl = max(dot(n, l), 0.0);
         var e = li.intensity * shape * w * w / d2 * nl;
