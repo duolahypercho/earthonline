@@ -378,6 +378,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // (opt in) the screen-space indirect light: the occlusion pass's bitmask gather to 12 m, its history and filter
             "--screen-gi" | "--no-screen-gi" => a.look.screen_gi = s == "--screen-gi",
             "--occluder-light" | "--no-occluder-light" => a.look.occluder_light = s == "--occluder-light",
+            "--dome-env" | "--no-dome-env" => a.look.dome_env = s == "--dome-env",
             // weather (a preset or the shared schedule) and the stage switches.
             "--weather" => {
                 let v = val()?;
