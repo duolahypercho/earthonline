@@ -1413,13 +1413,17 @@ impl SkyGpu {
         s.dt = dt.max(0.0);
     }
 
-    /// (bench captures) The frame counter restarts at `frame`: the sub-pixel
-    /// jitter's phase and every pass seeded by the frame (`flags.y`: the
-    /// reflections' and the lit fog's jitter, the volume's reconstruction
-    /// offset) follow it, so the frames a capture renders do not depend on how
-    /// many frames its settle took (a wall-clock bound).
-    pub fn reset_frame_phase(&self, frame: u32) {
-        self.state.lock().unwrap().frame = frame;
+    /// (bench captures) The frame counter moves on to the next multiple of
+    /// `period`: the sub-pixel jitter's phase and every pass seeded by the frame
+    /// (`flags.y`: the reflections' and the lit fog's jitter, the volume's
+    /// reconstruction offset, the clouds' blue-noise step; all periodic in a
+    /// divisor of `period`) start from one phase, so the frames a capture
+    /// renders do not depend on how many frames its settle took (a wall-clock
+    /// bound); the counter never goes back, so no history (the lit fog's frame
+    /// stamp) can match a frame of the capture before it.
+    pub fn align_frame_phase(&self, period: u32) {
+        let mut s = self.state.lock().unwrap();
+        s.frame = (s.frame / period + 1).wrapping_mul(period);
     }
 
     /// `--smooth-time`: the exposure converges instead of snapping on a turn or

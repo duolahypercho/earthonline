@@ -2150,12 +2150,16 @@ impl LookGpu {
         self.post_source.store(r.map(|p| p as u32 + 1).unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// (bench captures) The look's and the sky's frame counters restart at
-    /// `frame` (sky.rs `reset_frame_phase`; here the grain's and the photo
-    /// finish's phase), so a capture's frames do not depend on its settle's length.
-    pub fn reset_frame_phase(&self, frame: u32) {
-        self.state.lock().unwrap().frame_index = frame;
-        self.sky.reset_frame_phase(frame);
+    /// (bench captures) The look's and the sky's frame counters move on to the
+    /// next multiple of `period` (sky.rs `align_frame_phase`; here the grain's
+    /// and the photo finish's phase), so a capture's frames do not depend on
+    /// its settle's length.
+    pub fn align_frame_phase(&self, period: u32) {
+        {
+            let mut s = self.state.lock().unwrap();
+            s.frame_index = (s.frame_index / period + 1).wrapping_mul(period);
+        }
+        self.sky.align_frame_phase(period);
     }
 
     /// The clock (hours, 0..24); the sky model and light rig follow on the next update.
