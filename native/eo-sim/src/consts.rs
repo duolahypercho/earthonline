@@ -219,6 +219,10 @@ pub const DENSE_RADIUS_M: f64 = 200.0;
 /// (`--car-density`) Past this share of the radius a lane's density falls
 /// off to a quarter at the radius (the near streets full, the far ones thinner).
 pub const DENSE_FALLOFF_FROM: f64 = 0.6;
+/// (`--car-density`) The cars past the JS pool are put down from a stream of
+/// draws of their own (the fleet's seed xor this), so the pool's cars are put
+/// down where they were without the density.
+pub const DENSE_EXTRA_SEED: u32 = 0x6a09_e667;
 
 /// A People setting's live resident disc: `crowdPopulationBubble(level)` in
 /// src/render/performance-settings.js over its `CROWD_QUALITY` row.

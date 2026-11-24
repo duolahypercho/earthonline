@@ -343,10 +343,16 @@ impl Region {
             }
         };
         if let Some(t) = self.cfg.traffic {
-            // (`--car-density`) each lane drawn by the cars it carries: the
-            // list holds a lane once for every twentieth of a car, the count
-            // the cars the disc carries (at most the pool, never fewer than
-            // the JS pool: a quiet hour puts the JS's cars on the busier streets).
+            // (`--car-density`) the JS pool first, put down exactly as without
+            // the density (the same lanes and the same draws: the same cars where
+            // they were), then the cars the streets carry beyond it, from a
+            // stream of draws of their own: each lane drawn by the cars it
+            // carries (the list holds a lane once for every twentieth of a car),
+            // the fleet the cars the disc carries (at most the pool, never
+            // fewer than the JS pool).
+            for _ in 0..VEHICLE_POOL.min(self.cfg.vehicle_pool) {
+                let _ = self.fleet.spawn(net, &lanes, &mut self.car_rng, self.cfg.seed_int);
+            }
             let focus = [self.focus.x, self.focus.z];
             let mut weighted = vec![];
             let mut cars = 0.0;
@@ -358,8 +364,9 @@ impl Region {
                 }
             }
             let count = (cars.round() as usize).max(VEHICLE_POOL).min(self.cfg.vehicle_pool);
-            for _ in 0..count {
-                let _ = self.fleet.spawn(net, &weighted, &mut self.car_rng, self.cfg.seed_int);
+            let mut extra = Mulberry32::new(self.cfg.seed_int.wrapping_add(77).wrapping_add(self.id.wrapping_mul(0x9e37_79b9)) ^ DENSE_EXTRA_SEED);
+            for _ in VEHICLE_POOL.min(self.cfg.vehicle_pool)..count {
+                let _ = self.fleet.spawn(net, &weighted, &mut extra, self.cfg.seed_int);
             }
             self.fleet.separate(net);
             return;
