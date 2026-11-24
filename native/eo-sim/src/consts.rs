@@ -189,6 +189,37 @@ pub const HOMING_MAX_GAIN: f64 = 3.0;
 /// `STREET_POPULATION.vehiclePool`: the moving fleet on a real-map city.
 pub const VEHICLE_POOL: usize = 42;
 
+/// (`TrafficDensity`, eo-app `--car-density`) The moving and queued traffic
+/// a lane-kilometre of a street class carries at the day's busiest hours,
+/// vehicles per lane-km: density = flow / speed, the flow a lane carries in
+/// the busy hours of a dense city's grid and the speed along it with its
+/// signals' delay (an arterial's lane ~700 veh/h at ~18 km/h; a collector's
+/// ~500 at 17; a local through street's ~300 at 15; a residential street's
+/// ~80 at 12; an alley's or a driveway's ~30 at 10; a freeway's lane ~1500 at
+/// 70; its ramps half that). INFERRED: the order of the urban flows and
+/// speeds the Highway Capacity Manual's urban street and freeway chapters
+/// tabulate, not a count of these streets.
+pub fn lane_density_per_km(highway: &str) -> f64 {
+    match highway {
+        "motorway" | "trunk" => 21.0,
+        "motorway_link" | "trunk_link" => 12.0,
+        "primary" | "primary_link" => 39.0,
+        "secondary" | "secondary_link" => 29.0,
+        "tertiary" | "tertiary_link" => 20.0,
+        "residential" | "unclassified" | "living_street" => 7.0,
+        "service" => 3.0,
+        _ => 5.0,
+    }
+}
+/// (`--car-density`) The fleet's size with the density on (the JS pool's 42
+/// before), and how far round the focus the density is put down and kept:
+/// the drawn traffic window's near part, where a car is more than a speck.
+pub const DENSE_VEHICLE_POOL: usize = 128;
+pub const DENSE_RADIUS_M: f64 = 200.0;
+/// (`--car-density`) Past this share of the radius a lane's density falls
+/// off to a quarter at the radius (the near streets full, the far ones thinner).
+pub const DENSE_FALLOFF_FROM: f64 = 0.6;
+
 /// A People setting's live resident disc: `crowdPopulationBubble(level)` in
 /// src/render/performance-settings.js over its `CROWD_QUALITY` row.
 #[derive(Clone, Copy, Debug, PartialEq)]
