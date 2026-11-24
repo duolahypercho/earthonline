@@ -240,7 +240,8 @@ pub struct LookOptions {
     pub car_reflections: u8,
     /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
     /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`,
-    /// `--palm-variety`, `--crown-light`, `--far-palms`, `--prop-far-shadow`, `--hill-relief`): 0 (the default) is the frame as before,
+    /// `--palm-variety`, `--crown-light`, `--far-palms`, `--prop-far-shadow`, `--hill-relief`, `--leaf-shade`,
+    /// `--wet-foliage`, `--lawn-albedo`): 0 (the default) is the frame as before,
     /// and each bit's shader code is compiled out while it is off (`sf_select`).
     pub nature: u32,
 }
@@ -284,8 +285,22 @@ pub const NATURE_PROP_FAR: u32 = 1024;
 /// `--hill-relief`: the far hills' gullies and spurs under the height field's
 /// 40 m lattice, bending its normal (farshore.wgsl `fs_relief`).
 pub const NATURE_HILL_RELIEF: u32 = 2048;
+/// `--leaf-shade`: the street lights without a shadow map of their own (shop
+/// windows, the lamps' ground bounce, headlamps) reach a palm's or a street
+/// tree's leaves through the crown's leaf area between them (Beer-Lambert over
+/// the light's path through the crown; sky_light.wgsl `sky_leaf_t`, set by
+/// props_draw.wgsl), and the light through a leaf takes the transmittance over
+/// reflectance of each display primary's band (props_draw.wgsl `PR_LEAF_T_OVER_R`).
+pub const NATURE_LEAF_SHADE: u32 = 4096;
+/// `--wet-foliage`: in the rain the leaves carry drops and a film (darker, a
+/// glossier lobe where the water stands) and the bark soaks (the albedo
+/// halved on the palms' fibre, rain tracks down the trunk; props_draw.wgsl `pr_wet_leaf`, `pr_wet_bark`).
+pub const NATURE_WET_FOLIAGE: u32 = 8192;
+/// `--lawn-albedo` (with `--turf`): a mown lawn's tone held to a measured turf's
+/// luminance, 0.06-0.10 (landmarks_surface.wgsl `NT_TURF_LUM`).
+pub const NATURE_LAWN_ALBEDO: u32 = 16384;
 /// Every natural-detail bit.
-pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER | NATURE_BARE | NATURE_PALM_VARIETY | NATURE_CROWN | NATURE_FAR_PALMS | NATURE_PROP_FAR | NATURE_HILL_RELIEF;
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER | NATURE_BARE | NATURE_PALM_VARIETY | NATURE_CROWN | NATURE_FAR_PALMS | NATURE_PROP_FAR | NATURE_HILL_RELIEF | NATURE_LEAF_SHADE | NATURE_WET_FOLIAGE | NATURE_LAWN_ALBEDO;
 
 impl Default for LookOptions {
     fn default() -> Self {
@@ -1028,7 +1043,7 @@ fn night_gain(on: bool, f: &LookFrame) -> f32 {
 
 /// A shader file's natural-detail blocks for the features compiled in now: the
 /// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
-/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`, `BARE`, `PALM_VARIETY`, `CROWN`, `FAR_PALMS`, `PROP_FAR`, `HILL_RELIEF`: `NATURE_*`) in, those between `// sf:NAME-`
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`, `BARE`, `PALM_VARIETY`, `CROWN`, `FAR_PALMS`, `PROP_FAR`, `HILL_RELIEF`, `LEAF_SHADE`, `WET_FOLIAGE`, `LAWN_ALBEDO`: `NATURE_*`) in, those between `// sf:NAME-`
 /// and `// sf:end` only without it, and the marker lines are dropped (`NAME|OTHER`:
 /// either bit; `NAME&OTHER`: both; `!NAME`: without it; blocks do not nest). With every
 /// bit out the text is the file as it was before the bits existed, so a shader
@@ -1049,6 +1064,9 @@ pub fn sf_select(src: &str) -> String {
         "FAR_PALMS" => f.nature & NATURE_FAR_PALMS != 0,
         "PROP_FAR" => f.nature & NATURE_PROP_FAR != 0,
         "HILL_RELIEF" => f.nature & NATURE_HILL_RELIEF != 0,
+        "LEAF_SHADE" => f.nature & NATURE_LEAF_SHADE != 0,
+        "WET_FOLIAGE" => f.nature & NATURE_WET_FOLIAGE != 0,
+        "LAWN_ALBEDO" => f.nature & NATURE_LAWN_ALBEDO != 0,
         _ => false,
     };
     // `A|B`: either bit in (code two features share); `A&B`: both (code that joins them);

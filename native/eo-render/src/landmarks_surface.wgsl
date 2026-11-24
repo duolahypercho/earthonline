@@ -429,11 +429,28 @@ const NT_TURF_THETA: f32 = -0.15;
 const NT_TURF_RHO0: f32 = 0.1;
 const NT_TURF_STRIPE_M: f32 = 1.6;
 const NT_TURF_STRIPE: f32 = 0.14;
+// sf:end
+// sf:TURF&LAWN_ALBEDO+
+// (`--lawn-albedo`) a mown lawn's luminance: Kentucky bluegrass and tall fescue
+// turf reflect 0.10-0.13 at 550 nm, a luminance of about 0.06-0.10 (Trenholm,
+// Carrow and Duncan 1999; Bell et al. 2002); the mapped lawn tones ran to 0.15
+// (the imagery's haze over a lawn reads as its own), twice a tree crown's, so the
+// parks from the air were lime sheets round black crowns. The tone (before the
+// scans) is held to that range, its hue and the scans' detail kept.
+const NT_TURF_LUM: vec2<f32> = vec2<f32>(0.06, 0.10);
+var<private> nt_lawn_k: f32 = 1.0; // (set by `nt_turf_weight` from the tone) the lawn's scale to that range
+// sf:end
+// sf:TURF+
 
 // How much of a ground tone is grass (x mown lawn: bright green; y any grass:
 // green or the dry summer straw), from the tone before the scans (cc0_ground_sets' kinds).
 fn nt_turf_weight(c: vec3<f32>) -> vec2<f32> {
     let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+// sf:end
+// sf:TURF&LAWN_ALBEDO+
+    nt_lawn_k = clamp(l, NT_TURF_LUM.x, NT_TURF_LUM.y) / max(l, 1e-4); // (`--lawn-albedo`)
+// sf:end
+// sf:TURF+
     let green = smoothstep(1.03, 1.12, c.g / max(c.r, 1e-4)) * smoothstep(1.12, 1.3, c.g / max(c.b, 1e-4));
     let lawn = green * smoothstep(0.035, 0.06, l);
     let warm = c.r / max(c.b, 1e-4);
@@ -480,6 +497,11 @@ fn nt_turf(s: ptr<function, Surface>, w: vec2<f32>, world: vec3<f32>, n: vec3<f3
     let share = key / max(key + amb, 1e-6);
     let canopy = clamp(mix(sky, sun, share), 0.55, 1.8);
     var alb = (*s).albedo;
+// sf:end
+// sf:TURF&LAWN_ALBEDO+
+    alb = alb * mix(1.0, nt_lawn_k, w.x); // (`--lawn-albedo`) the tone's scale, the scans' detail kept
+// sf:end
+// sf:TURF+
     // The pixel's footprint (m): what is finer than it averages out.
     let fw = max(length(dpx), length(dpy));
     let p = world.xz;

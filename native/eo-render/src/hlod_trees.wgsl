@@ -202,7 +202,14 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
 // times the crown's own transmittance along the view's chord, exp(-2 z) with z
 // the crown normal's share toward the eye (1 at its centre, 0 at its edge).
 fn ft_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
+// sf:end
+// sf:FOLIAGE&!LEAF_SHADE+
     let t = albedo * vec3<f32>(0.55, 0.85, 0.3);
+// sf:end
+// sf:FOLIAGE&LEAF_SHADE+
+    let t = albedo * vec3<f32>(0.8, 0.95, 0.35); // (`--leaf-shade`) over each primary's band (props_draw.wgsl PR_LEAF_T_OVER_R)
+// sf:end
+// sf:FOLIAGE+
     let b = -n;
     let chord = exp(-2.0 * max(dot(n, v), 0.0));
     let l = look.key_dir.xyz;
@@ -242,7 +249,7 @@ fn ft_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>) -
 // Gamma Ross's area scattering phase function of bi-Lambertian leaves
 // (reflectance rho, transmittance tau, omega = rho + tau) facing every way,
 // beta the angle between the sun's photons (-l) and the ray to the eye (v):
-//   Gamma(beta) = omega / (3 pi) (sin beta - beta cos beta) + tau / pi cos beta
+//   Gamma(beta) = omega / (3 pi) (sin beta - beta cos beta) + tau / 3 cos beta
 // (Shultis and Myneni 1988): bright with the sun behind the eye (the lit
 // faces), dark side-lit, and with the sun behind the crown only what the
 // leaves pass, a thin rim where the sun's path through the crown is short.
@@ -254,8 +261,25 @@ fn ft_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>) -
 // above (the zenith and four directions 35 degrees up, uniform over the
 // hemisphere as leaves facing every way see it), at the same depths.
 // Multiple scattering adds about omega / (2 (1 - omega)) in the visible.
-const FT_SIGMA: f32 = 0.6; // 1/m: G 0.5 x leaf area density 1.2 m2/m3 (street and park broadleaf crowns, 0.8-1.6)
+// (r2i3) A city tree's crown is open-grown: its leaf area density is about
+// 1 m2/m3 (0.6-1.2 for street and park trees, Peper and McPherson 2003), and
+// its leaves gather on shoots and branches with gaps between the clumps, so
+// the light goes further in (Nilson's clumping index, 0.5-0.8 for broadleaf
+// crowns, Chen and Black 1992: 0.6 here, on every path). The leaf
+// reflectance is a measured leaf's (LOPEX93 broadleaf and conifer: luminance
+// 0.07-0.11; the tint only sets the tree's own shade of it, where it had run
+// down to the tints' 0.045: the park pines read black from the air), and the
+// sky's light takes the same multiple scattering as the sun's.
+const FT_SIGMA: f32 = 0.3; // 1/m: clumping 0.6 x G 0.5 x leaf area density 1.0 m2/m3
+const FT_LEAF_LUM: vec2<f32> = vec2<f32>(0.07, 0.11);
+// sf:end
+// sf:CROWN&!LEAF_SHADE+
 const FT_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.55, 0.85, 0.3); // props_draw.wgsl PR_LEAF_T_OVER_R
+// sf:end
+// sf:CROWN&LEAF_SHADE+
+const FT_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.8, 0.95, 0.35); // (`--leaf-shade`) props_draw.wgsl PR_LEAF_T_OVER_R
+// sf:end
+// sf:CROWN+
 // a mature broadleaf leaf's reflectance over its luminance (linear, about 0.055 / 0.10 / 0.043)
 const FT_LEAF_CHROMA: vec3<f32> = vec3<f32>(0.64, 1.17, 0.50);
 // the hotspot's angular width (rad): a leaf's size over the crown's depth
@@ -273,12 +297,12 @@ fn ft_exit(q: vec3<f32>, w: vec3<f32>, inv: vec3<f32>) -> f32 {
 }
 
 // A crown's leaf reflectance: the tree's tint pulled most of the way to a
-// measured leaf's chroma, its luminance held in a leaf's range (0.045 to
-// 0.095), each tree a little its own.
+// measured leaf's chroma, its luminance held in a leaf's range
+// (FT_LEAF_LUM), each tree a little its own.
 fn ft_leaf_r(tint: vec3<f32>, seed: f32) -> vec3<f32> {
     let lum = max(dot(tint, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4);
     let c = mix(tint / lum, FT_LEAF_CHROMA, 0.6);
-    return c * clamp(lum, 0.045, 0.095) * (0.85 + 0.3 * fract(seed * 0.6180339));
+    return c * clamp(lum, FT_LEAF_LUM.x, FT_LEAF_LUM.y) * (0.85 + 0.3 * fract(seed * 0.6180339));
 }
 
 // The crown's light at a card pixel: xyz the sun's scattered radiance per unit
@@ -319,7 +343,8 @@ fn ft_crown(uv: vec2<f32>, size: vec2<f32>, right: vec3<f32>, v: vec3<f32>, rho:
     let tau = rho * FT_LEAF_T_OVER_R;
     let omega = rho + tau;
     let beta = acos(cb);
-    let gamma = max(omega / (3.0 * LK_PI) * (sin(beta) - beta * cb) + tau / LK_PI * cb, vec3<f32>(0.0));
+    // (r2i3: tau / 3, Shultis and Myneni's; it read tau / pi, a few per cent low forward)
+    let gamma = max(omega / (3.0 * LK_PI) * (sin(beta) - beta * cb) + tau / 3.0 * cb, vec3<f32>(0.0));
     let ms = vec3<f32>(1.0) + 0.5 * omega / (vec3<f32>(1.0) - omega);
     return vec4<f32>(gamma / (LK_PI * 0.5) * sun * ms, sky);
 }
@@ -332,7 +357,13 @@ const FT_PALM: u32 = 7u; // hlod_trees.rs `FAR_PALM`: the survey's palms
 // fading out over the last PR_FADE_BAND (0.12) of it: the card fades in there.
 const FT_PALM_FULL_M: f32 = 450.0;
 const FT_PALM_NEAR_M: f32 = 396.0;
-const FT_PALM_FRONDS: u32 = 13u;
+// (r2i3) a Canary Island date palm carries 50-80 live fronds; drawn as 24
+// (each a few of them overlapping at this distance), their leaflets' spread
+// 0.17 of the reach (leaflets 40-45 cm each side of a 5 m rachis), round a
+// heart dense with the fronds' bases (13 thin fronds read as a sapling's).
+const FT_PALM_FRONDS: u32 = 24u;
+const FT_PALM_SPREAD: f32 = 0.17;
+const FT_PALM_HEART: f32 = 0.2;
 
 struct FtPalm {
     frond: bool,
@@ -345,7 +376,7 @@ struct FtPalm {
 // A palm on its card (x across in crown reaches, y up the height), the
 // survey's palms being mostly Canary Island date palms: a column to the
 // crown's heart (0.55 of the reach under the top), a little swollen at the
-// foot, and 13 fronds from the heart, each a feather that rises and bends
+// foot, and FT_PALM_FRONDS fronds from the heart, each a feather that rises and bends
 // under its own weight (s along its bearing, 0.55 s^2 down), its leaflets'
 // spread widest past mid length; a frond turned toward or away from the eye
 // is seen shorter, the oldest hang. The fronds take the palm leaflets' tones
@@ -379,7 +410,7 @@ fn ft_palm(uv: vec2<f32>, size: vec2<f32>, seed: f32, right: vec3<f32>, toward: 
         let s1 = clamp(s0 + dot(q - p0, tg0) / max(dot(tg0, tg0), 1e-4), 0.0, len);
         let p1 = s1 * dir - vec2<f32>(0.0, 0.55 * s1 * s1);
         let f = s1 / len;
-        let w = max(0.13 * sin(3.14159 * clamp(f * 0.9 + 0.06, 0.0, 1.0)) * (0.45 + 0.55 * f), w_min);
+        let w = max(FT_PALM_SPREAD * sin(3.14159 * clamp(f * 0.9 + 0.06, 0.0, 1.0)) * (0.45 + 0.55 * f), w_min);
         let d = length(q - p1) / w;
         if (d < best) {
             best = d;
@@ -388,7 +419,7 @@ fn ft_palm(uv: vec2<f32>, size: vec2<f32>, seed: f32, right: vec3<f32>, toward: 
             hang = smoothstep(0.0, -0.5, dir.y);
         }
     }
-    o.frond = best < 1.0;
+    o.frond = best < 1.0 || length(q * vec2<f32>(1.0, 1.6)) < FT_PALM_HEART;
     let tone = 0.88 + 0.24 * fract(seed * 0.377);
     if (o.frond) {
         let up = vec3<f32>(0.0, 1.0, 0.0);
@@ -497,7 +528,8 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
             vol = true;
             let rho = ft_leaf_r(in.tint, in.seed);
             let cv = ft_crown(in.uv, in.size.xy, in.right, v, rho);
-            albedo = 0.5 * rho * (vec3<f32>(1.0) + FT_LEAF_T_OVER_R);
+            let om = rho * (vec3<f32>(1.0) + FT_LEAF_T_OVER_R);
+            albedo = 0.5 * om * (vec3<f32>(1.0) + 0.5 * om / (vec3<f32>(1.0) - om)); // omega / 2, and its multiple scattering
             ao = cv.w;
             sun = cv.xyz;
             lk_leaf_sun = 0.0;
