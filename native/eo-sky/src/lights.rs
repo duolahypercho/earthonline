@@ -352,13 +352,42 @@ pub const SIGNAL_REACH_LUX: f64 = 0.25;
 /// placement's, not the head's, and takes none. INFERRED (the distance).
 pub const SIGNAL_CLEAR_M: f64 = 6.0;
 
-/// A chromaticity (x, y) in linear sRGB at unit luminance (out of gamut clipped).
-pub fn xy_unit_color(x: f64, y: f64) -> [f64; 3] {
+/// The sRGB white point (D65) in CIE xy.
+pub const D65_XY: [f64; 2] = [0.3127, 0.3290];
+
+/// A chromaticity (x, y) as linear sRGB at unit luminance, unclipped (a
+/// colour outside the sRGB gamut has a negative component).
+fn xy_linear(x: f64, y: f64) -> [f64; 3] {
     let (cx, cz) = (x / y, (1.0 - x - y) / y);
-    let r = 3.2406 * cx - 1.5372 - 0.4986 * cz;
-    let g = -0.9689 * cx + 1.8758 + 0.0415 * cz;
-    let b = 0.0557 * cx - 0.2040 + 1.0570 * cz;
-    let c = [r.max(0.0), g.max(0.0), b.max(0.0)];
+    [3.2406 * cx - 1.5372 - 0.4986 * cz, -0.9689 * cx + 1.8758 + 0.0415 * cz, 0.0557 * cx - 0.2040 + 1.0570 * cz]
+}
+
+/// A chromaticity (x, y) in linear sRGB at unit luminance. One outside the
+/// sRGB gamut (the signals' and rear lamps' saturated LEDs) is brought in along
+/// its line to the white point (D65), which keeps its dominant wavelength,
+/// i.e. its hue: the ITE signal green (x 0.17 y 0.70, ~505 nm) is the
+/// blue-green its LEDs are, where clipping the negative red would turn it to
+/// the display's own yellow-green primary (~550 nm) and read as neon.
+pub fn xy_unit_color(x: f64, y: f64) -> [f64; 3] {
+    let inside = |t: f64| {
+        let (px, py) = (D65_XY[0] + t * (x - D65_XY[0]), D65_XY[1] + t * (y - D65_XY[1]));
+        xy_linear(px, py).iter().all(|&v| v >= 0.0)
+    };
+    let t = if inside(1.0) {
+        1.0
+    } else {
+        let (mut lo, mut hi) = (0.0f64, 1.0f64);
+        for _ in 0..48 {
+            let m = 0.5 * (lo + hi);
+            if inside(m) {
+                lo = m;
+            } else {
+                hi = m;
+            }
+        }
+        lo
+    };
+    let c = xy_linear(D65_XY[0] + t * (x - D65_XY[0]), D65_XY[1] + t * (y - D65_XY[1])).map(|v| v.max(0.0));
     let l = eo_look::math::luminance(c);
     c.map(|v| v / l)
 }
@@ -545,6 +574,27 @@ mod tests {
         for c in [r, y, g] {
             assert!((eo_look::math::luminance(c) - 1.0).abs() < 1e-9);
         }
+        // the green keeps its blue (its hue), not the display's yellow-green primary
+        assert!(g[2] > 0.25 * g[1], "green {g:?}");
+    }
+
+    #[test]
+    fn out_of_gamut_colours_keep_their_hue() {
+        for [x, y] in SIGNAL_XY.into_iter().chain([[0.69, 0.30]]) {
+            let c = xy_unit_color(x, y);
+            assert!(c.iter().all(|&v| v >= 0.0));
+            // the colour's chromaticity on the line from D65 to (x, y), between them
+            let xyz = [0.4124 * c[0] + 0.3576 * c[1] + 0.1805 * c[2], 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], 0.0193 * c[0] + 0.1192 * c[1] + 0.9505 * c[2]];
+            let s = xyz[0] + xyz[1] + xyz[2];
+            let (px, py) = (xyz[0] / s, xyz[1] / s);
+            let (dx, dy) = (x - D65_XY[0], y - D65_XY[1]);
+            let cross = (px - D65_XY[0]) * dy - (py - D65_XY[1]) * dx;
+            assert!(cross.abs() < 2e-3 * (dx * dx + dy * dy).sqrt(), "({x}, {y}) -> ({px:.4}, {py:.4})");
+            assert!((px - D65_XY[0]) * dx + (py - D65_XY[1]) * dy > 0.0);
+        }
+        // an in-gamut colour is its own
+        let w = xy_unit_color(0.3127, 0.3290);
+        assert!((w[0] - 1.0).abs() < 2e-3 && (w[1] - 1.0).abs() < 2e-3 && (w[2] - 1.0).abs() < 2e-3, "{w:?}");
     }
 
     #[test]
