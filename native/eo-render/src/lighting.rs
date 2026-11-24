@@ -225,6 +225,10 @@ mod tests {
         sets.push(("shop light".into(), look::ShaderFeatures { shop_light: true, ..none }));
         sets.push(("facade clutter".into(), look::ShaderFeatures { facade_clutter: true, ..none }));
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
+        sets.push(("wet surfaces".into(), look::ShaderFeatures { wet_surfaces: true, ..none })); // (`--wet-surfaces`)
+        sets.push(("wet surfaces, cinematic".into(), look::ShaderFeatures { wet_surfaces: true, cinematic: true, ..none }));
+        sets.push(("screen reflect".into(), look::ShaderFeatures { screen_reflect: true, ..none })); // (`--screen-reflect`)
+        sets.push(("screen reflect, wet surfaces, cinematic".into(), look::ShaderFeatures { screen_reflect: true, wet_surfaces: true, cinematic: true, ..none }));
         sets
     }
 
@@ -270,7 +274,7 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, wet_surfaces: false, screen_reflect: false, ..look::ShaderFeatures::ALL }); // (the look profile and the reflect track's switches are their own)
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));
@@ -281,6 +285,26 @@ mod tests {
         // each lighting bit keeps only its own option.
         let blend_only = look::ShaderFeatures { lx_bits: look::LX_BIT_CASCADE_BLEND, ..look::ShaderFeatures::NONE }.limit(&on);
         assert_eq!(blend_only.lighting, LightingOptions { cascade_blend: true, ..LightingOptions::OFF });
+    }
+
+    #[test]
+    fn the_reflect_tracks_switches_are_compiled_in_only_when_asked_and_limited_with_them() {
+        // (`--wet-surfaces`, `--screen-reflect`) the default compiles both out; each switch compiles in its own.
+        let o = look::LookOptions::default();
+        let f = look::ShaderFeatures::of(&o, false, false, false);
+        assert!(!f.wet_surfaces && !f.screen_reflect);
+        for (k, v) in [("SF_WET_SURFACES", false), ("SF_SCREEN_REFLECT", false)] {
+            assert!(look::ShaderFeatures::NONE.wgsl().contains(&format!("const {k}: bool = {v};")), "{k}");
+            assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const {k}: bool = {};", !v)), "{k}");
+        }
+        let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}");
+        for (wet, sr) in [(true, false), (false, true), (true, true)] {
+            let on = look::LookOptions { sky: crate::sky::SkyOptions { wet_surfaces: wet, screen_reflect: sr, ..o.sky }, ..o };
+            let f = look::ShaderFeatures::of(&on, false, false, false);
+            assert_eq!(f, look::ShaderFeatures { wet_surfaces: wet, screen_reflect: sr, ..look::ShaderFeatures::NONE }, "each alone compiles in nothing else");
+            assert!(same(&f.limit(&on), &on), "compiled in, it stays as asked");
+            assert!(same(&look::ShaderFeatures::NONE.limit(&on), &o), "compiled out, it stays off (the default frame)");
+        }
     }
 
     #[test]

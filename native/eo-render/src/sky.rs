@@ -53,6 +53,10 @@ pub const CLUSTER_CAP: u32 = 32;
 pub const STREAK_CAP: u32 = 32;
 /// (`--weather damp`, stage L3) sky_common.wgsl `SKY_DAMP`.
 pub const SKY_DAMP_BIT: u32 = 1 << 18;
+/// (`--wet-surfaces`) the wet surfaces' runtime bit (sky_light.wgsl `SKY_WET_SURFACES`).
+pub const SKY_WET_SURFACES_BIT: u32 = 1 << 23;
+/// (`--screen-reflect`) the reflection's runtime bit (sky_light.wgsl `SKY_SCREEN_REFLECT`).
+pub const SKY_SCREEN_REFLECT_BIT: u32 = 1 << 24;
 /// Lights are shaded within this view depth (m).
 pub const CLUSTER_FAR_M: f32 = 300.0;
 pub const CLUSTER_NEAR_M: f32 = 0.5;
@@ -103,6 +107,21 @@ pub struct SkyOptions {
     /// (`--cloud-depth-haze` turns it on); off, the ground's whole aerial perspective is in
     /// front of the cloud, a blue veil under the horizon, as before.
     pub cloud_depth_haze: bool,
+    /// (`--wet-surfaces`, the reflect track) every exposed surface takes the
+    /// rain: a porosity-weighted darkening and film on walks, plazas, roofs and
+    /// walls, puddles standing in the ground's hollows and the gutters with
+    /// damp halos, a water surface's whole environment on the film, and the
+    /// screen-space reflection traced and filtered for it (sky_light.wgsl
+    /// `sky_w2_*`). Off by default (its code compiled out: `SF_WET_SURFACES`);
+    /// off, the frame is as before.
+    pub wet_surfaces: bool,
+    /// (`--screen-reflect`, the reflect track) the screen-space reflection's
+    /// second generation: a jittered trace the history accumulates, filtered
+    /// by the surface's lobe at the hit (sharp at contact, long for far
+    /// lights), the frame's own sky where a ray leaves the scene, and glass
+    /// traced as well (sky_light.wgsl `sky_sr_*`). Off by default (its code
+    /// compiled out: `SF_SCREEN_REFLECT`); off, the frame is as before.
+    pub screen_reflect: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -143,6 +162,8 @@ impl Default for SkyOptions {
             cove_cumulus: false,
             cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
             cloud_depth_haze: false,
+            wet_surfaces: false,
+            screen_reflect: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -178,6 +199,8 @@ impl SkyOptions {
             cove_cumulus: false,
             cumulus: false,
             cloud_depth_haze: false,
+            wet_surfaces: false,
+            screen_reflect: false,
             ..Self::default()
         }
     }
@@ -216,6 +239,8 @@ impl SkyOptions {
             (self.cumulus || self.cove_cumulus, 16384), // SKY_CUMULUS
             (self.cloud_depth_haze, 2048), // SKY_CLOUD_DEPTH_HAZE
             (self.cinematic, 1 << 17), // SKY_CINEMATIC (`--look cinematic`, stage L4: the golden haze and shafts)
+            (self.wet_surfaces, SKY_WET_SURFACES_BIT), // SKY_WET_SURFACES (`--wet-surfaces`, sky_light.wgsl)
+            (self.screen_reflect, SKY_SCREEN_REFLECT_BIT), // SKY_SCREEN_REFLECT (`--screen-reflect`, sky_light.wgsl)
         ] {
             if on {
                 b |= bit;

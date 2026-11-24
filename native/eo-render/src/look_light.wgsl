@@ -150,7 +150,7 @@ var<private> rm_emit: vec3<f32>;
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
     if ((m.flags & F_GLASS) == 0u && s.env <= 0) {
-        sky_wet_generic(&s, ng); // roofs, ground, walls, bodies in the rain (the street wets itself)
+        sky_wet_generic_at(&s, ng, world); // roofs, ground, walls, bodies in the rain (the street wets itself)
     }
     let n = s.n;
     let rough = s.rough;
@@ -178,7 +178,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     } else if (kind == 1u) {
         cls = look.env_class.w;
     }
-    let env_i = look.ambient.w * cls;
+    let env_i = sky_w2_env(look.ambient.w * cls); // (`--wet-surfaces`) the water's environment whole
 
     // Key light with its shadow.
     let l = look.key_dir.xyz;
@@ -266,6 +266,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // glossy (wet) ground reflects the previous frame where its ray finds it.
     // (`--look cinematic`, stage L3) on car paint the clearcoat's sharper reflection (below)
     let coat_on = SKY_CINE_FULL && sky_coat > 0.0;
+    sky_sr_glass = glass; // (`--screen-reflect`) panes trace too
     let ssr = sky_ssr(world, select(n, ng, coat_on), v, select(rough, sky_coat_rough, coat_on));
     var rad_e = rad * env_i;
     if (amb) {
@@ -307,6 +308,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         } else if (pg && pgs.cover > 0.0) {
             rad_c = mix(rad_c, pg_reflect(pgs, rc, world, ccr, true), pgs.cover); // the probe grid
         }
+        rad_c = sky_sr_glass_mix(rad_c, ssr, env_i); // (`--screen-reflect`) the trace over the probes
         let dfg_c = lk_dfg(nvc, ccr);
         let cc_ind = rad_c * env_i * (0.04 * dfg_c.x + dfg_c.y);
         var cc_dir = vec3<f32>(0.0);
