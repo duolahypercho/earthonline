@@ -18,6 +18,7 @@ pub mod look;
 pub mod math;
 pub mod penumbra;
 pub mod rig;
+pub mod screen_gi;
 pub mod shadow;
 pub mod sky;
 pub mod sun;
