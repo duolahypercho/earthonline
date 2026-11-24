@@ -291,22 +291,21 @@ pub fn street_lamp_lux(l: &LampLight, r: f64) -> f64 {
 // | Lamp | Value | Source |
 // | --- | --- | --- |
 // | Tail lamp | 10 cd toward the rear | SAE J585 (tail lamps): 2-18 cd at H-V for a single lighted section |
-// | Stop lamp | 120 cd toward the rear | SAE J586 (stop lamps): 80-300 cd at H-V; a vehicle held at a junction (under `REAR_STOP_SPEED_MS`) shows it |
+// | Stop lamp | 120 cd toward the rear | SAE J586 (stop lamps): 80-300 cd at H-V; lit while the vehicle brakes (its drawn lens's state, the agents' braking flag) |
 // | Colour | SAE red, x 0.69 y 0.30 | SAE J578 red boundary; as linear sRGB at unit luminance |
 // | Reach | where it gives `REAR_REACH_LUX` | INFERRED: a tenth of a lux, an eighth of the night's unlit ground (`night_photometry::NIGHT_UNLIT_PHYSICAL_LUX`) |
-// | Spread | full to 20 deg off the rear axis, none past 70 deg | SAE J585/J586 photometric test points (H-V, 10 deg up and down, 20 deg left and right at about half) |
+// | Spread | `REAR_LOBE` about the rear axis (a cone of `REAR_OUTER_DEG` where a shader takes a cone) | SAE J585/J586 photometric test points (the lobes' table below) |
+// | Source | just behind the body's rear face (its bounds) | so its own body takes none of it and the road under it none |
 
 /// A tail lamp's intensity toward the rear (cd; SAE J585).
 pub const REAR_TAIL_CD: f64 = 10.0;
 /// A stop lamp's intensity toward the rear (cd; SAE J586).
 pub const REAR_STOP_CD: f64 = 120.0;
-/// Under this speed (m/s) a moving vehicle is held at a junction with its stop lamps lit.
-pub const REAR_STOP_SPEED_MS: f64 = 0.5;
 /// A rear lamp's light is drawn out to where it gives this illuminance (lux).
 pub const REAR_REACH_LUX: f64 = 0.1;
-/// A rear lamp's spread: full within `REAR_INNER_DEG` of the rear axis, none past
-/// `REAR_OUTER_DEG` (SAE J585/J586 test points reach 20 deg left and right at about
-/// half the axis value and 45 deg at a few per cent; past them its own body).
+/// A rear lamp's spread as a cone where a shader takes one (the wet street's streaks):
+/// full within `REAR_INNER_DEG` of the rear axis, none past `REAR_OUTER_DEG`; the
+/// surfaces and the haze take `REAR_LOBE`.
 pub const REAR_INNER_DEG: f64 = 20.0;
 pub const REAR_OUTER_DEG: f64 = 70.0;
 /// A rear lamp's lit lens (m^2; its reflections' source size).
@@ -329,7 +328,8 @@ pub fn rear_lamp_reach_m(candela: f64) -> f64 {
 // | Red | 365 cd | x 0.69 y 0.30 | ITE VTCSH Part 2 (LED circular signal supplement), minimum maintained intensity at H-V, 12-inch; ITE / CIE signal red |
 // | Yellow | 910 cd | x 0.57 y 0.42 | the same table; ITE yellow |
 // | Green | 475 cd | x 0.17 y 0.70 | the same table; ITE green (the blue-green of the LED lenses) |
-// | Beam | from the axis to none past 25 deg | the VTCSH distribution's points (about 0.8 of the axis value at 7.5 deg, half at 12.5, a quarter at 17.5, a few per cent past 25 deg) as a spot's smoothstep in cos | |
+// | Beam | `SIGNAL_LOBE` (a cone to `SIGNAL_OUTER_DEG` where a shader takes a cone) | the VTCSH distribution's points (the lobes' table below) | |
+// | Lens | 300 mm, its luminance its intensity toward the eye over its area | ITE VTCSH (12-inch) | |
 // | Reach | where it gives `SIGNAL_REACH_LUX` | INFERRED: a quarter of a lux |
 // | Clear | nothing lit within `SIGNAL_CLEAR_M` of the lens | CA MUTCD 4D.12's clear view of the face along its approach; INFERRED: the distance |
 
@@ -337,7 +337,9 @@ pub fn rear_lamp_reach_m(candela: f64) -> f64 {
 pub const SIGNAL_CD: [f64; 3] = [365.0, 910.0, 475.0];
 /// The lenses' chromaticities (x, y): red, yellow, green.
 pub const SIGNAL_XY: [[f64; 2]; 3] = [[0.69, 0.30], [0.57, 0.42], [0.17, 0.70]];
-/// The beam: full on the axis (`SIGNAL_INNER_DEG`), nothing past `SIGNAL_OUTER_DEG`.
+/// The beam as a cone where a shader takes one (the wet street's streaks): full on
+/// the axis (`SIGNAL_INNER_DEG`), nothing past `SIGNAL_OUTER_DEG`; the surfaces, the
+/// haze and the lens take `SIGNAL_LOBE`.
 pub const SIGNAL_INNER_DEG: f64 = 0.0;
 pub const SIGNAL_OUTER_DEG: f64 = 25.0;
 /// A lens's light is drawn out to where it gives this illuminance (lux).
@@ -367,6 +369,110 @@ pub fn signal_color(aspect: usize) -> [f64; 3] {
     xy_unit_color(x, y)
 }
 
+// ---- (`--signal-spill`, `--rear-lamps`) the signals' and rear lamps' photometric lobes ----
+//
+// A signal's or a rear lamp's light is a narrow lobe about its axis, not a
+// cone: its intensity falls by angle off the axis as its standard's test
+// points do, below and to the sides, and a signal's visor cuts it above.
+// The lobe is separable, I(v, h) / I(axis) = f_v(v) f_h(h), each the sum of
+// two Gaussians in the angle (a core and a tail), fitted to the points:
+//
+// | Lamp | Points (share of the axis value) | Source |
+// | --- | --- | --- |
+// | Signal, below its axis | 2.5 deg down 1.0 (the axis), 7.5 0.8, 12.5 0.5, 17.5 0.25, 22.5 0.12, 27.5 0.06 | ITE VTCSH Part 2 (LED circular signal supplement), 300 mm minimum maintained intensities at 2.5 deg left/right, as shares of the 2.5 deg down value (rounded) |
+// | Signal, to the side | 2.5 deg 1.0, 7.5 0.86, 12.5 0.6, 17.5 0.37, 22.5 0.19, 27.5 0.08 | the same table at 2.5 deg down |
+// | Signal, above its axis | half by 3 deg up, a few per cent by 8 deg up | INFERRED: the visor (cap) over each lens cuts the light above the axis (ITE VTCSH Part 1: a visor shields the face) |
+// | Rear lamp, up or down | 5 deg 0.75, 10 deg 0.33, 15 deg 0.12, 20 deg 0.04 | SAE J585 / J586 test points (H-V, 5 and 10 deg up and down) as shares of H-V; past 10 deg FMVSS 108's visibility minimum |
+// | Rear lamp, to the side | 5 deg 0.9, 10 deg 0.7, 20 deg 0.3, 30 deg 0.12, 45 deg 0.04 | SAE J585 / J586 test points (5, 10, 20 deg left and right); 45 deg FMVSS 108's visibility minimum |
+//
+// The shaders take the vertical angle as the sine of the depression and the
+// horizontal one from 2 (1 - cos) (small-angle forms, within ~5 % of the
+// angle to 45 deg); `lobe` here is the same arithmetic.
+
+/// A lamp's lobe: `peak_down_deg` the depression of its axis's peak; below
+/// the peak `w_v` of a Gaussian of `sigma_v_deg[0]` and the rest of
+/// `sigma_v_deg[1]`; above it one of `sigma_up_deg`; to the side `w_h` of
+/// `sigma_h_deg[0]` and the rest of `sigma_h_deg[1]`. None behind it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Lobe {
+    pub peak_down_deg: f64,
+    pub w_v: f64,
+    pub sigma_v_deg: [f64; 2],
+    pub sigma_up_deg: f64,
+    pub w_h: f64,
+    pub sigma_h_deg: [f64; 2],
+}
+
+/// A 300 mm signal lens (ITE VTCSH; the visor above).
+pub const SIGNAL_LOBE: Lobe = Lobe { peak_down_deg: 2.5, w_v: 0.85, sigma_v_deg: [11.0, 24.0], sigma_up_deg: 5.0, w_h: 0.85, sigma_h_deg: [15.5, 30.0] };
+/// A tail or stop lamp (SAE J585 / J586; symmetric up and down).
+pub const REAR_LOBE: Lobe = Lobe { peak_down_deg: 0.0, w_v: 0.9, sigma_v_deg: [9.0, 20.0], sigma_up_deg: 9.5, w_h: 0.8, sigma_h_deg: [15.0, 40.0] };
+/// A 300 mm signal lens's lit area (m^2): its luminance is its intensity over it.
+pub const SIGNAL_LENS_AREA_M2: f64 = std::f64::consts::PI * 0.15 * 0.15;
+
+impl Lobe {
+    /// The shaders' two vectors: (sin of the peak's depression, w_v, 1 / sigma_v^2 core, tail),
+    /// (w_h, 1 / sigma_h^2 core, tail, 1 / sigma_up^2), the sigmas in radians.
+    pub fn params(&self) -> [[f64; 4]; 2] {
+        let k = |deg: f64| 1.0 / deg.to_radians().powi(2);
+        [
+            [self.peak_down_deg.to_radians().sin(), self.w_v, k(self.sigma_v_deg[0]), k(self.sigma_v_deg[1])],
+            [self.w_h, k(self.sigma_h_deg[0]), k(self.sigma_h_deg[1]), k(self.sigma_up_deg)],
+        ]
+    }
+
+    /// The share of the axis's intensity toward unit direction `a` (from the
+    /// lamp, y up) for a lamp whose axis points along `axis` (its horizontal
+    /// part is used): the shaders' `nt_lobe`.
+    pub fn share(&self, a: [f64; 3], axis: [f64; 3]) -> f64 {
+        let [v, h] = self.params();
+        let (hl, ha) = ([a[0], a[2]], [axis[0], axis[2]]);
+        let n = ((hl[0] * hl[0] + hl[1] * hl[1]) * (ha[0] * ha[0] + ha[1] * ha[1])).max(1e-10).sqrt();
+        let ch = (hl[0] * ha[0] + hl[1] * ha[1]) / n;
+        if ch <= 0.0 {
+            return 0.0;
+        }
+        let t2 = 2.0 * (1.0 - ch);
+        let x = -a[1] - v[0];
+        let x2 = x * x;
+        let fv = if x < 0.0 { (-x2 * h[3]).exp() } else { v[1] * (-x2 * v[2]).exp() + (1.0 - v[1]) * (-x2 * v[3]).exp() };
+        let fh = h[0] * (-t2 * h[1]).exp() + (1.0 - h[0]) * (-t2 * h[2]).exp();
+        fv * fh
+    }
+}
+
+/// The lobes' WGSL: `nt_lobe(a, axis, v, h)` and each lamp's vectors
+/// (`NT_SIGNAL_V`, `NT_SIGNAL_H`, `NT_REAR_V`, `NT_REAR_H`).
+pub fn lobe_wgsl() -> String {
+    let v4 = |p: [f64; 4]| format!("vec4<f32>({:.8}, {:.8}, {:.8}, {:.8})", p[0], p[1], p[2], p[3]);
+    let [sv, sh] = SIGNAL_LOBE.params();
+    let [rv, rh] = REAR_LOBE.params();
+    format!(
+        "\n// generated by eo-sky lights::lobe_wgsl (`--signal-spill`, `--rear-lamps`)\n\
+         const NT_SIGNAL_V: vec4<f32> = {};\nconst NT_SIGNAL_H: vec4<f32> = {};\nconst NT_REAR_V: vec4<f32> = {};\nconst NT_REAR_H: vec4<f32> = {};\n\
+         const NT_SIGNAL_CLEAR_M: f32 = {:.3};\nconst NT_SIGNAL_LENS_M2: f32 = {:.6};\n\
+         /// a signal's or rear lamp's share of its axis intensity toward unit direction `a`\n\
+         /// (from the lamp), its axis `axis` (eo-sky lights `Lobe::share`).\n\
+         fn nt_lobe(a: vec3<f32>, axis: vec3<f32>, v: vec4<f32>, h: vec4<f32>) -> f32 {{\n\
+         \x20   let hl = vec2<f32>(a.x, a.z);\n\
+         \x20   let ha = vec2<f32>(axis.x, axis.z);\n\
+         \x20   let ch = dot(hl, ha) * inverseSqrt(max(dot(hl, hl) * dot(ha, ha), 1e-10));\n\
+         \x20   let x = -a.y - v.x;\n\
+         \x20   let x2 = x * x;\n\
+         \x20   let t2 = 2.0 * (1.0 - ch);\n\
+         \x20   let fv = select(v.y * exp(-x2 * v.z) + (1.0 - v.y) * exp(-x2 * v.w), exp(-x2 * h.w), x < 0.0);\n\
+         \x20   let fh = h.x * exp(-t2 * h.y) + (1.0 - h.x) * exp(-t2 * h.z);\n\
+         \x20   return select(0.0, fv * fh, ch > 0.0);\n\
+         }}\n",
+        v4(sv),
+        v4(sh),
+        v4(rv),
+        v4(rh),
+        SIGNAL_CLEAR_M,
+        SIGNAL_LENS_AREA_M2
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,6 +483,57 @@ mod tests {
         assert!(c[0] > 3.0 && c[1] < 0.5 && c[2] < 0.5, "red: {c:?}");
         assert!((rear_lamp_reach_m(REAR_TAIL_CD) - 10.0).abs() < 1e-9);
         assert!(rear_lamp_reach_m(REAR_STOP_CD) > 30.0);
+    }
+
+    /// A direction `down` deg below the horizontal and `side` deg off the +z axis.
+    fn dir(down: f64, side: f64) -> [f64; 3] {
+        let (v, h) = (down.to_radians(), side.to_radians());
+        [v.cos() * h.sin(), -v.sin(), v.cos() * h.cos()]
+    }
+
+    #[test]
+    fn signal_lobe_follows_the_ite_points() {
+        let ax = [0.0, 0.0, 1.0];
+        let on = SIGNAL_LOBE.share(dir(2.5, 0.0), ax);
+        assert!((on - 1.0).abs() < 1e-6, "the axis: {on}");
+        // below the axis (the VTCSH points' shares) and to the side (at 2.5 deg down)
+        for (d, want) in [(7.5, 0.8), (12.5, 0.5), (17.5, 0.25), (22.5, 0.12), (27.5, 0.06)] {
+            let got = SIGNAL_LOBE.share(dir(d, 0.0), ax);
+            assert!((got - want).abs() < 0.05 + 0.2 * want, "{d} deg down: {got} vs {want}");
+        }
+        for (s, want) in [(7.5, 0.86), (12.5, 0.6), (17.5, 0.37), (22.5, 0.19), (27.5, 0.08)] {
+            let got = SIGNAL_LOBE.share(dir(2.5, s), ax);
+            assert!((got - want).abs() < 0.05 + 0.2 * want, "{s} deg aside: {got} vs {want}");
+        }
+        // the visor above, nothing behind; the ground 10 m out from a 4.5 m head takes a tenth
+        assert!(SIGNAL_LOBE.share(dir(-8.0, 0.0), ax) < 0.05);
+        assert_eq!(SIGNAL_LOBE.share(dir(2.5, 120.0), ax), 0.0);
+        let ground = SIGNAL_LOBE.share(dir((4.5f64 / 10.0).atan().to_degrees(), 0.0), ax);
+        assert!(ground < 0.2, "the walk 10 m out: {ground}");
+    }
+
+    #[test]
+    fn rear_lobe_follows_the_sae_points_and_spares_the_road_under_it() {
+        let ax = [0.0, 0.0, 1.0];
+        for (d, want) in [(5.0, 0.75), (10.0, 0.33), (15.0, 0.12), (20.0, 0.04)] {
+            for s in [d, -d] {
+                let got = REAR_LOBE.share(dir(s, 0.0), ax);
+                assert!((got - want).abs() < 0.04 + 0.2 * want, "{s} deg: {got} vs {want}");
+            }
+        }
+        for (s, want) in [(5.0, 0.9), (10.0, 0.7), (20.0, 0.3), (30.0, 0.12), (45.0, 0.04)] {
+            let got = REAR_LOBE.share(dir(0.0, s), ax);
+            assert!((got - want).abs() < 0.04 + 0.2 * want, "{s} deg aside: {got} vs {want}");
+        }
+        // the road a metre behind a 0.8 m lamp (39 deg down) takes under a per cent
+        assert!(REAR_LOBE.share(dir(38.7, 0.0), ax) < 0.01);
+    }
+
+    #[test]
+    fn lobe_wgsl_carries_the_lobes() {
+        let w = lobe_wgsl();
+        assert!(w.contains("fn nt_lobe(") && w.contains("const NT_SIGNAL_V") && w.contains("const NT_REAR_H"));
+        assert!((SIGNAL_LENS_AREA_M2 - 0.0707).abs() < 1e-3);
     }
 
     #[test]
