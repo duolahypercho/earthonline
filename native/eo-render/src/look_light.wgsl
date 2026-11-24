@@ -72,14 +72,18 @@ fn lk_vogel(i: u32, n: u32, rot: f32) -> vec2<f32> {
 
 // (`--soft-shadows`, SF_SOFT_SHADOWS; eo-look `penumbra`) the sun's visibility
 // through its disc 0.5334 degrees across: percentage-closer soft shadows
-// (Fernando 2005). The casters' mean depth over a disc of PS_MAX_SPREAD_M
-// round the point gives the distance d up the beam to the edge that shades
-// it; the comparison is then filtered over a disc of the penumbra's half
-// width, d x tan(0.5334 deg) / 2 (a uniform disc: a straight edge's soft
-// band is the sun's disc past a chord). Each tap compares against the
-// receiver's own plane (its geometric normal in the cascade's clip space).
-// Only a point with casters round it but not all round (the band itself)
-// runs the filter. -1: too narrow a penumbra, the cascade's 3 x 3 tent stands.
+// (Fernando 2005). The casters in a disc of PS_MAX_SPREAD_M round the point
+// give the distance d up the beam to the edge that shades it: each caster's
+// height over the receiver's plane at its own texel, the nearest past
+// PS_MIN_CASTER_M (the map holds a caster's sun-facing surface, so the mean
+// over a thick or layered caster overstates the distance to the edge, and
+// differently either side of it, which bent the band). The comparison is
+// then filtered over a disc of the penumbra's half width, d x tan(0.5334
+// deg) / 2 (a uniform disc: a straight edge's soft band is the sun's disc
+// past a chord). Each tap compares against the receiver's own plane (its
+// geometric normal in the cascade's clip space). Only a point with casters
+// round it but not all round (the band itself) runs the filter. -1: too
+// narrow a penumbra, the cascade's 3 x 3 tent stands.
 fn lk_cascade_soft(c: i32, world: vec3<f32>, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>) -> f32 {
     let dims = vec2<f32>(textureDimensions(lk_shadow_map).xy);
     let texel = 1.0 / dims.x;
@@ -105,14 +109,18 @@ fn lk_cascade_soft(c: i32, world: vec3<f32>, uv: vec2<f32>, z: f32, b: vec4<f32>
     // the casters round the point.
     let base = uv * dims;
     let rs = clamp(PS_MAX_SPREAD_M / b.z, 1.0, PS_MAX_RADIUS_TEXELS);
-    var zb = 0.0;
     var nb = 0.0;
+    var dz = 1e9;
     for (var i = 0u; i < PS_SEARCH_TAPS; i = i + 1u) {
         let t = clamp(floor(base + lk_vogel(i, PS_SEARCH_TAPS, rot) * rs), vec2<f32>(0.0), dims - 1.0);
         let d = textureLoad(lk_shadow_map, vec2<i32>(t), c, 0);
-        if (d < z + dot(g, (t + 0.5 - base) * texel)) {
-            zb = zb + d;
+        let zp = z + dot(g, (t + 0.5 - base) * texel);
+        if (d < zp) {
             nb = nb + 1.0;
+            let h = (zp - d) * b.w;
+            if (h > PS_MIN_CASTER_M) {
+                dz = min(dz, h);
+            }
         }
     }
     // no caster within the widest penumbra: lit; casters all round: the umbra.
@@ -122,9 +130,12 @@ fn lk_cascade_soft(c: i32, world: vec3<f32>, uv: vec2<f32>, z: f32, b: vec4<f32>
     if (nb > f32(PS_SEARCH_TAPS) - 0.5) {
         return 0.0;
     }
-    // the edge's distance up the beam, metres, and the filter's radius in
-    // texels (never past the search's, so the band is the same either side).
-    let dz = max(z - zb / nb, 0.0) * b.w;
+    // only casters touching the receiver: the tent. Else the filter's radius
+    // in texels for the edge dz metres up the beam (never past the search's,
+    // so the band is the same either side).
+    if (dz > 1e8) {
+        return -1.0;
+    }
     let rf = min(0.5 * dz * PS_TAN_DIAMETER / b.z, rs);
     if (rf <= PS_TENT_TEXELS) {
         return -1.0;

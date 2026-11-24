@@ -754,9 +754,10 @@ fn penumbra_wgsl() -> String {
     use eo_look::penumbra as p;
     let f = |v: f64| format!("{v:.8}");
     format!(
-        "const PS_TAN_DIAMETER: f32 = {};\nconst PS_MAX_SPREAD_M: f32 = {};\nconst PS_MAX_RADIUS_TEXELS: f32 = {};\nconst PS_TENT_TEXELS: f32 = {};\nconst PS_MAX_PLANE_SLOPE: f32 = {};\nconst PS_SEARCH_TAPS: u32 = {}u;\nconst PS_FILTER_TAPS: u32 = {}u;\n",
+        "const PS_TAN_DIAMETER: f32 = {};\nconst PS_MAX_SPREAD_M: f32 = {};\nconst PS_MIN_CASTER_M: f32 = {};\nconst PS_MAX_RADIUS_TEXELS: f32 = {};\nconst PS_TENT_TEXELS: f32 = {};\nconst PS_MAX_PLANE_SLOPE: f32 = {};\nconst PS_SEARCH_TAPS: u32 = {}u;\nconst PS_FILTER_TAPS: u32 = {}u;\n",
         f(p::tan_diameter()),
         f(p::MAX_SPREAD_M),
+        f(p::MIN_CASTER_M),
         f(p::MAX_RADIUS_TEXELS),
         f(p::TENT_TEXELS),
         f(p::MAX_PLANE_SLOPE),
