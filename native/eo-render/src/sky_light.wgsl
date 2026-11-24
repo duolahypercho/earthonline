@@ -242,6 +242,9 @@ fn sky_local_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<
 // of the distance from it).
 var<private> sky_leaf: vec4<f32> = vec4<f32>(0.0);
 var<private> sky_leaf_k: vec2<f32> = vec2<f32>(0.0);
+// true in the props' module alone (look.rs `props_city_source`): every other
+// pipeline's lights' loop compiles as before, its registers untouched.
+const SKY_LEAF_ON: bool = false;
 
 /// (`--leaf-shade`) The share of a light at `lp` that reaches `p` through the
 /// crown's leaves (Beer-Lambert over the segment's optical depth inside the
@@ -354,7 +357,7 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
             }
         }
 // sf:LEAF_SHADE+
-        if (sky_leaf.w > 0.0 && e > 0.0 && li.pad < 1.0) {
+        if (SKY_LEAF_ON && sky_leaf.w > 0.0 && e > 0.0 && li.pad < 1.0) {
             e = e * sky_leaf_t(world, li.pos); // (`--leaf-shade`) a light with no map of its own, through the crown's leaves
         }
 // sf:end

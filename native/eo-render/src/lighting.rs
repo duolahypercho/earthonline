@@ -306,7 +306,7 @@ mod tests {
                 for (label, src) in group1_shaders() {
                     parse(&format!("{name}: {label}"), &src);
                 }
-                let props = format!("{}\n{}\n{}", look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), look::sf_select(include_str!("props_draw.wgsl")));
+                let props = format!("{}\n{}\n{}", look::props_city_source(look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false)), include_str!("props_types.wgsl"), look::sf_select(include_str!("props_draw.wgsl")));
                 parse(&format!("{name}: props"), &props);
                 // the natural-detail blocks (`// sf:`): without the bits the props' shader holds
                 // the old back-light and none of the new code; with foliage, the new code alone.
@@ -364,6 +364,8 @@ mod tests {
                 let leaf_shade = f.nature & look::NATURE_LEAF_SHADE != 0;
                 assert_eq!(city.contains("fn sky_leaf_t("), leaf_shade, "{name}: the crown's transmittance follows its bit");
                 assert_eq!(city.contains("e = e * sky_leaf_t(world, li.pos);"), leaf_shade, "{name}: the lights' loop takes it with the bit only");
+                assert_eq!(props.contains("const SKY_LEAF_ON: bool = true;"), leaf_shade, "{name}: compiled into the props' loop with the bit");
+                assert!(!city.contains("const SKY_LEAF_ON: bool = true;"), "{name}: and into no other pipeline's");
                 assert_eq!(props.contains("sky_leaf_k = vec2<f32>(PR_LS_PALM_K.x, PR_LS_PALM_K.y * sc);"), leaf_shade, "{name}: the palms set their crown with the bit only");
                 assert_eq!(props.contains("@location(9) sway: f32,"), leaf_shade || crown, "{name}: the wind weight reaches the fragment with either bit");
                 if leaf_shade {

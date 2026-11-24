@@ -1141,6 +1141,16 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// binds stand-ins), so their output is the same and their fragment shaders,
 /// at the edge of what Apple's compiler takes, have room for the probe grid
 /// (probe_grid.wgsl, compiled in everywhere but the far layer).
+/// (`--leaf-shade`) The props' city shader: the crown's transmittance in the
+/// lights' loop (sky_light.wgsl `SKY_LEAF_ON`) is compiled into the props'
+/// module alone; every other pipeline keeps the const false, so its loop
+/// compiles as before (measured, r2i3: with the hook in every city pipeline
+/// the city overview's early draw took about 1 ms more by day, when no light
+/// runs; with it in the props' alone, nothing measurable).
+pub fn props_city_source(src: String) -> String {
+    src.replace("const SKY_LEAF_ON: bool = false;", "const SKY_LEAF_ON: bool = true;")
+}
+
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
     sf_select(&city_shader_parts(ambient, shadow, single_probe)) // the natural-detail blocks (`// sf:`) of the features compiled in
 }
