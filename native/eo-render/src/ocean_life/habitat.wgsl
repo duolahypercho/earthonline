@@ -23,13 +23,25 @@ fn rotate_xz(p:vec3f,a:f32)->vec3f {
     var root=at.xyz;
     var yaw=at.w;
     var norm=normal;
+    var surface_coord=pos;
     if kind<=2u || kind==12u || kind==20u {
         let tail=pow(clamp((.34-loc.x)/.84,0.,1.),2.);
         let beat=sin(t*select(10.1,3.3,(kind==2u || kind==12u))+size.w-5.7*loc.x);
         loc.z+=beat*tail*select(.083,.029,(kind==2u || kind==12u));
         if kind<2u || kind==20u {
             // Neighbours follow one orbit, with individual body beats and spacing.
-            let lap=.37*t+traits.y;
+            var lap=.37*t+traits.y;
+            if DIVE_DETAIL {
+                // Neighbours keep the same school orbit with individual lag and heave.
+                let phase = 0.24 * sin(size.w) + 0.10 * sin(0.71*t + size.w);
+                lap += phase;
+                let heave = 0.075*sin(lap*1.8 + 0.55*size.w) + 0.027*sin(1.43*t + size.w);
+                root.y += heave;
+                let pitch = 0.16*cos(lap*1.8 + 0.55*size.w);
+                let c = cos(pitch); let s = sin(pitch);
+                loc = vec3f(c*loc.x - s*loc.y, s*loc.x + c*loc.y, loc.z);
+                norm = vec3f(c*norm.x - s*norm.y, s*norm.x + c*norm.y, norm.z);
+            }
             root+=rotate_xz(vec3f(cos(lap)*traits.z,.04*sin(lap*2.+size.w),.62*sin(lap)*traits.z),at.w);
             yaw+=atan2(.62*cos(lap),-sin(lap));
         }
@@ -40,10 +52,22 @@ fn rotate_xz(p:vec3f,a:f32)->vec3f {
         let bend=height*height;
         loc.x+=bend*(.09+.095*surge);loc.z+=bend*.057*sin(t*.96+.20*p.y+size.w*.13);
         norm=normalize(normal+vec3f(-.08*height*surge,0.,0.));
+        if DIVE_DETAIL && kind==19u {
+            // Alpha stores distance along an individual blade. Stipes, bladders
+            // and the attached end have zero weight. Short waves lag toward the tip.
+            let coord = u32(round(color.a*255.));
+            let along = f32(coord >> 4u) / 15.;
+            let across = (f32(coord & 15u) - 8.) / 7.;
+            surface_coord = vec3f(along, across, select(0., 1., coord != 0u));
+            let phase = t*1.48 + size.w + 4.6*pos.y + 2.9*pos.z - 2.8*along;
+            let bend_tip = sin(phase)*along*along;
+            loc += vec3f(0.014*bend_tip, 0.022*bend_tip, 0.017*cos(phase)*along*along);
+            norm = normalize(norm + vec3f(0., -0.12*bend_tip, 0.07*bend_tip));
+        }
     }
     let world=rotate_xz(loc*size.xyz,yaw)+root;
     var out:Out;out.clip=view.vp*vec4f(world,1.);out.world=world;
-    out.normal=rotate_xz(norm/max(size.xyz,vec3f(.001)),yaw);out.color=color.rgb*traits.w;out.kind=kind;out.local=pos;
+    out.normal=rotate_xz(norm/max(size.xyz,vec3f(.001)),yaw);out.color=color.rgb*traits.w;out.kind=kind;out.local=surface_coord;
     return out;
 }
 fn grain(p:vec3f)->f32{
@@ -76,7 +100,25 @@ fn grain(p:vec3f)->f32{
             alb*=.86+.10*sin(20.*p.x+6.*p.y+sin(12.*p.z))+.10*grain(floor(p*60.))*exp(-25.*footprint);
         }
     }
-    if i.kind==19u {
+    if DIVE_DETAIL && i.kind==19u {
+        // Midrib and lengthwise corrugations track the blade as it flexes.
+        let t = i.local.x;
+        let side = i.local.y;
+        let midrib = exp(-18.*abs(side))*(1.-t);
+        let phase = 25.*side + 3.8*sin(5.*t+2.7*side);
+        let resolved = 1.-smoothstep(0.3,2.,fwidth(phase));
+        let groove = 0.5 + 0.5*cos(phase);
+        let tissue = alb * vec3f(1.19,0.84,0.72) * (0.94 + 0.12*groove*resolved)
+            + vec3f(0.092,0.036,0.010)*midrib;
+        alb = mix(alb,tissue,i.local.z);
+    }
+    if DIVE_DETAIL && i.kind==20u {
+        let belly = 1.-smoothstep(-0.10,0.08,i.local.y);
+        alb *= mix(vec3f(0.29,0.41,0.43),vec3f(1.0),belly);
+        let eye_dist = length(i.local.xy - vec2f(0.29,0.034));
+        alb *= mix(0.11,1.,smoothstep(0.021,0.041,eye_dist));
+    }
+    if i.kind==19u && !DIVE_DETAIL {
         // Midrib and ruffled margins catch light differently as a frond turns.
         alb*=0.87+0.13*sin(i.local.y*70.+i.local.x*26.);
     }
@@ -92,6 +134,13 @@ fn grain(p:vec3f)->f32{
     }
     if (i.kind>=3u && i.kind<=6u) || i.kind==11u || i.kind==19u {
         radiance+=alb*light.key.rgb*.095*max(-dot(n,sun),0.);
+    }
+    if DIVE_DETAIL && i.kind==19u {
+        // A thin lamina receives diffuse sky on both faces. Its backlit warm
+        // pigment goes through the same water transport as its reflected light.
+        let backside = max(-dot(n,sun), 0.);
+        radiance += alb * vec3f(1.0, 0.80, 0.43)
+            * (0.11*light.sky.rgb + 0.18*backside*light.key.rgb);
     }
     return vec4f(max(radiance,vec3f(0.)),1.);
 }

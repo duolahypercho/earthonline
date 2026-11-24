@@ -534,6 +534,7 @@ selection:
 | Area | Switches |
 | --- | --- |
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
+| Underwater close detail | Add `--dive-detail` for camera-relative water rays, regional underwater light absorption, depth-filtered sunlight and moving reef blades. `--no-dive-detail` restores the previous dive. Use with `--ocean-reef` for the kelp and schooling fish. |
 | Pacific kelp and reef forms | `--ocean-reef` includes the mapped marine habitats. Add `--no-ocean-reef` to an `--ocean-life` run for the original Blender habitats alone. |
 | Mapped marine habitats and swimming | `--ocean-life` enables the surveyed seafloor, regional light transport, fish, plants and seabed animals. `--no-ocean-life` restores the previous water. |
 | Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |

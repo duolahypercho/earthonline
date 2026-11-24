@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { coastalKelp } from './coastal-kelp.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const out = path.join(root, 'public/assets/ocean');
@@ -31,13 +32,26 @@ async function source(name) {
 }
 const [math, world, shaders, license] = await Promise.all(Object.keys(hashes).map(source));
 if (!shaders.includes('const W_LEAF =')) throw Error('Missing source leaf shader');
-const context = vm.createContext({ LV: 0 });
+const stems = [];
+const context = vm.createContext({
+  LV: 0,
+  sampleStipes(stem, strands, height) {
+    stems.length = 0;
+    for (let strand = 0; strand < strands; strand++) {
+      stems.push(Array.from({length: 17}, (_, k) => {
+        const y = height * k / 16;
+        const [x, z] = stem(strand, y);
+        return [x, y, z];
+      }));
+    }
+  },
+});
 vm.runInContext(math + '\n' + world, context, { timeout: 5000 });
 const stem = world.indexOf('  const column = ');
 const footprint = world.indexOf('    // light absorption footprint', stem);
 if (stem < 0 || footprint < 0) throw Error('Missing kelp-column generator');
 vm.runInContext('const big = [], glint = () => {}; const leaf = (bucket,...leaf) => bucket.push(leaf);\n' +
-  world.slice(stem, footprint) + '};', context);
+  world.slice(stem, footprint).replace('    for (let s = 0; s < strands;', '    sampleStipes(stem, strands, H);\n    for (let s = 0; s < strands;') + '};', context);
 const run = expression => vm.runInContext(expression, context, { timeout: 5000 });
 
 // Flatten one of the original twisted columns using a ribbed ribbon for each
@@ -98,6 +112,7 @@ const recipes = [
   ['branching-colony', 'meshCoral(1,false)', [.49,.175,.109]],
   ['kelp-column', null, null],
   ['baitfish', 'meshFish()', [.36,.44,.43]],
+  ['coastal-kelp', null, null],
 ];
 const gltf={asset:{version:'2.0',generator:'Earth Online reef cook'},scene:0,scenes:[{nodes:[]}],nodes:[],meshes:[],bufferViews:[],accessors:[],buffers:[]};
 const chunks=[];let length=0;
@@ -113,7 +128,8 @@ function accessor(array,type,components,componentType,target,bounds=false,normal
   return gltf.accessors.push(a)-1;
 }
 for(const [name,recipe,tint] of recipes){
-  const mesh=recipe?run(recipe):kelp(), p=Float32Array.from(mesh.p), indices=Uint16Array.from(mesh.i);
+  const mesh = name === 'coastal-kelp' ? coastalKelp(run('big'), stems) : recipe ? run(recipe) : kelp();
+  const p=Float32Array.from(mesh.p), indices=Uint16Array.from(mesh.i);
   if (p.length/3>65535 || mesh.i.some(i=>i<0 || i>=p.length/3)) throw Error('Index overflow '+name);
   const normals=new Float32Array(p.length), colors=new Uint8Array(p.length/3*4);
   for(let i=0;i<indices.length;i+=3){
@@ -128,7 +144,7 @@ for(const [name,recipe,tint] of recipes){
       normals[k+j]/=n;
       colors[4*i+j]=Math.round(255*Math.min(1,mesh.rgb?mesh.rgb[k+j]:tint[j]*pigment));
     }
-    colors[4*i+3]=255;
+    colors[4*i+3]=mesh.bladeCoord ? mesh.bladeCoord[i] : 255;
   }
   const attributes={POSITION:accessor(p,'VEC3',3,5126,34962,true),NORMAL:accessor(normals,'VEC3',3,5126,34962),COLOR_0:accessor(colors,'VEC4',4,5121,34962,false,true)};
   const m=gltf.meshes.push({name,primitives:[{attributes,indices:accessor(indices,'SCALAR',1,5123,34963),mode:4}]})-1;
@@ -145,6 +161,6 @@ await writeFile(path.join(out,'reef-forms.LICENSE.txt'),license);
 await writeFile(path.join(out,'reef-forms.provenance.json'),JSON.stringify({
   url:'/assets/ocean/reef-forms.glb',bytes:glb.length,sha256:sha(glb),author:'Maksymilian Dendura and Earth Online contributors',
   source:upstream,revision,inputs:hashes,license:'MIT',licenseFile:'reef-forms.LICENSE.txt',builder:'scripts/blender-ocean/cook-reef.mjs',
-  adaptation:'Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. Vertex pigments and game-scale placement are adapted to the Pacific coast.'
+  adaptation:'Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. The coastal variant joins blades and gas bladders to continuous sampled stipes, with per-vertex blade flex. Vertex pigments and game-scale placement are adapted to the Pacific coast.'
 },null,2)+'\n');
 console.log(gltf.meshes.map(x=>x.name).join(', '),glb.length,sha(glb));

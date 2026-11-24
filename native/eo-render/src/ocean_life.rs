@@ -86,6 +86,7 @@ impl OceanLife {
                 ranges.push(0..0);
                 continue;
             };
+            let name = if look.options.dive_detail && name == "kelp-column" { "coastal-kelp" } else { name };
             let mesh = glb
                 .meshes()
                 .find(|m| m.name() == Some(name))
@@ -166,7 +167,7 @@ impl OceanLife {
         });
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("marine life"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("ocean_life/habitat.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(format!("const DIVE_DETAIL: bool = {};\n{}", look.options.dive_detail, include_str!("ocean_life/habitat.wgsl")).into()),
         });
         let pipeline=d.create_render_pipeline(&wgpu::RenderPipelineDescriptor{
             label:Some("marine life in the opaque underwater scene"),layout:Some(&pl),

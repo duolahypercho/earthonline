@@ -1,7 +1,7 @@
 {
   "url": "/assets/ocean/reef-forms.glb",
-  "bytes": 121628,
-  "sha256": "c387400862bec8b1a56bbd3a4a7f2347f8846681b709f595e54559649a25675c",
+  "bytes": 330808,
+  "sha256": "a0cbcfe3a054c759ea66426beb5f0ef31423fe5cf9252dd299758f21a72ef0cc",
   "author": "Maksymilian Dendura and Earth Online contributors",
   "source": "https://github.com/Noniv/abyssal-garden",
   "revision": "a596354eff400d458bc2aeb9bdf5e0a9734b2bcf",
@@ -14,5 +14,5 @@
   "license": "MIT",
   "licenseFile": "reef-forms.LICENSE.txt",
   "builder": "scripts/blender-ocean/cook-reef.mjs",
-  "adaptation": "Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. Vertex pigments and game-scale placement are adapted to the Pacific coast."
+  "adaptation": "Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. The coastal variant joins blades and gas bladders to continuous sampled stipes, with per-vertex blade flex. Vertex pigments and game-scale placement are adapted to the Pacific coast."
 }
