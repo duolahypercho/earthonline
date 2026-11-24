@@ -184,11 +184,19 @@ fn amb_ground(world: vec3<f32>, ng: vec3<f32>) -> AmbGround {
 // the sunlit street's light, over covered ground (under a deck, a closed
 // yard) it keeps only the lobe's sky part. Zero facing up, at night and in a
 // cloud's shadow (eo-look bounce.rs `added_irradiance`).
+// (`--occluder-light`, eo-look `bounce::added_irradiance_whole`) the lobe's sun
+// part leaves whole: the cap a channel left the neutral lobe's green and blue
+// over the orange sunlit ground at a low sun, a navy fill on every underside.
+// And the open ground's share reflects the whole sky (it has nothing over it),
+// where the lobe kept it at the street's own sky under the point (`amb_vg`).
 fn amb_bounce(a: AmbGround, n: vec3<f32>, cloud: f32) -> vec3<f32> {
     let lower = 0.5 - 0.5 * n.y;
     let share = min(amb_vis(a.g, n), a.w * lower);
     let sun = look.lx[0].yzw * cloud;
     let lobe_sun = max(look.hemi_ground.xyz - AMB_LOBE_SKY_ALBEDO * (look.hemi_sky.xyz + look.ambient.xyz), vec3<f32>(0.0));
+    if (amb_ol_on()) {
+        return share * (sun + amb_lobe_sky() * (1.0 - amb_vg)) - (a.w * lower) * lobe_sun;
+    }
     return share * sun - (a.w * lower) * min(lobe_sun, sun);
 }
 
@@ -282,6 +290,31 @@ fn amb_occluder_exitance(vg: f32) -> vec3<f32> {
     return OL_WALL_ALBEDO * e / (vec3<f32>(1.0) - OL_WALL_ALBEDO * (OL_SIDE_OPEN - vw));
 }
 
+// (`--occluder-light`, eo-look `occluder::lid_share`) the decks' undersides'
+// share of what hides the sky over a point whose volume visibility is `c`,
+// read from where the sky it still sees lies: r = a0 / (a0 + ay), the visible
+// sky on a vertical surface over that facing up, is 1/2 under the open sky,
+// lower between walls (the sky left overhead), higher under a lid (the sky
+// left at the sides).
+fn amb_lid_share(c: vec4<f32>) -> f32 {
+    return lk_smooth(OL_LID_R0, OL_LID_R1, c.x / max(c.x + c.z, 1e-3));
+}
+
+// (`--occluder-light`, eo-look `occluder::soffit_exitance`) a deck's
+// underside's exitance over a street that sees `vg` of the sky: beyond its
+// edges `vg` of its lower hemisphere is open ground (the street's lobe's sky
+// part whole, and the sunlit ground's exitance from the sun: look.lx[0].yzw
+// with the ground bounce, the rig's lobe's sun part without it), under it
+// covered ground lit by the street's own sky.
+fn amb_soffit_exitance(vg: f32) -> vec3<f32> {
+    let ls = amb_lobe_sky();
+    var sun = max(look.hemi_ground.xyz - ls, vec3<f32>(0.0));
+    if (any(look.lx[0].yzw > vec3<f32>(0.0))) {
+        sun = look.lx[0].yzw;
+    }
+    return OL_DECK_ALBEDO * (vg * (ls + sun) + (1.0 - vg) * vg * ls);
+}
+
 // (`--occluder-light`) the share of the rig's rim light (a directional stand-in
 // for the sky opposite the sun, never shadowed) that what hides the sky
 // hides: 1 - the visible share along its direction over the open sky's.
@@ -314,7 +347,12 @@ fn amb_irradiance(c: vec4<f32>, n: vec3<f32>, env: vec3<f32>) -> vec3<f32> {
     let vs = min(amb_vis(c, n), t);
     if (amb_ol_on()) {
         let lower = 1.0 - t;
+        // what hides the sky: the shaded walls, or under a lid the deck's underside (by the lid's share).
         amb_occ_m = amb_occluder_exitance(amb_vg);
+        let lid = amb_lid_share(c);
+        if (lid > 0.0) {
+            amb_occ_m = mix(amb_occ_m, amb_soffit_exitance(amb_vg), lid);
+        }
         let lit = look.hemi_sky.xyz * vs + (look.hemi_ground.xyz - amb_lobe_sky() * (1.0 - amb_vg)) * lower + amb_occ_m * (t - vs);
         // the rig's rim (a directional stand-in for the sky opposite the sun, never
         // shadowed) hidden as the sky along it is, taken from the fill it stands for

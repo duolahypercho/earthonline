@@ -392,6 +392,10 @@ mod tests {
         assert!(look::ShaderFeatures::ALL.wgsl().contains("const SF_OCCLUDER_LIGHT: bool = true;"));
         let wa = eo_look::occluder::WALL_ALBEDO;
         assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({:.8}, {:.8}, {:.8});", wa[0], wa[1], wa[2])), "the walls' albedo reaches the shader");
+        // the decks' undersides: their albedo and the lid's reading.
+        let w = look::ShaderFeatures::ALL.wgsl();
+        assert!(w.contains(&format!("const OL_DECK_ALBEDO: f32 = {:.8};", eo_look::occluder::DECK_ALBEDO)), "the decks' albedo reaches the shader");
+        assert!(w.contains(&format!("const OL_LID_R0: f32 = {:.8};", eo_look::occluder::LID_R0)) && w.contains(&format!("const OL_LID_R1: f32 = {:.8};", eo_look::occluder::LID_R1)), "the lid's reading reaches the shader");
         // (`--soft-shadows`) the penumbra's discs are eo-look's Vogel taps.
         let d = eo_look::penumbra::vogel_disc(eo_look::penumbra::SEARCH_TAPS);
         assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_SEARCH_DISC: array<vec2<f32>, {}> = array<vec2<f32>, {}>(vec2<f32>({:.8}, {:.8}),", d.len(), d.len(), d[0][0], d[0][1])));
