@@ -904,7 +904,7 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
     let held = relief && SF_STREET_PBR && sp_pond_water > -1.0;
     if (n_geom.y > 0.95) {
         if (held) {
-            ph = sky_wr_pond(fp);
+            ph = sky_wr_pond(world.xz, fp);
         } else {
             ph = sky_w2_puddle(world.xz, k, skyu.wet.y * select(SKY_W2_WALK_FILL, 1.0, asphalt), fp);
         }
@@ -926,6 +926,9 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
     let v = normalize(skyu.eye.xyz - world);
     let graze = smoothstep(0.26, 0.05, abs(dot(n_geom, v))) * select(0.0, 1.0, n_geom.y > 0.95);
     var film = mix(wet_rough, 0.06, graze * 0.92);
+    if (relief && !held) {
+        sky_wr_iso = 1.0; // (`--wet-relief`) a walk's film is isotropic for the trace
+    }
     if (held) {
         // (`--wet-relief`) the film as smooth as the surface under it, at every
         // angle: GGX and Fresnel make it a sheet seen low (its roughness does
@@ -1002,7 +1005,9 @@ fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
 //   paths' ruts (laid out from the standards' lane, parking lane and design
 //   vehicle), the settled birdbaths and the pan's flow line hold water deeper
 //   than what has drained since the rain (street_pbr.wgsl `sp_wet_relief`,
-//   its water depth `sp_pond_water`); the switch's value-noise hollows stay
+//   its water depth `sp_pond_water`), over the pavement's profile inside
+//   those basins (a chain of pools along a rut, lobed shores, not a strip with
+//   a straight edge); the switch's value-noise hollows stay
 //   off the road (on a crowned carriageway they drew blobs either side of the
 //   centre line and, in a narrow street, a canal from kerb to kerb). The shore
 //   is anti-aliased by the pixel's footprint over the relief's slope; a ring
@@ -1041,24 +1046,58 @@ const SKY_WR_HALO_M: f32 = 0.0005;
 /// (the relief's slope, street_pbr.wgsl `sp_wet_relief`).
 const SKY_WR_SHORE: vec2<f32> = vec2<f32>(3e-4, 0.015);
 /// The film's roughness over the look's, as the surface's own over its mean:
-/// held within x..y (the sealant's cast film at the low end; never rougher
-/// than the look's film, the open texture's own, so a rough patch's film
-/// stays inside the reflection's roughness range, 0.3-0.5).
-const SKY_WR_FILM_K: vec2<f32> = vec2<f32>(0.45, 1.0);
+/// held within x..y (never rougher than the look's film, the open texture's
+/// own, so a rough patch's film stays inside the reflection's roughness
+/// range, 0.3-0.5). The film of a few tenths of a millimetre levels the
+/// texture under it, and what roughens it is as much its own (drops landing,
+/// the drying film's edges) as the surface's: a smooth patch, plate or
+/// sealant band makes it at most a third smoother (a floor of 0.45 made a
+/// smooth plate a hard-edged mirror in a soft sheen, and lines of sealant
+/// laser-thin streaks).
+const SKY_WR_FILM_K: vec2<f32> = vec2<f32>(0.7, 1.0);
+/// The pavement's profile under the water (m of height, m of wavelength; two
+/// octaves, domain-warped): a rut's floor, a birdbath's and the gutter's flow
+/// line are not level along the road. The paver's screed and the base's
+/// settling leave a few millimetres of undulation over a metre or two (an
+/// urban street's roughness, IRI ~3-5 m/km), the mix's segregation about a
+/// millimetre over half a metre. Against a rut's side slope of ~2 % that moves
+/// a shore by up to 15 cm and leaves stretches of rut dry: the water stands in
+/// a chain of pools with lobed shores, not in a strip with a straight edge.
+const SKY_WR_PROFILE: vec4<f32> = vec4<f32>(0.003, 1.7, 0.0012, 0.45);
+/// The profile pools the water only inside a basin of the relief (a rut, a
+/// birdbath, the flow line: relief deeper than x, fully from y m): on the
+/// open carriageway the crown's cross fall drains an undulation instead.
+const SKY_WR_BASIN: vec2<f32> = vec2<f32>(0.0005, 0.002);
 
 /// (`--wet-relief`) the streak lobes' alphas over the look's at the fragment
 /// (the film's roughness ratio squared; 1 elsewhere).
 var<private> sky_wr_alpha_k: f32 = 1.0;
+/// (`--wet-relief`) the share of the fragment's film the trace filters as an
+/// isotropic surface (walks and plazas: 1; 0 elsewhere). A broom-finished
+/// walk's film is as rough across the view as along it, so what it reflects
+/// blurs sideways by alpha n.v as it stretches toward the eye by alpha: the
+/// look's anisotropic streak lobe (a seventh as wide across) drew a pillar, a
+/// post or a person on a wet walk as a hard-edged slab.
+var<private> sky_wr_iso: f32 = 0.0;
 
 fn sky_wr_on() -> bool {
     return SKY_WR_FULL && sky_on(skyu.flags.x, SKY_WET_RELIEF) && sky_w2_on();
 }
 
-/// The pond (x) and its saturated ring (y) where the street pass measured
-/// the relief's water (`sp_pond_water`, m over the drained level); the shore
-/// over the footprint `fp` (m).
-fn sky_wr_pond(fp: f32) -> vec2<f32> {
-    let water = sp_pond_water;
+/// The pavement's profile at a horizontal point (m, mean 0; `SKY_WR_PROFILE`).
+fn sky_wr_profile(p: vec2<f32>) -> f32 {
+    let warp = vec2<f32>(st_noise(p * 0.31 + 5.7), st_noise(p * 0.31 + 13.9)) - 0.5;
+    let q = p + warp * 1.6;
+    return (st_noise(q / SKY_WR_PROFILE.y + 2.9) - 0.5) * 2.0 * SKY_WR_PROFILE.x + (st_noise(q / SKY_WR_PROFILE.w + 8.3) - 0.5) * 2.0 * SKY_WR_PROFILE.z;
+}
+
+/// The pond (x) and its saturated ring (y) at `p` where the street pass
+/// measured the relief's water (`sp_pond_water`, m over the drained level),
+/// over the pavement's profile there; the shore over the footprint `fp` (m).
+fn sky_wr_pond(p: vec2<f32>, fp: f32) -> vec2<f32> {
+    // the relief's depth there (the street pass's water over what has drained)
+    let dip = sp_pond_water + SP_POND_DRAIN_M * (1.0 - clamp(skyu.wet.y, 0.0, 1.0));
+    let water = sp_pond_water + sky_wr_profile(p) * smoothstep(SKY_WR_BASIN.x, SKY_WR_BASIN.y, dip);
     let pud = smoothstep(0.0, SKY_WR_SHORE.x + fp * SKY_WR_SHORE.y, water);
     let ring = smoothstep(-SKY_WR_HALO_M, 0.0, water) * (1.0 - pud);
     return vec2<f32>(pud, ring);
@@ -1539,7 +1578,10 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     let a_pud = max(SKY_CINE_PUDDLE_ALPHA, sky_w2_pud_alpha);
     let a_k = select(1.0, sky_wr_alpha_k, SKY_WR_FULL); // (`--wet-relief`) the film's lobes by the surface under it
     let a_along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG * a_k, a_pud, sky_streak_pud), sky_streak_w);
-    let a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS * a_k, a_pud, sky_streak_pud), sky_streak_w);
+    var a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS * a_k, a_pud, sky_streak_pud), sky_streak_w);
+    if (SKY_WR_FULL) {
+        a_across = mix(a_across, a_along, sky_wr_iso * (1.0 - sky_streak_pud)); // (`--wet-relief`) a walk's film is isotropic
+    }
     let cw = select(1.0, max(dot(n, v), 0.02), ground);
     // pixels a radian at the frame's centre
     let ppr = skyu.res.y / (2.0 * max(skyu.cluster.z, 0.1));
