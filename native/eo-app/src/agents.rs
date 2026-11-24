@@ -789,6 +789,11 @@ impl AgentRuntime {
             return None;
         }
         let focus = Self::focus_of(eye, forward);
+        if self.opts.crowd {
+            // `--crowd`: the card's street at the card's hour (the restart starts the
+            // clock at `start_hour`; it was the run's start hour for every card).
+            self.start_hour = renderer.look.time_of_day();
+        }
         self.restart_sim(world, focus, self.opts.density);
         self.hide_near = vec![(eye.to_array(), WARM_CLEAR_M)];
         let t = Instant::now();
