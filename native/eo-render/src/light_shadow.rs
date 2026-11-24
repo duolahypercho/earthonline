@@ -259,7 +259,7 @@ fn constants_wgsl() -> String {
 
 /// The compute passes' WGSL (sky_common.wgsl, the sea, the constants, light_shadow.wgsl).
 pub fn compute_source() -> String {
-    format!("{}\n{}\n{}\n{}\n{}", include_str!("sky_common.wgsl"), crate::sky::sea_wgsl(), constants_wgsl(), crate::shop_lights::wgsl() + &crate::sky::lamp_bounce_wgsl(), include_str!("light_shadow.wgsl"))
+    format!("{}\n{}\n{}\n{}\n{}", include_str!("sky_common.wgsl"), crate::sky::sea_wgsl(), constants_wgsl(), crate::shop_lights::wgsl() + &crate::sky::lamp_bounce_wgsl() + &crate::sky::night_kinds_wgsl(), include_str!("light_shadow.wgsl"))
 }
 
 /// The depth passes' WGSL for one kind of caster: "clear" / "city" (the

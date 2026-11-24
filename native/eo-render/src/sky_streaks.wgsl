@@ -29,7 +29,14 @@ fn lt_streak_q(l: SkyLight) -> f32 {
     }
     let lum = dot(l.color, vec3<f32>(0.2126, 0.7152, 0.0722));
     let r = l.pos - skyu.eye.xyz;
-    return lum * l.intensity / max(dot(r, r), 1.0);
+    var q = lum * l.intensity / max(dot(r, r), 1.0);
+    if ((SG_ON || RL_ON) && l.kind >= NT_SIGNAL_KIND) {
+        // (`--signal-spill`, `--rear-lamps`) by its lobe toward the eye: a head or a car
+        // facing away has no streak to give, and takes no lamp's place in the list
+        let sig = l.kind == NT_SIGNAL_KIND;
+        q = q * nt_lobe(-r / max(length(r), 1e-3), l.dir, select(NT_REAR_V, NT_SIGNAL_V, sig), select(NT_REAR_H, NT_SIGNAL_H, sig));
+    }
+    return q;
 }
 
 fn lt_streak_bin(q: f32, qmax: f32) -> u32 {

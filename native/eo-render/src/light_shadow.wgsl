@@ -227,7 +227,8 @@ fn ls_view(p: vec3<f32>) -> vec3<f32> {
 /// (`--lamp-bounce`) A pool's bounce ranks after the shop windows.
 fn ls_key(l: LsLight) -> vec4<u32> {
     let d = l.pos - skyu.eye.xyz;
-    var d2 = select(dot(d, d), dot(d, d) + LS_SHOP_RANK_M2, l.kind == SHOP_KIND);
+    // (`--signal-spill`, `--rear-lamps`) a signal lens's or rear lamp's light ranks with the shop windows
+    var d2 = select(dot(d, d), dot(d, d) + LS_SHOP_RANK_M2, l.kind == SHOP_KIND || l.kind == NT_SIGNAL_KIND || l.kind == NT_REAR_KIND);
     if (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) {
         d2 = dot(d, d) + 2.0 * LS_SHOP_RANK_M2;
     }

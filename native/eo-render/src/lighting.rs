@@ -259,6 +259,7 @@ mod tests {
         sets.push(("rear lamps, cinematic".into(), look::ShaderFeatures { rear_lamps: true, cinematic: true, ..none })); // (`--rear-lamps`)
         sets.push(("signal spill, cinematic".into(), look::ShaderFeatures { signal_spill: true, cinematic: true, ..none })); // (`--signal-spill`)
         sets.push(("lit rooms, room depth".into(), look::ShaderFeatures { lit_rooms: true, room_depth: true, ..none })); // (`--lit-rooms`)
+        sets.push(("rear lamps, signal spill, night photometry".into(), look::ShaderFeatures { rear_lamps: true, signal_spill: true, night_photometry: true, ..none })); // (`--rear-lamps`, `--signal-spill`: their lobes)
         for bit in [look::NATURE_FOLIAGE, look::NATURE_LOD_FADE, look::NATURE_TURF, look::NATURE_PALM, look::NATURE_HILLS, look::NATURE_COVER, look::NATURE_FOLIAGE | look::NATURE_PALM, look::NATURE_TURF | look::NATURE_COVER, look::NATURE_ALL] {
             sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`)
         }

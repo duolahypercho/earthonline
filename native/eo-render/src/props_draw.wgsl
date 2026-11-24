@@ -72,6 +72,10 @@ fn prop_vs(
         // (`--luminaires`) a district light's lit glass: its radiance (`pr_lamp_glass`) in the colour
         out.color = pr_lamp_glass(color, inst, pos, normalize(look.cam_pos.xyz - world));
     }
+    if (SF_SIGNAL_SPILL && inst.model == PR_SIGNAL_HEAD && (materials[material].flags & PR_LENS) != 0u) {
+        // (`--signal-spill`) a signal lens's radiance (`pr_signal_lens`) in the colour (a lens's albedo is 0)
+        out.color = pr_signal_lens(materials[material].flags, inst, normalize(look.cam_pos.xyz - world));
+    }
     out.material = material;
     out.inst = idx;
     out.local = pos;
@@ -731,12 +735,17 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
 // radiance handed to the fragment in the colour. The lamp's intensity is the gather's for that socket
 // (sky_lights.wgsl `lights_props` under the look: the RP-8 pool's nadir from
 // the socket's height, its share, its unit's factor); the glass shows it as:
-// kind 1, a lantern's frosted panes, seen from the side: the intensity over
-// the panes' projected area, brightest level with the lamp inside; kind 2, a
-// cobra head's flat lens facing down: I(theta) / (A cos theta), its intensity
-// toward the eye by the full-cutoff tail (eo-sky lit_fog `luminaire_shape`), dark
-// from above. Linear radiance in the lamps' units (x the practicals' gain
-// taken back off by the caller's division).
+// kind 1, a lantern's clear panes, seen from the side: the lamp inside is the fx
+// pass's core (sky_fx.wgsl), the panes the light their seeds, dirt and inner
+// faces scatter, `LUM_PANE_SHARE` of the intensity over their projected area,
+// brightest level with the lamp (the housing's frame stays dark between them);
+// kind 2, a cobra head's flat lens facing down: I(theta) / (A cos theta), its
+// intensity toward the eye by the full-cutoff tail (eo-sky lit_fog
+// `luminaire_shape`), dark from above. Linear radiance in the lamps' units
+// (their units per lux carry the practicals' gain: the caller takes look_light's off).
+// INFERRED (`LUM_PANE_SHARE`): a lantern's clear or seeded glass returns a tenth
+// of its lamp's luminance over the pane (frosted glass would be the whole).
+const LUM_PANE_SHARE: f32 = 0.1;
 const PR_LAMP_GLOW: u32 = 1048576u; // props_lib P_LAMP_GLOW (1 << 20)
 fn pr_lamp_glass(c: vec4<f32>, inst: PrInstance, local: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     if ((skyu.flags.x & LUM_BIT) == 0u) {
@@ -750,7 +759,7 @@ fn pr_lamp_glass(c: vec4<f32>, inst: PrInstance, local: vec3<f32>, v: vec3<f32>)
     var l = 0.0;
     if (g.x < 1.5) {
         let dy = (local.y - g.z) / 0.2;
-        l = i / max(g.y, 1e-3) * (0.55 + 0.9 * exp(-dy * dy));
+        l = i / max(g.y, 1e-3) * (0.55 + 0.9 * exp(-dy * dy)) * LUM_PANE_SHARE;
     } else {
         let c = -v.y;
         if (c > 0.0) {
@@ -761,6 +770,22 @@ fn pr_lamp_glass(c: vec4<f32>, inst: PrInstance, local: vec3<f32>, v: vec3<f32>)
     }
     let col = select(LUM_COLOR_WARM, LUM_COLOR_LED, inst.model == LUM_MODEL_COBRA);
     return col * lu_tint(inst.pad, units) * l;
+}
+
+// ---- (`--signal-spill`) a signal's lens at night ----
+// The lit lens the light the gather spills from it (sky.rs `set_signal_lights`):
+// its intensity toward the eye by the signal's lobe (eo-sky lights `SIGNAL_LOBE`:
+// bright facing the eye, dim from the side, none from behind) over its 300 mm
+// area, in the lamps' units; the dark aspects dark glass. Shaded in the vertex
+// stage (the lit fragment stands at Apple's compiler's limit); the fragment
+// blends it in by the night (by day the display-referenced lens as before).
+fn pr_signal_lens(flags: u32, inst: PrInstance, v: vec3<f32>) -> vec3<f32> {
+    let k = (flags >> 24u) & 3u;
+    if (pr_lamps[inst.lamp] != k || k > 2u) {
+        return vec3<f32>(0.0);
+    }
+    let i = NT_SIGNAL_CD[k] * nt_lobe(v, pr_rot(inst.yaw, vec3<f32>(0.0, 0.0, 1.0)), NT_SIGNAL_V, NT_SIGNAL_H);
+    return NT_SIGNAL_RGB[k] * i / NT_SIGNAL_LENS_M2 * skyu.bloom_w2.z;
 }
 
 fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
@@ -867,6 +892,11 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let lit = pr_lamps[inst.lamp] == k;
         let tone = select(pr_lens[3u + k].rgb, pr_lens[k].rgb, lit);
         m.emissive = vec4<f32>(tone * pr.lens.x, 0.0);
+        if (SF_SIGNAL_SPILL && (skyu.flags.x & NT_SIGNAL_BIT) != 0u) {
+            // (`--signal-spill`) as the night comes, the lens its own light's (`pr_signal_lens`,
+            // in the vertex stage: its radiance rides the colour).
+            m.emissive = vec4<f32>(mix(m.emissive.rgb, in.color, skyu.night.z), 0.0);
+        }
         s.albedo = vec3<f32>(0.0);
     }
     if ((m.flags & (PR_PED_HAND | PR_PED_WALK)) != 0u) {
@@ -881,7 +911,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     if (SF_LUMINAIRES && (m.flags & PR_LAMP_GLOW) != 0u) {
         // (`--luminaires`) a district light's glass lit by its own lamp (`pr_lamp_glass`, in the
         // vertex stage: its radiance rides the colour), over the glass's small diffuse return.
-        m.emissive = vec4<f32>(in.color * lk_practical_gain(), 0.0);
+        m.emissive = vec4<f32>(in.color, 0.0); // (the division below takes look_light's gain back off)
         s.albedo = m.base.rgb * albedo_tex.rgb * 0.3;
     }
     // (`--night-photometry`) a lens's radiance is solved in display terms (x 1 / exposure):

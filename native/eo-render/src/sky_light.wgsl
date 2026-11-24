@@ -209,6 +209,10 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
             src = SKY_CINE_SRC_HEADLAMP;
         } else if (li.kind >= 4u) {
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+            if ((SF_SIGNAL_SPILL || SF_REAR_LAMPS) && li.kind >= NT_SIGNAL_KIND) {
+                // (`--signal-spill`, `--rear-lamps`) its lobe toward the film
+                shape = nt_lobe(-l, li.dir, select(NT_REAR_V, NT_SIGNAL_V, li.kind == NT_SIGNAL_KIND), select(NT_REAR_H, NT_SIGNAL_H, li.kind == NT_SIGNAL_KIND));
+            }
             src = 0.5 * sqrt(max(li.size, 0.0));
         }
         // the source's size widens the lobe both ways (as the clusters' specular)
@@ -308,10 +312,12 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
             // SpotLight: smoothstep(cos angle, cos (angle (1 - penumbra))));
             // a shop window's light (kind 4, `--shop-light`) its window's lobe the same way.
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
-            if (SF_SIGNAL_SPILL && li.size < 0.0) {
-                // (`--signal-spill`, sky.rs `set_signal_lights`) a signal lens's beam lights
-                // nothing nearer it than -size (what stood there would hide the lens).
-                shape = shape * smoothstep(-0.75 * li.size, -li.size, dist);
+            if ((SF_SIGNAL_SPILL || SF_REAR_LAMPS) && li.kind >= NT_SIGNAL_KIND) {
+                // (`--signal-spill`, `--rear-lamps`) a signal lens's or rear lamp's lobe (eo-sky
+                // lights `SIGNAL_LOBE`, `REAR_LOBE`); a signal's beam lights nothing nearer
+                // it than NT_SIGNAL_CLEAR_M (what stood there would hide the lens).
+                let sig = li.kind == NT_SIGNAL_KIND;
+                shape = nt_lobe(-l, li.dir, select(NT_REAR_V, NT_SIGNAL_V, sig), select(NT_REAR_H, NT_SIGNAL_H, sig)) * select(1.0, smoothstep(0.75 * NT_SIGNAL_CLEAR_M, NT_SIGNAL_CLEAR_M, dist), sig);
             }
         }
         let nl = max(dot(n, l), 0.0);

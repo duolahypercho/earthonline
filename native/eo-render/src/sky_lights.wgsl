@@ -281,7 +281,7 @@ fn lt_eye_share(head: vec3<f32>) -> f32 {
 /// sprite reach). `head` is the luminaire (the lens; the source may stand
 /// above it); `cutoff` a full-cutoff street luminaire (`--night-photometry`:
 /// its sprite carries its intensity toward the eye, `lt_eye_share`).
-fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool, glass: bool) {
+fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool, lantern: bool) {
     let near = lt_visible(l.pos, l.range);
     if (near) {
         lt_push(l);
@@ -307,9 +307,9 @@ fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool, glass: bool) {
                     // (`--night-photometry`) its share toward the eye in the fraction (sky_fx.wgsl `fx_eye_share`).
                     s.pad = s.pad + 0.999 * (1.0 - lt_eye_share(head));
                 }
-                if (glass) {
-                    // (`--luminaires`) bit 2: its fixture's glass is drawn lit (props_draw.wgsl
-                    // `pr_lamp_glass`), so the fx pass draws no core where the fixture stands.
+                if (lantern) {
+                    // (`--luminaires`) bit 2: a lantern drawn with its panes lit: its core
+                    // the lamp inside (sky_fx.wgsl `sprite_vs`)
                     s.pad = s.pad + 4.0;
                 }
                 lt_sprites[k] = s;
@@ -470,10 +470,10 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
         lt_cine_lamp(&l, p.pos, h, select(4u, 3u, warm), p.kind == LT_MODEL_HISTORIC);
     }
     l.color = l.color * lu_tint(p.pad1, units); // (`--lamp-units`) its colour bin
-    // (`--luminaires`) a district light's fixture is drawn with its glass lit (the props'
-    // lamp models), so its sprite keeps the air light and glare but no core
-    let glass = LUM_ON && (skyu.flags.x & LUM_BIT) != 0u && !tunnel && p.kind != LT_LANDMARK;
-    lt_emit(l, p.pos, !tunnel && p.kind != LT_LANDMARK && p.kind != LT_MODEL_HISTORIC && p.kind != LT_MODEL_BANNER, glass);
+    // (`--luminaires`: its sprite keeps its core over the fixture drawn with its glass lit:
+    // the lamp seen through a lantern's clear panes, a cobra head's lens's glare)
+    let lantern = LUM_ON && (skyu.flags.x & LUM_BIT) != 0u && !tunnel && (p.kind == LT_MODEL_HISTORIC || p.kind == LT_MODEL_BANNER);
+    lt_emit(l, p.pos, !tunnel && p.kind != LT_LANDMARK && p.kind != LT_MODEL_HISTORIC && p.kind != LT_MODEL_BANNER, lantern);
     if (LT_LAMP_BOUNCE && !tunnel && p.kind != LT_LANDMARK && p.source_lift > 0.0) {
         // (`--lamp-bounce`) its pool: the nadir at the RP-8 peak from its head's height.
         let hb = p.source_lift / LT_JS_SOURCE_LIFT_MH;
@@ -531,25 +531,33 @@ fn lights_agents(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
     if (RL_ON && (skyu.flags.x & RL_BIT) != 0u) {
-        // (`--rear-lamps`) the tail lamps (SAE J585), the stop lamps while held at a
-        // junction (J586), as red spots of a rear lamp's spread (full within
-        // RL_INNER_DEG of the rear axis, none past RL_OUTER_DEG: its own body
-        // beside the lens takes none) just behind the rear lenses (the headlamps'
-        // height and track, at the rear overhang): red on the road, the kerb and the
-        // car behind, the wet street's streaks, the haze; no map, no sprite.
-        let rz = select(min(m.wheel[0].z, m.wheel[2].z) - 0.95, m.center.z - m.radius * 0.85, abs(fl.x) * 0.78 < 0.2);
-        let cd = select(RL_TAIL_CD, RL_STOP_CD, a.speed < RL_STOP_SPEED);
+        // (`--rear-lamps`) the tail lamps (SAE J585), the stop lamps while it brakes
+        // (J586; the braking flag its drawn lenses light by, agents_draw.wgsl
+        // `ag_lamp`), each a light of the rear lamps' lobe (NT_REAR_KIND: eo-sky
+        // `lights::REAR_LOBE` on the surfaces and in the haze; the streaks take its
+        // cone) standing just behind the body's rear face (from its bounds: the
+        // half-diagonal less the half-width by the wheels' track and the half-height
+        // over the tyres' contact), so its own body and the road under it take none:
+        // red on the road behind, the kerb and the car behind, the wet street's
+        // streaks, the haze; no map, no sprite.
+        let hx = abs(fl.x) + 0.15;
+        let hy = max(m.center.y - (fl.y - m.wheel_radius), 0.0);
+        let hz = sqrt(max(m.radius * m.radius - hx * hx - hy * hy, 0.0));
+        let boxed = abs(fl.x) * 0.78 < 0.2;
+        let rz = select(m.center.z - hz - 0.05, m.center.z - m.radius * 0.85, boxed);
+        let rlat = select(max(hx - 0.2, lat), lat, boxed);
+        let cd = select(RL_TAIL_CD, RL_STOP_CD, (a.flags & 1u) != 0u);
         for (var s = 0; s < 2; s = s + 1) {
             let side = select(-1.0, 1.0, s == 0);
             var r: SkyLight;
-            r.pos = a.pos + lt_rotate(a.rot, vec3<f32>(side * lat, up + 0.12, rz) * a.scale);
+            r.pos = a.pos + lt_rotate(a.rot, vec3<f32>(side * rlat, up + 0.12, rz) * a.scale);
             r.intensity = cd * lt.scale.y / RL_LOW_BEAM_PEAK_CD;
             r.color = RL_RED;
             r.range = sqrt(cd / RL_REACH_LUX);
-            r.dir = normalize(lt_rotate(a.rot, vec3<f32>(0.0, -0.05, -1.0)));
+            r.dir = normalize(lt_rotate(a.rot, vec3<f32>(0.0, 0.0, -1.0)));
             r.cos_outer = cos(RL_OUTER_DEG * 0.017453292);
             r.cos_inner = cos(RL_INNER_DEG * 0.017453292);
-            r.kind = 4u;
+            r.kind = NT_REAR_KIND;
             r.size = RL_LENS_AREA_M2;
             r.pad = 0.0;
             if (lt_visible(r.pos, r.range)) {
@@ -626,7 +634,8 @@ fn lights_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocati
     for (var phase = 0u; phase < phases; phase = phase + 1u) {
         for (var i = lid; i < n; i = i + 64u) {
             let l = lt_frame[i];
-            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND); // (`--lamp-bounce`: the pools with the shops, last)
+            // (`--lamp-bounce`: the pools with the shops, last; `--signal-spill`, `--rear-lamps`: their lenses with the shops)
+            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) || ((SG_ON || RL_ON) && l.kind >= NT_SIGNAL_KIND);
             if (phases == 2u && late != (phase == 1u)) {
                 continue;
             }
