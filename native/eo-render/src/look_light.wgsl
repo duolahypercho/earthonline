@@ -147,6 +147,9 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 // shader before `look_light`: the pane's emission (kit/materials.js emissiveNode).
 var<private> rm_emit: vec3<f32>;
 
+// (`--car-materials`) a car paint's reflection class (agents_draw.wgsl; 0 elsewhere: the surface's own).
+var<private> sky_coat_env: f32;
+
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
     if ((m.flags & F_GLASS) == 0u && s.env <= 0) {
@@ -179,6 +182,13 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         cls = look.env_class.w;
     }
     let env_i = look.ambient.w * cls;
+    // (`--car-materials`) a car's paint: its reflections (the base's and the
+    // lacquer's) at their own class (agents_draw.wgsl sets `sky_coat_env`; 0
+    // elsewhere), the diffuse at the surface's.
+    var env_s = env_i;
+    if (SF_CAR_MATERIALS && sky_coat_env > 0.0) {
+        env_s = look.ambient.w * sky_coat_env;
+    }
 
     // Key light with its shadow.
     let l = look.key_dir.xyz;
@@ -267,12 +277,12 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // (`--look cinematic`, stage L3) on car paint the clearcoat's sharper reflection (below)
     let coat_on = SKY_CINE_FULL && sky_coat > 0.0;
     let ssr = sky_ssr(world, select(n, ng, coat_on), v, select(rough, sky_coat_rough, coat_on));
-    var rad_e = rad * env_i;
+    var rad_e = rad * env_s;
     if (amb) {
         // the ambient volume: the environment by the sky seen along the
         // reflection, what blocks it by its own radiance (ambient.wgsl).
         let aw = amb_reflection(av, r);
-        rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_i * aw.y / LK_PI);
+        rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_s * aw.y / LK_PI);
     }
     let indirect_s = mix(rad_e, ssr.rgb, ssr.a) * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
@@ -330,7 +340,14 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         if (pg && pgs.cover > 0.0) {
             rad_c = mix(rad_c, pg_reflect(pgs, rc, world, ccr, false), pgs.cover);
         }
-        rad_c = mix(rad_c * env_i, ssr.rgb, ssr.a); // the street it stands on, where the reflection finds it
+        var rad_ce = rad_c * env_s;
+        if (SF_CAR_MATERIALS && amb && sky_coat_env > 0.0) {
+            // (`--car-materials`) the lacquer's environment as the base's: by the
+            // sky the ambient volume sees along it (a car under a deck reflects the deck)
+            let awc = amb_reflection(av, rc);
+            rad_ce = rad_ce * awc.x + look.hemi_ground.xyz * (env_s * awc.y / LK_PI);
+        }
+        rad_c = mix(rad_ce, ssr.rgb, ssr.a); // the street it stands on, where the reflection finds it
         let dfg_c = lk_dfg(nvc, ccr);
         var cc_dir = vec3<f32>(0.0);
         if (nl > 0.0) {

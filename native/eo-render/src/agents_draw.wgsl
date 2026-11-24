@@ -39,7 +39,12 @@ fn agent_vs(
     @location(5) tag: u32,
     @builtin(instance_index) inst: u32,
 ) -> AgOut {
-    let pose = ag_pose(ag_visible[inst], pos, normal.xyz, joints, weights, tag);
+    // (`--car-materials`) a car's normal with its refinement (`ag_car_normal`; a person's spare byte is 0).
+    var nrm = normal.xyz;
+    if (SF_CAR_MATERIALS && normal.w != 0.0 && ag.misc.y != 0u) {
+        nrm = ag_car_normal(normal);
+    }
+    let pose = ag_pose(ag_visible[inst], pos, nrm, joints, weights, tag);
     var out: AgOut;
     out.clip = frame.view_proj * vec4<f32>(pose.world, 1.0);
     out.world = pose.world;
@@ -285,6 +290,11 @@ const AG_CAR_COAT_OLD: f32 = 0.12;
 // body's own paint material says nothing of it): silvers and greys always,
 // whites never (solid or pearl), dark and coloured paints half of them.
 const AG_CAR_FLAKE_METAL: f32 = 0.55;
+// The base coat's share of the paint's colour (the lacquer passes ~96 % each
+// way, a white pigment returns ~0.85: a palette white of 0.89 is ~0.7 under
+// the lacquer) and an old coat's chalking (a warm grey cast).
+const AG_CAR_BASE_COAT: f32 = 0.8;
+const AG_CAR_CHALK: vec3<f32> = vec3<f32>(0.96, 0.94, 0.89);
 // A red or amber lamp's luminance (the brightest lamp, the brake at night)
 // held under this many times the exposure's white: past it the camera's
 // crosstalk (eo-look `tone::SENSOR_CROSSTALK`) whitens the core, as a real
@@ -298,9 +308,22 @@ const AG_CAR_GLASS_ROUGH: f32 = 0.06;
 const AG_CAR_GLASS_COAT_ROUGH: f32 = 0.02;
 const AG_CAR_GLASS_CLEAR: f32 = 0.25;
 // A lamp cover: polycarbonate (F0 ~0.05 as glass), nearly clear; a red or
-// amber cover passes about half (the emitter behind it is that colour).
+// amber cover passes little of what lies behind it untinted (it is seen in
+// its own colour, `ag_car_lens`).
 const AG_CAR_LENS_CLEAR: f32 = 0.08;
-const AG_CAR_LENS_TINTED: f32 = 0.5;
+const AG_CAR_LENS_TINTED: f32 = 0.6;
+// A lit lamp's cover: the share of the emitter's luminance its optic spreads
+// across the cover (a red or amber cover; a clear headlamp cover over its
+// projector or bowl); by day what a red or amber cover over its bowl sends
+// back (the cover's transmittance in its colour twice, x the bowl's ~0.6).
+const AG_CAR_LENS_FILL: f32 = 0.08;
+// A red cover lower than this share of the body's mid-height is a bumper's
+// passive reflector (the tail lamps sit at 0.55-0.75 of the body's height).
+const AG_CAR_LAMP_LOWEST: f32 = 0.9;
+const AG_CAR_REFLECTOR_BACK: f32 = 0.35;
+const AG_CAR_LENS_FILL_CLEAR: f32 = 0.05;
+const AG_CAR_LENS_RED_BACK: vec3<f32> = vec3<f32>(0.36, 0.006, 0.004);
+const AG_CAR_LENS_AMBER_BACK: vec3<f32> = vec3<f32>(0.42, 0.12, 0.004);
 // The cabin's share of the sky and the ambient light (roof, pillars, the
 // body round it: a car interior sees about a third of the open sky).
 const AG_CAR_CABIN_AO: f32 = 0.3;
@@ -316,7 +339,7 @@ const AG_CAR_RUBBER: vec3<f32> = vec3<f32>(0.028, 0.028, 0.03);
 const AG_CAR_ROAD_DUST: vec3<f32> = vec3<f32>(0.11, 0.095, 0.08);
 const AG_CAR_LETTERING: vec3<f32> = vec3<f32>(0.075, 0.075, 0.075);
 const AG_CAR_BRAKE_DUST: vec3<f32> = vec3<f32>(0.05, 0.042, 0.034);
-// California plate: retroreflective white sheeting, the red script, navy characters.
+// California plate: retroreflective white sheeting, the red script, navy characters (a 5 x 7 face, `ag_car_font`).
 const AG_CAR_PLATE_WHITE: vec3<f32> = vec3<f32>(0.62, 0.62, 0.6);
 const AG_CAR_PLATE_RED: vec3<f32> = vec3<f32>(0.42, 0.02, 0.02);
 const AG_CAR_PLATE_NAVY: vec3<f32> = vec3<f32>(0.012, 0.02, 0.09);
@@ -380,7 +403,7 @@ fn ag_car_led(p: vec2<f32>, px: f32) -> f32 {
     return mix(1.0, 0.25 + 2.4 * led, keep);
 }
 
-// A seven-segment code (bits a..g) for a plate character: digits, then letters.
+// A seven-segment code (bits a..g) for a tyre sidewall character: digits, then letters.
 fn ag_car_glyph(k: u32) -> u32 {
     switch k {
         case 0u: { return 63u; }
@@ -407,6 +430,68 @@ fn ag_car_glyph(k: u32) -> u32 {
     }
 }
 
+// A plate character's 5 x 7 bitmap (rows top to bottom, five bits each,
+// the leftmost the highest; rows 0-3 in x, 4-6 in y): the digits, then the
+// letters a plate uses (no I, O or Q).
+fn ag_car_font(k: u32) -> vec2<u32> {
+    switch k {
+        case 0u: { return vec2<u32>(708142u, 14905u); } // 0
+        case 1u: { return vec2<u32>(135556u, 14468u); } // 1
+        case 2u: { return vec2<u32>(67118u, 32004u); } // 2
+        case 3u: { return vec2<u32>(69727u, 14881u); } // 3
+        case 4u: { return vec2<u32>(600258u, 2143u); } // 4
+        case 5u: { return vec2<u32>(64031u, 14881u); } // 5
+        case 6u: { return vec2<u32>(999686u, 14897u); } // 6
+        case 7u: { return vec2<u32>(133183u, 8456u); } // 7
+        case 8u: { return vec2<u32>(476718u, 14897u); } // 8
+        case 9u: { return vec2<u32>(509486u, 12353u); } // 9
+        case 10u: { return vec2<u32>(1033774u, 17969u); } // A
+        case 11u: { return vec2<u32>(1001022u, 31281u); } // B
+        case 12u: { return vec2<u32>(541230u, 14896u); } // C
+        case 13u: { return vec2<u32>(575068u, 29265u); } // D
+        case 14u: { return vec2<u32>(999967u, 32272u); } // E
+        case 15u: { return vec2<u32>(999967u, 16912u); } // F
+        case 16u: { return vec2<u32>(770606u, 15921u); } // G
+        case 17u: { return vec2<u32>(1033777u, 17969u); } // H
+        case 18u: { return vec2<u32>(67655u, 12866u); } // J
+        case 19u: { return vec2<u32>(807505u, 18004u); } // K
+        case 20u: { return vec2<u32>(541200u, 32272u); } // L
+        case 21u: { return vec2<u32>(710513u, 17969u); } // M
+        case 22u: { return vec2<u32>(714289u, 17971u); } // N
+        case 23u: { return vec2<u32>(1001022u, 16912u); } // P
+        case 24u: { return vec2<u32>(1001022u, 18004u); } // R
+        case 25u: { return vec2<u32>(475663u, 30753u); } // S
+        case 26u: { return vec2<u32>(135327u, 4228u); } // T
+        case 27u: { return vec2<u32>(575025u, 14897u); } // U
+        case 28u: { return vec2<u32>(575025u, 4433u); } // V
+        case 29u: { return vec2<u32>(706097u, 10933u); } // W
+        case 30u: { return vec2<u32>(141873u, 17962u); } // X
+        case 31u: { return vec2<u32>(141873u, 4228u); } // Y
+        default: { return vec2<u32>(133183u, 32264u); } // Z
+    }
+}
+
+fn ag_car_font_bit(b: vec2<u32>, c: i32, r: i32) -> f32 {
+    if (c < 0 || c > 4 || r < 0 || r > 6) {
+        return 0.0;
+    }
+    let w = select(b.y, b.x, r < 4);
+    let row = (w >> (5u * u32(r % 4))) & 31u;
+    return f32((row >> u32(4 - c)) & 1u);
+}
+
+// A character's ink at gp (0..1 across, 0..1 up its box): its bitmap read
+// bilinearly and cut at half (rounded strokes a cell wide), the cut's width
+// the pixel's footprint `f` in cells.
+fn ag_car_font_ink(b: vec2<u32>, gp: vec2<f32>, f: vec2<f32>) -> f32 {
+    let q = vec2<f32>(gp.x * 5.0, (1.0 - gp.y) * 7.0) - 0.5;
+    let i = vec2<i32>(floor(q));
+    let t = q - floor(q);
+    let v = mix(mix(ag_car_font_bit(b, i.x, i.y), ag_car_font_bit(b, i.x + 1, i.y), t.x), mix(ag_car_font_bit(b, i.x, i.y + 1), ag_car_font_bit(b, i.x + 1, i.y + 1), t.x), t.y);
+    let w = clamp(max(f.x * 5.0, f.y * 7.0) * 0.5, 0.05, 0.5);
+    return smoothstep(0.5 - w, 0.5 + w, v);
+}
+
 // The cover of a box (centre c, half size h) at p, filtered over `f`.
 fn ag_car_box(p: vec2<f32>, c: vec2<f32>, h: vec2<f32>, f: vec2<f32>) -> f32 {
     let q = (h - abs(p - c)) / max(f, vec2<f32>(1e-5));
@@ -428,15 +513,7 @@ fn ag_car_plate(uv: vec2<f32>, duv: vec2<f32>, h: f32, dirt: f32, rear: bool) ->
         let f = vec2<f32>(duv.x / (cw * 0.76), duv.y / 0.44);
         let hk = st_hash(vec2<f32>(h * 97.0 + k * 13.1, k + 5.3));
         let letter = k >= 1.0 && k <= 3.0;
-        let code = ag_car_glyph(select(u32(hk * 9.99), 10u + u32(hk * 10.99), letter));
-        let w = 0.085;
-        if ((code & 1u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, 1.0 - w), vec2<f32>(0.42, w), f)); }
-        if ((code & 2u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(1.0 - w, 0.74), vec2<f32>(w, 0.24), f)); }
-        if ((code & 4u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(1.0 - w, 0.26), vec2<f32>(w, 0.24), f)); }
-        if ((code & 8u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, w), vec2<f32>(0.42, w), f)); }
-        if ((code & 16u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(w, 0.26), vec2<f32>(w, 0.24), f)); }
-        if ((code & 32u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(w, 0.74), vec2<f32>(w, 0.24), f)); }
-        if ((code & 64u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, 0.5), vec2<f32>(0.42, w), f)); }
+        ink = ag_car_font_ink(ag_car_font(select(u32(hk * 9.99), 10u + u32(hk * 22.99), letter)), gp, f);
         // under a few pixels a character: its mean ink (no shimmer, the same tone).
         let keep = 1.0 - smoothstep(0.12, 0.35, max(f.x, f.y) * 0.5);
         ink = mix(0.3, ink, keep);
@@ -535,6 +612,12 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
         (*g).m.emissive = vec4<f32>(col * i * hold * ag_car_led(face, d.px), 0.0);
         return k;
     }
+    // The base coat under the lacquer: the paint's colour as its pigment
+    // gives it back through the lacquer both ways (the lacquer's own
+    // reflection is the coat's), older paint chalked toward a warm grey.
+    if ((base.flags & AG_M_PAINT) != 0u) {
+        (*g).s.albedo = (*g).s.albedo * AG_CAR_BASE_COAT * mix(vec3<f32>(1.0), AG_CAR_CHALK, age);
+    }
     // Road grime (`--grime`) on the body, its trim and liveries.
     let paint = (base.flags & AG_M_PAINT) != 0u || role == AG_ROLE_LIVERY;
     if (wx_level() != 0u && (paint || role == 0u || role == AG_ROLE_TRIM)) {
@@ -559,7 +642,9 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             (*g).s.metal = AG_CAR_FLAKE_METAL * flake;
         }
         (*g).s.rough = ag_car_aa(max((*g).s.rough, 0.3), d.dn);
-        (*g).s.env = ENV_PAINTED_METAL;
+        // the base coat's diffuse at the facades' class (as the street round it
+        // is lit), its reflections and the lacquer's at the painted-metal class.
+        sky_coat_env = ST_ENV_PAINTED_METAL;
         sky_coat = 1.0;
         let coat = mix(mix(AG_CAR_COAT_NEW, AG_CAR_COAT_OLD, age), AG_CINE_COAT_GRIME_ROUGH, grime);
         sky_coat_rough = ag_car_aa(mix(coat, AG_CAR_GLASS_COAT_ROUGH, wet * smoothstep(0.3, 0.8, nb.y)), d.dn);
@@ -573,6 +658,27 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
                 let hi = max(max(base.base.r, base.base.g), base.base.b);
                 let tinted = hi - min(min(base.base.r, base.base.g), base.base.b) > 0.5 * hi;
                 absorb = select(AG_CAR_LENS_CLEAR, AG_CAR_LENS_TINTED, tinted);
+                let red = base.base.r > 2.5 * base.base.g;
+                let fill = ag_car_lens(tinted, red, local, md, a);
+                if (tinted) {
+                    // A red or amber cover: a coloured translucent layer lit as
+                    // a surface is (by day the light its bowl sends back through
+                    // it, its colour twice), what lies behind it showing through
+                    // the rest, the lacquer-like gloss over it, its lamp's fill
+                    // (the blend takes the layer at its cover).
+                    // (a bumper's passive reflector: no bowl behind it, a deeper red)
+                    let reflector = red && local.y < AG_CAR_LAMP_LOWEST * md.center.y;
+                    (*g).s.albedo = select(AG_CAR_LENS_AMBER_BACK, AG_CAR_LENS_RED_BACK, red) * select(1.0, AG_CAR_REFLECTOR_BACK, reflector);
+                    (*g).s.metal = 0.0;
+                    (*g).s.rough = ag_car_aa(0.35, d.dn);
+                    (*g).s.alpha = absorb;
+                    (*g).m.flags = (*g).m.flags | F_GLASS;
+                    (*g).m.emissive = vec4<f32>(fill / absorb, 0.0);
+                    sky_coat = 1.0;
+                    sky_coat_rough = ag_car_aa(AG_CAR_GLASS_COAT_ROUGH + 0.04 * dirt * age, d.dn);
+                    return k;
+                }
+                k.emit = fill;
             }
             (*g).s.albedo = vec3<f32>(0.0);
             (*g).s.metal = 0.0;
@@ -692,6 +798,58 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
         }
     }
     return k;
+}
+
+// A car's normal from its refined packing (eo-agents `vehicles::pack_normal_fine`,
+// `unpack_normal_fine`; a spare byte of 0, a person's, is never read here):
+// the two smaller 8-bit components (by magnitude, the lowest axis on a tie)
+// corrected by fourteenths of a step from the spare byte's code, the largest
+// from unit length with its 8-bit sign.
+fn ag_car_normal(p: vec4<f32>) -> vec3<f32> {
+    let q = round(p.xyz * 127.0);
+    let b = i32(round(p.w * 127.0));
+    let c = b + select(111, 112, b < 0);
+    let e1 = f32(c % 15 - 7) / 14.0;
+    let e2 = f32(c / 15 - 7) / 14.0;
+    let a = abs(q);
+    if (a.x >= a.y && a.x >= a.z) {
+        let y = (q.y + e1) / 127.0;
+        let z = (q.z + e2) / 127.0;
+        return vec3<f32>(sign(q.x) * sqrt(max(1.0 - y * y - z * z, 0.0)), y, z);
+    }
+    if (a.y >= a.z) {
+        let x = (q.x + e1) / 127.0;
+        let z = (q.z + e2) / 127.0;
+        return vec3<f32>(x, sign(q.y) * sqrt(max(1.0 - x * x - z * z, 0.0)), z);
+    }
+    let x = (q.x + e1) / 127.0;
+    let y = (q.y + e2) / 127.0;
+    return vec3<f32>(x, y, sign(q.z) * sqrt(max(1.0 - x * x - y * y, 0.0)));
+}
+
+// A lit lamp's cover: its lamp fills it (the light the lamp's optic and bowl
+// spread across it, its colour round the brighter LEDs or bulb, instead of
+// lit edges round a dark cover). A red or amber cover is its tail, brake or
+// indicator lamp's, a clear one the headlamp's in front, the reversing
+// lamp's behind.
+fn ag_car_lens(tinted: bool, red: bool, local: vec3<f32>, md: AgModel, a: AgAgent) -> vec3<f32> {
+    var lf = AG_M_REVERSE;
+    var col = vec3<f32>(1.0, 0.97, 0.92);
+    var hold = 1.0;
+    if (tinted) {
+        lf = select(AG_M_INDICATOR, AG_M_TAIL, red);
+        col = select(AG_CAR_LED_AMBER, AG_CAR_LED_RED, red);
+        hold = min(1.0, AG_CAR_LAMP_WHITE / max(ag.lamp_tail.w * look.key.w, 1e-4));
+        if (local.y < AG_CAR_LAMP_LOWEST * md.center.y) {
+            return vec3<f32>(0.0); // a red reflector in the bumper: no lamp behind it
+        }
+    } else if (local.z > md.center.z) {
+        if (ag_car_parked(a)) {
+            return vec3<f32>(0.0); // a parked car's headlamps are off
+        }
+        lf = AG_M_HEAD | AG_M_DRL;
+    }
+    return col * ag_lamp(a.flags, lf, local.x) * hold * select(AG_CAR_LENS_FILL_CLEAR, AG_CAR_LENS_FILL, tinted);
 }
 
 // After look_light: thin glass's reflection (with the lamps' glints the
