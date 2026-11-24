@@ -344,6 +344,14 @@ fn aggregate_sample(p: [f32; 2], expo_mean: f32) -> (f32, f32, [f32; 3]) {
     (m, ex, [t * tint[0] as f32, t * tint[1] as f32, t * tint[2] as f32])
 }
 
+/// `aggregate_means` between the tracks (AGG_EXPOSED, polish 0) and in them
+/// (AGG_EXPOSED_WHEEL, polish 1), written out (the test
+/// `the_aggregate_averages_to_weathered_asphalt` measures them again).
+pub const AGG_MEANS: [([f64; 3], f64, f64, f64); 2] = [
+    ([0.12038539964444765, 0.11855698706342105, 0.11598795633427789], 0.7271058790312914, 0.9285496144920468, 0.29829076655337583),
+    ([0.1492969290532521, 0.1463453334343689, 0.14222029987935714], 0.6364667495738108, 0.9285496144920468, 0.48628469785557044),
+];
+
 /// The layout's means at the binder film's worn share `expo_mean` (measured
 /// over 96 x 96 pitches): (albedo RGB, roughness at the tracks' polish
 /// `wheel`, the mastic's occlusion, the exposed tops' cover).
@@ -650,9 +658,7 @@ pub fn wgsl() -> String {
         s.push_str(&format!("const {k}: vec3<f32> = {};\n", v3(v)));
     }
     // the layout's measured means between the tracks (0) and in them (1): every term over its mean
-    static MEANS: std::sync::OnceLock<[([f64; 3], f64, f64, f64); 2]> = std::sync::OnceLock::new();
-    let m = MEANS.get_or_init(|| [aggregate_means(AGG_EXPOSED, 0.0), aggregate_means(AGG_EXPOSED_WHEEL, 1.0)]);
-    for (i, (alb, rough, ao, tops)) in m.iter().enumerate() {
+    for (i, (alb, rough, ao, tops)) in AGG_MEANS.iter().enumerate() {
         s.push_str(&format!("const SA_MEAN_ALB{i}: vec3<f32> = {};\n", v3(*alb)));
         s.push_str(&format!("const SA_MEAN_ROUGH{i}: f32 = {};\n", f(*rough)));
         s.push_str(&format!("const SA_MEAN_AO{i}: f32 = {};\n", f(*ao)));
@@ -746,6 +752,12 @@ mod tests {
     fn the_aggregate_averages_to_weathered_asphalt() {
         let (a0, r0, ao0, t0) = aggregate_means(AGG_EXPOSED, 0.0);
         let (a1, r1, ao1, t1) = aggregate_means(AGG_EXPOSED_WHEEL, 1.0);
+        // the shader's constants are this measurement (AGG_MEANS, written out so the
+        // startup does not run it)
+        for (i, (a, r, ao, t)) in [(a0, r0, ao0, t0), (a1, r1, ao1, t1)].into_iter().enumerate() {
+            let m = AGG_MEANS[i];
+            assert!((0..3).all(|c| (m.0[c] - a[c]).abs() < 1e-6) && (m.1 - r).abs() < 1e-6 && (m.2 - ao).abs() < 1e-6 && (m.3 - t).abs() < 1e-6, "{i}: {a:?} {r} {ao} {t}");
+        }
         let l = |a: [f64; 3]| 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
         assert!((0.08..=0.18).contains(&l(a0)), "{a0:?}");
         assert!(l(a1) > l(a0) && l(a1) < 0.2, "{a1:?}");
