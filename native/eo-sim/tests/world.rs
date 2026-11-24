@@ -242,8 +242,8 @@ fn the_traffic_density_follows_the_streets_and_the_hour() {
     let expected: f64 = net.lanes.iter().filter(|l| l.alive).map(|l| t.lane_cars(l, [focus.x, focus.z])).sum();
     assert!(expected > 1.3 * VEHICLE_POOL as f64, "SoMa at 5 pm: {expected:.0} cars expected");
     assert!(busy.fleet.len() as f64 >= 0.9 * expected.min(DENSE_VEHICLE_POOL as f64) && busy.fleet.len() <= DENSE_VEHICLE_POOL, "busy: {} of {expected:.0}", busy.fleet.len());
-    // a quiet hour keeps the JS pool's cars
-    assert!(small.fleet.len() <= VEHICLE_POOL && small.fleet.len() + 3 >= VEHICLE_POOL && small.fleet.len() < busy.fleet.len(), "4 am {} vs 5 pm {}", small.fleet.len(), busy.fleet.len());
+    // a quiet hour keeps the JS pool's cars and adds only where an arterial is left short
+    assert!(small.fleet.len() + 3 >= VEHICLE_POOL && small.fleet.len() < busy.fleet.len(), "4 am {} vs 5 pm {}", small.fleet.len(), busy.fleet.len());
     // the JS pool's cars are put down where they were without the density (the same lanes and draws), the rest after them
     let kept = (0..off.fleet.len().min(busy.fleet.len()))
         .filter(|&i| busy.fleet.cars[i].lane == off.fleet.cars[i].lane && (busy.fleet.cars[i].arc - off.fleet.cars[i].arc).abs() < 8.0)
