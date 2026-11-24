@@ -166,6 +166,23 @@ pub fn plaza_rings(root: &std::path::Path, sw: &eo_street::StreetWorld) -> Vec<(
     plan.plazas.iter().filter_map(|p| p.rings.first().map(|r| (p.id.clone(), r.clone()))).collect()
 }
 
+/// `--crowd`: the landmarks' walkable paving (`Structure::footway`: the
+/// quay's apron along the seawall, the pier decks, the plazas' paving) as
+/// triangles for the feed's `Decks`.
+pub fn footway_decks(structures: &[eo_landmarks::set::Structure]) -> Vec<[[f32; 3]; 3]> {
+    let mut out = vec![];
+    for s in structures.iter().filter(|s| s.footway) {
+        let p = &s.mesh.positions;
+        let v = |i: u32| -> Option<[f32; 3]> { let k = 3 * i as usize; p.get(k..k + 3).map(|x| [x[0], x[1], x[2]]) };
+        for t in s.mesh.indices.chunks_exact(3) {
+            if let (Some(a), Some(b), Some(c)) = (v(t[0]), v(t[1]), v(t[2])) {
+                out.push([a, b, c]);
+            }
+        }
+    }
+    out
+}
+
 /// `--crowd`: the plazas' walks (eo-sim `plaza_walks`): each crossed by
 /// straight walks between points of its outline and walked round.
 pub fn plaza_paths(rings: &[(String, Vec<[f64; 2]>)]) -> Vec<eo_sim::native::PathWay> {
@@ -271,6 +288,8 @@ pub struct AgentRuntime {
     pub cuts: u64,
     /// `--crowd`: the paved plazas (set by the simulation's builder, handed to the feed).
     plazas: Arc<std::sync::Mutex<Option<Arc<eo_agents::feed::Plazas>>>>,
+    /// `--crowd`: the landmarks' walkable paving (handed to the feed).
+    decks: Option<Arc<eo_agents::feed::Decks>>,
 }
 
 /// One region around `focus` at `density` times the default population;
@@ -340,6 +359,7 @@ impl AgentRuntime {
             cut_post: None,
             cuts: 0,
             plazas: Default::default(),
+            decks: (opts.crowd && !world.footway_decks.is_empty()).then(|| Arc::new(eo_agents::feed::Decks::new(world.footway_decks.as_ref().clone()))),
         };
         if !opts.on {
             return rt;
@@ -349,7 +369,8 @@ impl AgentRuntime {
         // the Rocketbox people unless `--no-rocketbox` (or no copy at EO_PEOPLE_ROOT): then none.
         let people = if args.rocketbox { eo_agents::library::PeopleSource::from_env() } else { eo_agents::library::PeopleSource::Off };
         // (`--car-detail`) each body's far slot its own simplified body instead of three boxes.
-        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0 };
+        // (`--people-motion`) the people's heads held steady in the bake.
+        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0, steady_heads: eo_agents::motion::steady_heads() };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-load".into())
@@ -490,6 +511,7 @@ impl AgentRuntime {
                     Ok(mut f) => {
                         f.separate = self.opts.crowd; // `--crowd`: the bodies kept apart
                         f.plazas = self.plazas.lock().unwrap().clone(); // `--crowd`: on the plazas' paving
+                        f.decks = self.decks.clone(); // `--crowd`: on the landmarks' paving
                         self.feed = Some(FeedThread::start(f));
                     }
                     Err(e) => self.errors.push(format!("{e:#}")),
