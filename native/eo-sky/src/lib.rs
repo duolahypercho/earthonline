@@ -16,6 +16,7 @@ pub mod lights;
 pub mod lit_fog;
 pub mod moon;
 pub mod night;
+pub mod night_photometry;
 pub mod photo;
 pub mod photometry;
 pub mod shops;
