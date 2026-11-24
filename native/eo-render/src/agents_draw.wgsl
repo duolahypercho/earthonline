@@ -224,14 +224,14 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     }
     // (`--car-materials`) the cars' own materials and lamps: the surface and
     // its coat set before the one look_light, the glass's reflection after.
-    var car = AgCar(0u, false, vec3<f32>(0.0));
+    var car = AgCar(0u, false, vec3<f32>(0.0), 0u);
     let car_on = ag_car_on();
     if (car_on) {
         car = ag_car_prepare(&g, in, cd);
     }
     let c = look_light(g.s, g.m, g.v, in.world, g.n, 0u);
     if (car_on) {
-        return ag_car_finish(c, car, in.world, g.m);
+        return ag_car_finish(c, car, in.world, g);
     }
     return c;
 }
@@ -356,11 +356,15 @@ struct AgCarD {
 };
 
 // What `ag_car_finish` needs: the role, whether the surface is thin glass
-// (its reflection over its opacity), its own glow (a lit lamp cover).
+// (its reflection over its opacity), its own glow (a lit lamp cover), and
+// (`--car-reflections`) which layer mirrors the street's far lights: 0 none,
+// 1 the lacquer or the glass (sky_coat), 2 bare metal (chrome, a reflector
+// bowl, a wheel).
 struct AgCar {
     role: u32,
     glass: bool,
     emit: vec3<f32>,
+    far: u32,
 };
 
 // Whether the cars' materials draw (agents.rs `AgParams::misc.y`).
@@ -555,7 +559,7 @@ fn ag_car_plate(uv: vec2<f32>, duv: vec2<f32>, h: f32, dirt: f32, rear: bool) ->
 // The surface and material of a car's fragment by its role, and the lacquer
 // (sky_coat) for look_light; what `ag_car_finish` needs after it.
 fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
-    var k = AgCar(0u, false, vec3<f32>(0.0));
+    var k = AgCar(0u, false, vec3<f32>(0.0), 0u);
     let a = ag_agents[in.agent];
     let md = ag_models[a.model];
     if (md.model_class == AG_PERSON) {
@@ -648,6 +652,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
         sky_coat = 1.0;
         let coat = mix(mix(AG_CAR_COAT_NEW, AG_CAR_COAT_OLD, age), AG_CINE_COAT_GRIME_ROUGH, grime);
         sky_coat_rough = ag_car_aa(mix(coat, AG_CAR_GLASS_COAT_ROUGH, wet * smoothstep(0.3, 0.8, nb.y)), d.dn);
+        k.far = 1u;
         return k;
     }
     switch role {
@@ -676,6 +681,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
                     (*g).m.emissive = vec4<f32>(fill / absorb, 0.0);
                     sky_coat = 1.0;
                     sky_coat_rough = ag_car_aa(AG_CAR_GLASS_COAT_ROUGH + 0.04 * dirt * age, d.dn);
+                    k.far = 1u;
                     return k;
                 }
                 k.emit = fill;
@@ -688,6 +694,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             sky_coat = 1.0;
             sky_coat_rough = ag_car_aa(AG_CAR_GLASS_COAT_ROUGH + 0.04 * dirt * age, d.dn);
             k.glass = true;
+            k.far = 1u;
         }
         case 3u: {
             // Rubber: the sidewall's raised lettering on the outer face, road
@@ -751,6 +758,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             // environment's strength; a bowl glows with its lit lamp.
             (*g).s.env = ENV_PAINTED_METAL;
             (*g).s.rough = ag_car_aa((*g).s.rough, d.dn);
+            k.far = 2u;
             if (role == AG_ROLE_REFLECTOR && !parked) {
                 let front = local.z > md.center.z;
                 let i = ag_lamp(a.flags, select(AG_M_TAIL, AG_M_HEAD | AG_M_DRL, front), local.x);
@@ -772,6 +780,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             (*g).s.metal = mix((*g).s.metal, 0.15, bd * 0.8);
             (*g).s.rough = ag_car_aa(mix((*g).s.rough, 0.6, bd), d.dn);
             (*g).s.env = ENV_PAINTED_METAL;
+            k.far = 2u;
         }
         case 9u: {
             // Black plastics, sun-faded to a chalky grey on older cars.
@@ -859,21 +868,111 @@ fn ag_car_lens(tinted: bool, red: bool, local: vec3<f32>, md: AgModel, a: AgAgen
 // look_light's range fog (f toward F) stays where it was: what the blend
 // adds behind the glass is already fogged, so out = (c - f F + (1 - f) x the
 // glints) / alpha + f F gives mix(reflection + T x behind, F, f).
-fn ag_car_finish(c: vec4<f32>, k: AgCar, world: vec3<f32>, m: Material) -> vec4<f32> {
+// (`--car-reflections`) the far lights' reflection `far` joins the glints
+// (fogged as look_light fogged the rest); a tinted cover's (blended at its
+// alpha) over its alpha, so the blend keeps it whole.
+fn ag_car_finish(c: vec4<f32>, k: AgCar, world: vec3<f32>, g: AgSurf) -> vec4<f32> {
+    var far = vec3<f32>(0.0);
+    if (SF_CAR_REFLECTIONS && k.far != 0u) {
+        if (k.far == 1u) {
+            far = sky_coat * ag_car_far_lights(world, g.n, g.v, vec3<f32>(0.04), sky_coat_rough);
+        } else {
+            far = ag_car_far_lights(world, g.s.n, g.v, mix(vec3<f32>(0.04), g.s.albedo, g.s.metal), g.s.rough);
+        }
+    }
     if (k.glass) {
         let a = max(c.a, 0.02);
-        var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
-        if (skyu.flags.x != 0u) {
-            let u = max(abs(world.y - look.cam_pos.y) - 20.0, 0.0) / 400.0;
-            if (u > 1e-2) {
-                vd = vd * (1.0 - exp(-u)) / u;
-            }
-        }
-        let f = lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd));
+        let f = ag_car_fog(world, g.m);
         let ff = look.fog_color.xyz * f;
-        return vec4<f32>((c.rgb - ff + (1.0 - f) * (sky_coat_lights + k.emit)) / a + ff, a);
+        return vec4<f32>((c.rgb - ff + (1.0 - f) * (sky_coat_lights + k.emit + far)) / a + ff, a);
+    }
+    if (SF_CAR_REFLECTIONS && k.far != 0u) {
+        let over = select(1.0, 1.0 / max(c.a, 0.02), (g.m.flags & F_GLASS) != 0u);
+        return vec4<f32>(c.rgb + far * (1.0 - ag_car_fog(world, g.m)) * over, c.a);
     }
     return c;
+}
+
+// look_light's range fog at a car's point (its share toward the fog colour).
+fn ag_car_fog(world: vec3<f32>, m: Material) -> f32 {
+    var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
+    if (skyu.flags.x != 0u) {
+        let u = max(abs(world.y - look.cam_pos.y) - 20.0, 0.0) / 400.0;
+        if (u > 1e-2) {
+            vd = vd * (1.0 - exp(-u)) / u;
+        }
+    }
+    return lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd));
+}
+
+// ---- (`--car-reflections`; SF_CAR_REFLECTIONS, look.rs `ShaderFeatures`:
+// compiled out without it) The street's brightest lights mirrored in a car
+// at any distance. A smooth layer (the lacquer at GGX ~0.04-0.12, glass at
+// 0.02, chrome) shows a street lamp, a headlamp or a lit shop window as a
+// sharp highlight wherever its reflection finds one, however far the lamp
+// is: a mirror's reflection keeps its source's luminance (it shrinks with
+// distance, it does not dim), so the clusters' reach, which windows a
+// light's irradiance, has no place in it. The lights are the frame's
+// brightest toward the eye (the streak list, sky_streaks.wgsl, the wet
+// street's), each a sphere of its luminaire's size: the GGX lobe widened by
+// the source's angle (as the clusters' specular), the reflected radiance
+// never over the lens's luminance (a mirror's bound), the lens's emission
+// toward the point at least the share the eye sees of it (as the streaks).
+// What the clusters' loop already gave inside a light's reach (its window
+// squared) is left out, so nothing counts twice; a lamp with a shadow map
+// is hidden where its map says the point does not see it.
+fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
+    if (!SF_CAR_REFLECTIONS || !SKY_CINE_FULL || !sky_on(skyu.flags.x, SKY_LIGHTS) || !sky_on(skyu.flags.x, SKY_CINEMATIC) || skyu.lights.x == 0u || frame.copy_step.z > 0.5) {
+        return vec3<f32>(0.0);
+    }
+    let g = skyu.lights.yzw;
+    let base = g.x * g.y * g.z * (1u + SKY_CLUSTER_CAP);
+    let count = min(sky_clusters[base], SKY_STREAK_CAP);
+    var out = vec3<f32>(0.0);
+    for (var k = 0u; k < count; k = k + 1u) {
+        let li = sky_lights[sky_clusters[base + 1u + k]];
+        let d = li.pos - world;
+        let d2 = max(dot(d, d), 0.04);
+        let dist = sqrt(d2);
+        let l = d / dist;
+        let nl = dot(n, l);
+        let w = clamp(1.0 - pow(dist / max(li.range, 1e-3), 4.0), 0.0, 1.0);
+        let rest = 1.0 - w * w;
+        if (nl <= 0.0 || rest <= 0.0) {
+            continue;
+        }
+        let ca = dot(-l, li.dir);
+        var shape = 1.0;
+        var src = SKY_CINE_SRC_STREET;
+        if (li.kind == 0u) {
+            shape = max(sky_cine_cobra(l, li.dir), SKY_CINE_STREAK_LENS);
+        } else if (li.kind == 3u) {
+            shape = max(smoothstep(li.cos_outer, li.cos_inner, ca), SKY_CINE_STREAK_LENS);
+        } else if (li.kind == 1u) {
+            let dep = asin(clamp(l.y, -1.0, 1.0)) * 57.29578;
+            let hl = normalize(vec2<f32>(-l.x, -l.z) + vec2<f32>(1e-6, 0.0));
+            let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
+            let hr = vec2<f32>(-ha.y, ha.x);
+            let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
+            shape = max(sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578) * side, SKY_CINE_STREAK_HEAD_LENS * smoothstep(-0.2, 0.2, dot(hl, ha)));
+            src = SKY_CINE_SRC_HEADLAMP;
+        } else if (li.kind >= 4u) {
+            shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+            src = 0.5 * sqrt(max(li.size, 0.0));
+        }
+        src = max(src, 0.02);
+        var e = li.intensity * shape * rest / d2 * nl;
+        if (LS_SHADER && li.pad >= 1.0 && e > 0.0) {
+            e = e * ls_light_visibility(u32(li.pad) - 1u, world, n);
+        }
+        if (e <= 0.0) {
+            continue;
+        }
+        let rc = sqrt(min(rough * rough + src / (2.0 * dist), 1.0));
+        let bound = d2 / (LK_PI * src * src * nl);
+        out = out + li.color * e * min(lk_ggx(n, v, l, f0, rc), vec3<f32>(bound));
+    }
+    return out;
 }
 
 // Road grime on a car (`--grime`; in ag_weather's place under the cars'
