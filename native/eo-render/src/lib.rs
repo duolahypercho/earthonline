@@ -2213,7 +2213,7 @@ impl Renderer {
             ..*cam
         };
         let cam = &jittered;
-        let mapped_ocean = self.ocean_life.get().map(|ocean| ocean.update(queue, cam, self.water_clock()));
+        let mapped_ocean = self.ocean_life.get().map(|ocean| ocean.update(queue, cam, self.water_clock(), self.water.get().and_then(|w| w.canopy_map.as_ref())));
         // stage L5 (the cinematic look): the sea's "all fogged" test reads the fog in use
         // (the volume's aerial perspective pushes the range fog to 2e7 m), and the far
         // terrain hears when the sea pass is skipped so it draws the water there itself.

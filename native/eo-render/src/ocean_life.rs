@@ -1,6 +1,7 @@
 //! A small camera-local window onto stable habitat tiles across the SF sea.
 //! Model buffers are permanent. Only a tile crossing uploads new placements.
 pub mod field;
+pub(crate) mod canopy;
 use crate::{GpuContext, camera::Camera, look};
 use anyhow::{Context, Result, ensure};
 use bytemuck::{Pod, Zeroable};
@@ -38,6 +39,9 @@ struct Window {
 pub struct OceanLife {
     reef: bool,
     coastal_habitat: bool,
+    vary_kelp: bool,
+    rock_aprons: bool,
+    leaf_area: [Vec<canopy::LeafArea>; 4],
     sampler: Sampler,
     pipeline: wgpu::RenderPipeline,
     group: wgpu::BindGroup,
@@ -78,7 +82,14 @@ impl OceanLife {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut ranges = Vec::new();
+        let mut leaf_area = std::array::from_fn(|_| Vec::new());
         for (kind, base_name) in KINDS.iter().copied().enumerate() {
+            if ((21..field::LEDGE).contains(&kind) && !look.options.reef_kelp)
+                || (kind >= field::LEDGE && !look.options.reef_rocks)
+            {
+                ranges.push(0..0);
+                continue;
+            }
             let name = match base_name {
                 "eelgrass" if look.options.coastal_habitat => "eelgrass-shoots",
                 "bull-kelp" if look.options.coastal_habitat => "bull-kelp-crown",
@@ -121,6 +132,11 @@ impl OceanLife {
                     ensure!(id < nv, "invalid habitat index");
                     indices.push(base + id);
                 }
+            }
+            if look.options.reef_canopy_light
+                && let Some(form) = field::CROWN_KINDS.iter().position(|k| *k == kind)
+            {
+                leaf_area[form] = canopy::measure(&vertices, &indices[start as usize..]);
             }
             ranges.push(start..indices.len() as u32);
         }
@@ -174,8 +190,8 @@ impl OceanLife {
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("marine life"),
             source: wgpu::ShaderSource::Wgsl(format!(
-                "const DIVE_DETAIL: bool = {};\nconst COASTAL_HABITAT: bool = {};\nconst SWELL_DIR: f32 = {:.7};\nconst SWELL_OMEGA: f32 = {:.7};\n{}",
-                look.options.dive_detail, look.options.coastal_habitat, eo_water::waves::SWELL_DIR,
+                "const DIVE_DETAIL: bool = {};\nconst COASTAL_HABITAT: bool = {};\nconst REEF_ROCKS: bool = {};\nconst CANOPY_LIGHT: bool = {};\nconst SWELL_DIR: f32 = {:.7};\nconst SWELL_OMEGA: f32 = {:.7};\n{}",
+                look.options.dive_detail, look.options.coastal_habitat, look.options.reef_rocks, look.options.reef_canopy_light, eo_water::waves::SWELL_DIR,
                 std::f64::consts::TAU / eo_water::waves::SWELL_TP[0], include_str!("ocean_life/habitat.wgsl"),
             ).into()),
         });
@@ -196,6 +212,9 @@ impl OceanLife {
         Ok(Self {
             reef: reef.is_some(),
             coastal_habitat: look.options.coastal_habitat,
+            vary_kelp: look.options.reef_kelp,
+            rock_aprons: look.options.reef_rocks,
+            leaf_area,
             sampler,
             pipeline,
             group,
@@ -244,7 +263,7 @@ impl OceanLife {
         })
     }
 
-    pub fn update(&self, q: &wgpu::Queue, cam: &Camera, clock: f64) -> bool {
+    pub fn update(&self, q: &wgpu::Queue, cam: &Camera, clock: f64, canopy_map: Option<&wgpu::Texture>) -> bool {
         let mut w = self.window.lock().unwrap();
         let p = Vec2::new(cam.eye.x, cam.eye.z);
         let column = (cam.eye.y < field::SEA + 4.)
@@ -278,6 +297,12 @@ impl OceanLife {
                         field::reef(x, z, &self.sampler, &mut groups);
                         if self.coastal_habitat {
                             field::coastal_canopy(&mut groups);
+                            if self.vary_kelp {
+                                field::vary_crowns(x, z, &mut groups);
+                            }
+                            if self.rock_aprons {
+                                field::rock_aprons(x, z, &self.sampler, &mut groups);
+                            }
                             field::coastal_grass(x, z, &self.sampler, &mut groups[3]);
                         }
                     }
@@ -306,7 +331,11 @@ impl OceanLife {
                 let r = &w.groups[kind].instances;
                 &all[r.start as usize..r.end as usize]
             };
-            shade_plant_beds(&mut v, plants(3), plants(11));
+            shade_plant_beds(&mut v, plants(3), field::CROWN_KINDS.into_iter().flat_map(plants));
+            if let Some(texture) = canopy_map {
+                canopy::write(q, texture, (cell.as_vec2()+0.5)*TILE,
+                    self.leaf_area.iter().zip(field::CROWN_KINDS.map(plants)).map(|(leaves, stands)| (leaves.as_slice(), stands)));
+            }
         }
         if !ix.is_empty() {
             q.write_buffer(&self.sediment, 0, bytemuck::cast_slice(&v));
@@ -344,7 +373,7 @@ impl OceanLife {
 }
 /// The bed receives less diffuse sky beneath a canopy. Accumulate the solid
 /// angle of nearby crowns on the metre grid. Alpha zero still denotes dry land.
-fn shade_plant_beds(bed: &mut [Vertex], grass: &[Instance], kelp: &[Instance]) {
+fn shade_plant_beds<'a>(bed: &mut [Vertex], grass: &'a [Instance], kelp: impl Iterator<Item = &'a Instance>) {
     let Some(first) = bed.first() else {
         return;
     };
@@ -459,7 +488,7 @@ mod tests {
         let (before, _) = sediment(Vec2::new(-3., 3.), &sample, &[]);
         calls.store(0, Ordering::Relaxed);
         let centre = Vec2::new(-9., 9.);
-        let (mut v, ix) = sediment(centre, &sample, &before);
+        let (v, ix) = sediment(centre, &sample, &before);
         assert_eq!(
             calls.load(Ordering::Relaxed),
             BED_SIDE * BED_SIDE - (BED_SIDE - 6).pow(2)

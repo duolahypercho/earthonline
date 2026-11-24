@@ -219,8 +219,11 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
         beam_fraction *= inverseSqrt(1.0 + footprint / aperture);
     }
     let beam_focus = mix(1.0, w_caustic(origin + ray * scatter_t, scatter_depth, sun_up), beam_fraction);
-    let vol = ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
-        + direct * (scatter * wo_phase(dot(ray, sun_up)) * beam_focus + ext * multiple / WG_PI)
+    let shade_near = reef_transmission(origin + ray*(0.45*scatter_t), sun_up);
+    let shade_far = reef_transmission(origin + ray*min(path,1.65*scatter_t), sun_up);
+    let volume_light = 0.5*(shade_near+shade_far);
+    let vol = volume_light.y * ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
+        + direct * (volume_light.x * scatter * wo_phase(dot(ray, sun_up)) * beam_focus + volume_light.y * ext * multiple / WG_PI)
           * uw_integral(ext, path, down0, down1, max(sun_up.y, 0.1));
     var boundary = vec3<f32>(0.0);
     if (surface) {
@@ -297,6 +300,8 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
             let direct_beam=min(flux,exp(-ext*down1/max(sun_up.y,0.1)));
             incident=flux+direct_beam*direct_share*(focus-1.);
         }
+        let bed_light = reef_transmission(end,sun_up);
+        incident *= mix(bed_light.y,bed_light.x,direct_share);
         boundary = textureLoad(w_scene, vec2<i32>(i.clip.xy), 0).rgb * incident;
     }
     let grains = uw_grains(origin, ray, path, lk_luma(ext), select(0.0, cove, look.cove.x > 0.0), pixel_cone);

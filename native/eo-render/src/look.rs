@@ -252,6 +252,9 @@ pub struct LookOptions {
     pub dive_detail: bool,
     /// Locally shaped bull-kelp canopy and eelgrass shoots.
     pub coastal_habitat: bool,
+    pub reef_kelp: bool,
+    pub reef_canopy_light: bool,
+    pub reef_rocks: bool,
     /// Local water attenuation in the Aquatic Park Cove preview.
     pub cove_detail: bool,
     pub cove_canopy: bool,
@@ -289,7 +292,7 @@ pub struct LookOptions {
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { blender_camera: false, cove_daylight: false, shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_parts_off: 0, water_optics: false, ocean_life: false, ocean_reef: false, dive_detail: false, coastal_habitat: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { blender_camera: false, cove_daylight: false, shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_parts_off: 0, water_optics: false, ocean_life: false, ocean_reef: false, dive_detail: false, coastal_habitat: false, reef_kelp: false, reef_canopy_light: false, reef_rocks: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 

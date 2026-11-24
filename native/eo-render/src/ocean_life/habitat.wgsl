@@ -1,6 +1,14 @@
 // The first seven rows are shared with the city's Look uniform. The opaque
 // output is scene-linear; the existing water pass transports it to the eye.
-struct Light { dir:vec4f, key:vec4f, rim_dir:vec4f, rim:vec4f, sky:vec4f, ground:vec4f, ambient:vec4f };
+struct Light { dir:vec4f, key:vec4f, rim_dir:vec4f, rim:vec4f, sky:vec4f, ground:vec4f, ambient:vec4f, environment:vec4f, sh:array<vec4f,9> };
+// The same cosine-convolved sky coefficients used by the water lighting.
+fn reef_sky(n:vec3f)->vec3f {
+    let x=n.x; let y=n.y; let z=n.z;
+    return max(vec3f(0.), light.sh[0].xyz*0.282095
+        + 0.488603*(light.sh[1].xyz*y + light.sh[2].xyz*z + light.sh[3].xyz*x)
+        + 1.092548*(light.sh[4].xyz*x*y + light.sh[5].xyz*y*z + light.sh[7].xyz*x*z)
+        + light.sh[6].xyz*(0.315392*(3.*z*z-1.)) + light.sh[8].xyz*(0.546274*(x*x-y*y)));
+}
 struct View { vp:mat4x4f, eye_time:vec4f };
 @group(0) @binding(0) var<uniform> view:View;
 @group(1) @binding(0) var<uniform> light:Light;
@@ -82,6 +90,7 @@ fn rotate_xz(p:vec3f,a:f32)->vec3f {
     if COASTAL_HABITAT && kind==255u { surface_coord.z = color.a; }
     let world=rotate_xz(loc*size.xyz,yaw)+root;
     var out:Out;out.clip=view.vp*vec4f(world,1.);out.world=world;
+    if REEF_ROCKS || CANOPY_LIGHT { out.world=world-view.eye_time.xyz; }
     out.normal=rotate_xz(norm/max(size.xyz,vec3f(.001)),yaw);out.color=color.rgb*traits.w;out.kind=kind;out.local=surface_coord;
     return out;
 }
@@ -89,16 +98,32 @@ fn grain(p:vec3f)->f32{
     var a=fract(p*vec3f(.1081,.1037,.0953));a+=dot(a,a.yzx+19.31);
     return fract((a.x+a.y)*a.z);
 }
+// Smooth mineral variation in object space avoids flickering where the stone
+// recedes below a pixel. The fracture faces keep their own geometric normals.
+fn stone_noise(p:vec3f)->f32 {
+    let cell=floor(p); let v=fract(p); let u=v*v*(3.-2.*v);
+    let a=mix(grain(cell),grain(cell+vec3f(1,0,0)),u.x);
+    let b=mix(grain(cell+vec3f(0,1,0)),grain(cell+vec3f(1,1,0)),u.x);
+    let c=mix(grain(cell+vec3f(0,0,1)),grain(cell+vec3f(1,0,1)),u.x);
+    let e=mix(grain(cell+vec3f(0,1,1)),grain(cell+vec3f(1,1,1)),u.x);
+    return mix(mix(a,b,u.y),mix(c,e,u.y),u.z);
+}
 @fragment fn fs(i:Out,@builtin(front_facing) front:bool)->@location(0) vec4f {
-    let eye=view.eye_time.xyz;let d=distance(i.world,eye);
+    let eye=view.eye_time.xyz;
+    // Interpolating positions relative to the swimmer preserves derivatives
+    // on small rock faces several kilometres from the city origin.
+    let world=select(i.world, i.world+eye, REEF_ROCKS || CANOPY_LIGHT);
+    let to_eye=select(eye-i.world, -i.world, REEF_ROCKS || CANOPY_LIGHT);
+    let d=length(to_eye);
     let up=normalize(cross(dpdy(i.world),dpdx(i.world))+vec3f(0.,.00000001,0.));
     let footprint=max(length(dpdx(i.world)),length(dpdy(i.world)));
     var n=normalize(i.normal+vec3f(0.,.000001,0.));var alb=i.color;
-    let v=normalize(eye-i.world);let sun=light.dir.xyz;
+    let v=normalize(to_eye);var sun=light.dir.xyz;
+    if CANOPY_LIGHT { sun=-refract(-sun,vec3f(0.,1.,0.),1./1.333); }
     if i.kind==255u {
         // Fine sediment and asymmetric crests use world metres. An irregular
         // phase and patches of quiet mud break up the wave trains.
-        let p=i.world.xz;
+        let p=world.xz;
         let mud=.5+.5*sin(.44*p.x+.25*p.y+.89*sin(.25*p.y));
         let phase=dot(p,vec2f(13.,7.5))+1.13*sin(.86*p.y)+.56*sin(1.38*p.x-.52*p.y);
         let crest=sin(phase)+.22*sin(2.*phase+.8);
@@ -106,14 +131,27 @@ fn grain(p:vec3f)->f32{
         n=normalize(select(-up,up,up.y>=0.)+vec3f(-.89,0.,-.49)*crest*relief);
         let sand=mix(vec3f(.16,.145,.098),vec3f(.34,.291,.183),clamp(i.color.g*.60+i.color.b*.29,0.,1.));
         let grain_band=exp(-78.*footprint);
-        alb=sand*(.76+.22*mud+.10*crest*relief*4.+.36*grain_band*(grain(floor(i.world*290.))-.5));
-        if i.color.r>.5 && d>7. && grain(floor(i.world*21.))<smoothstep(7.,15.,d){discard;}
+        alb=sand*(.76+.22*mud+.10*crest*relief*4.+.36*grain_band*(grain(floor(world*290.))-.5));
+        if i.color.r>.5 && d>7. && grain(floor(world*21.))<smoothstep(7.,15.,d){discard;}
     } else {
-        if d>10. && grain(floor(i.world*74.))<smoothstep(10.,15.,d){discard;}
+        if d>10. && grain(floor(world*74.))<smoothstep(10.,15.,d){discard;}
         if (i.kind>=7u && i.kind<=10u) || i.kind==14u || i.kind==15u {
             let p=i.local;
             alb*=.86+.10*sin(20.*p.x+6.*p.y+sin(12.*p.z))+.10*grain(floor(p*60.))*exp(-25.*footprint);
         }
+    }
+    if REEF_ROCKS && ((i.kind>=7u && i.kind<=9u) || i.kind==14u || i.kind==15u || i.kind==24u || i.kind==25u) {
+        let p=i.local;
+        let inclusion=stone_noise(p*5.6);
+        let cleft=stone_noise(p*vec3f(5.,17.,6.)+inclusion*2.8);
+        let pit=stone_noise(p*27.);
+        let growth=smoothstep(0.47,0.80,inclusion+0.17*n.y-0.08*cleft);
+        let weathered=mix(alb,vec3f(0.13,0.075,0.087),0.65*growth);
+        alb=weathered*(0.62+0.51*cleft+0.31*pit);
+        let relief=0.013*cleft + 0.004*pit;
+        let px=dpdx(i.world); let py=dpdy(i.world);
+        let tx=cross(py,n); let ty=cross(n,px); let det=dot(px,tx);
+        n=normalize(n-sign(det)*(dpdx(relief)*tx+dpdy(relief)*ty)/max(abs(det),1e-8));
     }
     if (DIVE_DETAIL && i.kind==19u) || (COASTAL_HABITAT && i.kind==11u) {
         // Midrib and lengthwise corrugations track the blade as it flexes.
@@ -166,6 +204,9 @@ fn grain(p:vec3f)->f32{
     if !front && i.kind!=255u {n=-n;}
     let lambert=max(dot(n,sun),0.);
     var ambient=mix(light.ground.rgb,light.sky.rgb,clamp(.52+.46*n.y,0.,1.))+light.ambient.rgb;
+    if CANOPY_LIGHT {
+        ambient += reef_sky(n)*light.ambient.w*light.environment.w;
+    }
     if COASTAL_HABITAT && i.kind==255u { ambient *= i.local.z; }
     var radiance=alb*(ambient+light.key.rgb*lambert)/3.14159;
     if i.kind<=1u || i.kind==20u {

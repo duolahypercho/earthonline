@@ -4,7 +4,10 @@ use glam::Vec2;
 use std::sync::Arc;
 
 pub const CORE_KINDS: usize = 14;
-pub const KINDS: [&str; 21] = [
+pub const CROWN_KINDS: [usize; 4] = [11, 21, 22, 23];
+pub const LEDGE: usize = 24;
+pub const BOULDER: usize = 25;
+pub const KINDS: [&str; 26] = [
     "perch",
     "topsmelt",
     "sculpin",
@@ -26,6 +29,11 @@ pub const KINDS: [&str; 21] = [
     "branching-colony",
     "kelp-column",
     "baitfish",
+    "streaming-crown",
+    "open-crown",
+    "clustered-crown",
+    "bedrock-ledge",
+    "fractured-boulder",
 ];
 pub const TILE: f32 = 6.0;
 pub const RING: i32 = 2;
@@ -472,6 +480,71 @@ pub fn coastal_canopy(groups: &mut [Vec<Instance>; KINDS.len()]) {
     });
 }
 
+/// Keep a holdfast in place while varying the number, age and spread of its stipes.
+pub fn vary_crowns(x: i32, z: i32, groups: &mut [Vec<Instance>; KINDS.len()]) {
+    let mut rng = Rng(hash(x, z) ^ 0xa13e_5d7c);
+    let plants = std::mem::take(&mut groups[11]);
+    for mut plant in plants {
+        let kind = CROWN_KINDS[(rng.unit() * CROWN_KINDS.len() as f32) as usize];
+        // Young or storm-abraded individuals form a broken subcanopy.
+        let height = if kind == 22 {
+            rng.between(0.48, 0.79)
+        } else {
+            rng.between(0.83, 1.0)
+        };
+        plant.shape[1] *= height;
+        plant.shape[0] *= height * rng.between(0.86, 1.21);
+        plant.shape[2] *= height * rng.between(0.77, 1.14);
+        groups[kind].push(plant); // All four meshes share the bull-kelp shader.
+    }
+}
+/// Extend existing reef rock into low overlapping ledges. Smaller fragments
+/// sit in the sediment at the foot of each outcrop, with gaps between outcrops.
+pub fn rock_aprons(x: i32, z: i32, sample: &Sampler, groups: &mut [Vec<Instance>; KINDS.len()]) {
+    let mut rng = Rng(hash(x, z) ^ 0x56d4_bf09);
+    let (anchors, stones) = groups.split_at_mut(LEDGE);
+    for rock in anchors[14].iter().chain(&anchors[15]) {
+        let centre = Vec2::new(rock.at[0], rock.at[2]);
+        let axis = Vec2::new(rock.at[3].cos(), rock.at[3].sin());
+        let cross = Vec2::new(-axis.y, axis.x);
+        let mass = rock.shape[0];
+        let count = 6 + (rng.unit() * 9.) as usize;
+        for j in 0..count {
+            let ledge = j < 2;
+            let sign = if j % 2 == 0 { 1. } else { -1. };
+            let p = centre
+                + mass * (sign * rng.between(0.65, 1.85) * axis + rng.between(-0.86, 0.86) * cross);
+            let Some(site) = sample(p).filter(|s| {
+                s.pacific > 0.55 && s.beach < 0.45 && s.shore > 1.5 && s.floor < SEA - 1.2
+            }) else {
+                continue;
+            };
+            let radius = mass
+                * if ledge {
+                    rng.between(0.78, 1.46)
+                } else {
+                    rng.between(0.13, 0.62)
+                };
+            let height = radius * rng.between(0.40, 1.04);
+            let yaw = rock.at[3]
+                + rng.between(-0.34, 0.34)
+                + if ledge { 0. } else { rng.between(-1.8, 1.8) };
+            let buried = height * rng.between(-0.12, 0.16);
+            let id = if ledge { LEDGE } else { BOULDER };
+            stones[id - LEDGE].push(Instance {
+                at: [p.x, site.floor + buried, p.y, yaw],
+                shape: [
+                    radius,
+                    height,
+                    radius * rng.between(0.68, 1.19),
+                    rng.between(0., 6.28),
+                ],
+                traits: [id as f32, 0., 0., rng.between(0.75, 1.25)],
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -492,6 +565,35 @@ mod tests {
         let mut life = Default::default();
         populate(x, z, sample, &mut life);
         life
+    }
+
+    #[test]
+    fn reef_rock_and_kelp_forms_follow_world_sites() {
+        let sample = samples(SEA - 8., 18., 0.86);
+        let mut forms = [0; 4];
+        let mut stones = 0;
+        for x in -8..8 {
+            for z in -8..8 {
+                let mut groups = Default::default();
+                reef(x, z, &sample, &mut groups);
+                coastal_canopy(&mut groups);
+                let mut replay = groups.clone();
+                for g in [&mut groups, &mut replay] {
+                    vary_crowns(x, z, g);
+                    rock_aprons(x, z, &sample, g);
+                }
+                assert_eq!(groups, replay);
+                for (i, kind) in CROWN_KINDS.into_iter().enumerate() {
+                    forms[i] += groups[kind].len();
+                }
+                for stone in groups[LEDGE].iter().chain(&groups[BOULDER]) {
+                    assert!((stone.at[1] - (SEA - 8.)).abs() < stone.shape[1] * 0.17);
+                    stones += 1;
+                }
+            }
+        }
+        assert!(forms.into_iter().all(|count| count > 0));
+        assert!(stones > 0);
     }
 
     #[test]
