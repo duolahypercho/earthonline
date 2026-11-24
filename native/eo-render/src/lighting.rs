@@ -248,6 +248,8 @@ mod tests {
         sets.push(("probe sky".into(), look::ShaderFeatures { probe_sky: true, ..none })); // (`--probe-sky`)
         sets.push(("wet relief".into(), look::ShaderFeatures { wet_relief: true, ..none })); // (`--wet-relief`)
         sets.push(("wet relief, wet surfaces, screen reflect, street pbr, cinematic".into(), look::ShaderFeatures { wet_relief: true, wet_surfaces: true, screen_reflect: true, street_pbr: true, cinematic: true, ..none }));
+        sets.push(("lamp streaks".into(), look::ShaderFeatures { lamp_streaks: true, ..none })); // (`--lamp-streaks`)
+        sets.push(("lamp streaks, wet relief, wet surfaces, screen reflect, street pbr, cinematic".into(), look::ShaderFeatures { lamp_streaks: true, wet_relief: true, wet_surfaces: true, screen_reflect: true, street_pbr: true, cinematic: true, ..none }));
         sets.push(("probe sky, cinematic".into(), look::ShaderFeatures { probe_sky: true, cinematic: true, lx_bits: u32::MAX, ..none }));
         sets.push(("car materials".into(), look::ShaderFeatures { car_materials: true, ..none })); // (`--car-materials`)
         sets.push(("car materials, cinematic, grime".into(), look::ShaderFeatures { car_materials: true, cinematic: true, grime: true, ..none }));
@@ -348,7 +350,7 @@ mod tests {
         // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options;
         // the sun bounce, the albedo's multi-bounce, the penumbra and the screen-space indirect light,
         // the reflect track's switches, the camera model and the cars' materials are their own, below)
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, wet_surfaces: false, screen_reflect: false, probe_sky: false, wet_relief: false, camera: false, car_materials: false, car_reflections: false, ..look::ShaderFeatures::ALL });
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, wet_surfaces: false, screen_reflect: false, probe_sky: false, wet_relief: false, lamp_streaks: false, camera: false, car_materials: false, car_reflections: false, ..look::ShaderFeatures::ALL });
         assert!(!f.street_pbr && !look::ShaderFeatures::ALL.street_pbr, "the street pass comes in with its switch only (eo-app)");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
@@ -396,16 +398,16 @@ mod tests {
         // (`--wet-surfaces`, `--screen-reflect`, `--probe-sky`) the default compiles them out; each switch compiles in its own.
         let o = look::LookOptions::default();
         let f = look::ShaderFeatures::of(&o, false, false, false);
-        assert!(!f.wet_surfaces && !f.screen_reflect && !f.probe_sky && !f.wet_relief);
-        for (k, v) in [("SF_WET_SURFACES", false), ("SF_SCREEN_REFLECT", false), ("SF_PROBE_SKY", false), ("SF_WET_RELIEF", false)] {
+        assert!(!f.wet_surfaces && !f.screen_reflect && !f.probe_sky && !f.wet_relief && !f.lamp_streaks);
+        for (k, v) in [("SF_WET_SURFACES", false), ("SF_SCREEN_REFLECT", false), ("SF_PROBE_SKY", false), ("SF_WET_RELIEF", false), ("SF_LAMP_STREAKS", false)] {
             assert!(look::ShaderFeatures::NONE.wgsl().contains(&format!("const {k}: bool = {v};")), "{k}");
             assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const {k}: bool = {};", !v)), "{k}");
         }
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}");
-        for (wet, sr, ps, wr) in [(true, false, false, false), (false, true, false, false), (false, false, true, false), (true, false, false, true), (true, true, true, true)] {
-            let on = look::LookOptions { sky: crate::sky::SkyOptions { wet_surfaces: wet, screen_reflect: sr, probe_sky: ps, wet_relief: wr, ..o.sky }, ..o };
+        for (wet, sr, ps, wr, ls) in [(true, false, false, false, false), (false, true, false, false, false), (false, false, true, false, false), (true, false, false, true, false), (false, false, false, false, true), (true, true, true, true, true)] {
+            let on = look::LookOptions { sky: crate::sky::SkyOptions { wet_surfaces: wet, screen_reflect: sr, probe_sky: ps, wet_relief: wr, lamp_streaks: ls, ..o.sky }, ..o };
             let f = look::ShaderFeatures::of(&on, false, false, false);
-            assert_eq!(f, look::ShaderFeatures { wet_surfaces: wet, screen_reflect: sr, probe_sky: ps, wet_relief: wr, ..look::ShaderFeatures::NONE }, "each alone compiles in nothing else");
+            assert_eq!(f, look::ShaderFeatures { wet_surfaces: wet, screen_reflect: sr, probe_sky: ps, wet_relief: wr, lamp_streaks: ls, ..look::ShaderFeatures::NONE }, "each alone compiles in nothing else");
             assert!(same(&f.limit(&on), &on), "compiled in, it stays as asked");
             assert!(same(&look::ShaderFeatures::NONE.limit(&on), &o), "compiled out, it stays off (the default frame)");
         }

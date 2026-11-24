@@ -168,6 +168,8 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     let g = skyu.lights.yzw;
     let base = g.x * g.y * g.z * (1u + SKY_CLUSTER_CAP);
     let count = min(sky_clusters[base], SKY_STREAK_CAP);
+    // (`--lamp-streaks`) the cars' rear lamps after the list (`sky_ls_light`; none without)
+    let total = count + sky_ls_count(base);
     // the tangent along the ground toward the eye (the streak's length)
     var t = v - n * dot(v, n);
     if (dot(t, t) < 1e-8) {
@@ -185,8 +187,13 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     let r_across = mix(SKY_CINE_STREAK_ACROSS, SKY_W2_RING_LOBE.y, sky_streak_pud);
     let lobes = select(1, 2, SKY_W2_FULL && ring_w > 0.0);
     var out = vec3<f32>(0.0);
-    for (var k = 0u; k < count; k = k + 1u) {
-        let li = sky_lights[sky_clusters[base + 1u + k]];
+    for (var k = 0u; k < total; k = k + 1u) {
+        var li: SkyLight;
+        if (k < count) {
+            li = sky_lights[sky_clusters[base + 1u + k]];
+        } else {
+            li = sky_ls_light(base, k - count);
+        }
         let d = li.pos - world;
         let d2 = max(dot(d, d), 0.04);
         let dist = sqrt(d2);
@@ -1697,4 +1704,43 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     }
     let c = (hit_c * hit_w + sky_c * sky_w * (1.0 - hit_w)) / w;
     return vec4<f32>(c, w * fade);
+}
+
+// ---- (`--lamp-streaks`, the reflect track; sky.rs `SkyOptions::lamp_streaks`;
+// compiled out without SF_LAMP_STREAKS, and into the street's pipelines only;
+// the gather's side is sky_lamp_streaks.wgsl) ----
+// The cars' rear lamps streak on the wet street as the street lamps and
+// headlamps do (`sky_cine_streaks`): the gather writes the rear lamps of the
+// cars brightest at the eye after the streak list, each a whole light record
+// (a lens of the lamp's size, its intensity in the frame's light units, its
+// lens's red at unit luminance, a cone round the car's rear axis); the streak
+// loop reads them after the list's lights and reflects them through the same
+// film lobes. With the switch off the gather writes none.
+const SKY_LS_FULL: bool = SF_LAMP_STREAKS && SKY_CINE_FULL;
+/// The rear lamps' records at most (two a car, sky_reflect.rs `LS_CARS`).
+const SKY_LS_LAMPS: u32 = 12u;
+
+/// (`--lamp-streaks`) How many rear lamps follow the streak list (0 off).
+fn sky_ls_count(base: u32) -> u32 {
+    if (!SKY_LS_FULL) {
+        return 0u;
+    }
+    return min(sky_clusters[base + 1u + SKY_STREAK_CAP], SKY_LS_LAMPS);
+}
+
+/// (`--lamp-streaks`) Rear lamp `k`'s record (16 words a light after the count).
+fn sky_ls_light(base: u32, k: u32) -> SkyLight {
+    let o = base + 2u + SKY_STREAK_CAP + 16u * k;
+    var l: SkyLight;
+    l.pos = vec3<f32>(bitcast<f32>(sky_clusters[o]), bitcast<f32>(sky_clusters[o + 1u]), bitcast<f32>(sky_clusters[o + 2u]));
+    l.intensity = bitcast<f32>(sky_clusters[o + 3u]);
+    l.color = vec3<f32>(bitcast<f32>(sky_clusters[o + 4u]), bitcast<f32>(sky_clusters[o + 5u]), bitcast<f32>(sky_clusters[o + 6u]));
+    l.range = bitcast<f32>(sky_clusters[o + 7u]);
+    l.dir = vec3<f32>(bitcast<f32>(sky_clusters[o + 8u]), bitcast<f32>(sky_clusters[o + 9u]), bitcast<f32>(sky_clusters[o + 10u]));
+    l.cos_outer = bitcast<f32>(sky_clusters[o + 11u]);
+    l.cos_inner = bitcast<f32>(sky_clusters[o + 12u]);
+    l.kind = sky_clusters[o + 13u];
+    l.size = bitcast<f32>(sky_clusters[o + 14u]);
+    l.pad = 0.0;
+    return l;
 }

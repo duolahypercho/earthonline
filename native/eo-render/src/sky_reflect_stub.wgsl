@@ -50,3 +50,13 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
 fn sky_sr_spec(env: vec3<f32>, ssr: vec4<f32>, fss: vec3<f32>, so: f32) -> vec3<f32> {
     return mix(env, ssr.rgb, ssr.a) * fss * so;
 }
+
+// (`--lamp-streaks`) off here too: no rear lamps after the streak list.
+fn sky_ls_count(base: u32) -> u32 {
+    return 0u;
+}
+
+fn sky_ls_light(base: u32, k: u32) -> SkyLight {
+    var l: SkyLight;
+    return l;
+}

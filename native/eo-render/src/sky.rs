@@ -206,6 +206,12 @@ pub struct SkyOptions {
     /// it), and Lekner & Dorf's darkening (sky_light.wgsl `sky_wr_*`). Off by
     /// default (its code compiled out: `SF_WET_RELIEF`); off, the frame is as before.
     pub wet_relief: bool,
+    /// (`--lamp-streaks`, the reflect track; under the cinematic look) the
+    /// cars' rear lamps streak on the wet street as lights of their own
+    /// (sky_lamp_streaks.wgsl picks the cars brightest at the eye, sky_light.wgsl
+    /// `sky_cine_streaks` reflects them). Off by default (its code and pass made
+    /// only with `SF_LAMP_STREAKS`); off, the gather writes no rear lamp.
+    pub lamp_streaks: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -283,6 +289,7 @@ impl Default for SkyOptions {
             screen_reflect: false,
             probe_sky: false,
             wet_relief: false,
+            lamp_streaks: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -328,6 +335,7 @@ impl SkyOptions {
             screen_reflect: false,
             probe_sky: false,
             wet_relief: false,
+            lamp_streaks: false,
             ..Self::default()
         }
     }
@@ -648,6 +656,8 @@ pub struct SkyGpu {
     lights_pipes: [wgpu::ComputePipeline; 5],
     /// (`--look cinematic`, stage L3) the streak lights' pick (sky_streaks.wgsl), made only with SF_CINEMATIC.
     streaks_pipe: Option<wgpu::ComputePipeline>,
+    /// (`--lamp-streaks`) the cars' rear lamps' pick (sky_lamp_streaks.wgsl), made only with SF_LAMP_STREAKS and SF_CINEMATIC.
+    lamp_streaks_pipe: Option<wgpu::ComputePipeline>,
     noise_pipe: wgpu::ComputePipeline,
     noise_bg: wgpu::BindGroup,
     noise_down: wgpu::ComputePipeline,
@@ -744,6 +754,9 @@ pub fn cine_lamps_wgsl(on: bool) -> String {
         // (stage L3) the streak lights' pick (sky.rs `streaks_pipe`)
         src += &format!("const LT_STREAK_CAP: u32 = {STREAK_CAP}u;\n");
         src += include_str!("sky_streaks.wgsl");
+        if crate::look::shader_features().lamp_streaks {
+            src += &crate::sky_reflect::lamp_streaks_gather_wgsl(); // (`--lamp-streaks`, the reflect track)
+        }
     }
     src
 }
@@ -813,6 +826,8 @@ impl SkyGpu {
         // (COPY_SRC: the shop lights' tests and cards read the clusters, `lights_readback`)
         // (`--look cinematic`, stage L3) the streak lights' count and indices after the clusters, only with the look compiled in.
         let streak_words = if crate::look::shader_features().cinematic { 1 + STREAK_CAP as u64 } else { 0 };
+        // (`--lamp-streaks`) the cars' rear lamps after them, only with both compiled in.
+        let streak_words = streak_words + if crate::look::shader_features().cinematic && crate::look::shader_features().lamp_streaks { crate::sky_reflect::lamp_streak_words() } else { 0 };
         let clusters = buffer("sky-clusters", (ncl * (1 + CLUSTER_CAP as u64) + streak_words) * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         let lt_params = buffer("sky-light-params", std::mem::size_of::<LtParams>() as u64, uni);
         let dummy_storage = buffer("sky-dummy-storage", 256, wgpu::BufferUsages::STORAGE);
@@ -891,6 +906,8 @@ impl SkyGpu {
             compute("lights_shops", &ll, &lm, "lights_shops"), // (`--shop-light`)
         ];
         let streaks_pipe = crate::look::shader_features().cinematic.then(|| compute("lights_streaks", &ll, &lm, "lights_streaks"));
+        // (`--lamp-streaks`) the cars' rear lamps' pick, after the streaks' (sky_lamp_streaks.wgsl)
+        let lamp_streaks_pipe = (crate::look::shader_features().cinematic && crate::look::shader_features().lamp_streaks).then(|| compute("lights_lamp_streaks", &ll, &lm, "lights_lamp_streaks"));
 
         // Cloud noise (once).
         let (vol_src, noise_src) = include_str!("sky_volume.wgsl").split_once("// ---- noise module").expect("noise marker");
@@ -1185,6 +1202,7 @@ impl SkyGpu {
             lights_bgl,
             lights_pipes,
             streaks_pipe,
+            lamp_streaks_pipe,
             noise_pipe,
             noise_bg,
             noise_down,
@@ -1908,7 +1926,10 @@ impl SkyGpu {
         let tunnel_pool = bore_units / crate::structures::TUNNEL_POOL_OVERLAP;
         let p = LtParams {
             counts: [self.lamp_count.load(Ordering::Relaxed), agents, FRAME_LIGHT_CAP, (s.agents_bg.is_some()) as u32],
-            scale: [(lamp_k * lamps_on) as f32, (lamp_k * eo_sky::photometry::LOW_BEAM_PEAK_CD * veh) as f32, 0.0, 45.0],
+            // (z: `--lamp-streaks`, the cars' rear lamps' units per candela, with the street
+            // lamps' clock: by day a rear lamp's few hundred cd/m2 are lost in the daylit
+            // film, which the lamps' constant night scale would not show; 0 off)
+            scale: [(lamp_k * lamps_on) as f32, (lamp_k * eo_sky::photometry::LOW_BEAM_PEAK_CD * veh) as f32, if o.lamp_streaks { (lamp_k * veh * lamps_on) as f32 } else { 0.0 }, 45.0],
             props: [(props_k * lamps_on) as f32, if tiles_any { 1.0 } else { 0.0 }, (eo_sky::photometry::LAMP_POOL_PEAK_LUX * lamp_k * lamps_on) as f32, tunnel_pool as f32],
             // (`--look cinematic`, stage L2) w the lamp palette's cell (0: none or the look off),
             // the waterside's z, w its columns and rows (both unread by the gather without the look).
@@ -2042,6 +2063,11 @@ impl SkyGpu {
         pass.dispatch_workgroups(ncl, 1, 1);
         // (`--look cinematic`, stage L3) the streak lights, after the clusters
         if let (Some(p), true) = (&self.streaks_pipe, s.opts.cinematic) {
+            pass.set_pipeline(p);
+            pass.dispatch_workgroups(1, 1, 1);
+        }
+        // (`--lamp-streaks`) the cars' rear lamps after them (none written while the switch is off)
+        if let (Some(p), true) = (&self.lamp_streaks_pipe, s.opts.cinematic) {
             pass.set_pipeline(p);
             pass.dispatch_workgroups(1, 1, 1);
         }

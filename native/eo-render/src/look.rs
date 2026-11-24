@@ -765,6 +765,10 @@ pub struct ShaderFeatures {
     /// The water the street's relief holds and the film by the surface under it
     /// (`--wet-relief`; sky_light.wgsl `sky_wr_*`, `SF_WET_RELIEF`; over `--wet-surfaces`).
     pub wet_relief: bool,
+    /// The cars' rear lamps as streak lights on the wet street (`--lamp-streaks`;
+    /// sky_light.wgsl `sky_ls_*`, `SF_LAMP_STREAKS`; the gather's pick, sky_lamp_streaks.wgsl,
+    /// and its words after the streak list made only with it; under the cinematic look).
+    pub lamp_streaks: bool,
     /// The camera model under the cinematic look (`--cine-camera`; `SF_CAMERA`; cine_post.rs):
     /// its passes are made only with it, and its lines in the post and bloom shaders sit behind it.
     pub camera: bool,
@@ -801,7 +805,7 @@ impl ShaderFeatures {
         facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, // the facades track
         street_pbr: false, // the street track
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
-        wet_surfaces: true, screen_reflect: true, probe_sky: true, wet_relief: true, // the reflect track
+        wet_surfaces: true, screen_reflect: true, probe_sky: true, wet_relief: true, lamp_streaks: true, // the reflect track
         camera: true, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, // the night track
@@ -813,7 +817,7 @@ impl ShaderFeatures {
         facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, // the facades track
         street_pbr: false, // the street track
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
-        wet_surfaces: false, screen_reflect: false, probe_sky: false, wet_relief: false, // the reflect track
+        wet_surfaces: false, screen_reflect: false, probe_sky: false, wet_relief: false, lamp_streaks: false, // the reflect track
         camera: false, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, // the night track
@@ -846,6 +850,7 @@ impl ShaderFeatures {
             screen_reflect: o.sky.screen_reflect,
             probe_sky: o.sky.probe_sky,
             wet_relief: o.sky.wet_relief,
+            lamp_streaks: o.sky.lamp_streaks,
             camera: o.look.is_cinematic() && o.sky.cine_camera,
             car_materials: o.car_materials > 0,
             car_reflections: o.car_materials > 0 && o.car_reflections > 0,
@@ -917,6 +922,7 @@ impl ShaderFeatures {
         }
         l.sky.probe_sky &= self.probe_sky;
         l.sky.wet_relief &= self.wet_relief;
+        l.sky.lamp_streaks &= self.lamp_streaks;
         l.sky.cine_camera &= self.camera;
         if !self.car_materials {
             l.car_materials = 0;
@@ -963,6 +969,7 @@ impl ShaderFeatures {
                 ("SF_SCREEN_REFLECT", self.screen_reflect),
                 ("SF_PROBE_SKY", self.probe_sky),
                 ("SF_WET_RELIEF", self.wet_relief),
+                ("SF_LAMP_STREAKS", self.lamp_streaks),
                 // the camera track
                 ("SF_CAMERA", self.camera),
                 // the vehicles track
