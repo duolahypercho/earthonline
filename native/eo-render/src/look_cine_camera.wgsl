@@ -53,6 +53,62 @@ fn cam_agx(x0: vec3<f32>) -> vec3<f32> {
     return clamp(m_out * v, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+/// (`--camera-tone`) the camera's curve on one value: `cam_tone_log` and the
+/// AgX sigmoid, decoded with its 2.2 (cine_post.rs `sigmoid_display`).
+fn cam_curve1(n: f32) -> f32 {
+    let g = log2(0.18);
+    var v = g + cam_tone_log(vec3<f32>(log2(max(n, 1e-10)) - g)).x;
+    v = clamp((v - CAM_AGX_LO) / (CAM_AGX_HI - CAM_AGX_LO), 0.0, 1.0);
+    let v2 = v * v;
+    let v4 = v2 * v2;
+    let e = 15.5 * v4 * v2 - 40.14 * v4 * v + 31.96 * v4 - 6.868 * v2 * v + 0.4298 * v2 + 0.1191 * v - 0.00232;
+    return pow(clamp(e, 0.0, 1.0), 2.2);
+}
+
+/// (`--camera-tone`) the camera's display transform (cine_post.rs `display`):
+/// the curve on a norm between the luminance and the brightest channel
+/// (`CAM_TONE_NORM_MAX`) with the colour's ratios kept (its hue does not
+/// skew as one channel nears white before the others); the mid-tones'
+/// saturation, rolled off in the deep toe (a black's colour goes toward
+/// neutral) and in the shoulder; far over white (`CAM_TONE_WHITEN_EV`) the path to white (the other
+/// channels rise to the brightest: a sensor's channels all fill); then the
+/// gamut's soft edge: a channel past `CAM_TONE_GAMUT_KNEE` is brought toward 1
+/// by desaturating toward the colour's own luminance, never clipped alone (a
+/// golden sky runs through cream to white instead of a flat R 255 plateau; a
+/// saturated lamp keeps its hue as it whitens). Scene (middle grey 0.18) ->
+/// display linear.
+fn cam_display(x0: vec3<f32>) -> vec3<f32> {
+    let x = max(x0, vec3<f32>(0.0));
+    let y = dot(x, CAM_LW);
+    let m = max(x.r, max(x.g, x.b));
+    let n = mix(y, m, CAM_TONE_NORM_MAX);
+    if (!(n > 1e-10)) {
+        return vec3<f32>(0.0);
+    }
+    let t = cam_curve1(n);
+    var c = x * (t / n);
+    let l = dot(c, CAM_LW);
+    let s = CAM_TONE_SAT.x * mix(CAM_TONE_SAT.y, 1.0, smoothstep(CAM_TONE_TOE_DESAT.x, CAM_TONE_TOE_DESAT.y, l))
+        * (1.0 - (1.0 - CAM_TONE_SAT.z) * smoothstep(CAM_TONE_SHOULDER_DESAT.x, CAM_TONE_SHOULDER_DESAT.y, l));
+    c = vec3<f32>(l) + (c - vec3<f32>(l)) * s;
+    let w = smoothstep(CAM_TONE_WHITEN_EV.x, CAM_TONE_WHITEN_EV.y, log2(n / 0.18));
+    c = mix(c, vec3<f32>(max(max(c.r, max(c.g, c.b)), t)), w);
+    let l2 = dot(c, CAM_LW);
+    let mx = max(c.r, max(c.g, c.b));
+    let mn = min(c.r, min(c.g, c.b));
+    var k = 1.0;
+    let tk = CAM_TONE_GAMUT_KNEE;
+    if (mx > tk && mx > l2 + 1e-6) {
+        let soft = tk + (1.0 - tk) * (mx - tk) / ((1.0 - tk) + (mx - tk));
+        k = (max(soft, l2) - l2) / (mx - l2);
+    }
+    if (mn < 0.0) {
+        k = min(k, l2 / max(l2 - mn, 1e-6));
+    }
+    c = vec3<f32>(l2) + (c - vec3<f32>(l2)) * clamp(k, 0.0, 1.0);
+    return clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 /// The local exposure's gain at a pixel of log2 luminance `lx` (exposed by the
 /// hour's exposure, the grid's units). The base luminance round it (the
 /// bilateral grid sliced at its own luminance, blended with the wider blur of
@@ -72,7 +128,7 @@ fn cam_local(pos: vec2<f32>, lx: f32) -> f32 {
     let blur = select(gz, g.z / max(g.w, 1e-6), g.w > 1e-4);
     let bil = select(blur, g.x / max(g.y, 1e-6), g.y > 1e-5);
     let support = smoothstep(0.004, 0.06, g.y);
-    let bn = mix(blur, bil, CAM_BILATERAL_SHARE * support);
+    let bn = mix(blur, bil, select(CAM_BILATERAL_SHARE, CAM_TONE_BILATERAL_SHARE, SF_CAM_TONE) * support);
     let base = CAM_GRID_LO + bn * span + log2(max(cam_state.gain, 1e-6));
     let rb = base - log2(0.18);
     let knee = cine.cam3.w;
@@ -112,7 +168,7 @@ fn cam_push(x: vec3<f32>) -> vec3<f32> {
 /// in a flat gradient (`CAM_SHARPEN_GATE`: a clear sky's or a wall's faint
 /// noise is not raised); the colour keeps its chromaticity, only its luminance
 /// moves. Restores the detail the temporal resolve's history blend softens.
-fn cam_sharpen(p: vec2<i32>, c: vec3<f32>, e: f32) -> vec3<f32> {
+fn cam_sharpen(p: vec2<i32>, c: vec3<f32>, e: f32, strength: f32) -> vec3<f32> {
     let dims = vec2<i32>(textureDimensions(hdr));
     let lc0 = dot(c, CAM_LW) * e;
     let ec = lc0 / (1.0 + lc0);
@@ -137,7 +193,7 @@ fn cam_sharpen(p: vec2<i32>, c: vec3<f32>, e: f32) -> vec3<f32> {
     // its noise term: a pixel unlike the mean of its neighbours by its range's whole width.
     let nz = 1.0 - 0.5 * clamp(abs(0.25 * sum - ec) / max(mx - mn, 1e-6), 0.0, 1.0);
     let gate = smoothstep(CAM_SHARPEN_GATE.x, CAM_SHARPEN_GATE.y, (mx - mn) / max(mx, 1e-5));
-    let lobe = max(-0.1875, min(max(-hit_min, hit_max), 0.0)) * CAM_SHARPEN * nz * gate;
+    let lobe = max(-0.1875, min(max(-hit_min, hit_max), 0.0)) * strength * nz * gate;
     let ls = clamp((lobe * sum + ec) / (4.0 * lobe + 1.0), 0.0, 0.999);
     let ratio = (ls / (1.0 - ls)) / max(lc0, 1e-9);
     return c * select(1.0, clamp(ratio, 0.5, 2.0), lc0 > 1e-9);
@@ -315,12 +371,31 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     }
     // the sharpen, before the lens spreads anything (the bloom is smooth already); not where
     // the focus blurs (it reads the unblurred neighbours).
-    c = mix(cam_sharpen(vec2<i32>(pos), c, e0 * cam_state.gain), c, smoothstep(0.6, 1.5, coc0));
+    // (`--camera-tone`: stronger, `cam5.w`)
+    c = mix(cam_sharpen(vec2<i32>(pos), c, e0 * cam_state.gain, select(CAM_SHARPEN, cine.cam5.w, SF_CAM_TONE)), c, smoothstep(0.6, 1.5, coc0));
     // the bloom, energy kept: the pixel gives up the share the lens spreads
     // (`cam_bloom_part`, as the prefilter took it) and the levels give it back.
     if (skyu.bloom.w > 0.5) {
         let b = max(textureSampleLevel(bloom_tex, ph_lin, pos / dims, 0.0).rgb, vec3<f32>(0.0));
         c = max(c - cam_bloom_part(c, e0), vec3<f32>(0.0)) + b;
+    }
+    // (`--white-balance`) the camera's balance on the scene's light (cine_camera.wgsl `cam_adapt`).
+    // (and the hour's preset, `cam7`: a warm golden hour, a cool blue hour, in the scene before the curve)
+    var wbg = vec3<f32>(1.0);
+    if (SF_CAM_WB) {
+        if (cam_state.wb_ok > 0.5) {
+            wbg = clamp(vec3<f32>(cam_state.wb_r, cam_state.wb_g, cam_state.wb_b), vec3<f32>(0.25), vec3<f32>(4.0));
+        }
+        if (cine.cam7.w > 0.0) {
+            wbg = wbg * clamp(cine.cam7.xyz, vec3<f32>(0.5), vec3<f32>(2.0));
+        }
+        c = c * wbg;
+        // the hour's saturation as the camera's colour rendering (about the colour's luminance;
+        // the display transform's gamut edge takes what passes it)
+        if (cine.cam7.w > 0.0) {
+            let yl = dot(c, CAM_LW);
+            c = vec3<f32>(yl) + (c - vec3<f32>(yl)) * clamp(cine.cam7.w, 0.5, 1.5);
+        }
     }
     // the optical fall-off: a share of cos^4 of the field angle.
     let tf = vec2<f32>(skyu.cluster.z * skyu.cluster.w, skyu.cluster.z);
@@ -331,8 +406,13 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     var x = c * (e0 * cam_state.gain);
     x = x * cam_local(pos, log2(max(dot(c * e0, CAM_LW), 1e-12)));
     x = cam_push(x);
-    x = x + cam_flare(pos, dims);
-    var d = to_srgb(cam_agx(x));
+    x = x + cam_flare(pos, dims) * wbg;
+    var d: vec3<f32>;
+    if (SF_CAM_TONE) {
+        d = to_srgb(cam_display(x));
+    } else {
+        d = to_srgb(cam_agx(x));
+    }
     // the hour's grade (cine_post.rs bakes the camera's keys when the model is on).
     d = textureSampleLevel(cine_lut, cine_samp, d * cine.grade.y + vec3<f32>(cine.grade.z), 0.0).rgb;
     // film grain: one luminance pattern a little over a pixel across (`ph_grain`, about
@@ -341,8 +421,20 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     let y = clamp(dot(d, CAM_LW), 0.0, 1.0);
     let seed = u32(max(look.post2.w, 0.0)) % 4096u;
     let gw = smoothstep(0.02, 0.12, y) * (1.0 - smoothstep(0.35, 0.65, y));
-    let gn = ph_grain(vec2<i32>(pos), seed, 5u) * cine.cam2.x * gw;
-    d = clamp(d + vec3<f32>(gn), vec3<f32>(0.0), vec3<f32>(1.0));
+    if (SF_CAM_TONE) {
+        // (`--camera-tone`) the sensor's noise follows its gain (the meter's lift over the
+        // hour's exposure, whose own grain is the night's or the day's: `cam2.x`), with a colour
+        // share (`cam5.z`, more at night) that keeps the luminance.
+        let amp = cine.cam2.x * sqrt(clamp(cam_state.gain, 0.5, 3.0)) * gw;
+        let gl = ph_grain(vec2<i32>(pos), seed, 5u);
+        let gr = ph_grain(vec2<i32>(pos), seed, 6u);
+        let gb = ph_grain(vec2<i32>(pos), seed, 7u);
+        let ch = vec3<f32>(gr, -(0.2126 * gr + 0.0722 * gb) / 0.7152, gb) * cine.cam5.z;
+        d = clamp(d + (vec3<f32>(gl) + ch) * amp, vec3<f32>(0.0), vec3<f32>(1.0));
+    } else {
+        let gn = ph_grain(vec2<i32>(pos), seed, 5u) * cine.cam2.x * gw;
+        d = clamp(d + vec3<f32>(gn), vec3<f32>(0.0), vec3<f32>(1.0));
+    }
     // Display dither: triangular, +-1 step of 8-bit (as `finish_color`).
     let amp = look.post2.y;
     let n = hash(pos, look.post2.w) + hash(pos.yx * 1.31, look.post2.w + 3.7) - 1.0;

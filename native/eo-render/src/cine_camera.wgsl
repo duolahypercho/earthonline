@@ -22,6 +22,16 @@
 // - `cam_blur`: the grid blurred ([1 2 1] in x, y and the slices) and, beside
 //   it, the 5 x 5 column blur of each column's mean, into a 3D texture the
 //   post pass samples.
+//
+// (`--camera-tone`, `SF_CAM_TONE`) a block of sky (its distance in the
+// resolve's alpha) counts `CAM_TONE_SKY_METER` in the meter's histogram: the
+// meter reads the ground, the walls and the subject. (`--white-balance`,
+// `SF_CAM_WB`) `cam_build` sums the chromaticity of the frame's surfaces (no
+// sky; within `CAM_WB_EV` of middle grey at the last frame's exposure; under
+// `CAM_WB_CHROMA`) after the histograms, and `cam_adapt` turns it into the
+// balance's gains (`cam_state.wb_*`): the colour temperature's axis corrected
+// by `cam6.x` for a warm light and `cam6.y` for a cool one, the green-magenta
+// axis by `cam6.z`.
 
 @group(0) @binding(0) var<uniform> look: Look;
 @group(0) @binding(1) var<uniform> skyu: Sky;
@@ -45,6 +55,10 @@ const CAM_CELL_BLOCKS: f32 = 64.0;
 var<workgroup> wg_hist: array<atomic<u32>, 2u * CAM_HIST_BINS>;
 var<workgroup> wg_sum: array<atomic<u32>, CAM_GRID_Z>;
 var<workgroup> wg_cnt: array<atomic<u32>, CAM_GRID_Z>;
+// (`--white-balance`) the workgroup's chromaticity sums (red, green, blue x weight) and weight.
+var<workgroup> wg_wb: array<atomic<u32>, 4>;
+/// (`--white-balance`) the estimate's fixed point (a block of full weight adds this much).
+const CAM_WB_SCALE: f32 = 4096.0;
 
 /// The meter's weight at `uv`: the lower two thirds and the centre count most
 /// (a street, not the sky over it; a subject, not the frame's edge).
@@ -67,6 +81,9 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
         atomicStore(&wg_sum[li], 0u);
         atomicStore(&wg_cnt[li], 0u);
     }
+    if (SF_CAM_WB && li < 4u) {
+        atomicStore(&wg_wb[li], 0u);
+    }
     workgroupBarrier();
     let dims = textureDimensions(cam_src);
     let p0 = wid.xy * CAM_CELL_PX + lid.xy * 4u;
@@ -74,16 +91,42 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
         // the block's mean: four bilinear taps, each the mean of 2 x 2 pixels.
         let inv = 1.0 / vec2<f32>(dims);
         let b = vec2<f32>(p0);
-        var c = textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(1.0, 1.0)) * inv, 0.0).rgb;
-        c = c + textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(3.0, 1.0)) * inv, 0.0).rgb;
-        c = c + textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(1.0, 3.0)) * inv, 0.0).rgb;
-        c = c + textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(3.0, 3.0)) * inv, 0.0).rgb;
+        let t0 = textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(1.0, 1.0)) * inv, 0.0);
+        let t1 = textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(3.0, 1.0)) * inv, 0.0);
+        let t2 = textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(1.0, 3.0)) * inv, 0.0);
+        let t3 = textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(3.0, 3.0)) * inv, 0.0);
+        let c = t0.rgb + t1.rgb + t2.rgb + t3.rgb;
         let y = lk_luma(max(c * 0.25, vec3<f32>(0.0))) * look.key.w;
         let l = log2(max(y, 1e-12));
         if (l == l) {
             let uv = (b + vec2<f32>(2.0)) * inv;
             let hb = u32(clamp((l - CAM_HIST_LO) / (CAM_HIST_HI - CAM_HIST_LO) * f32(CAM_HIST_BINS), 0.0, f32(CAM_HIST_BINS) - 1.0));
-            atomicAdd(&wg_hist[hb], u32(cam_meter_weight(uv) * 64.0 + 0.5));
+            // (`--camera-tone`, `--white-balance`) the block's sky: its mean distance from the
+            // resolve's alpha (2 + metres, the sky 65504: a quarter of it is past 16000 m).
+            let am = 0.25 * (t0.a + t1.a + t2.a + t3.a);
+            let sky = am > 16000.0;
+            var mw = cam_meter_weight(uv);
+            if (SF_CAM_TONE && sky) {
+                mw = mw * CAM_TONE_SKY_METER;
+            }
+            atomicAdd(&wg_hist[hb], u32(mw * 64.0 + 0.5));
+            if (SF_CAM_WB && !sky && am >= 2.0) {
+                // a surface lit near middle grey at the last frame's exposure, not a strong colour.
+                let cs = max(c * 0.25, vec3<f32>(0.0));
+                let sum = cs.r + cs.g + cs.b;
+                let mx = max(cs.r, max(cs.g, cs.b));
+                let chroma = (mx - min(cs.r, min(cs.g, cs.b))) / max(mx, 1e-12);
+                let u = l + log2(max(cam_state.gain, 1e-6)) - log2(0.18);
+                let w = cam_meter_weight(uv) * smoothstep(CAM_WB_EV.x - 1.0, CAM_WB_EV.x, u) * (1.0 - smoothstep(CAM_WB_EV.y, CAM_WB_EV.y + 1.0, u))
+                    * (1.0 - smoothstep(CAM_WB_CHROMA.x, CAM_WB_CHROMA.y, chroma));
+                if (w > 0.0 && sum > 1e-12) {
+                    let q = cs / sum * (w * CAM_WB_SCALE);
+                    atomicAdd(&wg_wb[0], u32(q.r + 0.5));
+                    atomicAdd(&wg_wb[1], u32(q.g + 0.5));
+                    atomicAdd(&wg_wb[2], u32(q.b + 0.5));
+                    atomicAdd(&wg_wb[3], u32(w * CAM_WB_SCALE + 0.5));
+                }
+            }
             atomicAdd(&wg_hist[CAM_HIST_BINS + hb], 64u);
             let gz = clamp((l - CAM_GRID_LO) / (CAM_GRID_HI - CAM_GRID_LO), 0.0, 1.0);
             let zb = min(u32(gz * f32(CAM_GRID_Z)), CAM_GRID_Z - 1u);
@@ -96,6 +139,12 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
         let v = atomicLoad(&wg_hist[i]);
         if (v > 0u) {
             atomicAdd(&cam_hist[i], v);
+        }
+    }
+    if (SF_CAM_WB && li < 4u) {
+        let v = atomicLoad(&wg_wb[li]);
+        if (v > 0u) {
+            atomicAdd(&cam_hist[2u * CAM_HIST_BINS + li], v);
         }
     }
     let gd = cam_columns(dims);
@@ -227,6 +276,13 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
             st.mean = mean;
             corr = clamp(log2(0.18) + cine.cam1.z - mean, -cine.cam1.w, cine.cam0.z);
         }
+        // (`--camera-tone`) the sun in the frame (its disc's mean at the hour's exposure) pulls the
+        // meter down by up to `CAM_TONE_SUN_PULL` EV: a backlit street is kept a silhouette's depth
+        // under its glare instead of lifted to the shade's grey.
+        if (SF_CAM_TONE) {
+            let se = log2(max(wa_sun[0] / 64.0, 1e-6));
+            corr = corr - CAM_TONE_SUN_PULL * smoothstep(CAM_TONE_SUN_EV.x, CAM_TONE_SUN_EV.y, se);
+        }
         let target_ev = ev_hour + corr;
         // a cut (no history), the first frame, or a far jump snaps; else converge.
         let cut = skyu.taa.y < 0.5 || st.init < 0.5 || !(abs(st.ev - target_ev) < 12.0);
@@ -259,6 +315,17 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
                 kh = clamp((cine.cam4.y - knee) / (top - knee), 1.0, max(cine.cam4.x, 1.0));
             }
         }
+        // (`--camera-tone`) the standing compression (`cam5.xy`: by day the shade comes up a
+        // little and what is over the knee comes down toward it, whether or not the range
+        // overflows), the range's fit taking it further; a night's push is left alone.
+        // (the shadows' part only as far as the frame's dark end is deep: 2.5 .. 4.5 EV under
+        // grey; an aerial's or a sunlit square's shallow shadows keep their depth)
+        if (SF_CAM_TONE) {
+            ks = min(ks, 1.0 - (1.0 - cine.cam5.x) * smoothstep(2.5, 4.5, -lo));
+            if (kh <= 1.0) {
+                kh = min(kh, cine.cam5.y);
+            }
+        }
         if (cut || !(st.k_shadow > 0.0) || !(st.k_high > 0.0)) {
             st.k_shadow = ks;
             st.k_high = kh;
@@ -283,6 +350,39 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
             st.focus_ok = 0.0;
         }
         st.sun_e = wa_sun[0] / 64.0 * st.gain;
+        // (`--white-balance`) the balance: the surfaces' mean chromaticity's log ratios, red and
+        // blue over green; the colour temperature's axis (blue against red) corrected by
+        // `cam6.x` (warm) or `cam6.y` (cool), the green-magenta axis (green against red and
+        // blue) by `cam6.z`, each within its limit; the estimate's luminance kept (the balance moves colour, not the
+        // exposure); converging as the meter does (snapped on a cut). No estimate (a frame of
+        // sky, or of nothing near grey): toward neutral.
+        if (SF_CAM_WB) {
+            let wb0 = 2u * CAM_HIST_BINS;
+            let sw = f32(atomicLoad(&cam_hist[wb0 + 3u]));
+            var g = vec3<f32>(1.0);
+            if (sw > 32.0 * CAM_WB_SCALE) {
+                let e = vec3<f32>(f32(atomicLoad(&cam_hist[wb0])), f32(atomicLoad(&cam_hist[wb0 + 1u])), f32(atomicLoad(&cam_hist[wb0 + 2u]))) / sw;
+                let lr = log2(max(e.r, 1e-4) / max(e.g, 1e-4));
+                let lb = log2(max(e.b, 1e-4) / max(e.g, 1e-4));
+                // (a warm light, blue under red: `cam6.x`; a cool one: `cam6.y`)
+                let tl = 0.5 * (lb - lr);
+                let tc = clamp(tl * select(cine.cam6.y, cine.cam6.x, tl < 0.0), -cine.cam6.w, cine.cam6.w);
+                let mc = clamp(-0.5 * (lr + lb) * cine.cam6.z, -CAM_WB_TINT_LIMIT, CAM_WB_TINT_LIMIT);
+                g = exp2(vec3<f32>(tc, -mc, -tc));
+                g = g * (lk_luma(e) / max(lk_luma(e * g), 1e-6));
+            }
+            var wb = vec3<f32>(st.wb_r, st.wb_g, st.wb_b);
+            if (cut || st.wb_ok < 0.5 || !all(wb > vec3<f32>(0.0)) || !all(wb < vec3<f32>(16.0))) {
+                wb = g;
+            } else {
+                let dt = clamp(skyu.taa.w, 1.0 / 240.0, 0.25);
+                wb = exp2(mix(log2(wb), log2(g), 1.0 - exp(-dt * CAM_ADAPT_RATE)));
+            }
+            st.wb_r = wb.r;
+            st.wb_g = wb.g;
+            st.wb_b = wb.b;
+            st.wb_ok = 1.0;
+        }
         st.init = 1.0;
         cam_state = st;
     }

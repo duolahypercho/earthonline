@@ -214,6 +214,11 @@ pub struct SkyOptions {
     /// False (the default) is the frame as before; its shader code sits behind
     /// `SF_CAMERA`.
     pub cine_camera: bool,
+    /// (camera track, round 2) the camera model's later features (cine_post.rs
+    /// `CAM_BIT_*`: `--camera-tone`, `--white-balance`, `--lens-halation`), each
+    /// compiled in only with its switch and `cine_camera`; 0 (the default) is the
+    /// model as before.
+    pub cam_bits: u32,
     /// (`--night-photometry`; eo-sky `night_photometry`) the night on one
     /// photometric scale: the practicals at their lux against the night's
     /// natural light and the exposure metered on the lit street. Off (the
@@ -273,6 +278,7 @@ impl Default for SkyOptions {
             shop_light: 0,
             cinematic: false,
             cine_camera: false,
+            cam_bits: 0,
             night_photometry: false,
             lamp_bounce: false,
             urban_sky: false,
