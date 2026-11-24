@@ -13,9 +13,15 @@
 //!
 //! The renderer estimates d per pixel from the cascade's depth map
 //! (percentage-closer soft shadows, Fernando, SIGGRAPH 2005 sketch): the
-//! average depth of the casters in a search disc round the point (the disc
-//! as wide as the widest penumbra kept, `MAX_SPREAD_M` of the half width),
-//! then the comparison filtered over a disc of the penumbra's half width
+//! casters in a search disc round the point (the disc as wide as the widest
+//! penumbra kept, `MAX_SPREAD_M` of the half width), each one's height over
+//! the receiver's plane at its own texel, the nearest of them past
+//! `MIN_CASTER_M` (`edge_distance`). Not their mean: the map holds a
+//! caster's sun-facing surface, so over a thick caster (a deck, a block)
+//! or a nearer caster under a further one the mean overstates the distance
+//! to the edge, and by different amounts either side of it, which bent a
+//! straight edge's band (measured on the viaduct and plaza cards, r1i2).
+//! Then the comparison is filtered over a disc of the penumbra's half width
 //! (never wider than the search, so the band is the same either side of the
 //! edge: at most `MAX_SPREAD_M` each way). A point with no caster in the
 //! search is lit and one with casters at every tap is in the umbra; only the
@@ -27,8 +33,16 @@
 /// The sun's angular diameter, degrees (the disc the sky draws).
 pub const SUN_DIAMETER_DEG: f64 = 0.5334;
 /// The largest penumbra half width the search reaches for, metres: an edge
-/// up to about 130 m along the beam (a deck or a cornice at a low sun).
-pub const MAX_SPREAD_M: f64 = 0.6;
+/// up to about 64 m along the beam (a six-storey cornice at noon, a deck
+/// 7 m up at a sun 6.6 degrees high). A further edge keeps this width: the
+/// map's depth is only trusted that far (a caster's sun-facing surface,
+/// not its edge), and at 0.6 m a tower's 1.2 m band read as a smear at eye
+/// height (r1i2 plaza card).
+pub const MAX_SPREAD_M: f64 = 0.3;
+/// Casters nearer the receiver's plane than this (metres up the beam) are the
+/// receiver's own relief or a contact (a penumbra under 2 mm, less than any
+/// cascade texel): they count as casters but never set the edge's distance.
+pub const MIN_CASTER_M: f64 = 0.2;
 /// Taps of the caster search and of the filter (a rotated Vogel disc each,
 /// turned per pixel and per frame; the frame's temporal resolve averages them).
 pub const SEARCH_TAPS: u32 = 12;
@@ -58,6 +72,14 @@ pub fn width_m(d: f64) -> f64 {
 /// The filter's radius in texels of `texel_m` metres for an edge `d` metres up the beam.
 pub fn filter_radius_texels(d: f64, texel_m: f64) -> f64 {
     (0.5 * width_m(d) / texel_m.max(1e-6)).min(MAX_RADIUS_TEXELS)
+}
+
+/// The distance up the beam to the edge that shades a point, from the
+/// casters a search found (each one's height over the receiver's plane at
+/// its own texel, metres): the nearest past `MIN_CASTER_M`, or None when
+/// every caster touches the receiver (the cascade's tent stands).
+pub fn edge_distance(heights: &[f64]) -> Option<f64> {
+    heights.iter().copied().filter(|h| *h > MIN_CASTER_M).fold(None, |m: Option<f64>, h| Some(m.map_or(h, |m| m.min(h))))
 }
 
 /// The search's radius in texels of `texel_m` metres.
@@ -96,6 +118,19 @@ mod tests {
         assert_eq!(filter_radius_texels(d, 0.008), MAX_RADIUS_TEXELS);
         assert!((filter_radius_texels(10.0, 0.012) - 3.88).abs() < 0.01);
         assert!(search_radius_texels(0.05) >= filter_radius_texels(MAX_SPREAD_M / (0.5 * tan_diameter()), 0.05) - 1e-9);
+    }
+
+    #[test]
+    fn the_nearest_caster_sets_the_edge() {
+        // a deck's edge 40 m up the beam seen past its own 25 m thickness, and the kerb under the point.
+        assert_eq!(edge_distance(&[65.0, 40.0, 52.0, 0.05]), Some(40.0));
+        // only the receiver's own relief: the tent.
+        assert_eq!(edge_distance(&[0.05, 0.1]), None);
+        assert_eq!(edge_distance(&[]), None);
+        // the widest band kept: an edge 64 m up the beam.
+        assert!((0.5 * width_m(64.0) - MAX_SPREAD_M).abs() < 0.005, "{}", width_m(64.0));
+        // a contact's penumbra is under any cascade texel.
+        assert!(width_m(MIN_CASTER_M) < 0.002);
     }
 
     #[test]
