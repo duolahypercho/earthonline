@@ -263,6 +263,13 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         // (the sealant and a lid keep their own finish)
         let fresh_fill = select(0.0, 0.7 * sw_patch, SF_STREET_WEAR);
         sg_coat(k * (1.0 - lid) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)) * (1.0 - fresh_fill), mix(SG_COAT_ROUGH, SG_COAT_ROUGH_WHEEL, wpath), n_geom, v);
+        if (SF_STREET_AGGREGATE && sky_coat > 0.0) {
+            // (`--street-aggregate`) the tops' layer reflects what the road's own lobe does: through
+            // look_light's lacquer path at the asphalt's own class (the same environment scale), the
+            // ambient volume's occlusion along its reflection (a deck or a canyon wall, not the open
+            // sky: no sky-blue bands down the wheel paths under a viaduct)
+            sky_coat_env = look.env_class.z;
+        }
     }
     if (SF_STREET_AGGREGATE) {
         // (`--street-aggregate`) the scans' blotchy relief (5-10 cm: "crumpled foil" in a
