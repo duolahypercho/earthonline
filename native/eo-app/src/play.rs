@@ -41,6 +41,7 @@ const PLAYER_MEDIAN_BUDGET_MS: f64 = 0.5;
 const PLAYER_HITCH_BUDGET_MS: f64 = 2.0;
 
 struct PlayOpts {
+    dive: Option<String>,
     interior_eye: bool,
     car_door_animation: bool,
     bench: bool,
@@ -160,7 +161,7 @@ fn base_args() -> Args {
 fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     let mut a = base_args();
     let mut test_character = crate::test_characters::Options::default();
-    let mut o = PlayOpts { interior_eye: true, car_door_animation: false, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let mut o = PlayOpts { dive: None, interior_eye: true, car_door_animation: false, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
     let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
     let mut it = raw.iter();
     while let Some(s) = it.next() {
@@ -248,6 +249,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--collision-threads" => o.collision_threads = val()?.parse::<usize>()?.max(1),
             "--blender-camera" => a.look.blender_camera = true,
             "--no-blender-camera" => a.look.blender_camera = false,
+            "--dive-site" => o.dive = Some(val()?.to_string()),
+            "--ocean-life" | "--no-ocean-life" => {}
             "--water-optics" => a.look.water_optics = true,
             "--cove-detail" => a.cove_detail = true,
             "--cove-canopy" => { a.cove_detail = true; a.look.cove_canopy = true; }
@@ -310,6 +313,10 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     tier.apply(&mut a);
     a.bench = o.bench;
     crate::apply_cove_look(&mut a, raw);
+    if let Some(name) = &o.dive {
+        anyhow::ensure!(crate::ocean_habitat::STARTS.iter().any(|s| s.0 == name), "unknown swim site {name}; choose bay, black-point, pacific, channel, east-bay, south-bay or shelf");
+        anyhow::ensure!(a.look.ocean_life && a.look.water, "playable dive sites require --ocean-life and water");
+    }
     a.test_character = test_character.selection(a.agents)?;
     if o.car_door_animation {
         let selected = a.test_character.as_ref().filter(|selected| selected.preview.is_none());
@@ -345,12 +352,12 @@ fn collision_world(
         let index = world.city.buildings.iter().position(|b| crate::house::owns(&b.id)).unwrap();
         for ids in buildings.by_tile.values_mut() { ids.retain(|&id| id as usize != index); }
         let ground = Arc::new(crate::house::HouseGround { base: ground, house: house.clone() });
-        let mut collision = CollisionWorld::new(ground, Arc::new(buildings), threads);
+        let mut collision = CollisionWorld::new(crate::ocean_habitat::swim_ground(world, ground), Arc::new(buildings), threads);
         let door =
             crate::house::Door::new(house, &world.scene, world.house_vertex_base, &mut collision)?;
         return Ok((collision, Some(door)));
     }
-    Ok((CollisionWorld::new(ground, Arc::new(buildings), threads), None))
+    Ok((CollisionWorld::new(crate::ocean_habitat::swim_ground(world, ground), Arc::new(buildings), threads), None))
 }
 
 /// Inside the furnished house the lens follows the character's head and posture.
@@ -911,11 +918,19 @@ mod window {
         let s = crate::bench::spawn(); // the spawn on the scaled plan
         let mut feet = DVec3::new(s[0] as f64, world.elevation.ground(s[0] as f64, s[1] as f64), s[1] as f64);
         if let Some(h) = &world.house { feet = h.entry_position(); }
+        let mut yaw = world.house.as_ref().map_or(0., |h| h.entry_yaw());
+        if let Some(name) = &opts.dive {
+            let start = crate::ocean_habitat::start(world.marine_floor.as_ref().expect("play validated the dive"), name)?;
+            feet = start.0;
+            yaw = start.1;
+            eprintln!("Playable dive {name} at {feet:.2}, facing {yaw:.2} radians");
+        }
         cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
-        feet.y = cw.surface_y(feet.x, feet.z);
-        let yaw = world.house.as_ref().map_or(0., |h| h.entry_yaw());
+        if opts.dive.is_none() { feet.y = cw.surface_y(feet.x, feet.z); }
         let mut player = Player::new(feet, yaw);
-        player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
+        if opts.dive.is_none() {
+            player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
+        }
         let event_loop = EventLoop::new()?;
         let mut app = App {
             interior_eye: args.house_finishes && args.house_furniture && opts.interior_eye,
@@ -1017,6 +1032,9 @@ mod window {
                 let mut input = StepInput { interact, ..StepInput::from_frame(&frame) };
                 // F (VehicleToggle): with --car-door-animation a quick tap between redraws too; the
                 // demo avatar's animated entry or exit when it can start (car_access.rs), else F as before.
+                if self.player.is_swimming(&self.cw) {
+                    input.jump |= frame.held(eo_player::input::Action::Jump);
+                }
                 input.vehicle_toggle |= std::mem::take(&mut self.vehicle_toggle_requested);
                 // the moored boats near the player: bodies on the drawn sea (eo-player `harbour`), its clock the water's.
                 if let Some(g) = self.gfx.as_ref() {

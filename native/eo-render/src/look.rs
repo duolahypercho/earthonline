@@ -243,6 +243,7 @@ pub struct LookOptions {
     pub water_parts_off: u32,
     /// Opt-in wave-driven underwater lighting and camera.
     pub water_optics: bool,
+    pub ocean_life: bool,
     /// Compensate the camera for daylight lost along the path down to the eye.
     pub dive_exposure: bool,
     /// Local water attenuation in the Aquatic Park Cove preview.
@@ -282,7 +283,7 @@ pub struct LookOptions {
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { blender_camera: false, cove_daylight: false, shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_parts_off: 0, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { blender_camera: false, cove_daylight: false, shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_parts_off: 0, water_optics: false, ocean_life: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -2484,7 +2485,7 @@ impl LookGpu {
             rooms_work: crate::rooms::drive_look(m.sun.altitude_deg, self.time_of_day(), smooth, self.options.look.is_cinematic()).1,
             wx: [(m.profile.overcast * wx_keep) as f32, (m.profile.isotropy * wx_keep) as f32, (m.profile.desaturation * wx_keep) as f32, if m.ext.on { 1.0 } else { 0.0 }], // eo-look `SkyExt`
             cove: [if self.options.cove_sediment && self.options.cove_detail { 1.0 / eo_data::groundscale::scale() as f32 } else { 0.0 },
-                if self.options.cove_detail && self.options.cove_daylight { eo_water::optics::COVE_DAYLIGHT_KD } else { 0.0 }, 0.0, 0.0],
+                if self.options.cove_detail && self.options.cove_daylight { eo_water::optics::COVE_DAYLIGHT_KD } else { 0.0 }, self.options.ocean_life as u8 as f32, 0.0],
             wx_tint: v4(m.profile.tint.map(|v| 1.0 + (v - 1.0) * wx_keep), m.ext.afterglow), // w the afterglow arch
             tone: {
                 let (b, c) = tone::filmic_coefficients(tone::FILMIC_CONTRAST, tone::FILMIC_SHOULDER, tone::FILMIC_WHITE, tone::FILMIC_MID_IN, tone::FILMIC_MID_OUT);

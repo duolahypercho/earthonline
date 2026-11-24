@@ -1289,10 +1289,10 @@ impl WaterGpu {
     /// (FFT and copy while water was seen lately; nothing drawn when all water
     /// is past `fog_far`, the look's range fog end), the uniforms.
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32) {
-        self.update_at_time(queue, cam, probe, active, fog_far, 0.0);
+        self.update_at_time(queue, cam, probe, active, fog_far, 0.0, None);
     }
 
-    pub(crate) fn update_at_time(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32, world_time: f64) {
+    pub(crate) fn update_at_time(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32, world_time: f64, mapped_ocean: Option<bool>) {
         let mut st = self.state.lock().unwrap();
         st.active = active;
         if !active {
@@ -1314,8 +1314,8 @@ impl WaterGpu {
         st.near_waterline = self.submerged.as_ref().is_some_and(|(_, field)| {
             cam.eye.y <= sea + BOX_M + cam.near
                 && cam.eye.x >= self.extent[0] - 60000.0 && cam.eye.x <= self.extent[2] + 60000.0
-                && cam.eye.z >= self.extent[1] - 60000.0 && cam.eye.z <= self.extent[3]
-                && field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > 0.0
+                && cam.eye.z >= self.extent[1] - 60000.0 && cam.eye.z <= self.extent[3] + if mapped_ocean.is_some() {st.south_m} else {0.0}
+                && mapped_ocean.unwrap_or_else(||field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > 0.0)
         });
         let recent = st.always || st.near_waterline
             || match st.seen {

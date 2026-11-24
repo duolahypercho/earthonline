@@ -371,6 +371,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         let g = &world.elevation;
         let extent = [g.meta.origin_x as f32, g.meta.origin_z as f32, g.max_x() as f32, g.max_z() as f32];
         r.attach_water(ctx, &eo_render::water::WaterInit { data, extent });
+        if let Some(sampler) = world.marine_floor.clone() {
+            let habitat = eo_render::ocean_life::OceanLife::new(ctx, &r.look, r.sample_count, &world.paths.repo_root, sampler)?;
+            let _ = r.ocean_life.set(habitat);
+        }
         if let Some(w) = r.water.get() {
             r.bytes.textures += w.bytes;
         }

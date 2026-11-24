@@ -42,6 +42,9 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
         if (look.cove.y > 0.0 && cove > 0.0) {
             light = mix(light, exp(-ext * (wo_daylight_ratio(ext, look.cove.y) * depth)), cove);
         }
+        if look.cove.z > 0.5 {
+            light = exp(-wo_marine_kd(wg_ocean(xz.x),cove)*depth);
+        }
         let meter = max(lk_luma(light), mix(1.0 / 16.0, 1.0 / 5.0, cove));
         // Partial chromatic adaptation to the local illuminant. The view path
         // still carries its full spectral extinction and distance-dependent cast.
@@ -139,13 +142,16 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let ocean = wg_ocean(origin.x);
     let cove = wo_cove(origin.xz);
     let scatter = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
-    let ext = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove) + scatter;
+    var ext = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove) + scatter;
+    let kd = wo_marine_kd(ocean,cove);
+    if look.cove.z > 0.5 {ext = wo_marine_ext(ocean,cove,scatter);}
     // Diffuse skylight penetrates suspended sediment farther than image contrast.
     var diffuse_depth = mix(1.0, 0.63, cove);
     let daylight = select(0.0, cove, look.cove.y > 0.0);
     if (daylight > 0.0) {
         diffuse_depth = mix(diffuse_depth, 0.75 * wo_daylight_ratio(ext, look.cove.y), daylight);
     }
+    if look.cove.z > 0.5 { diffuse_depth=0.75*lk_luma(kd)/max(lk_luma(ext),0.001); }
     let limit = 10.0 / min(ext.r, min(ext.g, ext.b));
     let hit = w_scene_depth(uv) / max(dot(ray, wu.fwd.xyz), 1e-4);
     var path = min(max(hit - start, 0.0), limit);
@@ -175,7 +181,8 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let scatter_t = min(0.5 * path, 1.0 / lk_luma(ext));
     let scatter_depth = mix(down0, down1, scatter_t / max(path, 1e-5));
     // Suspended sediment blurs wave focusing as the direct beam loses coherence.
-    let beam_focus = mix(1.0, w_caustic(origin + ray * scatter_t, scatter_depth, sun_up), exp(-cove * scatter_depth * 1.5));
+    let beam_fraction = select(exp(-cove * scatter_depth * 1.5), exp(-lk_luma(ext)*scatter_depth/max(sun_up.y,0.1)), look.cove.z>0.5);
+    let beam_focus = mix(1.0, w_caustic(origin + ray * scatter_t, scatter_depth, sun_up), beam_fraction);
     let vol = ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
         + direct * (scatter * wo_phase(dot(ray, sun_up)) * beam_focus + ext * multiple / WG_PI)
           * uw_integral(ext, path, down0, down1, max(sun_up.y, 0.1));
@@ -231,6 +238,11 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
             exp(-ext * down1 / max(sun_up.y, 0.1)) * focus, direct_share);
         if (daylight > 0.0) {
             incident = mix(incident, wo_daylight_bed(down1, ext, sun_up.y, direct_share, focus, look.cove.y), daylight);
+        }
+        if look.cove.z > 0.5 {
+            let flux=exp(-kd*down1);
+            let direct_beam=min(flux,exp(-ext*down1/max(sun_up.y,0.1)));
+            incident=flux+direct_beam*direct_share*(focus-1.);
         }
         boundary = textureLoad(w_scene, vec2<i32>(i.clip.xy), 0).rgb * incident;
     }

@@ -489,6 +489,35 @@ EO_NATIVE_CACHE=... ./target/release/eo-app --shots views.json --out shots-out -
 EO_NATIVE_CACHE=... ./target/release/eo-app --scene-cards --out cards-out
 ```
 
+### Swim the Pacific and San Francisco Bay
+
+Start the single-player game at Aquatic Park:
+
+```sh
+./target/release/eo-app --play --ocean-life --dive-site bay
+```
+
+Other starts are `black-point`, `pacific` (Ocean Beach), `channel` (Golden Gate),
+`east-bay`, `south-bay` and `shelf`. With `--ocean-life` alone, walk into the
+water from the usual city spawn. Swim with the movement keys and mouse, hold
+Space to rise, C or Ctrl to descend, and Shift for a faster stroke. Shallow
+water returns to walking. The dive uses the single-player fixed physics step.
+
+The terrain uses the city's NOAA CUDEM soundings and NOAA ETOPO 2022 regional
+relief. Small-scale ridges, rock shapes, patches of eelgrass, macroalgae, fish
+schools and soft-bottom animals are procedural habitat suggestions. Outside
+the city, the relief represents a grid roughly 400 m across. The habitat window
+follows the diver. The start locations are bookmarks throughout the same sea.
+The switch also enables water optics and dive exposure unless explicitly disabled.
+
+The marine library comes from the original Blender habitat study. Restore the
+locked source with `npm run assets:pull -- ocean/sf-habitats` at the repository
+root, then rebuild the game mesh and its digest with the following command:
+
+```sh
+blender -b artifacts/ocean/sf-habitats.blend --python-exit-code 1 --python scripts/blender-ocean/export_habitat.py
+```
+
 ### Kill switches
 
 Every visual feature can be turned off from the command line, so a change
@@ -498,6 +527,7 @@ selection:
 | Area | Switches |
 | --- | --- |
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
+| Mapped marine habitats and swimming | `--ocean-life` enables the surveyed seafloor, regional light transport, fish, plants and seabed animals. `--no-ocean-life` restores the previous water. |
 | Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |
 | Underwater habitats | `--underwater-habitats` adds the Bay and Pacific beds. `--no-underwater-habitats` removes them |
 | Aquatic Park Cove | `--cove-detail` enables the beach profile, cobbles, pier parapet, distant wooded slope, fair-weather clouds and cove optics. `--no-cove-detail` restores the previous scene. The Bay dive-site starts enable the preview. |

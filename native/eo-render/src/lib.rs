@@ -78,6 +78,7 @@ pub mod view_detail;
 pub mod weathering; // surface weathering that reads (`--grime`, stage W1)
 pub mod street_life; // litter, graffiti, posters (`--street-life`, stage W2b)
 pub mod seabed;
+pub mod ocean_life;
 pub mod draw_ranges; // the fixed-slot lists drawn in conservative ranges
 pub mod water; // water
 pub mod surf; // the surf strip along the beaches
@@ -719,6 +720,7 @@ pub struct Renderer {
     frame_upload_bytes: std::sync::atomic::AtomicU64,
     /// the sea (water.rs), attached once its shore field and spectrum are built.
     pub water: std::sync::OnceLock<water::WaterGpu>,
+    pub ocean_life: std::sync::OnceLock<ocean_life::OceanLife>,
     /// the surf strip (surf.rs), attached after the water.
     pub surf: std::sync::OnceLock<surf::SurfGpu>,
     /// the far terrain (farshore.rs), attached once its cooked heightfield is read.
@@ -1464,6 +1466,7 @@ impl Renderer {
             props: std::sync::OnceLock::new(),  // props
             groundcover: Default::default(),
             frame_upload_bytes: std::sync::atomic::AtomicU64::new(0),
+            ocean_life: std::sync::OnceLock::new(),
             water: std::sync::OnceLock::new(),  // water
             surf: std::sync::OnceLock::new(), // surf
             farshore: std::sync::OnceLock::new(), // farshore
@@ -2210,6 +2213,7 @@ impl Renderer {
             ..*cam
         };
         let cam = &jittered;
+        let mapped_ocean = self.ocean_life.get().map(|ocean| ocean.update(queue, cam, self.water_clock()));
         // stage L5 (the cinematic look): the sea's "all fogged" test reads the fog in use
         // (the volume's aerial perspective pushes the range fog to 2e7 m), and the far
         // terrain hears when the sea pass is skipped so it draws the water there itself.
@@ -2357,7 +2361,7 @@ impl Renderer {
             let clock = if self.look.options.water_optics { self.look.sky.world_time() } else { 0.0 };
             w.set_south_reach(if cine_world { water::CINEMATIC_SOUTH_REACH_M } else { 0.0 }); // stage L5
             let fog_far = if cine_world { cine_fog_far } else { self.look.frame().aerial.far as f32 };
-            w.update_at_time(queue, cam, probe, self.water_active(), fog_far, clock);
+            w.update_at_time(queue, cam, probe, self.water_active(), fog_far, clock, mapped_ocean);
         }
         if let Some(s) = self.surf.get() {
             let swell_hs = self.water.get().and_then(|w| w.plan()).map(|p| p.state.swell.hs as f32).unwrap_or(1.8); // the swell's Hs scales the incoming surf
@@ -2784,6 +2788,12 @@ impl Renderer {
                     if let Some(p) = self.props.get() {
                         // the street props after the opaque city (late pass with occlusion).
                         p.draw(&mut pass, &self.look);
+                        pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+                        pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
+                    }
+                    if let Some(ocean) = self.ocean_life.get()
+                        && ocean.draw(&mut pass, &self.look) {
+                        pass.set_bind_group(0, &draw_bg, &[]);
                         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                     }

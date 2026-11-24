@@ -282,6 +282,27 @@ pub fn habitat_segments(world: &World, args: &crate::Args, frames: usize, aspect
             }),
         });
     }
+    // Use fixed survey bookmarks for both sides of a matched run. The segment
+    // crosses several habitat tiles, including when viewed with the feature off.
+    let regions = [
+        ("ocean_bay", "bay"), ("ocean_rocks", "black-point"), ("ocean_coast", "pacific"),
+        ("ocean_channel", "channel"), ("ocean_east", "east-bay"), ("ocean_south", "south-bay"), ("ocean_shelf", "shelf"),
+    ];
+    for (name, region) in regions {
+        let wanted = args.segments.as_ref().map_or(args.look.ocean_life, |paths| paths.iter().any(|s| s == name));
+        if !wanted { continue; }
+        let (feet, heading) = crate::ocean_habitat::reference_start(region).expect("registered ocean entry");
+        let eye = feet.as_vec3() + Vec3::Y * 1.49;
+        let cam = Camera { near: 0.07, far, ..Camera::new(eye, (std::f64::consts::PI - heading) as f32, -0.18, aspect) };
+        let travel = (cam.forward() * Vec3::new(1., 0., 1.)).normalize() * 13.0 + cam.right() * 3.0;
+        segments.push(Segment {
+            name, description: format!("Swim across habitat tiles at {region}"), frames, paced: false, streams: true,
+            camera: Box::new(move |i, n| {
+                let t = i as f32 / n.saturating_sub(1).max(1) as f32;
+                Camera { eye: cam.eye + travel * t, ..cam }
+            }),
+        });
+    }
     segments
 }
 
