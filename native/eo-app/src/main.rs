@@ -373,6 +373,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--ao-albedo" | "--no-ao-albedo" => a.look.ao_albedo = s == "--ao-albedo",
             // (opt in) the sun's penumbra: the cascades filtered over the sun's disc at the caster's distance
             "--soft-shadows" | "--no-soft-shadows" => a.look.soft_shadows = s == "--soft-shadows",
+            // (opt in) the screen-space indirect light: the occlusion pass's bitmask gather to 12 m, its history and filter
+            "--screen-gi" | "--no-screen-gi" => a.look.screen_gi = s == "--screen-gi",
             // weather (a preset or the shared schedule) and the stage switches.
             "--weather" => {
                 let v = val()?;
