@@ -439,9 +439,13 @@ fn ag_contact_fs(in: AgCtOut) -> @location(0) vec4<f32> {
 // film's base lobe; its puddles' sharper lobes are left out) with the share
 // of the light's sphere the car's bodies leave (`ag_ct_lamp_vis`, as for
 // the lamps' shadows), and the pixel is multiplied by what is left of the
-// point's radiance: the film's mirror of the lights over it plus the street's
-// own diffuse light (its wet albedo under the sky, the ambient and the
-// clusters' lamps, unshadowed).
+// point's radiance when the hidden reflections are taken from it: its
+// radiance from the previous frame (the screen-space reflection's history,
+// already without them) plus them, so the cut converges on the radiance less
+// the hidden streaks and leaves the rest of the pixel (the street's diffuse,
+// its mirror of the sky, the facades and the cars' own lamps) as it was; the
+// street's own diffuse light (its wet albedo under the sky, the ambient and
+// the clusters' lamps, unshadowed) is never taken.
 
 // The box reaches toward the eye along the road this far (m), stopping this
 // short of the eye's foot, its height grown by this grade along it (the road
@@ -453,8 +457,6 @@ const AG_CT_WET_GRADE: f32 = 0.15;
 const AG_CT_WET_ROAD_M: f32 = 0.35;
 // Wet asphalt's albedo (dry ~0.1 darkened by the film, sky_light.wgsl SKY_CINE_WET_DARKEN.x).
 const AG_CT_WET_ALBEDO: f32 = 0.045;
-// The road beside a streak: this far across it either way (m; a streak's core is a few centimetres to a few decimetres across).
-const AG_CT_WET_SIDE_M: f32 = 0.6;
 // A streak light's reflection under this share of the point's radiance is not tested against the car.
 const AG_CT_WET_MIN: f32 = 0.003;
 
@@ -542,34 +544,41 @@ fn ag_ct_wet(world: vec3<f32>, n: vec3<f32>, p: vec3<f32>, a: AgAgent, b: array<
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
     var irr = lk_luma(hemi + look.ambient.xyz + lk_sh(n) * env_i) + lk_luma(look.key.xyz) * max(dot(n, look.key_dir.xyz), 0.0);
     irr = irr + ag_ct_wet_lamps(world, n);
-    var own = AG_CT_WET_ALBEDO / LK_PI * irr;
-    // the road beside the streaks in the previous frame (its mirror of the sky,
-    // the facades and the cars, which the film shows over its diffuse): the
-    // lesser of the two points across the streak, where the history holds it
-    if (sky_on(skyu.flags.x, SKY_SSR) && skyu.flags.z != 0u) {
-        let across = normalize(cross(n, t)) * AG_CT_WET_SIDE_M;
-        own = max(own, min(ag_ct_prev_luma(world + across), ag_ct_prev_luma(world - across)));
-    }
-    let total = own + sum;
+    let own = AG_CT_WET_ALBEDO / LK_PI * irr;
+    let guess = own + sum;
     for (var k = 0u; k < count; k = k + 1u) {
         let r = lights[k].x;
-        if (r <= AG_CT_WET_MIN * total) {
+        if (r <= AG_CT_WET_MIN * guess) {
             continue;
         }
         let li = sky_lights[sky_clusters[base + 1u + k]];
         hidden = hidden + r * (1.0 - ag_ct_lamp_vis(p, ag_rotate(qi, li.pos - a.pos) * inv, lights[k].y * inv, b));
     }
-    return clamp(1.0 - hidden / total, 0.0, 1.0);
+    if (hidden <= 0.0) {
+        return 1.0;
+    }
+    // what the point sends the eye before the car takes its streaks: the
+    // previous frame's (which the car's cut already left out: its radiance
+    // plus the cut, a fixed point at the radiance less the cut), where the
+    // history holds it; else the film's mirror of the lights over the street's
+    // own diffuse. The cut never takes the street's own diffuse.
+    var total = guess;
+    if (sky_on(skyu.flags.x, SKY_SSR) && skyu.flags.z != 0u) {
+        let c = ag_ct_prev_luma(world, 0.0);
+        if (c < 1e8) {
+            total = c + hidden;
+        }
+    }
+    return clamp(1.0 - hidden / total, min(own / total, 1.0), 1.0);
 }
 
-// The previous resolved frame's luminance at a world point (its level 1, a
-// little wider than a pixel), 1e9 off the frame (the other side decides).
-fn ag_ct_prev_luma(p: vec3<f32>) -> f32 {
+// The previous resolved frame's luminance at a world point (its level `lod`), 1e9 off the frame.
+fn ag_ct_prev_luma(p: vec3<f32>, lod: f32) -> f32 {
     let q = sky_ssr_cine_uv(p);
     if (q.z < 0.0 || any(q.xy < vec2<f32>(0.0)) || any(q.xy > vec2<f32>(1.0))) {
         return 1e9;
     }
-    return lk_luma(textureSampleLevel(sky_prev, sky_rep, q.xy, 1.0).rgb);
+    return lk_luma(textureSampleLevel(sky_prev, sky_rep, q.xy, lod).rgb);
 }
 
 // The clusters' lamps' irradiance (luminance) at a point facing `n`, shaped as the city's shading shapes them, without their maps.
