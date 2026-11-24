@@ -11,10 +11,18 @@ const CAM_LW: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
 /// the contrast `CAM_CONTRAST` from the mid-tones up, easing to `CAM_TOE.x` in
 /// the deep shadows (a softplus about `CAM_TOE.y` EV, `CAM_TOE.z` EV wide), so
 /// the shadows roll into black over several stops as a cine camera's do.
+/// (`--camera-print`) the deep shadows' slope and the curve's constant by the hour
+/// (`cam8`: a print's black by day, the long toe at night).
 fn cam_tone_log(u: vec3<f32>) -> vec3<f32> {
     let x = (u - vec3<f32>(CAM_TOE.y)) / CAM_TOE.z;
     let sp = max(x, vec3<f32>(0.0)) + log(vec3<f32>(1.0) + exp(-abs(x)));
-    return CAM_TOE.x * u + (CAM_CONTRAST - CAM_TOE.x) * CAM_TOE.z * sp - vec3<f32>(CAM_TOE_K);
+    var lo = CAM_TOE.x;
+    var k = CAM_TOE_K;
+    if (SF_CAM_PRINT) {
+        lo = cine.cam8.x;
+        k = cine.cam8.y;
+    }
+    return lo * u + (CAM_CONTRAST - lo) * CAM_TOE.z * sp - vec3<f32>(k);
 }
 
 /// The filmic curve: an AgX-style log sigmoid applied per channel in an inset

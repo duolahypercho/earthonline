@@ -8,11 +8,12 @@
 /// of the meter's sources (its centre, the spikes' intensity at the core, their
 /// drawn length, its colour at unit luminance), six spikes along three axes
 /// (a hexagonal aperture's three pairs of edges, turned `CAM_FLARE_ANGLE`), a
-/// little over a pixel wide and widening slowly outward (their energy along a
+/// pixel wide at the core and fanning out (`CAM_FLARE_WIDTH`; their energy along a
 /// unit of length kept as they widen), falling as (r0 / (r0 + r))^p; each colour
 /// at its own wavelength's scale (`CAM_FLARE_DISPERSION`: the long red reaches
-/// furthest, a spike's tip warms), tapered over the last 30 % of the drawn
-/// length. A source further than its length is skipped at the cost of one test.
+/// furthest, a spike's tip warms), tapered over the last 60 % of the drawn
+/// length (it fades out, it is not cut). A source further than its length is
+/// skipped at the cost of one test.
 fn cam_spikes(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
     let n = min(cam_stars.count, CAM_FLARE_SOURCES);
     if (n == 0u) {
@@ -33,11 +34,11 @@ fn cam_spikes(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
             let dir = vec2<f32>(cos(ang), sin(ang));
             let along = abs(dot(d, dir)) / px;
             let across = abs(dot(d, vec2<f32>(-dir.y, dir.x))) / px;
-            let w = 0.75 + 0.004 * along;
+            let w = CAM_FLARE_WIDTH.x + CAM_FLARE_WIDTH.y * along;
             let prof = exp(-(across * across) / (w * w)) / w;
             let r = vec3<f32>(along) / CAM_FLARE_DISPERSION;
             let f = pow(vec3<f32>(r0) / (vec3<f32>(r0) + r), vec3<f32>(CAM_FLARE_SPIKE.y)) / CAM_FLARE_DISPERSION;
-            let taper = 1.0 - smoothstep(0.7, 1.0, along * px / max(a.w, 1e-3));
+            let taper = 1.0 - smoothstep(0.4, 1.0, along * px / max(a.w, 1e-3));
             sp = sp + f * (prof * taper);
         }
         acc = acc + cam_stars.s[2u * i + 1u].rgb * sp * a.z;

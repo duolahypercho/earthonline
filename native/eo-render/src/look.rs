@@ -763,8 +763,9 @@ pub struct ShaderFeatures {
     /// its passes are made only with it, and its lines in the post and bloom shaders sit behind it.
     pub camera: bool,
     /// The camera model's later features compiled in (`cine_post::CAM_BIT_*`: `--camera-tone`,
-    /// `--white-balance`, `--lens-halation`, `--camera-sharpen`, `--lens-flare`; cine_post.rs
-    /// `SF_CAM_*`), only with the model.
+    /// `--white-balance`, `--lens-halation`, `--camera-sharpen`, `--lens-flare`,
+    /// `--camera-resolve` (`SF_CAM_RESOLVE` here: the resolve's shader), `--camera-print`;
+    /// cine_post.rs `SF_CAM_*`), only with the model.
     /// New code: `ALL` leaves it out, as the shaders were before it.
     pub camera_bits: u32,
     /// The cars' materials and lamps (`--car-materials`; `SF_CAR_MATERIALS`,
@@ -960,6 +961,7 @@ impl ShaderFeatures {
                 ("SF_SCREEN_REFLECT", self.screen_reflect),
                 // the camera track
                 ("SF_CAMERA", self.camera),
+                ("SF_CAM_RESOLVE", self.camera && self.camera_bits & crate::cine_post::CAM_BIT_RESOLVE != 0),
                 // the vehicles track
                 ("SF_CAR_MATERIALS", self.car_materials),
                 ("SF_CAR_REFLECTIONS", self.car_reflections),

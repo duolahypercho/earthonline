@@ -129,6 +129,9 @@ pub struct CineUniform {
     /// (`--white-balance`) xyz the hour's white-balance preset (`wb_preset`), w the
     /// hour's saturation in the scene (`wb_preset_sat`); zero without the feature.
     pub cam7: [f32; 4],
+    /// (`--camera-print`) x the toe's slope in the deep shadows (`print_toe`), y its
+    /// curve's constant (`toe_offset_at`); zw unused. Zero without the feature.
+    pub cam8: [f32; 4],
 }
 
 impl CineUniform {
@@ -145,6 +148,7 @@ impl CineUniform {
             cam5: [0.0; 4],
             cam6: [0.0; 4],
             cam7: [0.0; 4],
+            cam8: [0.0; 4],
         }
     }
 
@@ -176,6 +180,15 @@ impl CineUniform {
             let day = day_share(sun_alt_deg);
             u.cam5[0] = (CAM_TONE_FLARE[0] + (CAM_TONE_FLARE[1] - CAM_TONE_FLARE[0]) * day) as f32;
             u.cam5[2] = (CAM_TONE_SHADE_SAT[0] + (CAM_TONE_SHADE_SAT[1] - CAM_TONE_SHADE_SAT[0]) * day) as f32;
+        }
+        if bits & CAM_BIT_PRINT != 0 {
+            let day = day_share(sun_alt_deg);
+            let lo = print_toe(sun_alt_deg);
+            u.cam8 = [lo as f32, toe_offset_at(lo) as f32, 0.0, 0.0];
+            u.cam3[2] = (p.detail + (CAM_PRINT_DETAIL_DAY - camera_params(90.0).detail) * day) as f32;
+            // the veiling glare's floor fades out by day with the print's toe (a coated prime's
+            // veil is under the print's black by day; at night it keeps an unlit facade's trace).
+            u.cam5[0] *= (1.0 - day) as f32;
         }
         if bits & CAM_BIT_SHARPEN != 0 {
             u.cam5[1] = CAM_SHARPEN_DETAIL as f32;
@@ -251,20 +264,52 @@ pub const CAM_BIT_SHARPEN: u32 = 8;
 /// bright source, not only the sun: the meter finds the frame's point sources
 /// (in each grid cell its brightest 4 x 4 block over `CAM_FLARE_DETECT` exposed,
 /// refined to its brightest pixel, kept only where that pixel is the brightest
-/// within 3 px and stands `CAM_FLARE_POINT` over its 7 x 7 neighbourhood's mean:
-/// a lamp, a headlamp, the sun, a glint, not a lit window) into a list of at most
-/// `CAM_FLARE_SOURCES`, each with its flux over `CAM_FLARE_FLUX_FLOOR` (exposed;
-/// growing only logarithmically past `CAM_FLARE_FLUX_CAP`) and its colour; the
-/// post pass draws each one's diffraction spikes: six (a hexagonal aperture's three
-/// edge pairs, turned `CAM_FLARE_ANGLE_DEG`), a little over a pixel wide, their
-/// intensity `CAM_FLARE_SPIKE[0]` x the flux at the core falling as (r0 / (r0 +
-/// r))^p (`CAM_FLARE_SPIKE[1..3]`), each colour's spike as long as its wavelength
+/// within 5 px and stands `CAM_FLARE_POINT` over a ring `CAM_FLARE_RING_PX` round
+/// it, or `CAM_FLARE_ORB` x that over a ring twice as wide (a near lamp's globe in
+/// its glow): a lamp, a headlamp, a glint, not a lit window, not the sun's disc)
+/// into a list of at most `CAM_FLARE_SOURCES`, each with its flux over
+/// `CAM_FLARE_FLUX_FLOOR` (exposed; growing only logarithmically past
+/// `CAM_FLARE_FLUX_CAP`) and its colour; the post pass draws each one's diffraction
+/// spikes: six (a hexagonal aperture's three edge pairs, turned
+/// `CAM_FLARE_ANGLE_DEG`), a pixel wide at the core and fanning out
+/// (`CAM_FLARE_WIDTH`), their intensity `CAM_FLARE_SPIKE[0]` x the flux at the core
+/// falling as a straight edge's diffraction, (r0 / (r0 + r))^2
+/// (`CAM_FLARE_SPIKE[1..3]`), each colour's spike as long as its wavelength
 /// (`CAM_FLARE_DISPERSION`: a spike's tip goes red), drawn out to where it falls
-/// under `CAM_FLARE_SPIKE[3]` (at most `CAM_FLARE_SPIKE_MAX_PX`); the sun's ghost
-/// chain is `CAM_FLARE_GHOST_GAIN` x stronger and its own soft starburst gives way
-/// to the spikes.
+/// under `CAM_FLARE_SPIKE[3]` (a length that grows as the square root of the flux,
+/// at most `CAM_FLARE_SPIKE_MAX_PX`; a source whose spikes would be shorter than
+/// `CAM_FLARE_SPIKE_MIN_PX` draws none) and fading over its last 60 %; the sun's
+/// ghost chain is scaled by `CAM_FLARE_GHOST_GAIN` and its own soft starburst gives
+/// way to the spikes. (Changed in round 2 iteration 3: the spikes were drawn to
+/// 360 px at a 1.7 power, on far lights more than on a near lamp's globe, and the
+/// ghosts 2.2 x the model's.)
 pub const CAM_BIT_FLARE: u32 = 16;
-pub const CAM_BITS_ALL: u32 = CAM_BIT_TONE | CAM_BIT_WB | CAM_BIT_HALATION | CAM_BIT_SHARPEN | CAM_BIT_FLARE;
+/// `--camera-resolve`: the temporal resolve (sky_resolve.wgsl, `SF_CAM_RESOLVE`)
+/// accumulates the frames in the unjittered image: the history is fetched where
+/// the pixel's point was without this frame's sub-pixel jitter (the camera's
+/// motion alone; the model's resolve fetched it at the point's unjittered place
+/// but wrote it back at the jittered pixel, so every frame resampled the history
+/// half a pixel off at random and the fine detail went soft); the first frames
+/// after a cut averaged evenly (1 / n); a still pixel's clipping box widened
+/// (`CAM_RESOLVE_GAMMA`) so the jittered coverage of an edge or a wire thinner
+/// than a pixel accumulates instead of being clipped back to whichever side
+/// this frame's sample fell on. Its code is in the resolve's shader only
+/// (`SF_CAM_RESOLVE`, ShaderFeatures' constants); no uniform term.
+pub const CAM_BIT_RESOLVE: u32 = 32;
+/// `--camera-print`: by day the camera's response takes a print's black: the
+/// toe's slope in the deep shadows (`CAM_TOE[0]`, a cine camera's long toe, kept
+/// at night) runs to `CAM_PRINT_TOE_DAY` by day (blended over the sun's altitude as
+/// the model's terms are), so a doorway, the gap under a car or a deep reveal goes
+/// to black over its last stops instead of resting on a milky floor (5 and 6 EV
+/// under grey at sRGB 4 and 1 instead of 10 and 6, 4 EV under at 12 instead of 17;
+/// 2 and 3 EV under within 2 levels); the lens's veiling
+/// floor (`--camera-tone`) fades out by day with it; and the local exposure's detail
+/// against the grid's edge-aware base is raised to `CAM_PRINT_DETAIL_DAY` by day (a
+/// print's local contrast: mortar, reveals and the dark of a ledge's underside read);
+/// the golden hours' grade keeps no cool push in the shadows (`print_key`: the camera
+/// balanced for daylight; the shade's colour is the scene's light).
+pub const CAM_BIT_PRINT: u32 = 64;
+pub const CAM_BITS_ALL: u32 = CAM_BIT_TONE | CAM_BIT_WB | CAM_BIT_HALATION | CAM_BIT_SHARPEN | CAM_BIT_FLARE | CAM_BIT_RESOLVE | CAM_BIT_PRINT;
 
 /// (`--camera-tone`) the display gamut's soft edge (display linear): the knee a
 /// channel is held under, where the rational curve reaches 1, and the share of
@@ -305,9 +350,12 @@ pub const CAM_FLARE_SOURCES: u32 = 64;
 pub const CAM_FLARE_DETECT: f64 = 3.3;
 /// (`--lens-flare`) a source's brightest pixel stands at least this many times
 /// over the mean of a ring `CAM_FLARE_RING_PX` round it (a point or a lamp's globe,
-/// not an area of light such as a lit window).
+/// not an area of light such as a lit window), or `CAM_FLARE_ORB` times that over a
+/// ring twice as wide (a near lamp's globe in its own glow, wider than the first
+/// ring: the brightest lamp in the frame was missed and the small far ones drew).
 pub const CAM_FLARE_POINT: f64 = 2.5;
 pub const CAM_FLARE_RING_PX: f64 = 18.0;
+pub const CAM_FLARE_ORB: f64 = 2.0;
 /// (`--lens-flare`) the part of each pixel's exposed luminance over this floor
 /// counts toward the source's flux; past `CAM_FLARE_FLUX_CAP` it grows only
 /// logarithmically (the sun's disc).
@@ -316,14 +364,26 @@ pub const CAM_FLARE_FLUX_CAP: f64 = 400.0;
 /// (`--lens-flare`) the spikes: x their intensity at the core per unit of flux,
 /// y the falloff's power, z its scale r0 (px of a 1080-line frame), w the
 /// intensity (exposed) they are drawn down to.
-pub const CAM_FLARE_SPIKE: [f64; 4] = [0.0016, 1.7, 3.0, 0.003];
-pub const CAM_FLARE_SPIKE_MAX_PX: f64 = 360.0;
+/// The falloff's power is a straight edge's diffraction (intensity ~ 1/r^2 along the
+/// spike), so a spike is visible out to a length that grows as the square root of
+/// its source's flux: a brighter lamp's spikes are longer, a dim one's short or none.
+pub const CAM_FLARE_SPIKE: [f64; 4] = [0.004, 2.0, 3.0, 0.003];
+/// (`--lens-flare`) the drawn length's cap and floor (px of a 1080-line frame): no
+/// spike crosses a third of the frame; a source whose spikes would be shorter than
+/// the floor draws none (a faint far light keeps its round bloom).
+pub const CAM_FLARE_SPIKE_MAX_PX: f64 = 140.0;
+pub const CAM_FLARE_SPIKE_MIN_PX: f64 = 12.0;
+/// (`--lens-flare`) a spike's width (px of a 1080-line frame) at its core and its
+/// growth along it (px per px): it fans out softly and its energy along a unit of
+/// length is kept.
+pub const CAM_FLARE_WIDTH: [f64; 2] = [1.0, 0.012];
 /// (`--lens-flare`) each colour's spike length against green's (its wavelength's).
 pub const CAM_FLARE_DISPERSION: [f64; 3] = [1.12, 1.0, 0.86];
 /// (`--lens-flare`) the spikes' turn from the frame's horizontal (degrees).
 pub const CAM_FLARE_ANGLE_DEG: f64 = 15.0;
-/// (`--lens-flare`) the sun's ghosts' gain over the model's.
-pub const CAM_FLARE_GHOST_GAIN: f64 = 2.2;
+/// (`--lens-flare`) the sun's ghosts' gain over the model's (a coated prime's ghosts
+/// are faint: at 2.2 a stray hexagon read as a smear on the frame).
+pub const CAM_FLARE_GHOST_GAIN: f64 = 0.8;
 /// (`--white-balance`) the degree of adaptation along the colour temperature's
 /// axis (log2 of blue over red) when the frame's light is warm and when it is
 /// cool, at night and by day (`day_share` blends them): a camera's automatic
@@ -870,9 +930,39 @@ pub fn toe_offset() -> f64 {
 /// The camera's response in log2 about middle grey (`CAM_TOE`; CPU reference of
 /// look_cine_camera.wgsl `cam_tone_log`).
 pub fn tone_log(u: f64) -> f64 {
+    tone_log_at(u, CAM_TOE[0])
+}
+
+/// (`--camera-print`) the toe's constant for a deep-shadow slope `lo` (`toe_offset`'s).
+pub fn toe_offset_at(lo: f64) -> f64 {
     let sp = |x: f64| x.max(0.0) + (-x.abs()).exp().ln_1p();
-    let [lo, u0, w] = CAM_TOE;
-    lo * u + (CAM_CONTRAST - lo) * w * sp((u - u0) / w) - toe_offset()
+    let [_, u0, w] = CAM_TOE;
+    (CAM_CONTRAST - lo) * w * sp(-u0 / w)
+}
+
+/// The camera's response with the deep shadows' slope `lo` (`tone_log` at `CAM_TOE[0]`).
+pub fn tone_log_at(u: f64, lo: f64) -> f64 {
+    let sp = |x: f64| x.max(0.0) + (-x.abs()).exp().ln_1p();
+    let [_, u0, w] = CAM_TOE;
+    lo * u + (CAM_CONTRAST - lo) * w * sp((u - u0) / w) - toe_offset_at(lo)
+}
+
+/// (`--camera-print`) the toe's slope by day (the print's black; the night keeps the
+/// cine camera's long toe, `CAM_TOE[0]`) and the detail's gain by day (the model's 1.22).
+pub const CAM_PRINT_TOE_DAY: f64 = 0.85;
+pub const CAM_PRINT_DETAIL_DAY: f64 = 1.35;
+
+/// (`--camera-print`) a camera key under the print: the golden hours' shadow balance
+/// neutral (the camera balanced for daylight, as the day's key under `--camera-tone`:
+/// the shade shows the scene's own light, its sky blue and its warm bounce, instead of a
+/// cool push over the whole shaded street); every other term the key's.
+pub fn print_key(k: &grade::GradeKey) -> grade::GradeKey {
+    if k.name.contains("golden") { grade::GradeKey { shadow_balance: [1.0; 3], ..*k } } else { *k }
+}
+
+/// (`--camera-print`) the toe's slope at the sun's altitude.
+pub fn print_toe(sun_alt_deg: f64) -> f64 {
+    CAM_TOE[0] + (CAM_PRINT_TOE_DAY - CAM_TOE[0]) * day_share(sun_alt_deg)
 }
 /// The look's saturation on the curve's encoded values (the sigmoid's inset
 /// desaturates the mid-tones; a print stock's dyes give them back: sunlit
@@ -925,6 +1015,8 @@ struct Cine {
     cam6: vec4<f32>,
     // (`--white-balance`) xyz the hour's white-balance preset, w the hour's saturation in the scene (0: none)
     cam7: vec4<f32>,
+    // (`--camera-print`) x the toe's slope in the deep shadows, y its curve's constant; zw unused
+    cam8: vec4<f32>,
 };
 
 // (`--cine-camera`) the meter's state (cine_camera.wgsl `cam_adapt` writes it, the post pass reads it).
@@ -1007,11 +1099,12 @@ fn later_wgsl() -> String {
     let f = |v: f64| format!("{:?}", v as f32);
     let bits = crate::look::shader_features().camera_bits;
     let mut o = format!(
-        "// (camera track, round 2) the later features\nconst SF_CAM_TONE: bool = {};\nconst SF_CAM_WB: bool = {};\nconst SF_CAM_SHARPEN: bool = {};\nconst SF_CAM_FLARE: bool = {};\nconst CAM_TONE_GAMUT: vec3<f32> = vec3<f32>({}, {}, {});\nconst CAM_WB_EV: vec2<f32> = vec2<f32>({}, {});\nconst CAM_WB_CHROMA: vec2<f32> = vec2<f32>({}, {});\nconst CAM_WB_TINT_LIMIT: f32 = {};\nconst CAM_SHARPEN_OVERSHOOT: f32 = {};\nconst CAM_TONE_SHADE_EV: vec2<f32> = vec2<f32>({}, {});\n",
+        "// (camera track, round 2) the later features\nconst SF_CAM_TONE: bool = {};\nconst SF_CAM_WB: bool = {};\nconst SF_CAM_SHARPEN: bool = {};\nconst SF_CAM_FLARE: bool = {};\nconst SF_CAM_PRINT: bool = {};\nconst CAM_TONE_GAMUT: vec3<f32> = vec3<f32>({}, {}, {});\nconst CAM_WB_EV: vec2<f32> = vec2<f32>({}, {});\nconst CAM_WB_CHROMA: vec2<f32> = vec2<f32>({}, {});\nconst CAM_WB_TINT_LIMIT: f32 = {};\nconst CAM_SHARPEN_OVERSHOOT: f32 = {};\nconst CAM_TONE_SHADE_EV: vec2<f32> = vec2<f32>({}, {});\n",
         bits & CAM_BIT_TONE != 0,
         bits & CAM_BIT_WB != 0,
         bits & CAM_BIT_SHARPEN != 0,
         bits & CAM_BIT_FLARE != 0,
+        bits & CAM_BIT_PRINT != 0,
         f(CAM_TONE_GAMUT[0]),
         f(CAM_TONE_GAMUT[1]),
         f(CAM_TONE_GAMUT[2]),
@@ -1025,11 +1118,12 @@ fn later_wgsl() -> String {
         f(CAM_TONE_SHADE_EV[1]),
     );
     o += &format!(
-        "const CAM_FLARE_SOURCES: u32 = {}u;\nconst CAM_FLARE_DETECT: f32 = {};\nconst CAM_FLARE_POINT: f32 = {};\nconst CAM_FLARE_RING_PX: f32 = {};\nconst CAM_FLARE_FLUX_FLOOR: f32 = {};\nconst CAM_FLARE_FLUX_CAP: f32 = {};\nconst CAM_FLARE_SPIKE: vec4<f32> = vec4<f32>({}, {}, {}, {});\nconst CAM_FLARE_SPIKE_MAX_PX: f32 = {};\nconst CAM_FLARE_DISPERSION: vec3<f32> = vec3<f32>({}, {}, {});\nconst CAM_FLARE_ANGLE: f32 = {};\nconst CAM_FLARE_GHOST_GAIN: f32 = {};\n{}",
+        "const CAM_FLARE_SOURCES: u32 = {}u;\nconst CAM_FLARE_DETECT: f32 = {};\nconst CAM_FLARE_POINT: f32 = {};\nconst CAM_FLARE_RING_PX: f32 = {};\nconst CAM_FLARE_ORB: f32 = {};\nconst CAM_FLARE_FLUX_FLOOR: f32 = {};\nconst CAM_FLARE_FLUX_CAP: f32 = {};\nconst CAM_FLARE_SPIKE: vec4<f32> = vec4<f32>({}, {}, {}, {});\nconst CAM_FLARE_SPIKE_MAX_PX: f32 = {};\nconst CAM_FLARE_SPIKE_MIN_PX: f32 = {};\nconst CAM_FLARE_WIDTH: vec2<f32> = vec2<f32>({}, {});\nconst CAM_FLARE_DISPERSION: vec3<f32> = vec3<f32>({}, {}, {});\nconst CAM_FLARE_ANGLE: f32 = {};\nconst CAM_FLARE_GHOST_GAIN: f32 = {};\n{}",
         CAM_FLARE_SOURCES,
         f(CAM_FLARE_DETECT),
         f(CAM_FLARE_POINT),
         f(CAM_FLARE_RING_PX),
+        f(CAM_FLARE_ORB),
         f(CAM_FLARE_FLUX_FLOOR),
         f(CAM_FLARE_FLUX_CAP),
         f(CAM_FLARE_SPIKE[0]),
@@ -1037,6 +1131,9 @@ fn later_wgsl() -> String {
         f(CAM_FLARE_SPIKE[2]),
         f(CAM_FLARE_SPIKE[3]),
         f(CAM_FLARE_SPIKE_MAX_PX),
+        f(CAM_FLARE_SPIKE_MIN_PX),
+        f(CAM_FLARE_WIDTH[0]),
+        f(CAM_FLARE_WIDTH[1]),
         f(CAM_FLARE_DISPERSION[0]),
         f(CAM_FLARE_DISPERSION[1]),
         f(CAM_FLARE_DISPERSION[2]),
@@ -1358,12 +1455,13 @@ impl CineGpu {
         // (`--cine-camera`) the camera's keys for its curve; (`--white-balance`) with the one grade's
         // balances; (`--camera-tone`) its own keys, the table open at the top.
         let bits = crate::look::shader_features().camera_bits;
-        let (wb, tone) = (bits & CAM_BIT_WB != 0, bits & CAM_BIT_TONE != 0);
+        let (wb, tone, print) = (bits & CAM_BIT_WB != 0, bits & CAM_BIT_TONE != 0, bits & CAM_BIT_PRINT != 0);
         let cam_keys = if !camera_in {
             Vec::new()
         } else {
             let keys = if tone { &CAM_TONE_GRADE_KEYS } else { &CAM_GRADE_KEYS };
-            keys.iter().map(|k| if wb { show_key(k) } else { *k }).map(|k| if tone { cam_bake_lut_open(&k) } else { cam_bake_lut(&k) }).collect()
+            // (`--camera-print`) the golden hours' shadows balanced as the day's (`print_key`).
+            keys.iter().map(|k| if print { print_key(k) } else { *k }).map(|k| if wb { show_key(&k) } else { k }).map(|k| if tone { cam_bake_lut_open(&k) } else { cam_bake_lut(&k) }).collect()
         };
         let camera = camera_in.then(|| CameraGpu::new(device));
         Self { pipeline, bgl, uniform, photo, lut, lut_view, sampler, keys, cam_keys, last: Mutex::new(None), uploads: Default::default(), camera }
@@ -1517,7 +1615,7 @@ mod tests {
             naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             module
         };
-        for bits in [0, CAM_BIT_TONE, CAM_BIT_WB, CAM_BIT_HALATION, CAM_BIT_SHARPEN, CAM_BIT_FLARE, CAM_BITS_ALL] {
+        for bits in [0, CAM_BIT_TONE, CAM_BIT_WB, CAM_BIT_HALATION, CAM_BIT_SHARPEN, CAM_BIT_FLARE, CAM_BIT_RESOLVE, CAM_BIT_PRINT, CAM_BITS_ALL] {
         let on = crate::look::ShaderFeatures { cinematic: true, camera: true, camera_bits: bits, ..crate::look::ShaderFeatures::NONE };
         crate::look::with_shader_features(on, || {
             let m = validate("look_cine.wgsl + camera", &shader_source());
@@ -1534,6 +1632,8 @@ mod tests {
             // the resolve leaves the distances in its alpha for the depth of field.
             let r = format!("{}\n{}", crate::look::look_common_source(), include_str!("sky_resolve.wgsl"));
             assert!(r.contains("const SF_CAMERA: bool = true;"));
+            // (`--camera-resolve`) its resolve follows its bit.
+            assert!(r.contains(&format!("const SF_CAM_RESOLVE: bool = {};", bits & CAM_BIT_RESOLVE != 0)));
             validate("sky_resolve.wgsl + camera", &r);
             // (round 2) each later feature's switch follows its bit, in the pass, the meter and the bloom.
             let post = shader_source();
@@ -1543,6 +1643,7 @@ mod tests {
             assert!(camera_compute_source().contains(&format!("const SF_CAM_WB: bool = {};", bits & CAM_BIT_WB != 0)));
             assert!(post.contains(&format!("const SF_CAM_SHARPEN: bool = {};", bits & CAM_BIT_SHARPEN != 0)));
             assert!(post.contains(&format!("const SF_CAM_FLARE: bool = {};", bits & CAM_BIT_FLARE != 0)));
+            assert!(post.contains(&format!("const SF_CAM_PRINT: bool = {};", bits & CAM_BIT_PRINT != 0)));
             // (`--lens-flare`) the source list is bound in the meter and the pass only with its bit.
             let flare = bits & CAM_BIT_FLARE != 0;
             assert_eq!(post.contains("var<storage, read> cam_stars"), flare);
@@ -1619,6 +1720,46 @@ mod tests {
         }
         assert!(tone_log(-6.0) > -6.0 && tone_log(-6.0) < -4.0, "{}", tone_log(-6.0));
         assert!(tone_log(-1.0) < -1.0);
+    }
+
+    /// (`--camera-print`) by day the deep shadows run to a print's black (the toe's
+    /// slope near the mid-tones' contrast: 6 EV under grey a stop and more deeper than
+    /// the long toe), the mid-shadows (2 EV under) within a tenth of a stop of the
+    /// model's, the night's toe the model's; the detail is raised and the veiling floor
+    /// gone by day only; without the bit the uniform is the model's.
+    #[test]
+    fn the_camera_print_deepens_the_days_black_only() {
+        let (day, night) = (print_toe(30.0), print_toe(-20.0));
+        assert!((day - CAM_PRINT_TOE_DAY).abs() < 1e-9 && (night - CAM_TOE[0]).abs() < 1e-9);
+        assert!(tone_log_at(0.0, day).abs() < 1e-9 && (tone_log_at(-3.0, CAM_TOE[0]) - tone_log(-3.0)).abs() < 1e-12);
+        assert!(tone_log_at(-6.0, day) < tone_log(-6.0) - 0.9, "{} {}", tone_log_at(-6.0, day), tone_log(-6.0));
+        assert!((tone_log_at(-2.0, day) - tone_log(-2.0)).abs() < 0.1);
+        let mut last = f64::NEG_INFINITY;
+        for i in -120..80 {
+            let v = tone_log_at(i as f64 * 0.1, day);
+            assert!(v > last);
+            last = v;
+        }
+        let base = CineUniform::with_camera_bits(30.0, CAM_BIT_TONE);
+        let (pd, pn) = (CineUniform::with_camera_bits(30.0, CAM_BIT_TONE | CAM_BIT_PRINT), CineUniform::with_camera_bits(-20.0, CAM_BIT_TONE | CAM_BIT_PRINT));
+        assert_eq!(base.cam8, [0.0; 4]);
+        assert_eq!(pd.cam8, [day as f32, toe_offset_at(day) as f32, 0.0, 0.0]);
+        assert_eq!((pd.cam3[2], pd.cam5[0]), (CAM_PRINT_DETAIL_DAY as f32, 0.0));
+        let n0 = CineUniform::with_camera_bits(-20.0, CAM_BIT_TONE);
+        assert_eq!((pn.cam3, pn.cam5), (n0.cam3, n0.cam5));
+        assert_eq!(pn.cam8[0], CAM_TOE[0] as f32);
+        assert_eq!(CineUniform { cam8: [0.0; 4], cam3: base.cam3, cam5: base.cam5, ..pd }, base);
+        // the golden keys' shadows neutral, every other key and term as they were.
+        for k in CAM_TONE_GRADE_KEYS.iter().chain(CAM_GRADE_KEYS.iter()) {
+            let p = print_key(k);
+            if k.name.contains("golden") {
+                assert_eq!(p.shadow_balance, [1.0; 3]);
+                assert_eq!(grade::GradeKey { shadow_balance: k.shadow_balance, ..p }, *k);
+            } else {
+                assert_eq!(p, *k);
+            }
+        }
+        assert_eq!(CAM_GRADE_KEYS.iter().filter(|k| k.name.contains("golden")).count(), 2);
     }
 
     /// (`--cine-camera`) the camera's grade leaves the toe to the curve (a dark
@@ -1725,13 +1866,19 @@ mod tests {
         let uw = CineUniform::with_camera_bits(30.0, CAM_BIT_WB);
         assert_eq!(uw.cam6, [CAM_WB_DEGREE[1][0] as f32, CAM_WB_DEGREE[1][1] as f32, CAM_WB_TINT_DEGREE as f32, CAM_WB_LIMIT[0] as f32]);
         assert_eq!(CAM_STARS_BYTES, 16 + 32 * CAM_FLARE_SOURCES as u64);
-        // the brightest source's spikes reach a good part of the frame's height, under the drawn
-        // cap; the weakest drawn one a few pixels.
+        // a spike's length grows as the square root of its source's flux (a straight edge's
+        // 1/r^2 diffraction): the brightest sources reach the drawn cap (a fifth of the frame's
+        // height at most, not a third), a lamp at the flux cap a few tens of pixels, and a
+        // source whose spikes would be under the floor draws none.
         let [k, p, r0, eps] = CAM_FLARE_SPIKE;
+        assert_eq!(p, 2.0);
         let len = |flux: f64| r0 * ((k * flux / eps).powf(1.0 / p) - 1.0) * CAM_FLARE_DISPERSION[0];
         let hot = len(CAM_FLARE_FLUX_CAP * (1.0 + (1e6f64 / CAM_FLARE_FLUX_CAP).ln()));
-        assert!(hot > 200.0 && hot < CAM_FLARE_SPIKE_MAX_PX, "{hot}");
-        assert!(len(2.0 * eps / k) > 1.0 && len(2.0 * eps / k) < 10.0);
+        assert!(hot > CAM_FLARE_SPIKE_MAX_PX && CAM_FLARE_SPIKE_MAX_PX <= 1080.0 / 5.0, "{hot}");
+        let lamp = len(CAM_FLARE_FLUX_CAP);
+        assert!(lamp > 30.0 && lamp < 0.6 * CAM_FLARE_SPIKE_MAX_PX, "{lamp}");
+        assert!((len(4.0 * CAM_FLARE_FLUX_CAP) / lamp - 2.0).abs() < 0.2, "four times the flux, twice the length");
+        assert!(len(2.0 * eps / k) < CAM_FLARE_SPIKE_MIN_PX && CAM_FLARE_ORB > 1.0 && CAM_FLARE_GHOST_GAIN < 1.0);
         assert!(CAM_FLARE_DISPERSION[0] > 1.0 && CAM_FLARE_DISPERSION[2] < 1.0 && CAM_FLARE_DETECT > CAM_FLARE_FLUX_FLOOR);
     }
 

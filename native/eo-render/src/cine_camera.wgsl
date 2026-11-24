@@ -189,10 +189,13 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
 /// brightest pixel, kept only if no pixel within 5 px is brighter (an equal one only
 /// in a cell further along: one cell keeps a flat core), it stands `CAM_FLARE_POINT`
 /// over the mean of a ring `CAM_FLARE_RING_PX` round it (a lamp or its globe, not a
-/// lit window) and it is not on the sun's disc (its own glare draws the sun's); its
-/// flux (the 11 x 11 pixels' exposed luminance over `CAM_FLARE_FLUX_FLOOR`,
-/// logarithmic past `CAM_FLARE_FLUX_CAP`) sets its spikes' intensity and the length
-/// they are drawn to; appended with its colour.
+/// lit window), or `CAM_FLARE_ORB` x that over a ring twice as wide (a near lamp's
+/// globe inside its own glow), and it is not on the sun's disc (its own glare draws
+/// the sun's); its flux (the 11 x 11 pixels' exposed luminance over
+/// `CAM_FLARE_FLUX_FLOOR`, logarithmic past `CAM_FLARE_FLUX_CAP`) sets its spikes'
+/// intensity and the length they are drawn to (a 1/r^2 spike's visible length: the
+/// square root of the flux, within `CAM_FLARE_SPIKE_MIN_PX` .. `_MAX_PX`; under the
+/// floor nothing is drawn); appended with its colour.
 fn cam_find_source(p0: vec2<i32>, dims: vec2<i32>) {
     let e = look.key.w * cam_state.gain;
     let di = dims - vec2<i32>(1);
@@ -222,14 +225,19 @@ fn cam_find_source(p0: vec2<i32>, dims: vec2<i32>) {
             return;
         }
     }
-    // a point: its ring's mean well under it.
+    // a point: its ring's mean well under it (or, a globe in its glow, the wider ring's well
+    // under that).
     var ring = 0.0;
+    var ring2 = 0.0;
     for (var k = 0; k < 16; k = k + 1) {
         let a = f32(k) * 0.3926991;
-        let q = clamp(bp + vec2<i32>(round(vec2<f32>(cos(a), sin(a)) * CAM_FLARE_RING_PX * px)), vec2<i32>(0), di);
+        let dir = vec2<f32>(cos(a), sin(a)) * CAM_FLARE_RING_PX * px;
+        let q = clamp(bp + vec2<i32>(round(dir)), vec2<i32>(0), di);
         ring = ring + lk_luma(max(textureLoad(cam_src, q, 0).rgb, vec3<f32>(0.0)));
+        let q2 = clamp(bp + vec2<i32>(round(2.0 * dir)), vec2<i32>(0), di);
+        ring2 = ring2 + lk_luma(max(textureLoad(cam_src, q2, 0).rgb, vec3<f32>(0.0)));
     }
-    if (!(best >= CAM_FLARE_POINT * ring * e / 16.0)) {
+    if (!(best >= CAM_FLARE_POINT * ring * e / 16.0) && !(best >= CAM_FLARE_ORB * CAM_FLARE_POINT * ring2 * e / 16.0)) {
         return;
     }
     let cell = vec2<i32>(i32(CAM_CELL_PX));
@@ -263,8 +271,13 @@ fn cam_find_source(p0: vec2<i32>, dims: vec2<i32>) {
     if (a < 2.0 * CAM_FLARE_SPIKE.w) {
         return;
     }
-    // drawn out to where the longest (red) spike falls under `CAM_FLARE_SPIKE.w`.
-    let len = min(CAM_FLARE_SPIKE.z * (pow(a / CAM_FLARE_SPIKE.w, 1.0 / CAM_FLARE_SPIKE.y) - 1.0) * CAM_FLARE_DISPERSION.x, CAM_FLARE_SPIKE_MAX_PX) * px;
+    // drawn out to where the longest (red) spike falls under `CAM_FLARE_SPIKE.w`; a source
+    // whose spikes would be shorter than the floor draws none.
+    let len0 = CAM_FLARE_SPIKE.z * (pow(a / CAM_FLARE_SPIKE.w, 1.0 / CAM_FLARE_SPIKE.y) - 1.0) * CAM_FLARE_DISPERSION.x;
+    if (len0 < CAM_FLARE_SPIKE_MIN_PX) {
+        return;
+    }
+    let len = min(len0, CAM_FLARE_SPIKE_MAX_PX) * px;
     cam_star_push(vec4<f32>(vec2<f32>(bp) + 0.5, a, len), vec4<f32>(col / max(lk_luma(col), 1e-6), 0.0));
 }
 
