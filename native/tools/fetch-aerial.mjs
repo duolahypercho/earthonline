@@ -13,6 +13,12 @@
 // size or it is retried (the service answers 502/504 under load); files
 // already present are kept. Nothing downloaded is executed. The total is
 // checked against a 3 GB cap before and during the run.
+//
+// Every tile's box must be square in degrees per pixel (box width over
+// height = pixel columns over rows), or the plan is refused before anything
+// is fetched: the service serves a longitude/latitude request with pixels
+// square in degrees, widening any other box north and south about its
+// centre, so the tile would not cover the box the manifest records.
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -24,6 +30,19 @@ const CAP = 3 * 1024 ** 3;
 const root = process.argv[2] || process.env.EO_AERIAL_DIR || (() => { console.error('usage: fetch-aerial.mjs <root> (or set EO_AERIAL_DIR)'); process.exit(2); })();
 const plan = JSON.parse(readFileSync(join(root, 'tiles.json'), 'utf8'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+for (const t of plan.tiles) {
+  const q = new URL(t.url).searchParams;
+  const [w, s, e, n] = (q.get('bbox') || '').split(',').map(Number);
+  const [cols, rows] = (q.get('size') || '').split(',').map(Number);
+  const perCol = (e - w) / cols;
+  const perRow = (n - s) / rows;
+  // 1e-5: a fiftieth of a pixel over 2000 (the URL's 9 decimals round each edge by up to 0.1 mm).
+  if (!(perCol > 0 && perRow > 0) || Math.abs(perCol / perRow - 1) > 1e-5) {
+    console.error(`${t.file}: box ${q.get('bbox')} at ${q.get('size')} px is not square in degrees per pixel; the service would serve it widened north-south. Run roof_survey plan again.`);
+    process.exit(2);
+  }
+}
 
 let total = 0;
 for (const t of plan.tiles) {
@@ -95,7 +114,7 @@ const manifest = {
   licenceLinks: ['https://catalog.data.gov/dataset/national-agriculture-imagery-program-naip-imagery', 'https://www.usa.gov/publicdomain/label/1.0/', 'https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits'],
   credit: 'Imagery: USDA NAIP, via the U.S. Geological Survey National Map',
   downloaded: new Date().toISOString(),
-  grids: { rgb: plan.rgb, cir: plan.cir, frame: plan.frame, note: 'plain longitude/latitude (EPSG:4326) tiles; rgb = bands 1,2,3 (red, green, blue); cir = bands 4,1,2 (near infrared, red, green)' },
+  grids: { rgb: plan.rgb, cir: plan.cir, frame: plan.frame, note: 'plain longitude/latitude (EPSG:4326) tiles with pixels square in degrees, so each file covers exactly its recorded bbox; rgb = bands 1,2,3 (red, green, blue); cir = bands 4,1,2 (near infrared, red, green)' },
   totalBytes: files.reduce((a, f) => a + f.bytes, 0),
   files,
 };
