@@ -16,6 +16,7 @@ pub mod golden;
 pub mod ground_field;
 pub mod look;
 pub mod math;
+pub mod occluder;
 pub mod penumbra;
 pub mod rig;
 pub mod screen_gi;
