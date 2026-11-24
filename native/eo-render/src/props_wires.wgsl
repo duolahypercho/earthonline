@@ -76,6 +76,8 @@ struct PrWireOut {
     @location(0) side: f32,
     @location(1) @interpolate(flat) alpha: f32,
     @location(2) world: vec3<f32>,
+    // (`--wire-light`) the wire's direction
+    @location(3) @interpolate(flat) axis: vec3<f32>,
 };
 
 @vertex
@@ -104,6 +106,7 @@ fn wire_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> 
     let mid = distance((w.a + w.b) * 0.5, pr.cam.xyz);
     out.alpha = coverage * (1.0 - smoothstep(pr.wire.x, pr.wire.y, mid));
     out.world = world;
+    out.axis = normalize(w.b - w.a);
     return out;
 }
 
@@ -112,7 +115,49 @@ fn wire_fs(in: PrWireOut) -> @location(0) vec4<f32> {
     let edge = 1.0 - smoothstep(0.5, 1.0, abs(in.side));
     let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
     let fog = lk_smooth(look.fog.x, look.fog.y, vd);
-    let c = mix(PR_WIRE_COLOUR, look.fog_color.xyz, fog);
+    var base = PR_WIRE_COLOUR;
+    if (SF_WIRE_LIGHT) {
+        base = pr_wire_lit(in.world, in.axis); // (`--wire-light`)
+    }
+    let c = mix(base, look.fog_color.xyz, fog);
     return vec4<f32>(c, in.alpha * edge);
+}
+
+// (`--wire-light`, the night track) A wire lit as the scene's surfaces are, in
+// place of the JS's unlit colour (which the night's exposure lifts into strokes
+// brighter than the sky): a weathered cable, `PR_WIRE_COLOUR` its albedo (a
+// black jacket, an old conductor), matte, its round face's visible half lit by
+// the rig's fill and the environment (look_light's hemisphere, ambient and SH
+// irradiance, taken at the half's middle normal: within a few per cent of the
+// half's mean for a smooth sky) and by the key and the rim (a Lambertian
+// cylinder: the visible half's mean of max(n.l, 0) weighted by its width on
+// screen, (sin psi + (pi - psi) cos psi) / 4 of the light's part across the
+// wire, psi its angle from the half's middle). No shadow (a wire overhead sees
+// the sky), no street lamp (full-cutoff heads send none above them).
+fn pr_wire_cyl(l: vec3<f32>, t: vec3<f32>, nv: vec3<f32>) -> f32 {
+    let lp = l - t * dot(l, t);
+    let s = length(lp);
+    if (s < 1e-4) {
+        return 0.0;
+    }
+    let psi = acos(clamp(dot(lp / s, nv), -1.0, 1.0));
+    return s * (sin(psi) + (3.14159265 - psi) * cos(psi)) * 0.25;
+}
+
+fn pr_wire_lit(world: vec3<f32>, t: vec3<f32>) -> vec3<f32> {
+    let v = normalize(look.cam_pos.xyz - world);
+    var nv = v - t * dot(v, t);
+    nv = nv / max(length(nv), 1e-4);
+    let x = nv.x;
+    let y = nv.y;
+    let z = nv.z;
+    var sh = look.sh[0].xyz * 0.282095;
+    sh = sh + look.sh[1].xyz * (0.488603 * y) + look.sh[2].xyz * (0.488603 * z) + look.sh[3].xyz * (0.488603 * x);
+    sh = sh + look.sh[4].xyz * (1.092548 * x * y) + look.sh[5].xyz * (1.092548 * y * z) + look.sh[6].xyz * (0.315392 * (3.0 * z * z - 1.0));
+    sh = sh + look.sh[7].xyz * (1.092548 * x * z) + look.sh[8].xyz * (0.546274 * (x * x - y * y));
+    let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, y * 0.5 + 0.5);
+    let fill = hemi + look.ambient.xyz + max(sh, vec3<f32>(0.0)) * look.ambient.w * look.env_class.x;
+    let direct = look.key.xyz * pr_wire_cyl(look.key_dir.xyz, t, nv) + look.rim.xyz * pr_wire_cyl(look.rim_dir.xyz, t, nv);
+    return PR_WIRE_COLOUR / 3.14159265 * (fill + direct);
 }
 #endif_draw

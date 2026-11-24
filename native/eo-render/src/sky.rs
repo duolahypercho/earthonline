@@ -341,6 +341,12 @@ pub struct SkyOptions {
     /// cap a soft shoulder, so a lit window stands ~2.5-3.5 EV over the metered walk.
     /// Off (the default) draws today's frame; its shader code sits behind `SF_LIT_ROOMS`.
     pub lit_rooms: bool,
+    /// (`--wire-light`) the street overhead's wires lit as the scene's surfaces are
+    /// (a matte dark cable under the sky, the rig's fill and the key, by the
+    /// cylinder's own shading) in place of the JS's unlit colour, which the
+    /// night's exposure lifted into glowing strokes over the sky. Off (the
+    /// default) draws today's frame; its shader code sits behind `SF_WIRE_LIGHT`.
+    pub wire_light: bool,
 }
 
 impl Default for SkyOptions {
@@ -385,6 +391,7 @@ impl Default for SkyOptions {
             rear_lamps: false,
             signal_spill: false,
             lit_rooms: false,
+            wire_light: false,
         }
     }
 }

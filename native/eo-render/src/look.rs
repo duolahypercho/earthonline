@@ -792,6 +792,8 @@ pub struct ShaderFeatures {
     pub signal_spill: bool,
     /// Lit homes on the lamps' photometric scale (`--lit-rooms`; `SF_LIT_ROOMS`, rooms.wgsl).
     pub lit_rooms: bool,
+    /// The overhead wires lit as the scene's surfaces (`--wire-light`; `SF_WIRE_LIGHT`, props_wires.wgsl).
+    pub wire_light: bool,
     /// The natural-detail bits compiled in (`NATURE_*`; their `// sf:` blocks, `sf_select`).
     /// New code with no runtime test: `ALL` leaves it out, as the shaders were before it.
     pub nature: u32,
@@ -810,7 +812,7 @@ impl ShaderFeatures {
         wet_surfaces: true, screen_reflect: true, // the reflect track
         camera: true, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
-        night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, // the night track
+        night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, wire_light: true, // the night track
         nature: 0, // the nature track
     };
     /// No feature compiled in (the default frame's pipelines).
@@ -822,7 +824,7 @@ impl ShaderFeatures {
         wet_surfaces: false, screen_reflect: false, // the reflect track
         camera: false, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
-        night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, // the night track
+        night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, wire_light: false, // the night track
         nature: 0, // the nature track
     };
 
@@ -863,6 +865,7 @@ impl ShaderFeatures {
             rear_lamps: o.sky.rear_lamps,
             signal_spill: o.sky.signal_spill,
             lit_rooms: o.sky.lit_rooms,
+            wire_light: o.sky.wire_light,
             nature: o.nature & NATURE_ALL,
         }
     }
@@ -941,6 +944,7 @@ impl ShaderFeatures {
         l.sky.rear_lamps &= self.rear_lamps;
         l.sky.signal_spill &= self.signal_spill;
         l.sky.lit_rooms &= self.lit_rooms;
+        l.sky.wire_light &= self.wire_light;
         l.nature &= self.nature;
         l
     }
@@ -989,6 +993,7 @@ impl ShaderFeatures {
                 ("SF_REAR_LAMPS", self.rear_lamps),
                 ("SF_SIGNAL_SPILL", self.signal_spill),
                 ("SF_LIT_ROOMS", self.lit_rooms),
+                ("SF_WIRE_LIGHT", self.wire_light),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
