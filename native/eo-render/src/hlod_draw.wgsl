@@ -391,6 +391,9 @@ fn hl_glass_sky(in: HlOut, n: vec3<f32>, v: vec3<f32>, cov: f32) -> vec3<f32> {
 const FF_CELL_M: f32 = 7.0;
 const FF_UNIT_SHARE: vec2<f32> = vec2<f32>(0.14, 0.62);
 const FF_UNIT_TONE: vec3<f32> = vec3<f32>(0.47, 0.48, 0.47);
+// a stair or lift penthouse (3-5.5 x 3.5-7 m, 2.4-3.6 m tall) in this share of FF_PENT_M squares, by building.
+const FF_PENT_M: f32 = 22.0;
+const FF_PENT_SHARE: vec2<f32> = vec2<f32>(0.12, 0.55);
 const FF_HATCH_TONE: vec3<f32> = vec3<f32>(0.06, 0.07, 0.08);
 const FF_SHADOW: f32 = 0.6;
 // a far window's room: a blind or a lit ceiling (pale) in this share, else the dark room.
@@ -420,6 +423,29 @@ fn ff_cov1(x: f32, a: f32, b: f32, w: f32) -> f32 {
     return clamp((min(x + hw, b) - max(x - hw, a)) / (2.0 * hw), 0.0, 1.0);
 }
 
+// a unit's box in its FF_CELL_M square: (x, z) its corner in the square, (z, w) its size; size 0 none.
+fn ff_unit_box(cell: vec2<f32>, g: u32, share: f32) -> vec4<f32> {
+    let size = vec2<f32>(1.0 + 2.6 * ff_h(cell, g, 2u), 1.0 + 2.2 * ff_h(cell, g, 3u));
+    let o = vec2<f32>(ff_h(cell, g, 4u), ff_h(cell, g, 5u)) * (FF_CELL_M - size - 1.0) + 0.5;
+    return select(vec4<f32>(0.0, 0.0, -1.0, -1.0), vec4<f32>(o, size), ff_h(cell, g, 1u) < share);
+}
+
+fn ff_unit_height(cell: vec2<f32>, g: u32) -> f32 {
+    return 0.8 + 1.6 * ff_h(cell, g, 6u);
+}
+
+// a stair or lift penthouse's box in its FF_PENT_M square (as `ff_unit_box`).
+fn ff_pent_box(cell: vec2<f32>, g: u32, share: f32) -> vec4<f32> {
+    let size = vec2<f32>(3.0 + 2.5 * ff_h(cell, g, 41u), 3.5 + 3.5 * ff_h(cell, g, 42u));
+    let sz = select(size, size.yx, ff_h(cell, g, 43u) < 0.5);
+    let o = vec2<f32>(ff_h(cell, g, 44u), ff_h(cell, g, 45u)) * (FF_PENT_M - sz - 2.0) + 1.0;
+    return select(vec4<f32>(0.0, 0.0, -1.0, -1.0), vec4<f32>(o, sz), ff_h(cell, g, 40u) < share);
+}
+
+fn ff_pent_height(cell: vec2<f32>, g: u32) -> f32 {
+    return 2.4 + 1.2 * ff_h(cell, g, 46u);
+}
+
 // a far flat roof (`--far-facades`): rgb its albedo over `base` (the
 // measured roof colour stays its mean), a its roughness.
 fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<f32>, plant: bool) -> vec4<f32> {
@@ -438,37 +464,63 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     }
     let busy = hl_h3(g, 31, 401u);
     let share = mix(FF_UNIT_SHARE.x, FF_UNIT_SHARE.y, busy);
+    let pshare = mix(FF_PENT_SHARE.x, FF_PENT_SHARE.y, hl_h3(g, 37, 409u));
     let cell = floor(p / FF_CELL_M);
     let q = p - cell * FF_CELL_M;
-    let has = step(ff_h(cell, g, 1u), share);
-    let size = vec2<f32>(1.0 + 2.6 * ff_h(cell, g, 2u), 1.0 + 2.2 * ff_h(cell, g, 3u));
-    let o = vec2<f32>(ff_h(cell, g, 4u), ff_h(cell, g, 5u)) * (FF_CELL_M - size - 1.0) + 0.5;
-    let ht = 0.8 + 1.6 * ff_h(cell, g, 6u);
-    let unit = ff_cov1(q.x, o.x, o.x + size.x, fw.x) * ff_cov1(q.y, o.y, o.y + size.y, fw.y) * has;
-    // its shadow on the roof: the box swept away from the key light (its bounding box)
+    let ub = ff_unit_box(cell, g, share);
+    let unit = ff_cov1(q.x, ub.x, ub.x + ub.z, fw.x) * ff_cov1(q.y, ub.y, ub.y + ub.w, fw.y);
+    // a stair or lift penthouse (one at most in each FF_PENT_M square)
+    let pcell = floor(p / FF_PENT_M);
+    let pq = p - pcell * FF_PENT_M;
+    let pb = ff_pent_box(pcell, g, pshare);
+    let pent = ff_cov1(pq.x, pb.x, pb.x + pb.z, fw.x) * ff_cov1(pq.y, pb.y, pb.y + pb.w, fw.y);
+    // the shade the units and penthouses cast down the roof from the key light: a march toward the
+    // sun over their tops (a low sun throws a unit's shade many metres, over the next squares)
     let l = look.key_dir.xyz;
     let sun = smoothstep(0.03, 0.15, l.y);
-    var off = -l.xz / max(l.y, 0.12) * ht;
-    off = off * min(1.0, 3.5 / max(length(off), 1e-3));
-    let so = o + min(off, vec2<f32>(0.0));
-    let se = o + size + max(off, vec2<f32>(0.0));
-    let swept = ff_cov1(q.x, so.x, se.x, fw.x) * ff_cov1(q.y, so.y, se.y, fw.y) * has;
-    let shade = max(swept - unit, 0.0) * sun;
+    let lh = max(length(l.xz), 1e-3);
+    let toward = l.xz / lh;
+    let rise = max(l.y, 0.02) / lh;
+    var shade = 0.0;
+    if (sun > 0.0) {
+        for (var i = 0; i < 10; i = i + 1) {
+            let sd = 0.4 + 0.22 * f32(i * i) + 0.6 * f32(i);
+            let at = p + toward * sd;
+            let ray = sd * rise;
+            let cu = floor(at / FF_CELL_M);
+            let bu = ff_unit_box(cu, g, share);
+            let ru = at - cu * FF_CELL_M;
+            let in_u = step(bu.x, ru.x) * step(ru.x, bu.x + bu.z) * step(bu.y, ru.y) * step(ru.y, bu.y + bu.w) * step(ray, ff_unit_height(cu, g));
+            let cp = floor(at / FF_PENT_M);
+            let bp = ff_pent_box(cp, g, pshare);
+            let rp = at - cp * FF_PENT_M;
+            let in_p = step(bp.x, rp.x) * step(rp.x, bp.x + bp.z) * step(bp.y, rp.y) * step(rp.y, bp.y + bp.w) * step(ray, ff_pent_height(cp, g));
+            shade = max(shade, max(in_u, in_p));
+        }
+        shade = shade * (1.0 - max(unit, pent)) * sun;
+    }
     // a hatch or skylight in a cell without a unit
+    let has = step(0.01, ub.z);
     let hatch_on = (1.0 - has) * step(ff_h(cell, g, 8u), 0.22);
     let hs = vec2<f32>(0.9, 0.9) + 1.4 * ff_h(cell, g, 9u);
     let ho = vec2<f32>(ff_h(cell, g, 10u), ff_h(cell, g, 12u)) * (FF_CELL_M - hs - 1.0) + 0.5;
     let hatch = ff_cov1(q.x, ho.x, ho.x + hs.x, fw.x) * ff_cov1(q.y, ho.y, ho.y + hs.y, fw.y) * hatch_on;
-    // once a cell is under a pixel: the cell's mean cover and shade
+    // once a cell is under a pixel: the cell's mean cover and shade (a unit's shade about 2.3 m
+    // wide and its height over the sun's rise long; a penthouse's 4.5 m wide)
     let fade = smoothstep(0.8, 1.6, fwm / FF_CELL_M);
     let mean_unit = share * 5.9 / (FF_CELL_M * FF_CELL_M);
-    let mean_shade = share * 2.4 * min(length(off), 3.5) / (FF_CELL_M * FF_CELL_M) * sun;
+    let mean_pent = pshare * 24.0 / (FF_PENT_M * FF_PENT_M);
+    let reach_u = min(1.6 / max(rise, 0.05), 16.0);
+    let reach_p = min(3.0 / max(rise, 0.05), 16.0);
+    let mean_shade = min(share * 2.3 * reach_u / (FF_CELL_M * FF_CELL_M) + pshare * 4.5 * reach_p / (FF_PENT_M * FF_PENT_M), 0.6) * sun;
     let mean_hatch = (1.0 - share) * 0.22 * 3.2 / (FF_CELL_M * FF_CELL_M);
     let u = mix(unit, mean_unit, fade);
+    let pu = mix(pent, mean_pent, fade);
     let sh = mix(shade, mean_shade, fade);
     let ha = mix(hatch, mean_hatch, fade);
     let tone = FF_UNIT_TONE * mix(0.8, 1.2, ff_h(cell, g, 7u));
-    col = mix(mix(col, tone, u), FF_HATCH_TONE, ha) * (1.0 - FF_SHADOW * sh);
+    let ptone = base * mix(0.85, 1.25, ff_h(pcell, g, 47u));
+    col = mix(mix(mix(col, tone, u), ptone, pu), FF_HATCH_TONE, ha) * (1.0 - FF_SHADOW * sh);
     rough = mix(mix(rough, 0.5, u), 0.25, ha);
     return vec4<f32>(col, rough);
 }
