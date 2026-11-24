@@ -215,7 +215,8 @@ pub struct SkyOptions {
     /// `SF_CAMERA`.
     pub cine_camera: bool,
     /// (camera track, round 2) the camera model's later features (cine_post.rs
-    /// `CAM_BIT_*`: `--camera-tone`, `--white-balance`, `--lens-halation`), each
+    /// `CAM_BIT_*`: `--camera-tone`, `--white-balance`, `--lens-halation`,
+    /// `--camera-sharpen`, `--lens-flare`), each
     /// compiled in only with its switch and `cine_camera`; 0 (the default) is the
     /// model as before.
     pub cam_bits: u32,

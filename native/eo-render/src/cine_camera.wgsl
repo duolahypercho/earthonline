@@ -23,9 +23,10 @@
 //   it, the 5 x 5 column blur of each column's mean, into a 3D texture the
 //   post pass samples.
 //
-// (`--camera-tone`, `SF_CAM_TONE`) a block of sky (its distance in the
-// resolve's alpha) counts `CAM_TONE_SKY_METER` in the meter's histogram: the
-// meter reads the ground, the walls and the subject. (`--white-balance`,
+// (`--lens-flare`, `SF_CAM_FLARE`) `cam_build` ends with the cell's point
+// source: its brightest block over `CAM_FLARE_DETECT`, refined and tested by
+// `cam_find_source`, appended to the list the post pass draws spikes from.
+// (`--white-balance`,
 // `SF_CAM_WB`) `cam_build` sums the chromaticity of the frame's surfaces (no
 // sky; within `CAM_WB_EV` of middle grey at the last frame's exposure; under
 // `CAM_WB_CHROMA`) after the histograms, and `cam_adapt` turns it into the
@@ -59,6 +60,10 @@ var<workgroup> wg_cnt: array<atomic<u32>, CAM_GRID_Z>;
 var<workgroup> wg_wb: array<atomic<u32>, 4>;
 /// (`--white-balance`) the estimate's fixed point (a block of full weight adds this much).
 const CAM_WB_SCALE: f32 = 4096.0;
+// (`--lens-flare`) the cell's brightest block (its exposed luminance's bits) and the
+// first thread holding it.
+var<workgroup> wg_star: atomic<u32>;
+var<workgroup> wg_star_li: atomic<u32>;
 
 /// The meter's weight at `uv`: the lower two thirds and the centre count most
 /// (a street, not the sky over it; a subject, not the frame's edge).
@@ -84,8 +89,14 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
     if (SF_CAM_WB && li < 4u) {
         atomicStore(&wg_wb[li], 0u);
     }
+    if (SF_CAM_FLARE && li == 0u) {
+        atomicStore(&wg_star, 0u);
+        atomicStore(&wg_star_li, 0xffffffffu);
+    }
     workgroupBarrier();
     let dims = textureDimensions(cam_src);
+    // (`--lens-flare`) the block's mean exposed luminance at the last frame's exposure.
+    var blk = 0.0;
     let p0 = wid.xy * CAM_CELL_PX + lid.xy * 4u;
     if (all(p0 < dims)) {
         // the block's mean: four bilinear taps, each the mean of 2 x 2 pixels.
@@ -97,19 +108,16 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
         let t3 = textureSampleLevel(cam_src, cam_lin, (b + vec2<f32>(3.0, 3.0)) * inv, 0.0);
         let c = t0.rgb + t1.rgb + t2.rgb + t3.rgb;
         let y = lk_luma(max(c * 0.25, vec3<f32>(0.0))) * look.key.w;
+        blk = select(0.0, y * cam_state.gain, y == y);
         let l = log2(max(y, 1e-12));
         if (l == l) {
             let uv = (b + vec2<f32>(2.0)) * inv;
             let hb = u32(clamp((l - CAM_HIST_LO) / (CAM_HIST_HI - CAM_HIST_LO) * f32(CAM_HIST_BINS), 0.0, f32(CAM_HIST_BINS) - 1.0));
-            // (`--camera-tone`, `--white-balance`) the block's sky: its mean distance from the
-            // resolve's alpha (2 + metres, the sky 65504: a quarter of it is past 16000 m).
+            // (`--white-balance`) the block's sky: its mean distance from the resolve's alpha
+            // (2 + metres, the sky 65504: a quarter of it is past 16000 m).
             let am = 0.25 * (t0.a + t1.a + t2.a + t3.a);
             let sky = am > 16000.0;
-            var mw = cam_meter_weight(uv);
-            if (SF_CAM_TONE && sky) {
-                mw = mw * CAM_TONE_SKY_METER;
-            }
-            atomicAdd(&wg_hist[hb], u32(mw * 64.0 + 0.5));
+            atomicAdd(&wg_hist[hb], u32(cam_meter_weight(uv) * 64.0 + 0.5));
             if (SF_CAM_WB && !sky && am >= 2.0) {
                 // a surface lit near middle grey at the last frame's exposure, not a strong colour.
                 let cs = max(c * 0.25, vec3<f32>(0.0));
@@ -159,6 +167,105 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
         }
         cam_cols[col] = t;
     }
+    // (`--lens-flare`) the cell's point source: its brightest block over the threshold, the
+    // first thread holding it refines and tests it.
+    if (SF_CAM_FLARE) {
+        if (blk > CAM_FLARE_DETECT) {
+            atomicMax(&wg_star, bitcast<u32>(blk));
+        }
+        workgroupBarrier();
+        let top = atomicLoad(&wg_star);
+        if (top != 0u && bitcast<u32>(blk) == top) {
+            atomicMin(&wg_star_li, li);
+        }
+        workgroupBarrier();
+        if (top != 0u && atomicLoad(&wg_star_li) == li) {
+            cam_find_source(vec2<i32>(p0), vec2<i32>(dims));
+        }
+    }
+}
+
+/// (`--lens-flare`) a cell's point source from its brightest block `p0`: the block's
+/// brightest pixel, kept only if no pixel within 5 px is brighter (an equal one only
+/// in a cell further along: one cell keeps a flat core), it stands `CAM_FLARE_POINT`
+/// over the mean of a ring `CAM_FLARE_RING_PX` round it (a lamp or its globe, not a
+/// lit window) and it is not on the sun's disc (its own glare draws the sun's); its
+/// flux (the 11 x 11 pixels' exposed luminance over `CAM_FLARE_FLUX_FLOOR`,
+/// logarithmic past `CAM_FLARE_FLUX_CAP`) sets its spikes' intensity and the length
+/// they are drawn to; appended with its colour.
+fn cam_find_source(p0: vec2<i32>, dims: vec2<i32>) {
+    let e = look.key.w * cam_state.gain;
+    let di = dims - vec2<i32>(1);
+    var best = -1.0;
+    var bp = p0;
+    for (var k = 0; k < 16; k = k + 1) {
+        let q = p0 + vec2<i32>(k % 4, k / 4);
+        if (any(q > di)) {
+            continue;
+        }
+        let l = lk_luma(max(textureLoad(cam_src, q, 0).rgb, vec3<f32>(0.0))) * e;
+        if (l > best) {
+            best = l;
+            bp = q;
+        }
+    }
+    if (!(best > 0.0)) {
+        return;
+    }
+    let px = f32(dims.y) / 1080.0;
+    // not on the sun's disc (2.5 x its radius).
+    let sc = skyu.vp * vec4<f32>(skyu.atmo.xyz, 0.0);
+    if (sc.w > 1e-6) {
+        let sp = vec2<f32>(sc.x / sc.w * 0.5 + 0.5, 0.5 - sc.y / sc.w * 0.5) * vec2<f32>(dims);
+        let r = 2.5 * 0.0046548 / max(skyu.cluster.z, 1e-4) * 0.5 * f32(dims.y);
+        if (length(vec2<f32>(bp) + 0.5 - sp) < r) {
+            return;
+        }
+    }
+    // a point: its ring's mean well under it.
+    var ring = 0.0;
+    for (var k = 0; k < 16; k = k + 1) {
+        let a = f32(k) * 0.3926991;
+        let q = clamp(bp + vec2<i32>(round(vec2<f32>(cos(a), sin(a)) * CAM_FLARE_RING_PX * px)), vec2<i32>(0), di);
+        ring = ring + lk_luma(max(textureLoad(cam_src, q, 0).rgb, vec3<f32>(0.0)));
+    }
+    if (!(best >= CAM_FLARE_POINT * ring * e / 16.0)) {
+        return;
+    }
+    let cell = vec2<i32>(i32(CAM_CELL_PX));
+    let bc = bp / cell;
+    let bci = bc.y * dims.x + bc.x;
+    var flux = 0.0;
+    var col = vec3<f32>(0.0);
+    for (var k = 0; k < 121; k = k + 1) {
+        let q = bp + vec2<i32>(k % 11 - 5, k / 11 - 5);
+        if (any(q < vec2<i32>(0)) || any(q > di)) {
+            continue;
+        }
+        let c = max(textureLoad(cam_src, q, 0).rgb, vec3<f32>(0.0)) * e;
+        let l = lk_luma(c);
+        if (!(l == l)) {
+            continue;
+        }
+        let qc = q / cell;
+        if (l > best || (l == best && qc.y * dims.x + qc.x < bci)) {
+            return;
+        }
+        let over = max(l - CAM_FLARE_FLUX_FLOOR, 0.0);
+        flux = flux + over;
+        col = col + c * (over / max(l, 1e-6));
+    }
+    if (!(flux > 0.0)) {
+        return;
+    }
+    let fc = select(flux, CAM_FLARE_FLUX_CAP * (1.0 + log(flux / CAM_FLARE_FLUX_CAP)), flux > CAM_FLARE_FLUX_CAP);
+    let a = CAM_FLARE_SPIKE.x * fc;
+    if (a < 2.0 * CAM_FLARE_SPIKE.w) {
+        return;
+    }
+    // drawn out to where the longest (red) spike falls under `CAM_FLARE_SPIKE.w`.
+    let len = min(CAM_FLARE_SPIKE.z * (pow(a / CAM_FLARE_SPIKE.w, 1.0 / CAM_FLARE_SPIKE.y) - 1.0) * CAM_FLARE_DISPERSION.x, CAM_FLARE_SPIKE_MAX_PX) * px;
+    cam_star_push(vec4<f32>(vec2<f32>(bp) + 0.5, a, len), vec4<f32>(col / max(lk_luma(col), 1e-6), 0.0));
 }
 
 var<workgroup> wa_cum: array<f32, CAM_HIST_BINS>;
@@ -276,13 +383,6 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
             st.mean = mean;
             corr = clamp(log2(0.18) + cine.cam1.z - mean, -cine.cam1.w, cine.cam0.z);
         }
-        // (`--camera-tone`) the sun in the frame (its disc's mean at the hour's exposure) pulls the
-        // meter down by up to `CAM_TONE_SUN_PULL` EV: a backlit street is kept a silhouette's depth
-        // under its glare instead of lifted to the shade's grey.
-        if (SF_CAM_TONE) {
-            let se = log2(max(wa_sun[0] / 64.0, 1e-6));
-            corr = corr - CAM_TONE_SUN_PULL * smoothstep(CAM_TONE_SUN_EV.x, CAM_TONE_SUN_EV.y, se);
-        }
         let target_ev = ev_hour + corr;
         // a cut (no history), the first frame, or a far jump snaps; else converge.
         let cut = skyu.taa.y < 0.5 || st.init < 0.5 || !(abs(st.ev - target_ev) < 12.0);
@@ -313,17 +413,6 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
                 kh = clamp((cine.cam3.y - knee) / max(hi - knee, 1e-3), cine.cam0.y, 1.0);
             } else if (top > knee + 0.5 && top < cine.cam4.y) {
                 kh = clamp((cine.cam4.y - knee) / (top - knee), 1.0, max(cine.cam4.x, 1.0));
-            }
-        }
-        // (`--camera-tone`) the standing compression (`cam5.xy`: by day the shade comes up a
-        // little and what is over the knee comes down toward it, whether or not the range
-        // overflows), the range's fit taking it further; a night's push is left alone.
-        // (the shadows' part only as far as the frame's dark end is deep: 2.5 .. 4.5 EV under
-        // grey; an aerial's or a sunlit square's shallow shadows keep their depth)
-        if (SF_CAM_TONE) {
-            ks = min(ks, 1.0 - (1.0 - cine.cam5.x) * smoothstep(2.5, 4.5, -lo));
-            if (kh <= 1.0) {
-                kh = min(kh, cine.cam5.y);
             }
         }
         if (cut || !(st.k_shadow > 0.0) || !(st.k_high > 0.0)) {
