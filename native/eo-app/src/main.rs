@@ -369,6 +369,14 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-agent-occlusion" => a.look.facade &= !eo_render::facade::RUN_AGENT_HZB, // agents not tested against the pyramid
             "--no-probe-defer" => a.look.facade &= !eo_render::facade::RUN_PROBE_DEFER, // a probe face on any frame
             "--probe-yield" => a.look.facade |= eo_render::facade::RUN_PROBE_YIELD, // opt in
+            // (opt in) the sun's first bounce off the sunlit walls, gathered from the far sun map (needs --far-shadows)
+            "--sun-bounce" | "--no-sun-bounce" => a.look.sun_bounce = s == "--sun-bounce",
+            // (opt in) the occlusion's multi-bounce at each surface's own albedo instead of 0.7
+            "--ao-albedo" | "--no-ao-albedo" => a.look.ao_albedo = s == "--ao-albedo",
+            // (opt in) the sun's penumbra: the cascades filtered over the sun's disc at the caster's distance
+            "--soft-shadows" | "--no-soft-shadows" => a.look.soft_shadows = s == "--soft-shadows",
+            // (opt in) the screen-space indirect light: the occlusion pass's bitmask gather to 12 m, its history and filter
+            "--screen-gi" | "--no-screen-gi" => a.look.screen_gi = s == "--screen-gi",
             // weather (a preset or the shared schedule) and the stage switches.
             "--weather" => {
                 let v = val()?;

@@ -63,6 +63,113 @@ fn lk_cascade(c: i32, world: vec3<f32>, ng: vec3<f32>, bounded: bool) -> f32 {
         + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(h, h), c, z));
 }
 
+// A tap of a Vogel disc (`n` taps, uniform over the unit disc's area, turned by `rot`).
+fn lk_vogel(i: u32, n: u32, rot: f32) -> vec2<f32> {
+    let r = sqrt((f32(i) + 0.5) / f32(n));
+    let a = f32(i) * 2.39996323 + rot;
+    return r * vec2<f32>(cos(a), sin(a));
+}
+
+// (`--soft-shadows`, SF_SOFT_SHADOWS; eo-look `penumbra`) the sun's visibility
+// through its disc 0.5334 degrees across: percentage-closer soft shadows
+// (Fernando 2005). The casters in a disc of PS_MAX_SPREAD_M round the point
+// give the distance d up the beam to the edge that shades it: each caster's
+// height over the receiver's plane at its own texel, the nearest past
+// PS_MIN_CASTER_M (the map holds a caster's sun-facing surface, so the mean
+// over a thick or layered caster overstates the distance to the edge, and
+// differently either side of it, which bent the band). The comparison is
+// then filtered over a disc of the penumbra's half width, d x tan(0.5334
+// deg) / 2 (a uniform disc: a straight edge's soft band is the sun's disc
+// past a chord). Each tap compares against the receiver's own plane (its
+// geometric normal in the cascade's clip space). Only a point with casters
+// round it but not all round (the band itself) runs the filter. -1: too
+// narrow a penumbra, the cascade's 3 x 3 tent stands.
+fn lk_cascade_soft(c: i32, world: vec3<f32>, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>) -> f32 {
+    let dims = vec2<f32>(textureDimensions(lk_shadow_map).xy);
+    let texel = 1.0 / dims.x;
+    // the receiver's plane: dz per uv (rows r0, r1 and the normal solved for the tangent offset).
+    let m = look.cascade_vp[c];
+    let r0 = vec3<f32>(m[0].x, m[1].x, m[2].x);
+    let r1 = vec3<f32>(m[0].y, m[1].y, m[2].y);
+    let r2 = vec3<f32>(m[0].z, m[1].z, m[2].z);
+    let c1 = cross(r1, ng);
+    let c0 = cross(ng, r0);
+    let det = dot(r0, c1);
+    var g = vec2<f32>(0.0);
+    if (abs(det) > 1e-12) {
+        g = vec2<f32>(2.0 * dot(r2, c1), -2.0 * dot(r2, c0)) / det;
+    }
+    let gmax = PS_MAX_PLANE_SLOPE * b.z / (b.w * texel);
+    g = clamp(g, vec2<f32>(-gmax), vec2<f32>(gmax));
+    // per pixel and per frame turn (interleaved gradient noise on the pixel).
+    let cp = frame.view_proj * vec4<f32>(world, 1.0);
+    let sp = (cp.xy / max(cp.w, 1e-6) * vec2<f32>(0.5, -0.5) + 0.5) * vec2<f32>(textureDimensions(lk_ao)) * 2.0;
+    let ign = fract(52.9829189 * fract(dot(floor(sp) + look.post2.w * 5.588238, vec2<f32>(0.06711056, 0.00583715))));
+    let rot = ign * 6.2831853;
+    // the casters round the point.
+    let base = uv * dims;
+    let rs = clamp(PS_MAX_SPREAD_M / b.z, 1.0, PS_MAX_RADIUS_TEXELS);
+    var nb = 0.0;
+    var dz = 1e9;
+    for (var i = 0u; i < PS_SEARCH_TAPS; i = i + 1u) {
+        let t = clamp(floor(base + lk_vogel(i, PS_SEARCH_TAPS, rot) * rs), vec2<f32>(0.0), dims - 1.0);
+        let d = textureLoad(lk_shadow_map, vec2<i32>(t), c, 0);
+        let zp = z + dot(g, (t + 0.5 - base) * texel);
+        if (d < zp) {
+            nb = nb + 1.0;
+            let h = (zp - d) * b.w;
+            if (h > PS_MIN_CASTER_M) {
+                dz = min(dz, h);
+            }
+        }
+    }
+    // no caster within the widest penumbra: lit; casters all round: the umbra.
+    if (nb < 0.5) {
+        return 1.0;
+    }
+    if (nb > f32(PS_SEARCH_TAPS) - 0.5) {
+        return 0.0;
+    }
+    // only casters touching the receiver: the tent. Else the filter's radius
+    // in texels for the edge dz metres up the beam (never past the search's,
+    // so the band is the same either side).
+    if (dz > 1e8) {
+        return -1.0;
+    }
+    let rf = min(0.5 * dz * PS_TAN_DIAMETER / b.z, rs);
+    if (rf <= PS_TENT_TEXELS) {
+        return -1.0;
+    }
+    var s = 0.0;
+    for (var i = 0u; i < PS_FILTER_TAPS; i = i + 1u) {
+        let o = lk_vogel(i, PS_FILTER_TAPS, rot + 1.7) * (rf * texel);
+        s = s + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + o, c, z + dot(g, o));
+    }
+    return s / f32(PS_FILTER_TAPS);
+}
+
+// (`--soft-shadows`) cascade `c`'s visibility through the sun's disc where the
+// penumbra runs (look.cascade_bias[c].w the cascade's depth range while it
+// runs; not in the probe pass), else `lk_cascade` as it was. A separate entry,
+// so `lk_cascade` compiles to the same code with the feature in and off.
+fn lk_cascade_sun(c: i32, world: vec3<f32>, ng: vec3<f32>, bounded: bool) -> f32 {
+    let b = look.cascade_bias[c];
+    if (SF_SOFT_SHADOWS && LK_SHADOW_SOFT && b.w > 0.0 && frame.copy_step.z < 0.5) {
+        let p = world + ng * b.x;
+        let clip = look.cascade_vp[c] * vec4<f32>(p, 1.0);
+        let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
+        let z = clip.z + b.y;
+        if (bounded && (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || z < 0.0 || z > 1.0)) {
+            return -1.0;
+        }
+        let soft = lk_cascade_soft(c, world, uv, z, b, ng);
+        if (soft >= 0.0) {
+            return soft;
+        }
+    }
+    return lk_cascade(c, world, ng, bounded);
+}
+
 // Sun visibility 0..1 at a world point: the cascade by view depth, the last
 // fading out over the shadow fade (cascade_split.w to .z). With
 // `--cascade-blend` (LX_BIT_CASCADE_BLEND) a cascade hands over to the next
@@ -95,7 +202,12 @@ fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     if (vd > split.y) {
         c = 2;
     }
-    var vis = lk_cascade(c, world, ng, probe);
+    var vis = 0.0;
+    if (SF_SOFT_SHADOWS && LK_SHADOW_SOFT) {
+        vis = lk_cascade_sun(c, world, ng, probe);
+    } else {
+        vis = lk_cascade(c, world, ng, probe);
+    }
     if (vis < 0.0) {
         return 1.0; // the probe pass, outside the cascade's box: unshadowed
     }
@@ -104,7 +216,12 @@ fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
         let start = select(0.0, split.x, c == 1);
         let t = lk_smooth(end - (end - start) * LK_CASCADE_BLEND_BAND, end, vd);
         if (t > 0.0) {
-            let next = lk_cascade(c + 1, world, ng, true);
+            var next = 0.0;
+            if (SF_SOFT_SHADOWS && LK_SHADOW_SOFT) {
+                next = lk_cascade_sun(c + 1, world, ng, true);
+            } else {
+                next = lk_cascade(c + 1, world, ng, true);
+            }
             if (next >= 0.0) {
                 vis = vis + (next - vis) * t;
             }
@@ -241,7 +358,12 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let ao_vis = ao_multi_bounce(ao4.a);
     let ao = s.ao * ao_vis;
-    let indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
+    // (`--ao-albedo`) the multi-bounce at the surface's own albedo on the indirect diffuse.
+    var ao_d = vec3<f32>(ao);
+    if (SF_AO_ALBEDO && ao_run(2u)) {
+        ao_d = s.ao * ao_multi_bounce_albedo(ao4.a, diffuse);
+    }
+    let indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao_d;
 
     // Indirect specular: the sky along the reflection, blurred with roughness.
     let r = reflect(-v, n);

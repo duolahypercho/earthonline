@@ -32,6 +32,26 @@ fn ao_fetch(world: vec3<f32>) -> vec4<f32> {
     return textureSampleLevel(lk_ao, lk_ao_samp, uv, 0.0);
 }
 
+/// (`--ao-albedo`, SF_AO_ALBEDO) the same fit at the surface's own diffuse
+/// albedo, per channel (Jimenez, Wu, Pesce and Jarabo, "Practical Real-Time
+/// Strategies for Accurate Indirect Occlusion", 2016, eq. 10: the light the
+/// occluded hemisphere's surfaces pass on, taken at the albedo of the surface
+/// itself, its surroundings assumed alike). The city's surfaces are 0.1-0.4,
+/// not the JS's 0.7: a corner keeps less of its sky light (a visibility of
+/// 0.3 keeps 0.37 at 0.25, 0.57 at 0.7) and a coloured one takes its colour.
+fn ao_multi_bounce_albedo(v: f32, al: vec3<f32>) -> vec3<f32> {
+    let a = 2.0404 * al - 0.3324;
+    let b = -4.7951 * al + 0.6417;
+    let c = 2.7552 * al + 0.6903;
+    return max(vec3<f32>(v), ((v * a + b) * v + c) * v);
+}
+
+// Which of the occlusion pass's additions run (look.ao_params.w: bit 0 the
+// sun bounce, bit 1 the albedo's multi-bounce).
+fn ao_run(bit: u32) -> bool {
+    return (u32(look.ao_params.w + 0.5) & bit) != 0u;
+}
+
 /// Jimenez et al.'s multi-bounce fit (the JS's `multiBounceAlbedo` 0.7).
 fn ao_multi_bounce(v: f32) -> f32 {
     let al = 0.7;

@@ -16,10 +16,13 @@ pub mod golden;
 pub mod ground_field;
 pub mod look;
 pub mod math;
+pub mod penumbra;
 pub mod rig;
+pub mod screen_gi;
 pub mod shadow;
 pub mod sky;
 pub mod sun;
+pub mod sun_bounce;
 pub mod tone;
 
 use math::*;

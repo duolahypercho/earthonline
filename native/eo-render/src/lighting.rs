@@ -236,6 +236,11 @@ mod tests {
         sets.push(("canyon glass with the pane and every lighting part".into(), look::ShaderFeatures { canyon_glass: true, facade_glass: true, lx_bits: u32::MAX, cinematic: true, ..none }));
         sets.push(("street pbr".into(), look::ShaderFeatures { grime: true, street_pbr: true, ..none })); // (`--street-pbr`)
         sets.push(("street pbr alone".into(), look::ShaderFeatures { street_pbr: true, ..none }));
+        sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
+        sets.push(("ao albedo".into(), look::ShaderFeatures { ao_albedo: true, ..none })); // (`--ao-albedo`)
+        sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)
+        sets.push(("screen gi".into(), look::ShaderFeatures { screen_gi: true, ..none })); // (`--screen-gi`)
+        sets.push(("screen gi + sun bounce".into(), look::ShaderFeatures { screen_gi: true, sun_bounce: true, ..none }));
         sets
     }
 
@@ -263,6 +268,20 @@ mod tests {
                     include_str!("sky_velocity.wgsl")
                 );
                 parse(&format!("{name}: agents"), &agents);
+                // (`--sun-bounce`) the occlusion pass, with its gather or the stub.
+                let ao = look::ao_shader_source();
+                assert_eq!(ao.contains("var ao_far_map"), f.sun_bounce, "{name}: the gather's binding only with the feature");
+                parse(&format!("{name}: occlusion pass"), &ao);
+                // (`--screen-gi`) the gather's entry and its history only with the feature; the filter's own module.
+                assert_eq!(ao.contains("fn ao_gi_main"), f.screen_gi, "{name}: the gather only with the feature");
+                assert_eq!(ao.contains("var gi_hist"), f.screen_gi, "{name}");
+                if f.screen_gi {
+                    parse(&format!("{name}: occlusion filter"), &look::ao_gi_filter_source());
+                }
+                // (`--soft-shadows`) the penumbra in the full shadow variant only (props keep the tent).
+                assert!(look::shadow_wgsl(look::ShadowLevels::Full).contains("const LK_SHADOW_SOFT: bool = true;"));
+                assert!(look::shadow_wgsl(look::ShadowLevels::Near).contains("const LK_SHADOW_SOFT: bool = false;"));
+                assert!(common.contains(&format!("const SF_SOFT_SHADOWS: bool = {};", f.soft_shadows)), "{name}");
             });
         }
         assert_eq!(look::shader_features(), look::ShaderFeatures::ALL, "the scope ends with its body; unset, every feature is in");
@@ -282,8 +301,9 @@ mod tests {
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
         // (the look profile is its own, below; the facades track's switches are read from the
-        // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options)
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, ..look::ShaderFeatures::ALL });
+        // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options;
+        // the sun bounce, the albedo's multi-bounce, the penumbra and the screen-space indirect light are their own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, ..look::ShaderFeatures::ALL });
         assert!(!f.street_pbr && !look::ShaderFeatures::ALL.street_pbr, "the street pass comes in with its switch only (eo-app)");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
@@ -295,6 +315,32 @@ mod tests {
         // each lighting bit keeps only its own option.
         let blend_only = look::ShaderFeatures { lx_bits: look::LX_BIT_CASCADE_BLEND, ..look::ShaderFeatures::NONE }.limit(&on);
         assert_eq!(blend_only.lighting, LightingOptions { cascade_blend: true, ..LightingOptions::OFF });
+        // (`--sun-bounce`) compiled in with its option, left off when compiled out.
+        let sb = look::LookOptions { sun_bounce: true, ..on };
+        assert!(look::ShaderFeatures::of(&sb, false, false, false).sun_bounce);
+        assert!(!look::ShaderFeatures::NONE.limit(&sb).sun_bounce);
+        assert!(look::ShaderFeatures::ALL.limit(&sb).sun_bounce);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SUN_BOUNCE: bool = false;"));
+        // (`--ao-albedo`) the same.
+        let aa = look::LookOptions { ao_albedo: true, ..on };
+        assert!(look::ShaderFeatures::of(&aa, false, false, false).ao_albedo);
+        assert!(!look::ShaderFeatures::NONE.limit(&aa).ao_albedo);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_AO_ALBEDO: bool = false;"));
+        // (`--soft-shadows`) the same.
+        let ss = look::LookOptions { soft_shadows: true, ..on };
+        assert!(look::ShaderFeatures::of(&ss, false, false, false).soft_shadows);
+        assert!(!look::ShaderFeatures::NONE.limit(&ss).soft_shadows);
+        assert!(look::ShaderFeatures::ALL.limit(&ss).soft_shadows);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SOFT_SHADOWS: bool = false;"));
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_TAN_DIAMETER: f32 = {:.8};", eo_look::penumbra::tan_diameter())), "the penumbra's constants reach the shader");
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_MIN_CASTER_M: f32 = {:.8};", eo_look::penumbra::MIN_CASTER_M)));
+        // (`--screen-gi`) the same.
+        let gi = look::LookOptions { screen_gi: true, ..on };
+        assert!(look::ShaderFeatures::of(&gi, false, false, false).screen_gi);
+        assert!(!look::ShaderFeatures::NONE.limit(&gi).screen_gi);
+        assert!(look::ShaderFeatures::ALL.limit(&gi).screen_gi);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SCREEN_GI: bool = false;"));
+        assert!(look::ao_gi_filter_source().contains(&format!("const GI_FILTER_PLANE_M: f32 = {:.8};", eo_look::screen_gi::FILTER_PLANE_M)), "the gather's constants reach the filter");
     }
 
     #[test]
