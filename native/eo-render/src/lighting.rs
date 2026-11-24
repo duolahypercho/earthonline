@@ -225,6 +225,8 @@ mod tests {
         sets.push(("shop light".into(), look::ShaderFeatures { shop_light: true, ..none }));
         sets.push(("facade clutter".into(), look::ShaderFeatures { facade_clutter: true, ..none }));
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
+        sets.push(("car materials".into(), look::ShaderFeatures { car_materials: true, ..none })); // (`--car-materials`)
+        sets.push(("car materials, cinematic, grime".into(), look::ShaderFeatures { car_materials: true, cinematic: true, grime: true, ..none }));
         sets
     }
 
@@ -270,7 +272,7 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, car_materials: false, ..look::ShaderFeatures::ALL }); // (the look profile and the cars' materials are their own)
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));
