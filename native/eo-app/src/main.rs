@@ -390,6 +390,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-cloud-shadows" => a.look.sky.cloud_shadows = false,
             "--cloud-depth-haze" => a.look.sky.cloud_depth_haze = true,
             "--no-cloud-depth-haze" => a.look.sky.cloud_depth_haze = false,
+            "--night-photometry" => a.look.sky.night_photometry = true,
+            "--no-night-photometry" => a.look.sky.night_photometry = false,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
