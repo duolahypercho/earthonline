@@ -83,9 +83,12 @@ fn gi_history(world: vec3<f32>) -> vec4<f32> {
     return textureSampleLevel(gi_hist, gi_samp, uv, 0.0);
 }
 
+// The frame's estimate into the history. A frame's own visibility may lie past
+// 0..1 (one slice weighted against two: the frames' mean is the weighted
+// mean); kept so in the mean, clamped where there is no history to average it.
 fn gi_store(hp: vec2<i32>, raw: vec4<f32>, world: vec3<f32>) {
     let h = gi_history(world);
-    var o = raw;
+    var o = vec4<f32>(raw.rgb, clamp(raw.a, 0.0, 1.0));
     if (h.w >= 0.0) {
         o = mix(h, raw, GI_HISTORY_WEIGHT);
     }
@@ -218,12 +221,33 @@ fn ao_gi_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         bounce = bounce + plen * total * slice_b;
         norm = norm + plen * total;
     }
+    // One slice a frame (GI_SLICES 1): its weight against the mean of its own and
+    // the orthogonal slice's (each plen x its arc, the geometry alone: no samples),
+    // so the frames' mean is the two-slice weighted mean, not the slices' plain mean
+    // (which overweighted the slices a grazing surface's normal barely projects into).
+    if (GI_SLICES == 1u && norm > 1e-4) {
+        norm = 0.5 * (norm + gi_slice_weight((noise + 0.5) * LK_PI, right, up, V, N));
+    }
     if (norm > 1e-4) {
-        vis = clamp(vis / norm, 0.0, 1.0);
+        vis = vis / norm;
         bounce = bounce / norm;
     } else {
         vis = 1.0;
     }
     vis = 1.0 - AO_INTENSITY * (1.0 - vis);
     gi_store(hp, vec4<f32>(bounce + sun_b, vis), world);
+}
+
+// A slice's weight in the gather's mean (plen x its whole cosine-weighted arc), from its angle alone.
+fn gi_slice_weight(phi: f32, right: vec3<f32>, up: vec3<f32>, V: vec3<f32>, N: vec3<f32>) -> f32 {
+    let D = normalize(right * cos(phi) - up * sin(phi));
+    let ortho = D - V * dot(D, V);
+    let axis = normalize(cross(ortho, V));
+    let pn = N - axis * dot(N, axis);
+    let plen = length(pn);
+    if (plen < 1e-4) {
+        return 0.0;
+    }
+    let n = sign(dot(ortho, pn)) * acos(clamp(dot(pn / plen, V), -1.0, 1.0));
+    return plen * (ao_arc(n - 0.5 * LK_PI, n) + ao_arc(n + 0.5 * LK_PI, n));
 }

@@ -44,7 +44,7 @@ fn ao_gi_filter(@builtin(global_invocation_id) gid: vec3<u32>) {
     let c = textureLoad(gf_in, hp, 0);
     let zc = gf_depth(hp, dims);
     if (zc <= 0.0) {
-        textureStore(gf_out, hp, c);
+        textureStore(gf_out, hp, vec4<f32>(c.rgb, clamp(c.a, 0.0, 1.0)));
         return;
     }
     let gx = gf_slope(zc, gf_depth(hp - vec2<i32>(1, 0), dims), gf_depth(hp + vec2<i32>(1, 0), dims));
@@ -68,5 +68,7 @@ fn ao_gi_filter(@builtin(global_invocation_id) gid: vec3<u32>) {
             wsum = wsum + w;
         }
     }
-    textureStore(gf_out, hp, select(c, acc / wsum, wsum > 1e-6));
+    // (the history may hold a visibility a little past 0..1: one slice a frame weighted against two)
+    let o = select(c, acc / wsum, wsum > 1e-6);
+    textureStore(gf_out, hp, vec4<f32>(o.rgb, clamp(o.a, 0.0, 1.0)));
 }
