@@ -226,6 +226,12 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
         let warm = vcol.r - vcol.b;
         layer = select(select(CC0_L_COBBLESTONE_FLOOR_08, CC0_L_PATTERNED_CONCRETE_PAVERS, dot(vcol, CC0_LUMA) > 0.6), CC0_L_HERRINGBONE_PAVEMENT, warm > 0.12);
         inv = cc0_linv(layer);
+        if (SF_STREET_PBR && layer == CC0_L_COBBLESTONE_FLOOR_08) {
+            // (`--street-pbr`, street_pbr.wgsl) laid granite setts in place of the tiled scan
+            sp_plaza(s, world, n, dpx, dpy);
+            cc0_wall_hit = true;
+            return true;
+        }
     } else if (mode == CC0_MODE_SAND) {
         // Wet below the swash's reach (beach-surface.js wet margin, widened to the sand sheet).
         let wet = world.y < LM_SEA_LEVEL_Y + 1.2 + st_noise(world.xz / 9.0) * 0.8;
@@ -567,6 +573,19 @@ fn cc0_street_concrete(f: ptr<function, StTap>, p: vec2<f32>, gx: vec2<f32>, gy:
             tn = mix(tn, vec2<f32>(tb.n.x, -tb.n.y), w);
         }
     }
+    if (SF_STREET_PBR && plaza && la == CC0_L_COBBLESTONE_FLOOR_08) {
+        // (`--street-pbr`, street_pbr.wgsl) laid granite setts: their albedo over the plaza tone's
+        // composition (the walk's base), their roughness and relief through the decal post terms.
+        let st = sp_setts(p, gx, gy);
+        cc0_p_plaza = vec4<f32>(st.albedo / max(tint * ST_CONCRETE_BASE, vec3<f32>(1e-3)), 1.0);
+        cc0_p_n = vec3<f32>(st.lean, 1.0);
+        cc0_p_rough = vec2<f32>(st.rough, 1.0);
+        (*f).albedo = mean;
+        (*f).rough = mean_rough;
+        (*f).ao = clamp(st.ao * mean_ao, 0.0, 1.0);
+        (*f).tn = vec2<f32>(0.0);
+        return;
+    }
     if (plaza) {
         // Pavers past the walk's contrast clamps: the street scan's terms are
         // identity here and the pavers' own pattern multiplies the plaza tone after
@@ -665,8 +684,11 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     // The tooled border along each joint: troweled smooth (lighter, less rough) inside the broomed field.
     let border = pitch * CC0_TOOLED_EDGE_FRAC;
     let band = (1.0 - smoothstep(border * 0.85, border * 1.15 + fw, dj)) * fade;
-    (*s).albedo = (*s).albedo * (1.0 + 0.045 * band);
-    (*s).rough = clamp((*s).rough - 0.1 * band, 0.04, 1.0);
+    if (!SF_STREET_PBR) {
+        // (`--street-pbr` draws the joints as dark recessed grooves instead: no lighter, glossier border to glint)
+        (*s).albedo = (*s).albedo * (1.0 + 0.045 * band);
+        (*s).rough = clamp((*s).rough - 0.1 * band, 0.04, 1.0);
+    }
     // The broom finish: fine striations across the walk in the field, only where a pixel resolves them.
     let broom_fade = (1.0 - smoothstep(0.004, 0.012, fa)) * (1.0 - band);
     if (broom_fade > 0.0) {
@@ -695,7 +717,9 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     let ta = normalize(vec3<f32>(tan.x, 0.0, tan.y) - n_geom * dot(vec3<f32>(tan.x, 0.0, tan.y), n_geom));
     let tc = normalize(vec3<f32>(nrm.x, 0.0, nrm.y) - n_geom * dot(vec3<f32>(nrm.x, 0.0, nrm.y), n_geom));
     let lean = ta * (sign(sa) * ga) + tc * (sign(sc) * gc);
-    (*s).n = normalize((*s).n + lean * 0.45 * fade);
+    if (!SF_STREET_PBR) {
+        (*s).n = normalize((*s).n + lean * 0.45 * fade);
+    }
 }
 
 fn cc0_reset_post() {
@@ -1024,6 +1048,9 @@ fn cc0_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, a
     }
     let nrm = g / gl;
     let tan = vec2<f32>(-nrm.y, nrm.x);
+    if (SF_STREET_PBR) {
+        sp_paint_edge(s, an, gl, nrm, max(length(dpx), length(dpy))); // (`--street-pbr`) the raised line's edges
+    }
     let w0 = CC0_PAINT_STRIPE_M;
     // The scan's stripe interior (u 0.30-0.70) is about 0.4 of its 256 px width; its 1024 px run along v.
     let rep = w0 / 0.4 * 4.0;

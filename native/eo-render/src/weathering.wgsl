@@ -409,9 +409,13 @@ fn wx_road(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
         return;
     }
     if (cls == SC_ASPHALT && kd >= 0.0 && dist < WX_QUILT_FAR) {
-        let r = wx_run(rel, g, WX_QUILT_CELL_M);
-        if (r.ok) {
-            wx_quilt(s, r, kd, fw);
+        if (SF_STREET_PBR) {
+            sp_quilt(s, world, fw); // (`--street-pbr`) the quilt in the road's own frame, sealed and eased
+        } else {
+            let r = wx_run(rel, g, WX_QUILT_CELL_M);
+            if (r.ok) {
+                wx_quilt(s, r, kd, fw);
+            }
         }
     }
     if (dist < WX_SNAKE_FAR) {

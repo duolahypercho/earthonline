@@ -117,11 +117,87 @@ fn vertex_class(layer: Layer, color: u32) -> (u8, bool) {
     }
 }
 
+/// (`--street-pbr`) the carriageway drawn with smooth normals (`smooth_carriageway`).
+static SMOOTH_CARRIAGEWAY: AtomicBool = AtomicBool::new(false);
+
+/// eo-app, before any street tile is cooked: whether the carriageway's
+/// normals are smoothed (`--street-pbr`; off: each primitive's flat normal, as before).
+pub fn set_smooth_carriageway(on: bool) {
+    SMOOTH_CARRIAGEWAY.store(on, Ordering::Relaxed);
+}
+
+/// The carriageway's normals averaged over its primitives at each shared
+/// corner (angle-weighted, positions welded to a centimetre), so the camber's
+/// strips and a junction pad's fan shade as the one smooth surface they are:
+/// each primitive keeps a flat normal of its own, and under a low sun the
+/// facets show as tone wedges converging on the fan's apex. The kerb, walk and
+/// paint keep their own (their edges are real). None when there is nothing to do.
+pub fn smooth_carriageway(m: &TileMesh) -> Option<Vec<[f32; 3]>> {
+    let key = |p: [f32; 3]| ((p[0] as f64 * 100.0).round() as i64, (p[1] as f64 * 100.0).round() as i64, (p[2] as f64 * 100.0).round() as i64);
+    let mut sum: HashMap<(i64, i64, i64), [f64; 3]> = HashMap::new();
+    let mut any = false;
+    for (t, layer) in m.layers.iter().enumerate() {
+        if *layer != Layer::Carriageway {
+            continue;
+        }
+        let tri = [m.indices[3 * t] as usize, m.indices[3 * t + 1] as usize, m.indices[3 * t + 2] as usize];
+        let p = tri.map(|i| m.positions[i].map(|v| v as f64));
+        let e1 = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
+        let e2 = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
+        let mut n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        if n[1] < 0.0 {
+            n = [-n[0], -n[1], -n[2]];
+        }
+        let nl = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        if nl < 1e-12 {
+            continue;
+        }
+        for c in 0..3 {
+            // each corner weighted by its angle (a quad's two triangles count as the quad)
+            let (a, b) = (p[(c + 1) % 3], p[(c + 2) % 3]);
+            let u = [a[0] - p[c][0], a[1] - p[c][1], a[2] - p[c][2]];
+            let v = [b[0] - p[c][0], b[1] - p[c][1], b[2] - p[c][2]];
+            let lu = (u[0] * u[0] + u[1] * u[1] + u[2] * u[2]).sqrt();
+            let lv = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            if lu < 1e-9 || lv < 1e-9 {
+                continue;
+            }
+            let w = ((u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (lu * lv)).clamp(-1.0, 1.0).acos();
+            let s = sum.entry(key(m.positions[tri[c]])).or_insert([0.0; 3]);
+            for k in 0..3 {
+                s[k] += n[k] / nl * w;
+            }
+        }
+        any = true;
+    }
+    if !any {
+        return None;
+    }
+    let mut out = m.normals.clone();
+    for (t, layer) in m.layers.iter().enumerate() {
+        if *layer != Layer::Carriageway {
+            continue;
+        }
+        for k in 0..3 {
+            let i = m.indices[3 * t + k] as usize;
+            if let Some(s) = sum.get(&key(m.positions[i])) {
+                let l = (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]).sqrt();
+                if l > 1e-12 {
+                    out[i] = [(s[0] / l) as f32, (s[1] / l) as f32, (s[2] / l) as f32];
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
 /// Split a tile mesh into the street-material part and the plain part (paint,
 /// banks), as GPU vertices: rgb the JS palette tint, alpha the street class,
 /// the normal's w the distance to the kerb line (/ 6.35 m, -1 none).
 /// Returns (vertices, indices of the street object, indices of the plain object).
 pub fn to_gpu(m: &TileMesh, pal: Option<&StreetPalette>) -> (Vec<Vertex>, Vec<u32>, Vec<u32>) {
+    let smooth = if SMOOTH_CARRIAGEWAY.load(Ordering::Relaxed) { smooth_carriageway(m) } else { None };
+    let normals = smooth.as_deref().unwrap_or(&m.normals);
     let mut vcls: Vec<(u8, bool)> = vec![(class::PAINT, false); m.positions.len()];
     for (t, layer) in m.layers.iter().enumerate() {
         for k in 0..3 {
@@ -134,7 +210,7 @@ pub fn to_gpu(m: &TileMesh, pal: Option<&StreetPalette>) -> (Vec<Vertex>, Vec<u3
         .map(|i| {
             let c = m.colors[i];
             let color = (c & 0x00ff_ffff) | ((vcls[i].0 as u32) << 24);
-            let mut normal = eo_assets::glb::pack_normal(Vec3::from(m.normals[i]));
+            let mut normal = eo_assets::glb::pack_normal(Vec3::from(normals[i]));
             let kerb = m.kerb.get(i).copied().unwrap_or(-1.0);
             let w: i8 = if kerb >= 0.0 { ((kerb / 6.35).min(1.0) * 127.0).round() as i8 } else { -127 };
             normal = (normal & 0x00ff_ffff) | ((w as u8 as u32) << 24);
@@ -729,5 +805,41 @@ impl GpuObject {
         o.lod_role = LOD_STREET_NEAR;
         o.lod_group = 0;
         o
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Two carriageway quads meeting at a ridge (a camber's two strips) and a
+    /// kerb face beside them: the shared corners take the averaged normal, each
+    /// far corner its own quad's, and the kerb face keeps its flat one.
+    #[test]
+    fn the_carriageway_shades_smooth_and_the_kerb_keeps_its_edge() {
+        let mut m = TileMesh::default();
+        // strip A rises 2 % toward x = 1, strip B falls from it.
+        let pa = [[0.0, 0.0, 0.0], [1.0, 0.02, 0.0], [1.0, 0.02, 1.0], [0.0, 0.0, 1.0]];
+        let pb = [[1.0, 0.02, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 1.0], [1.0, 0.02, 1.0]];
+        let na = [-0.02f32, 1.0, 0.0];
+        let nb = [0.02f32, 1.0, 0.0];
+        for (p, n, layer) in [(pa, na, Layer::Carriageway), (pb, nb, Layer::Carriageway), ([[0.0, 0.0, 0.0], [0.0, 0.15, 0.0], [0.0, 0.15, 1.0], [0.0, 0.0, 1.0]], [-1.0, 0.0, 0.0], Layer::CurbFace)] {
+            let b = m.positions.len() as u32;
+            for q in p {
+                m.positions.push(q);
+                m.normals.push(n);
+                m.colors.push(0);
+                m.kerb.push(-1.0);
+            }
+            m.indices.extend_from_slice(&[b, b + 1, b + 2, b, b + 2, b + 3]);
+            m.layers.extend_from_slice(&[layer, layer]);
+        }
+        let s = smooth_carriageway(&m).expect("a carriageway");
+        assert!(s[1][0].abs() < 1e-5 && (s[1][1] - 1.0).abs() < 1e-5, "the ridge's corner is level: {:?}", s[1]);
+        assert!(s[0][0] < -0.015, "strip A's outer corner keeps its fall: {:?}", s[0]);
+        assert_eq!(s[8], [-1.0, 0.0, 0.0], "the kerb face keeps its normal");
+        SMOOTH_CARRIAGEWAY.store(false, Ordering::Relaxed);
+        let (v_off, _, _) = to_gpu(&m, None);
+        assert_eq!(v_off[1].normal & 0x00ff_ffff, eo_assets::glb::pack_normal(Vec3::from(na)) & 0x00ff_ffff, "off: each primitive's own normal, as before");
     }
 }
