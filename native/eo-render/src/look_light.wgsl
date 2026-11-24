@@ -192,6 +192,15 @@ fn lk_cascades_soft(c0: i32, world: vec3<f32>, ng: vec3<f32>, vd: f32) -> f32 {
     return lk_cascade(c, world, ng, false);
 }
 
+// (`--soft-shadows`, eo-look `penumbra::resolves`) whether the widest penumbra
+// (PS_MAX_SPREAD_M each way) is wider than the blur the tent already draws:
+// the cascade's texel (look.cascade_bias[c].z metres) and PS_SUBPIXEL_PX of the
+// frame's pixels at view depth vd (look.ao_params.y: 1 / the focal length in
+// pixels). Where it is not, the tent draws the same edge without the search.
+fn lk_soft_resolves(c: i32, vd: f32) -> bool {
+    return PS_MAX_SPREAD_M > max(look.cascade_bias[c].z * PS_TENT_TEXELS, vd * look.ao_params.y * PS_SUBPIXEL_PX);
+}
+
 // Sun visibility 0..1 at a world point: the cascade by view depth, the last
 // fading out over the shadow fade (cascade_split.w to .z). With
 // `--cascade-blend` (LX_BIT_CASCADE_BLEND) a cascade hands over to the next
@@ -225,7 +234,9 @@ fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
         c = 2;
     }
     var vis = 0.0;
-    if (SF_SOFT_SHADOWS && LK_SHADOW_SOFT && look.cascade_bias[0].w > 0.0 && !probe) {
+    // (the agents' module, LK_SUN_PRE, keeps the penumbra's branch uniform: with the
+    // resolve test in it Apple's compiler aborted their opaque pipeline again, r2i2)
+    if (SF_SOFT_SHADOWS && LK_SHADOW_SOFT && look.cascade_bias[0].w > 0.0 && !probe && (LK_SUN_PRE || lk_soft_resolves(c, vd))) {
         vis = lk_cascades_soft(c, world, ng, vd); // (`--soft-shadows`) the penumbra, one cascade a pixel
     } else {
         vis = lk_cascade(c, world, ng, probe);
@@ -292,6 +303,14 @@ var<private> lk_vis_wrap: f32;
 // (`--car-materials`) a car paint's reflection class (agents_draw.wgsl; 0 elsewhere: the surface's own).
 var<private> sky_coat_env: f32;
 
+// (`--soft-shadows`) the sun's visibility looked up before the shading
+// (LK_SUN_PRE, look.rs `shadow_wgsl`: on only in the agents' module, whose
+// fragment sets it first thing, agents_draw.wgsl `ag_shade`). Inside the key's
+// branch below, with the cars' materials, the penumbra made Apple's compiler
+// abort (an LLVM fatal error in its instruction emission, MTLCompilerService);
+// looked up where little else is live it builds.
+var<private> lk_sun_pre: f32 = 1.0;
+
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
     if ((m.flags & F_GLASS) == 0u && s.env <= 0) {
@@ -338,7 +357,11 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let nl = max(dot(n, l), 0.0);
     var key = vec3<f32>(0.0);
     if (nl > -lk_vis_wrap && dot(ng, l) > -0.05 - lk_vis_wrap) {
-        let kv = vec3<f32>(lk_shadow(world, ng), sky_cloud_transmittance(world), sky_contact_shadow(world, ng));
+        var sun_vis = lk_sun_pre;
+        if (!LK_SUN_PRE) {
+            sun_vis = lk_shadow(world, ng);
+        }
+        let kv = vec3<f32>(sun_vis, sky_cloud_transmittance(world), sky_contact_shadow(world, ng));
         key = look.key.xyz * max(nl, 0.0) * kv.x * kv.y * kv.z; // cloud and contact shadows
         lk_key_vis = kv.x * kv.y * kv.z; // (`--people-shading`)
         if (SF_STREET_PBR) {

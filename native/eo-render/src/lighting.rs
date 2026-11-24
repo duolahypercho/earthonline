@@ -376,6 +376,7 @@ mod tests {
         assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SOFT_SHADOWS: bool = false;"));
         assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_TAN_DIAMETER: f32 = {:.8};", eo_look::penumbra::tan_diameter())), "the penumbra's constants reach the shader");
         assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_MIN_CASTER_M: f32 = {:.8};", eo_look::penumbra::MIN_CASTER_M)));
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_SUBPIXEL_PX: f32 = {:.8};", eo_look::penumbra::SUBPIXEL_PX)), "the penumbra's sub-pixel limit reaches the shader");
         // (`--screen-gi`) the same.
         let gi = look::LookOptions { screen_gi: true, ..on };
         assert!(look::ShaderFeatures::of(&gi, false, false, false).screen_gi);

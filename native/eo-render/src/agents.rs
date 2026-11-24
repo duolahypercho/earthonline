@@ -100,24 +100,26 @@ pub fn people_contact_wgsl() -> &'static str {
 }
 
 /// The city's shader source the agents' module is made on: the full set but the
-/// single probe's lookups. With the cars' materials compiled in, the sun's
-/// penumbra (`--soft-shadows`, look.rs `shadow_wgsl` `LK_SHADOW_SOFT`) and the
-/// occluder light (`--occluder-light`, `SF_OCCLUDER_LIGHT`) are left out of it:
-/// with either, Apple's compiler fails the agents' opaque pipeline
-/// (XPC_ERROR_CONNECTION_INTERRUPTED; bisected in r2i1 on the round's whole
-/// switch set: leaving out the canyon glass, the screen reflection, the cars'
-/// far lights or half the penumbra's taps does not help; a discard before the
-/// shading lets it build, but the discard costs the opaque agents Apple's
-/// hidden-surface removal, +4 ms of the late opaque draw on `street_walk`,
-/// +5 to 8 ms on `night_kit_street`, measured). The cars and people keep the
-/// tent and the rig's stand-in; the street and the buildings take both.
+/// single probe's lookups. The sun's penumbra (`--soft-shadows`, look.rs
+/// `shadow_wgsl` `LK_SHADOW_SOFT`) is looked up once at the top of the agents'
+/// fragment (`LK_SUN_PRE`, agents_draw.wgsl `ag_shade`), not inside look_light's
+/// key branch: there, with the cars' materials, Apple's compiler aborted the
+/// agents' opaque pipeline (XPC_ERROR_CONNECTION_INTERRUPTED: an LLVM fatal
+/// error in MTLCompilerService's instruction emission). r2i2 bisect on the
+/// round's switch set: not its size (fewer taps, no loads, no filter all
+/// failed); the same lookup hoisted out of that divergent branch builds, and a
+/// divergent test put back round it (the sub-pixel skip) failed again, so the
+/// agents' module keeps the penumbra's branch uniform. The occluder light (`--occluder-light`, `SF_OCCLUDER_LIGHT`) is
+/// still left out with the cars' materials (the same abort, r2i1): the cars
+/// and people keep the rig's stand-in; the street and the buildings take it.
 fn agents_city_source() -> String {
-    let src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
+    let mut src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
     let f = crate::look::shader_features();
-    if f.car_materials && (f.soft_shadows || f.occluder_light) {
-        return src
-            .replacen("const LK_SHADOW_SOFT: bool = true;", "const LK_SHADOW_SOFT: bool = false;", 1)
-            .replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+    if f.soft_shadows {
+        src = src.replacen("const LK_SUN_PRE: bool = false;", "const LK_SUN_PRE: bool = true;", 1);
+    }
+    if f.car_materials && f.occluder_light {
+        src = src.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
     }
     src
 }
@@ -1152,21 +1154,27 @@ mod tests {
         super::set_people_contact(false);
     }
 
-    /// (`--soft-shadows`, `--occluder-light`) the agents' module takes the tent and
-    /// the rig's stand-in with the cars' materials (Apple's compiler fails it with
-    /// either); either alone without the cars' materials keeps its code as it was.
+    /// (`--soft-shadows`, `--occluder-light`) the agents' module keeps the penumbra,
+    /// looked up at the top of the fragment (`LK_SUN_PRE`), and takes the rig's
+    /// stand-in with the cars' materials (Apple's compiler fails it with the
+    /// occluder light); the occluder light alone without the cars' materials
+    /// keeps its code as it was.
     #[test]
-    fn the_agents_keep_the_tent_and_the_stand_in_with_the_cars_materials() {
+    fn the_agents_look_the_sun_up_first_and_keep_the_stand_in_with_the_cars_materials() {
         let none = crate::look::ShaderFeatures::NONE;
         let src = |f: crate::look::ShaderFeatures| crate::look::with_shader_features(f, super::agents_city_source);
         let soft = |s: &str| s.contains("const LK_SHADOW_SOFT: bool = true;");
+        let pre = |s: &str| s.contains("const LK_SUN_PRE: bool = true;");
         let ol = |s: &str| s.contains("const SF_OCCLUDER_LIGHT: bool = true;");
         let s = src(crate::look::ShaderFeatures { soft_shadows: true, occluder_light: true, ..none });
-        assert!(soft(&s) && ol(&s), "without the cars' materials: both");
+        assert!(soft(&s) && pre(&s) && ol(&s), "without the cars' materials: the penumbra first, the occluder light");
         let s = src(crate::look::ShaderFeatures { soft_shadows: true, occluder_light: true, car_materials: true, ..none });
-        assert!(!soft(&s) && !ol(&s), "with them: the tent and the stand-in");
+        assert!(soft(&s) && pre(&s) && !ol(&s), "with them: the penumbra first and the stand-in");
         let s = src(crate::look::ShaderFeatures { car_materials: true, ..none });
-        assert!(soft(&s), "(the constant is declared either way)");
+        assert!(soft(&s) && !pre(&s), "(the constants are declared either way; the lookup in place without the penumbra)");
+        // the city's own source looks the sun up in place.
+        let city = crate::look::with_shader_features(crate::look::ShaderFeatures { soft_shadows: true, ..none }, || crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false));
+        assert!(city.contains("const LK_SUN_PRE: bool = false;"));
     }
 
     /// (`--people-contact`) the shader's joints are eo-agents' contact joints, in order.

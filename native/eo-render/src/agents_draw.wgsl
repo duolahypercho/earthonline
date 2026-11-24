@@ -427,7 +427,25 @@ fn pb_person(g: AgSurf, world: vec3<f32>, foot: vec3<f32>) -> vec3<f32> {
 }
 
 // Every agent but those in a tunnel's bore: the city's light rig (look_light.wgsl).
+// (`--soft-shadows`, look_light.wgsl `lk_sun_pre`) the sun's visibility at the
+// fragment's geometric normal (as ag_surface takes it), looked up before the shading.
+fn ag_sun_pre(in: AgOut) {
+    let dn = cross(dpdx(in.world), dpdy(in.world));
+    var n = in.normal;
+    if (dot(n, n) < 1e-8) {
+        n = dn;
+    }
+    n = normalize(n);
+    if (dot(n, frame.cam_pos.xyz - in.world) < 0.0) {
+        n = -n;
+    }
+    lk_sun_pre = lk_shadow(in.world, n);
+}
+
 fn ag_shade(in: AgOut) -> vec4<f32> {
+    if (LK_SUN_PRE) {
+        ag_sun_pre(in); // (`--soft-shadows`) the penumbra first, where little else is live (look_light.wgsl `lk_sun_pre`)
+    }
     let cd = ag_car_derivs(in); // (`--car-materials`) in uniform control flow; nothing without it
     var g = ag_surface(in, false);
     if (SF_CINEMATIC && (g.m.flags & AG_M_PAINT) != 0u && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
