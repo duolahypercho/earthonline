@@ -1099,7 +1099,9 @@ fn sky_wr_film_k(rough: f32, asphalt: bool) -> f32 {
 //   texel and a half out, jittered per pixel and frame (interleaved gradient
 //   noise, golden-ratio steps). A texel hits where its depth lies within the
 //   ray's depth across it (passed by a small bias) and no more than the
-//   sample's assumed thickness in front of it; bisections on the screen place
+//   sample's assumed thickness in front of it, but a ray that comes in behind
+//   a face at its silhouette only as deep behind it as the thing is wide (a
+//   person, a pole is passed, not drawn out into a slab); bisections on the screen place
 //   the hit against the depth read bilinearly where its four texels are one
 //   surface (a reflected facade moves smoothly with the pixel instead of in
 //   half-resolution blocks). A ray that stays on the frame to its full reach
@@ -1404,6 +1406,9 @@ fn sky_sr_trace(p0: vec3<f32>, r: vec3<f32>, j: f32) -> vec4<f32> {
     var f_prev = 0.0;
     var f_hit = -1.0;
     var behind = false;
+    // the width (m) of the last thing measured and its depth (0: none yet)
+    var w_m = 0.0;
+    var w_z = 0.0;
     for (var i = 0; i < SKY_SR_STEPS; i = i + 1) {
         if (f >= f_end) {
             break;
@@ -1428,23 +1433,36 @@ fn sky_sr_trace(p0: vec3<f32>, r: vec3<f32>, j: f32) -> vec4<f32> {
         }
         // a texel: a hit where the ray crosses its depth within its thickness
         let thick = SKY_SR_THICK.x + SKY_SR_THICK.y * z;
-        if (z < SKY_SR_HIZ_FAR && min(za, zb) < z + thick) {
+        let solid = z < SKY_SR_HIZ_FAR;
+        // how far behind the texel's face the ray's nearer end lies, and what
+        // a crossing in the texel allows (the ray's own depth across it and the bias)
+        let gap = min(za, zb) - z;
+        let cross = abs(zb - za) + SKY_SR_BIAS.x + SKY_SR_BIAS.y * z;
+        let inside = solid && gap < thick;
+        let past = solid && gap >= thick;
+        // a ray that comes in behind a face (at its silhouette, not across
+        // it) or passes wholly behind it is inside the thing only as deep as
+        // it is wide (a canopy, a facade, a car body: about as deep as wide);
+        // a pole, a sign or a person, narrow across the ray's path, it passes
+        // (a fixed thickness held it a metre behind a person: his reflection
+        // drawn out into a slab on a wet walk). The width: how far the depth
+        // stays near this texel's along the ray's path and either side of it,
+        // measured again only for another thing (one call site).
+        if ((inside && gap > cross) || (past && !behind)) {
+            if (w_z <= 0.0 || abs(z - w_z) > SKY_SR_WIDE.y * w_z) {
+                w_m = sky_sr_width(s0 + ds * f, ds / len, z, top) * z * 2.0 * skyu.cluster.z / dims.y;
+                w_z = z;
+            }
+        }
+        if (inside && (gap <= cross || gap < SKY_SR_WIDE.x * w_m)) {
             f_prev = f;
             f_hit = f_out;
             break;
         }
-        let past = z < SKY_SR_HIZ_FAR && min(za, zb) > z + thick;
-        if (past && !behind) {
-            // the first thing the ray passes behind: as deep as it is wide
-            // (a canopy, a facade, a car body), the ray is inside it, not
-            // past it; a pole, a sign or a person (narrow across the ray's
-            // path) it passes. The width: how far the depth stays near this
-            // texel's along the ray's path and either side of it.
-            let w_m = sky_sr_width(s0 + ds * f, ds / len, z, top) * z * 2.0 * skyu.cluster.z / dims.y;
-            if (min(za, zb) - z < SKY_SR_WIDE.x * w_m) {
-                let kf = mix(k0, k1, f);
-                return vec4<f32>((s0 + ds * f) / dims, reach * k1 * f / kf, 1.0);
-            }
+        if (past && !behind && gap < SKY_SR_WIDE.x * w_m) {
+            // the first thing the ray passes behind holds it
+            let kf = mix(k0, k1, f);
+            return vec4<f32>((s0 + ds * f) / dims, reach * k1 * f / kf, 1.0);
         }
         behind = behind || past;
         f = f_out + nudge;
