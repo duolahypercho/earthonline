@@ -103,9 +103,11 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         covered = leaf.a >= 0.34;
     }
     if (!covered) { discard; }
-    if (in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade) {
-        discard;
-    }
+    // The screen-door fade-in is decided here but discarded only after the
+    // lighting: discarded before it, every card in its fade band drew black on
+    // Metal (the dither splits nearly every 2x2 quad, which likely leaves the
+    // lighting's derivatives undefined for the pixels it keeps).
+    let faded_out = in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade;
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = vec3<f32>(0.0, 1.0, 0.0);
     var albedo = in.tint;
@@ -143,7 +145,11 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     m.thin_absorption = 0.0;
     rm_emit = vec3<f32>(0.0);
     let face = normalize(cross(dpx, dpy));
-    return look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    let lit = look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    if (faded_out) {
+        discard;
+    }
+    return lit;
 }
 
 @fragment
