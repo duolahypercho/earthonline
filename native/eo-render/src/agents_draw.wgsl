@@ -1170,6 +1170,12 @@ const AG_CAR_FAR_MAP_OFFSET: f32 = 0.15;
 const AG_CAR_FAR_MAP_MIN: f32 = 0.002;
 // The specular anti-aliasing's variance for the far lights' lobe on paint, x AG_CAR_AA_VARIANCE.
 const AG_CAR_FAR_AA: f32 = 4.0;
+// A light whose half vector lies where the widened GGX lobe is under 1e-5 of
+// its peak leaves the layer nothing a pixel shows: D falls as
+// a2^2 / (1 - nh^2 (1 - a2))^2, so past 1 - nh^2 (1 - a2) > sqrt(1e5) a2 its
+// shape, map and BRDF are not evaluated (most of the 32 lights, on most of a
+// car: the term's cost was the loop over them all).
+const AG_CAR_FAR_TAIL: f32 = 316.0;
 fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
     if (!SF_CAR_REFLECTIONS || !SKY_CINE_FULL || !sky_on(skyu.flags.x, SKY_LIGHTS) || !sky_on(skyu.flags.x, SKY_CINEMATIC) || skyu.lights.x == 0u || frame.copy_step.z > 0.5) {
         return vec3<f32>(0.0);
@@ -1190,9 +1196,21 @@ fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>
         if (nl <= 0.0 || rest <= 0.0) {
             continue;
         }
+        var src = SKY_CINE_SRC_STREET;
+        if (li.kind == 1u) {
+            src = SKY_CINE_SRC_HEADLAMP;
+        } else if (li.kind >= 4u) {
+            src = 0.5 * sqrt(max(li.size, 0.0));
+        }
+        src = max(src, 0.02);
+        let rc2 = min(rough * rough + src / (2.0 * dist), 1.0);
+        let a2 = rc2 * rc2;
+        let nh = dot(n, normalize(l + v));
+        if (1.0 - nh * nh * (1.0 - a2) > AG_CAR_FAR_TAIL * a2) {
+            continue; // past the lobe's tail
+        }
         let ca = dot(-l, li.dir);
         var shape = 1.0;
-        var src = SKY_CINE_SRC_STREET;
         if (li.kind == 0u) {
             shape = max(sky_cine_cobra(l, li.dir), SKY_CINE_STREAK_LENS);
         } else if (li.kind == 3u) {
@@ -1204,17 +1222,14 @@ fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>
             let hr = vec2<f32>(-ha.y, ha.x);
             let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
             shape = max(sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578) * side, SKY_CINE_STREAK_HEAD_LENS * smoothstep(-0.2, 0.2, dot(hl, ha)));
-            src = SKY_CINE_SRC_HEADLAMP;
         } else if (li.kind >= 4u) {
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
-            src = 0.5 * sqrt(max(li.size, 0.0));
         }
-        src = max(src, 0.02);
         let e = li.intensity * shape * rest / d2 * nl;
         if (e <= 0.0) {
             continue;
         }
-        let rc = sqrt(min(rough * rough + src / (2.0 * dist), 1.0));
+        let rc = sqrt(rc2);
         let bound = d2 / (LK_PI * src * src * nl);
         var c = li.color * e * min(lk_ggx(n, v, l, f0, rc), vec3<f32>(bound));
         // the lamp's map only where its highlight shows (most lights leave a
