@@ -227,6 +227,7 @@ mod tests {
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
         sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
         sets.push(("ao albedo".into(), look::ShaderFeatures { ao_albedo: true, ..none })); // (`--ao-albedo`)
+        sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)
         sets
     }
 
@@ -258,6 +259,10 @@ mod tests {
                 let ao = look::ao_shader_source();
                 assert_eq!(ao.contains("var ao_far_map"), f.sun_bounce, "{name}: the gather's binding only with the feature");
                 parse(&format!("{name}: occlusion pass"), &ao);
+                // (`--soft-shadows`) the penumbra in the full shadow variant only (props keep the tent).
+                assert!(look::shadow_wgsl(look::ShadowLevels::Full).contains("const LK_SHADOW_SOFT: bool = true;"));
+                assert!(look::shadow_wgsl(look::ShadowLevels::Near).contains("const LK_SHADOW_SOFT: bool = false;"));
+                assert!(common.contains(&format!("const SF_SOFT_SHADOWS: bool = {};", f.soft_shadows)), "{name}");
             });
         }
         assert_eq!(look::shader_features(), look::ShaderFeatures::ALL, "the scope ends with its body; unset, every feature is in");
@@ -276,7 +281,7 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, sun_bounce: false, ao_albedo: false, ..look::ShaderFeatures::ALL }); // (the look profile, the sun bounce and the albedo's multi-bounce are their own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, ..look::ShaderFeatures::ALL }); // (the look profile, the sun bounce, the albedo's multi-bounce and the penumbra are their own, below)
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));
@@ -298,6 +303,13 @@ mod tests {
         assert!(look::ShaderFeatures::of(&aa, false, false, false).ao_albedo);
         assert!(!look::ShaderFeatures::NONE.limit(&aa).ao_albedo);
         assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_AO_ALBEDO: bool = false;"));
+        // (`--soft-shadows`) the same.
+        let ss = look::LookOptions { soft_shadows: true, ..on };
+        assert!(look::ShaderFeatures::of(&ss, false, false, false).soft_shadows);
+        assert!(!look::ShaderFeatures::NONE.limit(&ss).soft_shadows);
+        assert!(look::ShaderFeatures::ALL.limit(&ss).soft_shadows);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SOFT_SHADOWS: bool = false;"));
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_TAN_DIAMETER: f32 = {:.8};", eo_look::penumbra::tan_diameter())), "the penumbra's constants reach the shader");
     }
 
     #[test]
