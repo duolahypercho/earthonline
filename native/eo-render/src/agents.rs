@@ -44,6 +44,61 @@ pub const STATS_WORDS: usize = 12;
 /// Timestamps this module writes per frame: cull begin/end, casters begin/end.
 pub const QUERIES_PER_FRAME: u32 = 4;
 
+/// `--people-shading`: the people's skin, cloth and hair shading
+/// (agents_draw.wgsl `pp_person`) compiled into the agents' pipelines made
+/// after this is set (eo-app sets it before the library attaches); off, the
+/// code is compiled out and the frame is as before.
+static PEOPLE_SHADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_people_shading(on: bool) {
+    PEOPLE_SHADING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn people_shading() -> bool {
+    PEOPLE_SHADING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `--people-bounce`: the ground round a person's feet lights them from
+/// below (agents_draw.wgsl `pb_person`) in place of the rig's ground lobe,
+/// compiled into the agents' pipelines made after this is set; off, compiled
+/// out and the frame is as before.
+static PEOPLE_BOUNCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_people_bounce(on: bool) {
+    PEOPLE_BOUNCE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn people_bounce() -> bool {
+    PEOPLE_BOUNCE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `--people-contact`: the ground round each person occluded by their body
+/// (people_contact.wgsl, its own pipeline after the agents' opaque list; the
+/// library's contact anchors, eo-agents `people::add_contact_anchors`), made
+/// with the agents' pipelines after this is set; off, nothing of it is
+/// compiled, made or drawn.
+static PEOPLE_CONTACT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_people_contact(on: bool) {
+    PEOPLE_CONTACT.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn people_contact() -> bool {
+    PEOPLE_CONTACT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The generated constants agents_draw.wgsl reads (`SF_PEOPLE_SHADING`,
+/// `SF_PEOPLE_BOUNCE`).
+pub fn people_shading_wgsl() -> String {
+    format!("const SF_PEOPLE_SHADING: bool = {};\nconst SF_PEOPLE_BOUNCE: bool = {};", people_shading(), people_bounce())
+}
+
+/// The people's ground occlusion's shader, appended to the agents' colour
+/// shader only with `--people-contact` (empty without it).
+pub fn people_contact_wgsl() -> &'static str {
+    if people_contact() { include_str!("people_contact.wgsl") } else { "" }
+}
+
 /// Distance tiers and caps (`HERO_OVERLAY` / the crowd's bands and budget), metres.
 #[derive(Clone, Copy, Debug)]
 pub struct Tiers {
@@ -171,6 +226,8 @@ pub struct AgentsGpu {
     contact: Option<crate::agents_contact::Contact>,
     models_buf: wgpu::Buffer,
     shadow: wgpu::RenderPipeline,
+    /// (`--people-contact`) the people's ground occlusion (None without it).
+    people_contact: Option<wgpu::RenderPipeline>,
     timing: Mutex<Option<(wgpu::QuerySet, u32)>>,
     /// (lighting) the buffers and group 2 the lamp and headlight shadow maps' agent casters read.
     pub(crate) casters: crate::light_shadow::Casters,
@@ -486,14 +543,16 @@ impl AgentsGpu {
         // (`--car-contact`) the cars' occlusion of the street, appended only with the switch on.
         let contact_on = look.options.car_contact > 0;
         let draw_src = format!(
-            "{}\n{}\n{}\n{}\n{}{}",
+            "{}\n{}\n{}\n{}\n{}\n{}{}\n{}",
             // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
             crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
+            people_shading_wgsl(), // (`--people-shading`, `--people-bounce`) compiled out without them
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
             include_str!("agents_draw.wgsl"),
             include_str!("sky_velocity.wgsl"), // sky
-            if contact_on { concat!("\n", include_str!("agents_contact.wgsl")) } else { "" }
+            if contact_on { concat!("\n", include_str!("agents_contact.wgsl")) } else { "" }, // (`--car-contact`) only with it
+            people_contact_wgsl() // (`--people-contact`) only with it
         );
         let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -533,6 +592,45 @@ impl AgentsGpu {
                     entry_point: Some("agent_vel_fs"),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState { format: crate::sky::VEL_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        });
+
+        // (`--people-contact`) the people's ground occlusion: a quad on the
+        // ground round each person within reach, multiplying the lit frame
+        // (dst x src), depth-tested and not written, after the opaque agents.
+        let people_contact_pipe = people_contact().then(|| {
+            let color = wgpu::ColorTargetState {
+                format: crate::look::HDR_FORMAT,
+                blend: Some(wgpu::BlendState {
+                    color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::Zero, dst_factor: wgpu::BlendFactor::Src, operation: wgpu::BlendOperation::Add },
+                    alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::Zero, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add },
+                }),
+                write_mask: wgpu::ColorWrites::ALL,
+            };
+            let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::empty() };
+            let targets_ids = [Some(color.clone()), Some(ids)];
+            let targets = [Some(color)];
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("agent-contact"),
+                layout: Some(&draw_layout),
+                vertex: wgpu::VertexState { module: &draw_module, entry_point: Some("agent_contact_vs"), compilation_options: Default::default(), buffers: &[] },
+                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState { count: sample_count, ..Default::default() },
+                fragment: Some(wgpu::FragmentState {
+                    module: &draw_module,
+                    entry_point: Some(if debug_ids { "agent_contact_fs_ids" } else { "agent_contact_fs" }),
+                    compilation_options: Default::default(),
+                    targets: if debug_ids { &targets_ids } else { &targets },
                 }),
                 multiview_mask: None,
                 cache: None,
@@ -624,6 +722,7 @@ impl AgentsGpu {
             contact,
             models_buf: models.clone(), // sky
             shadow,
+            people_contact: people_contact_pipe,
             timing: Mutex::new(None),
             casters,
             bytes,
@@ -841,6 +940,11 @@ impl AgentsGpu {
             pass.set_pipeline(&b[0]);
             pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
         }
+        // (`--people-contact`) the ground round each person, occluded by them (same groups bound).
+        if let Some(p) = &self.people_contact {
+            pass.set_pipeline(p);
+            pass.draw(0..6, 0..self.count());
+        }
     }
 
     /// (`--car-contact`) Whether the cars' occlusion of the street will read this depth after the city pass.
@@ -961,5 +1065,76 @@ mod tests {
         }
         // the role field sits above every agent and draw.wgsl flag the shaders read.
         assert_eq!(v::M_ROLE_MASK & (eo_agents::M_RIM | (eo_agents::M_RIM - 1)), 0, "a field of its own");
+    }
+
+    /// (`--people-shading`) each class roughness the Rocketbox cook writes,
+    /// as BC1 keeps it (6 bits of green; a block of one value keeps it
+    /// exactly), lands in its class's band of agents_draw.wgsl `pp_class`,
+    /// and no two classes share a band.
+    #[test]
+    fn the_people_classes_read_back_from_the_cooks_roughness() {
+        use eo_agents::rocketbox::{ROUGH_CLOTH, ROUGH_GEAR, ROUGH_GLASS, ROUGH_HAIR, ROUGH_HEAD, ROUGH_SKIN};
+        let src = include_str!("agents_draw.wgsl");
+        let band = |name: &str| -> (f32, f32) {
+            let line = src.lines().find(|l| l.starts_with(&format!("const {name}: vec2<f32> = vec2<f32>("))).unwrap_or_else(|| panic!("{name}"));
+            let inner = &line[line.find("vec2<f32>(").unwrap() + 10..line.rfind(')').unwrap()];
+            let v: Vec<f32> = inner.split(',').map(|x| x.trim().parse().unwrap()).collect();
+            (v[0], v[1])
+        };
+        let bc1 = |r: f32| (r * 63.0).round() / 63.0;
+        let inside = |r: f32, b: (f32, f32)| r >= b.0 && r < b.1;
+        let (hair, skin, cloth) = (band("PP_HAIR_BAND"), band("PP_SKIN_BAND"), band("PP_CLOTH_BAND"));
+        for r in [ROUGH_HEAD, ROUGH_SKIN] {
+            assert!(inside(bc1(r), skin) && !inside(bc1(r), hair) && !inside(bc1(r), cloth), "skin {r}");
+        }
+        assert!(inside(bc1(ROUGH_HAIR), hair) && !inside(bc1(ROUGH_HAIR), skin), "hair");
+        assert!(inside(bc1(ROUGH_CLOTH), cloth), "cloth");
+        for r in [ROUGH_GEAR, ROUGH_GLASS] {
+            assert!(!inside(bc1(r), skin) && !inside(bc1(r), hair) && !inside(bc1(r), cloth), "neither {r}");
+        }
+        // a block mixing skin and cloth (BC1's thirds between the two) reads as neither or cloth, never skin.
+        let (s, c) = (bc1(ROUGH_SKIN), bc1(ROUGH_CLOTH));
+        assert!(!inside(s + (c - s) / 3.0, skin));
+    }
+
+    /// (`--people-shading`, `--people-bounce`, `--people-contact`) the
+    /// agents' colour shader validates with each of the people's switches
+    /// compiled in and out, the constants say which, and the contact shader
+    /// is there only with its switch.
+    #[test]
+    fn the_people_shading_compiles_in_and_out() {
+        for mask in 0..8u32 {
+            let (shading, bounce, contact) = (mask & 1 != 0, mask & 2 != 0, mask & 4 != 0);
+            super::set_people_shading(shading);
+            super::set_people_bounce(bounce);
+            super::set_people_contact(contact);
+            let konst = super::people_shading_wgsl();
+            assert_eq!(konst, format!("const SF_PEOPLE_SHADING: bool = {shading};\nconst SF_PEOPLE_BOUNCE: bool = {bounce};"));
+            assert_eq!(super::people_contact_wgsl().contains("fn agent_contact_vs"), contact);
+            let src = format!(
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
+                konst,
+                include_str!("agents_types.wgsl"),
+                include_str!("agents_common.wgsl"),
+                include_str!("agents_draw.wgsl"),
+                include_str!("sky_velocity.wgsl"),
+                super::people_contact_wgsl()
+            );
+            let module = wgpu::naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("people {mask}: {}", e.emit_to_string(&src)));
+            wgpu::naga::valid::Validator::new(wgpu::naga::valid::ValidationFlags::all(), wgpu::naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("people {mask}: {e:?}"));
+        }
+        super::set_people_shading(false);
+        super::set_people_bounce(false);
+        super::set_people_contact(false);
+    }
+
+    /// (`--people-contact`) the shader's joints are eo-agents' contact joints, in order.
+    #[test]
+    fn the_contact_joints_are_the_libraries() {
+        let src = include_str!("people_contact.wgsl");
+        let list = eo_agents::people::CONTACT_JOINTS.iter().map(|j| format!("{j}u")).collect::<Vec<_>>().join(", ");
+        assert!(src.contains(&format!("const PC_JOINTS: array<u32, {}> = array<u32, {}>({list});", eo_agents::people::CONTACT_JOINTS.len(), eo_agents::people::CONTACT_JOINTS.len())), "PC_JOINTS");
+        assert!(src.contains(&format!("const PC_PARTS: u32 = {}u;", eo_agents::people::CONTACT_JOINTS.len())), "PC_PARTS");
     }
 }

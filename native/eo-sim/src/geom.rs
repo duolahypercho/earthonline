@@ -61,6 +61,34 @@ pub fn dist_to_polyline(points: &[P2], x: f64, z: f64) -> f64 {
     best
 }
 
+/// The length of a polyline inside the disc of radius `r` round `c` (each
+/// segment clipped to the circle).
+pub fn length_in_disc(points: &[P2], c: P2, r: f64) -> f64 {
+    let mut total = 0.0;
+    for w in points.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let d = [b[0] - a[0], b[1] - a[1]];
+        let f = [a[0] - c[0], a[1] - c[1]];
+        let aa = d[0] * d[0] + d[1] * d[1];
+        if aa < 1e-12 {
+            continue;
+        }
+        let bb = 2.0 * (f[0] * d[0] + f[1] * d[1]);
+        let cc = f[0] * f[0] + f[1] * f[1] - r * r;
+        let disc = bb * bb - 4.0 * aa * cc;
+        if disc <= 0.0 {
+            continue;
+        }
+        let s = disc.sqrt();
+        let t0 = ((-bb - s) / (2.0 * aa)).max(0.0);
+        let t1 = ((-bb + s) / (2.0 * aa)).min(1.0);
+        if t1 > t0 {
+            total += (t1 - t0) * aa.sqrt();
+        }
+    }
+    total
+}
+
 /// `wrapPi`.
 #[inline]
 pub fn wrap_pi(mut a: f64) -> f64 {

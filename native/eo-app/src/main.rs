@@ -498,6 +498,16 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
             "--no-rocketbox" => a.rocketbox = false, // people
             "--no-rocketbox-motions" => eo_agents::motion::set_enabled(false), // no motion, so no people
+            "--crowd" => agents::CROWD.store(true, std::sync::atomic::Ordering::Relaxed), // the population by place and hour (agents.rs)
+            "--no-crowd" => agents::CROWD.store(false, std::sync::atomic::Ordering::Relaxed),
+            "--people-shading" => eo_render::agents::set_people_shading(true), // skin, cloth and hair (agents_draw.wgsl `pp_person`)
+            "--no-people-shading" => eo_render::agents::set_people_shading(false),
+            "--people-bounce" => eo_render::agents::set_people_bounce(true), // the ground round the feet lights a person (agents_draw.wgsl `pb_person`)
+            "--no-people-bounce" => eo_render::agents::set_people_bounce(false),
+            "--people-contact" => eo_render::agents::set_people_contact(true), // the ground round a person occluded by them (people_contact.wgsl)
+            "--no-people-contact" => eo_render::agents::set_people_contact(false),
+            "--people-motion" => eo_agents::motion::set_steady_heads(true), // the people's heads held steady, phones at the ear (eo-agents rocketbox.rs `steady_head`)
+            "--no-people-motion" => eo_agents::motion::set_steady_heads(false),
             // read by eo_render::hlod::HlodOptions::from_env and bench/hlod_shots.rs
             "--hlod-shots" => {}
             "--far-shots" | "--far-diag" => {} // bench/far_shots.rs reads them
@@ -624,6 +634,10 @@ pub struct World {
     /// the berths along the harbours' floating docks (eo-landmarks), where the
     /// props draw the moored boats; empty without the docks.
     pub berths: Arc<Vec<eo_landmarks::floating_docks::Berth>>,
+    /// (`--crowd`) the landmarks' walkable paving (the quay's apron, the pier
+    /// decks, the plazas: `Structure::footway`) as triangles, for the people
+    /// who walk on it (agents.rs); empty without `--crowd` or the landmarks.
+    pub footway_decks: Arc<Vec<[[f32; 3]; 3]>>,
 }
 
 /// the JS street ground materials' scanned sets, as
@@ -1092,6 +1106,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
     let mut berths = Vec::new();
+    let mut footway_decks = Vec::new();
     let landmarks = if let Some(mut set) = landmark_set {
         let t = Instant::now();
         berths = std::mem::take(&mut set.berths);
@@ -1126,6 +1141,9 @@ pub fn load_world(args: &Args) -> Result<World> {
             eprintln!("landmarks: Ocean Beach seawall {} stations, {} stairs; Sunset Dunes seawall {} stations, {} flights", pr[0].0, pr[0].1, pr[1].0, pr[1].1);
         }
         let base = authored.groups.len() as u32 + kit_set.as_ref().map(|k| k.groups.len() as u32).unwrap_or(0) + street_parts.as_ref().map(|p| p.0.groups.len() as u32).unwrap_or(0);
+        if agents::crowd_on() {
+            footway_decks = agents::footway_decks(&set.structures); // (`--crowd`) where people walk on the landmarks' paving
+        }
         let lm = eo_render::landmarks::append(&mut scene, &set, &mut authored.materials, base);
         if std::env::var("EO_TRACE_LOAD").is_ok() {
             eprintln!(
@@ -1207,7 +1225,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         None => (None, None),
     };
-    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn, berths: Arc::new(berths) }) // hlod
+    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn, berths: Arc::new(berths), footway_decks: Arc::new(footway_decks) }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan

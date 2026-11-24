@@ -280,3 +280,78 @@ fn plain_walks_look_ahead() {
         }
     }
 }
+
+/// (`--people-motion`) Every walk and standing loop on each proportion group
+/// with the heads held steady (`rocketbox::steady_head`): the loop's mean nod
+/// within `NOD_MEAN`'s limits and every frame within `NOD_FRAME`'s; the
+/// call loops keep the hand at the ear; the rest of the body is untouched.
+#[test]
+fn steady_heads_look_ahead() {
+    let Some(cp) = copies() else { return };
+    let cm = Manifest::clips().unwrap();
+    let sm = Manifest::styles().unwrap();
+    let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| [r.female, r.male]).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let clips: Vec<motion::RbClip> = ids.iter().map(|id| motion::load_rb_clip(&cp.clips, &cm, id).unwrap()).collect();
+    let clip = |id: &str| clips.iter().find(|c| c.id == id).unwrap();
+    let mut styles: Vec<motion::StyleCycle> = STYLES.iter().filter_map(|(s, p)| motion::load_style(&cp.styles, &sm, s, *p).ok()).collect();
+    motion::level_heads(&mut styles);
+    let head = idx("Bip01 Head");
+    let nod_at = |rows: &[[f32; 4]], f: usize| -> f32 {
+        let n = JOINTS.len();
+        let r = &rows[(f * n + head) * 3..(f * n + head) * 3 + 3];
+        // the bind's forward (+Z) through the frame's rotation
+        let fz = Vec3::new(r[0][2], r[1][2], r[2][2]).normalize();
+        (-fz.y).asin().to_degrees()
+    };
+    for (id, sk) in &groups(&cp.people) {
+        let female = id.contains("female");
+        let relaxed = rocketbox::relaxed_hands(sk, clip(if female { ROLES[0].female } else { ROLES[0].male }), &ROLES[0]).unwrap();
+        let mut srcs: Vec<BakeSrc> = styles.iter().map(|c| BakeSrc::Style { cycle: c }).collect();
+        for role in ROLES.iter() {
+            srcs.push(BakeSrc::Clip { clip: clip(if female { role.female } else { role.male }), role, frames: (role.seconds * role.fps).round() as u32 + 1 });
+        }
+        let plain = rocketbox::bake_list(sk, &srcs, Some(&relaxed)).unwrap();
+        let steady = rocketbox::bake_list_opts(sk, &srcs, Some(&relaxed), true).unwrap();
+        println!("== {id}");
+        let mut f0 = 0;
+        for (i, s) in srcs.iter().enumerate() {
+            let (name, n) = match s {
+                BakeSrc::Style { cycle } => (cycle.name.clone(), motion::WALK_FRAMES as usize + 1),
+                BakeSrc::Clip { role, frames, .. } => (role.name.to_string(), *frames as usize),
+            };
+            let before: Vec<f32> = (f0..f0 + n - 1).map(|f| nod_at(&plain.rows, f)).collect();
+            let after: Vec<f32> = (f0..f0 + n - 1).map(|f| nod_at(&steady.rows, f)).collect();
+            let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+            let span = |v: &[f32]| (v.iter().cloned().fold(f32::MAX, f32::min), v.iter().cloned().fold(f32::MIN, f32::max));
+            let (b0, b1) = span(&before);
+            let (a0, a1) = span(&after);
+            println!("  {name:<16} nod mean {:+6.1} ({b0:+6.1} .. {b1:+6.1})  steady {:+6.1} ({a0:+6.1} .. {a1:+6.1})  {:?}", mean(&before), mean(&after), steady.nods[i]);
+            assert!(mean(&after) <= rocketbox::NOD_MEAN[1] + 0.5 && mean(&after) >= -rocketbox::NOD_MEAN[3] - 0.5, "{id} {name}: mean nod {}", mean(&after));
+            assert!(a1 <= rocketbox::NOD_FRAME[1] + 0.5 && a0 >= -rocketbox::NOD_FRAME[3] - 0.5, "{id} {name}: nod {a0} .. {a1}");
+            // Below the neck nothing moves.
+            for f in f0..f0 + n {
+                for k in 0..JOINTS.len() {
+                    if ["Bip01 Neck", "Bip01 Head", "Bip01 MJaw", "Bip01 LEye", "Bip01 REye"].contains(&JOINTS[k].0) {
+                        continue;
+                    }
+                    assert!((at(&plain.rows, sk, f, k) - at(&steady.rows, sk, f, k)).length() < 1e-4, "{id} {name}: {} moved", JOINTS[k].0);
+                }
+            }
+            if let BakeSrc::Clip { role, .. } = s {
+                if role.family == Family::Call {
+                    let ear: Vec<f32> = (f0..f0 + n).map(|f| hand_to_head(&steady.rows, sk, f)).collect();
+                    assert!(median(ear.clone()) < 0.12, "{id} {}: the knuckles are {:.3} m from the ear", role.name, median(ear));
+                }
+            }
+            if let BakeSrc::Style { cycle } = s {
+                if cycle.phone {
+                    let ear: Vec<f32> = (f0..f0 + n).map(|f| hand_to_head(&plain.rows, sk, f)).collect();
+                    println!("    phone walk: knuckles to the nearer ear, median {:.3} m", median(ear));
+                }
+            }
+            f0 += n;
+        }
+    }
+}

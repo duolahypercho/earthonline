@@ -252,3 +252,128 @@ pub const SIM_TIER_FAR_EVERY: u32 = 2;
 
 /// `PHYSICS_FIXED_STEP_SECONDS` in src/simulation/physics/core/constants.js.
 pub const FIXED_STEP_S: f64 = 1.0 / 60.0;
+
+// ---------------------------------------------------------------- crowd density (`--crowd`)
+// The crowd by place and hour (eo-app `--crowd`; `RegionConfig::crowd`).
+// Without it the resident disc above (the JS People setting: a fixed body
+// count in 55 m, whatever the street and the hour) is used, unchanged.
+//
+// Each footway holds people at a linear density (people per metre of its
+// walking line) from the steady-state relation density = flow / speed: a
+// sidewalk passed by Q people an hour at the mode walking speed
+// (`PED_CRUISE_MODE`) holds Q / (3600 x speed) people a metre. The flow is
+// the sum of what generates walking along it:
+//
+//   street     the street's class (`sidewalk_class_weight`) x `CROWD_FLOW_CLASS_PPH`;
+//   floors     the storeys of the buildings fronting it (the mean over its
+//              length, 0 where nothing fronts it) x `CROWD_FLOW_STOREY_PPH` x
+//              the street's class: the homes and jobs above the street, so a
+//              block of towers fills its walks and a block of two-storey
+//              houses does not, and a service lane behind the towers (where
+//              their doors are not) little;
+//   shops      its share of walk-in frontage (shops, cafes, services with a
+//              street door) x `CROWD_FLOW_SHOPS_PPH`;
+//   nightlife  its share of bar, pub, restaurant, club and theatre frontage x
+//              `CROWD_FLOW_NIGHT_PPH` (twice the shops': at its peak a
+//              nightlife front gathers people at its doors as well as passing);
+//   place      a walk that is a destination itself (a plaza's or a
+//              promenade's paths, a pedestrian street: `FootActivity::place`
+//              1, a park's footpaths a third) x `CROWD_FLOW_PLACE_PPH`.
+//
+// The first three follow the day's footfall (`hour_footfall`), nightlife its
+// own curve (`night_footfall`). These are crowd-model parameters, set so a
+// downtown block of towers and shops at its peak holds 10-15 people every
+// 100 m of each sidewalk (500-700 an hour), a neighbourhood commercial street
+// with bars at 21 h about half that, a residential street at noon 1-3 and a
+// service lane behind houses next to nothing: typical ranges for San
+// Francisco's sidewalks, not counts at any one place. The fronts' uses come
+// from the city file's building tags (OSM), which name only some of the
+// shops and bars a street has, so a commercial street reads lower than it is.
+pub const CROWD_FLOW_CLASS_PPH: f64 = 60.0;
+pub const CROWD_FLOW_STOREY_PPH: f64 = 25.0;
+pub const CROWD_FLOW_SHOPS_PPH: f64 = 450.0;
+pub const CROWD_FLOW_NIGHT_PPH: f64 = 900.0;
+pub const CROWD_FLOW_PLACE_PPH: f64 = 450.0;
+/// `FootActivity::place` of a pedestrian street or plaza way (OSM
+/// `highway=pedestrian`) and of any other footpath (`footway`, `path`).
+pub const PLACE_PEDESTRIAN: f32 = 1.0;
+pub const PLACE_FOOTPATH: f32 = 1.0 / 3.0;
+/// The resident disc (`--crowd`): people live within this of the focus (the
+/// renderer's instanced band reaches 145 m), are retired past it plus the
+/// margin, never appear closer than the pop-in guard off shot or inside the
+/// view cone closer than the in-shot guard (a refill pops in only where a
+/// body is a few pixels tall), and never number more than the body budget
+/// (the renderer's crowd tiers draw at most 448).
+pub const CROWD_RADIUS_M: f64 = 150.0;
+pub const CROWD_KEEP_MARGIN_M: f64 = 16.0;
+pub const CROWD_POP_IN_GUARD_M: f64 = OFF_SHOT_REFILL_FLOOR_M;
+pub const CROWD_IN_SHOT_GUARD_M: f64 = 90.0;
+pub const CROWD_MAX_BODIES: usize = 400;
+
+/// (`--crowd`) At a nightlife front, the share of walk legs (x its nightlife
+/// share x `night_footfall`) that end standing at the doors, and how long
+/// they stand (s): the crowd at a bar's door in the evening.
+pub const DOOR_GATHER_SHARE: f64 = 0.6;
+pub const DOOR_GATHER_SECONDS: [f64; 2] = [30.0, 150.0];
+
+/// The evening economy's footfall (0..1; bars, restaurants, clubs, theatres):
+/// a lunch peak, the dinner rise, the late evening at its height, falling
+/// after midnight to the 02:00 last call (California Business and Professions
+/// Code section 25631: no sale of alcohol between 2 a.m. and 6 a.m.).
+pub fn night_footfall(hour: f64) -> f64 {
+    const TABLE: [f64; 24] = [
+        0.70, 0.50, 0.25, 0.08, 0.04, 0.03, 0.04, 0.10, 0.15, 0.18, 0.22, 0.40, 0.60, 0.55, 0.35, 0.30, 0.35, 0.50,
+        0.75, 0.92, 1.00, 1.00, 0.95, 0.85,
+    ];
+    let h = if hour.is_finite() { ((hour % 24.0) + 24.0) % 24.0 } else { 12.0 };
+    let i = h.floor() as usize;
+    let f = h - i as f64;
+    TABLE[i % 24] * (1.0 - f) + TABLE[(i + 1) % 24] * f
+}
+
+/// What fronts a footway (`--crowd`; `Footway::activity`): the shares of its
+/// length fronted by walk-in shops and by the evening economy, the mean
+/// storeys of whatever fronts it (0 where nothing does), and how much the walk
+/// is a place of its own (a plaza's or a park's path, `PLACE_*`; 0 beside a
+/// street). All zero without a frontage survey and paths
+/// (`NativeSource::with_frontage`, `with_paths`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FootActivity {
+    pub shops: f32,
+    pub night: f32,
+    pub storeys: f32,
+    pub place: f32,
+}
+
+/// People a metre of a footway's walking line holds at `hour` (see above).
+pub fn footway_density(class_weight: f64, a: FootActivity, hour: f64) -> f64 {
+    let day = hour_footfall(hour);
+    let flow = ((CROWD_FLOW_CLASS_PPH + CROWD_FLOW_STOREY_PPH * a.storeys as f64) * class_weight + CROWD_FLOW_SHOPS_PPH * a.shops as f64 + CROWD_FLOW_PLACE_PPH * a.place as f64) * day
+        + CROWD_FLOW_NIGHT_PPH * a.night as f64 * night_footfall(hour);
+    flow / (3600.0 * PED_CRUISE_MODE)
+}
+
+/// The resident disc of the crowd by place and hour (`RegionConfig::crowd`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CrowdDensity {
+    pub radius_m: f64,
+    pub keep_radius_m: f64,
+    pub pop_in_guard_m: f64,
+    pub in_shot_guard_m: f64,
+    pub max_bodies: usize,
+    /// Multiplies every footway's density (eo-app `--agent-density`).
+    pub scale: f64,
+}
+
+impl CrowdDensity {
+    pub fn standard(scale: f64) -> Self {
+        CrowdDensity {
+            radius_m: CROWD_RADIUS_M,
+            keep_radius_m: CROWD_RADIUS_M + CROWD_KEEP_MARGIN_M,
+            pop_in_guard_m: CROWD_POP_IN_GUARD_M,
+            in_shot_guard_m: CROWD_IN_SHOT_GUARD_M,
+            max_bodies: CROWD_MAX_BODIES,
+            scale,
+        }
+    }
+}

@@ -253,6 +253,25 @@ impl Walker {
             return true;
         }
         self.ambulatory = None;
+        // (`--crowd`) at a nightlife front in its hours, a walk often ends at
+        // the doors: a group stands talking, facing each other; one alone
+        // stands or takes a call with their back to the front, looking out
+        // at the street, as people outside a bar do (not at its door)
+        // (zero without the frontage survey: no draw, the JS pause below).
+        let night = net.footways[self.footway as usize].activity.night as f64 * night_footfall(hour);
+        if night > 0.0 && walker_draw(self.key, "door-", leg) < night * DOOR_GATHER_SHARE {
+            self.activity = if self.group {
+                Activity::Talk
+            } else if walker_draw(self.key, "door-call-", leg) < 0.5 {
+                Activity::Phone
+            } else {
+                Activity::Stand
+            };
+            self.facing = if self.group { Facing::Partner } else { Facing::Across };
+            let [lo, hi] = DOOR_GATHER_SECONDS;
+            self.activity_timer = lo + walker_draw(self.key, "door-dur-", leg) * (hi - lo);
+            return false;
+        }
         let total = self.total(net);
         let near_corner = self.s.min(total - self.s) <= 6.0;
         let mut weight_total = 0.0;
@@ -517,6 +536,10 @@ fn consider_crossing(net: &Network, w: &mut Walker, end: usize, stats: &mut Crow
     let junction = node.ends.len() > 2;
     let signal = node.signal;
     if signal == NONE && !junction {
+        return;
+    }
+    // (`--crowd`) no crosswalk mapped at this band: crossed only on a signal.
+    if signal == NONE && f.ends[end].no_crossing {
         return;
     }
     w.cross_leg += 1;

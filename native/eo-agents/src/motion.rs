@@ -97,6 +97,20 @@ pub fn enabled() -> bool {
     !OFF.load(Ordering::Relaxed) && std::env::var_os(OFF_ENV).is_none_or(|v| v.is_empty() || v == "0")
 }
 
+static STEADY: AtomicBool = AtomicBool::new(false);
+
+/// `--people-motion` (off by default): the people's heads held steady in the
+/// bake (`rocketbox::steady_head`, the library's `CookOptions::steady_heads`)
+/// and a texting walker's phone put to the ear. `--no-people-motion` cooks
+/// and feeds as before.
+pub fn set_steady_heads(on: bool) {
+    STEADY.store(on, Ordering::Relaxed);
+}
+
+pub fn steady_heads() -> bool {
+    STEADY.load(Ordering::Relaxed)
+}
+
 /// The 100STYLE styles walked (their forward walk, `<Style>_FW`), in loop
 /// order. Picked from the 100 for everyday street walking; the phone ones
 /// walk the sim's walkers on a phone. Downloaded and left out: Old (its
@@ -784,6 +798,10 @@ pub struct MotionMeta {
     pub notes: Vec<String>,
     /// Parts that could not be used, and why.
     pub fallback: Vec<String>,
+    /// (`--people-motion`) the heads were held steady in the bake; the feed
+    /// then also puts a texting walker's phone to the ear (no phone is drawn
+    /// in a hand).
+    pub steady: bool,
 }
 
 impl MotionMeta {
@@ -913,7 +931,11 @@ pub fn standing_family(activity: u16, flags: u32, id: u32) -> Family {
 /// The standing loop for this walker now (drawn once per family), or None
 /// when the slots hold no loops.
 pub fn standing(m: &MotionMeta, w: &mut WalkerMotion, activity: u16, flags: u32, id: u32) -> Option<(usize, usize)> {
-    let fam = standing_family(activity, flags, id);
+    let mut fam = standing_family(activity, flags, id);
+    if m.steady && fam == Family::Text {
+        // (`--people-motion`) the texting clip looks down at a phone no one is drawn holding.
+        fam = Family::Call;
+    }
     let i = fam as usize;
     if let Some((s, l)) = w.loops[i] {
         return Some((s as usize, l as usize));
@@ -994,6 +1016,28 @@ mod tests {
         let old = MotionMeta::default();
         assert_eq!(old.walk_anim(5, 0.25), 0.25);
         assert_eq!(old.clip_phase(1, 3, 1.75), 0.75);
+    }
+
+    /// (`--people-motion`) a texting walker takes a call instead (no phone is
+    /// drawn in a hand); without it, the texting loop as before.
+    #[test]
+    fn steady_texters_take_a_call() {
+        let mut m = meta();
+        m.loops[3] = vec![
+            LoopMeta { role: "call".into(), family: Family::Call, first: 0, frames: 100, seconds: 10.0, ..Default::default() },
+            LoopMeta { role: "text".into(), family: Family::Text, first: 101, frames: 100, seconds: 10.0, ..Default::default() },
+        ];
+        // walkers whose phone draw is a text (activity 3)
+        let texters: Vec<u32> = (0..200).filter(|&id| standing_family(3, 0, id) == Family::Text).collect();
+        assert!(!texters.is_empty());
+        for &id in &texters {
+            let mut w = WalkerMotion::default();
+            assert_eq!(standing(&m, &mut w, 3, 0, id), Some((3, 1)), "texting as before");
+            m.steady = true;
+            let mut w = WalkerMotion::default();
+            assert_eq!(standing(&m, &mut w, 3, 0, id), Some((3, 0)), "a call");
+            m.steady = false;
+        }
     }
 
     #[test]

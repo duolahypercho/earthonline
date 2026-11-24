@@ -48,6 +48,17 @@ pub const COOK_VERSION: u32 = 1;
 pub const ATLAS_RES: u32 = 1024;
 /// Mip levels kept (1024 .. 4 px: the BC blocks stop there).
 pub const ATLAS_LEVELS: u32 = 9;
+/// The roughness the cook writes per material class (the ORM atlas's green):
+/// the head's skin, the body's skin texels, hair and eyelashes, cloth (and
+/// the body's other texels), gear, glasses. eo-render's people shading
+/// (`--people-shading`, agents_draw.wgsl `pp_class`) reads the class back
+/// from these, so a change here is a change there (its test holds them).
+pub const ROUGH_HEAD: f32 = 0.5;
+pub const ROUGH_SKIN: f32 = 0.55;
+pub const ROUGH_HAIR: f32 = 0.45;
+pub const ROUGH_CLOTH: f32 = 0.85;
+pub const ROUGH_GEAR: f32 = 0.6;
+pub const ROUGH_GLASS: f32 = 0.15;
 /// The credit line the licence asks to travel with the avatars.
 pub const CREDIT: &str = "Microsoft Rocketbox Avatar Library (https://github.com/microsoft/Microsoft-Rocketbox), Copyright (c) 2020 Microsoft, MIT License.";
 
@@ -349,6 +360,8 @@ pub struct Baked {
     pub rows: Vec<[f32; 4]>,
     pub lifts: Vec<f32>,
     pub strides: Vec<Option<(f32, f32)>>,
+    /// (`steady_head`) per stretch: its mean nod before and after, degrees.
+    pub nods: Vec<Option<(f32, f32)>>,
 }
 
 type Pose = (Vec<Vec3>, Vec<Quat>);
@@ -637,15 +650,114 @@ pub fn stride_of(sk: &BipSkeleton, frames: &[Pose], lift: f32) -> Option<(f32, f
     Some((s, off[off.len() / 2]))
 }
 
+/// (`--people-motion`) Steady heads. In walking the head is held steady in
+/// pitch, its swing about the walk's mean within about +-5 degrees, the gaze
+/// a little below the horizon (Pozzo, Berthoz and Lefort 1990, "Head
+/// stabilization during various locomotor tasks in humans", Exp Brain Res
+/// 82; the eyes do the rest of looking down at the path). Several styles and
+/// clips carry the head bowed far past that (100STYLE's Depressed about 50
+/// degrees past the Neutral take, Rushed and CrowdAvoidance about 23, the
+/// texting clip looking at a phone no one is drawn holding), which reads on
+/// the street as staring at one's feet. Each loop's mean nod (degrees below
+/// the level line the bind pose looks along, + down) is held softly within
+/// `NOD_MEAN` (identity up to the knee, compressed toward the limit past
+/// it), each frame keeps its own swing about that mean, and the frame is
+/// held softly within `NOD_FRAME` (brief looks down stay brief). The neck
+/// takes `NOD_NECK_SHARE` of the correction, the head the rest, about the
+/// head's lateral axis; the face joints follow the head.
+pub const NOD_MEAN: [f32; 4] = [4.0, 10.0, 3.0, 6.0]; // knee down, limit down, knee up, limit up
+pub const NOD_FRAME: [f32; 4] = [12.0, 18.0, 6.0, 10.0];
+pub const NOD_NECK_SHARE: f32 = 0.4;
+
+fn nod_soft(x: f32, b: [f32; 4]) -> f32 {
+    let lim = |x: f32, knee: f32, max: f32| if x <= knee { x } else { knee + (max - knee) * ((x - knee) / (max - knee)).tanh() };
+    if x >= 0.0 { lim(x, b[0], b[1]) } else { -lim(-x, b[2], b[3]) }
+}
+
+/// The head's nod at a pose (degrees below the bind's level line, + down)
+/// and its forward direction.
+pub fn head_nod(sk: &BipSkeleton, r: &[Quat]) -> Option<(f32, Vec3)> {
+    let head = JOINTS.iter().position(|(b, _)| *b == "Bip01 Head")?;
+    let f = (r[head] * sk.rot[head].inverse()) * Vec3::Z;
+    (f.y.abs() < 0.97).then(|| ((-f.y).clamp(-1.0, 1.0).asin().to_degrees(), f))
+}
+
+/// `NOD_MEAN` and `NOD_FRAME` on one loop's frames (closed or not); the
+/// loop's mean nod before and after.
+pub fn steady_head(sk: &BipSkeleton, frames: &mut [Pose]) -> Option<(f32, f32)> {
+    let id = |b: &str| JOINTS.iter().position(|(x, _)| *x == b);
+    let (neck, head) = (id("Bip01 Neck")?, id("Bip01 Head")?);
+    if !sk.present[neck] || !sk.present[head] || frames.is_empty() {
+        return None;
+    }
+    let under = |k: usize, top: usize| -> bool {
+        let mut j = Some(k);
+        let mut guard = 0;
+        while let Some(x) = j {
+            if x == top {
+                return true;
+            }
+            j = sk.parent[x];
+            guard += 1;
+            if guard > JOINTS.len() {
+                break;
+            }
+        }
+        false
+    };
+    let neck_sub: Vec<usize> = (0..JOINTS.len()).filter(|&k| under(k, neck)).collect();
+    let head_sub: Vec<usize> = (0..JOINTS.len()).filter(|&k| under(k, head)).collect();
+    // A closed loop's last frame is its first: the mean over the others.
+    let n = frames.len();
+    let looped = if n > 2 && frames[n - 1].1 == frames[0].1 { n - 1 } else { n };
+    let nods: Vec<Option<(f32, Vec3)>> = frames.iter().map(|(_, r)| head_nod(sk, r)).collect();
+    let seen: Vec<f32> = nods[..looped].iter().flatten().map(|(x, _)| *x).collect();
+    if seen.is_empty() {
+        return None;
+    }
+    let mean = seen.iter().sum::<f32>() / seen.len() as f32;
+    let target = nod_soft(mean, NOD_MEAN);
+    let mut after = 0.0;
+    let mut count = 0;
+    for ((p, r), nod) in frames.iter_mut().zip(&nods) {
+        let Some((x, f)) = *nod else { continue };
+        let want = nod_soft(target + (x - mean), NOD_FRAME);
+        let lift = (x - want).to_radians(); // + raises the face toward the level line
+        let axis = f.cross(Vec3::Y);
+        if axis.length_squared() > 1e-8 && lift.abs() > 1e-5 {
+            let axis = axis.normalize();
+            for (sub, share) in [(&neck_sub, NOD_NECK_SHARE), (&head_sub, 1.0 - NOD_NECK_SHARE)] {
+                let q = Quat::from_axis_angle(axis, lift * share);
+                let c = p[sub[0]];
+                for &k in sub.iter() {
+                    p[k] = c + q * (p[k] - c);
+                    r[k] = (q * r[k]).normalize();
+                }
+            }
+        }
+        if count < looped {
+            after += want;
+            count += 1;
+        }
+    }
+    Some((mean, after / count.max(1) as f32))
+}
+
 /// a table of every stretch in `srcs`, in order.
 pub fn bake_list(sk: &BipSkeleton, srcs: &[BakeSrc], relaxed: Option<&[Quat]>) -> Result<Baked> {
+    bake_list_opts(sk, srcs, relaxed, false)
+}
+
+/// `bake_list`, with the heads held steady (`steady_head`) when `steady`.
+pub fn bake_list_opts(sk: &BipSkeleton, srcs: &[BakeSrc], relaxed: Option<&[Quat]>, steady: bool) -> Result<Baked> {
     let n = JOINTS.len();
-    let mut out = Baked { rows: vec![], lifts: vec![], strides: vec![] };
+    let mut out = Baked { rows: vec![], lifts: vec![], strides: vec![], nods: vec![] };
     for src in srcs {
-        let frames = match src {
+        let mut frames = match src {
             BakeSrc::Clip { clip, role, frames } => clip_frames(sk, clip, role, *frames)?,
             BakeSrc::Style { cycle } => style_frames(sk, cycle, relaxed)?,
         };
+        out.nods.push(if steady { steady_head(sk, &mut frames) } else { None });
         let lift = lift_of(sk, &frames);
         out.lifts.push(lift);
         out.strides.push(if matches!(src, BakeSrc::Style { .. }) { stride_of(sk, &frames, lift) } else { None });
@@ -1141,16 +1253,16 @@ fn build_planes(g: &Glb, regions: &HashMap<String, Region>) -> Result<Planes> {
                 // cloth 0.85, glasses 0.15, gear 0.6; metalness 0 throughout.
                 let srgb = [to_srgb8(c[0]) as f32 / 255.0, to_srgb8(c[1]) as f32 / 255.0, to_srgb8(c[2]) as f32 / 255.0];
                 let rough = match r.class {
-                    Class::Head => 0.5,
-                    Class::Hair => 0.45,
-                    Class::Glass => 0.15,
-                    Class::Gear => 0.6,
-                    Class::Cloth => 0.85,
+                    Class::Head => ROUGH_HEAD,
+                    Class::Hair => ROUGH_HAIR,
+                    Class::Glass => ROUGH_GLASS,
+                    Class::Gear => ROUGH_GEAR,
+                    Class::Cloth => ROUGH_CLOTH,
                     Class::Body => {
                         if skin_like(srgb[0], srgb[1], srgb[2]) {
-                            0.55
+                            ROUGH_SKIN
                         } else {
-                            0.85
+                            ROUGH_CLOTH
                         }
                     }
                 };

@@ -468,6 +468,9 @@ pub fn run(
         if warm {
             card["traffic"] = serde_json::json!(traffic.map(|(v, p)| serde_json::json!({ "vehicles": v, "people": p }))); // (`--car-traffic`) only with the option
         }
+        if crate::agents::crowd_on() {
+            card["crowd"] = agents.census_json(cam.eye); // (`--crowd`) only with the option
+        }
         if args.look.lighting.light_shadows > 0 || args.look.lighting.headlight_shadows > 0 {
             card["light_shadows"] = light_shadows_json(ctx, renderer); // (lighting) only with the options
             if std::env::var_os("EO_LIGHT_SHADOW_ATLAS").is_some() {
