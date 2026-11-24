@@ -196,6 +196,9 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     // `EO_SHADER_FEATURES=all`, a diagnostic: every feature's code compiled in, as before the stage).
     let features = eo_render::look::ShaderFeatures::of(&args.look, crate::structures::drawn(world).is_some(), args.structures.as_ref().is_some_and(|s| s.tunnels), args.facade_clutter > 0);
     let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
+    // the facades track's switches (`--facade-glass`, `--far-facades`; off: compiled out, the frame as before).
+    features.facade_glass |= eo_render::facade::glass_from_args();
+    features.far_facades |= eo_render::facade::far_from_args();
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
             "lx" => features.lx_bits = u32::MAX,
@@ -206,6 +209,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "shop_light" => features.shop_light = true,
             "clutter" => features.facade_clutter = true,
             "cinematic" => features.cinematic = true, // (`--look cinematic`, stage L0)
+            "facade_glass" => features.facade_glass = true,
+            "far_facades" => features.far_facades = true,
             _ => {}
         }
     }
