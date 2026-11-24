@@ -59,6 +59,19 @@ pub const TENT_TEXELS: f64 = 1.0;
 /// edge-on to the sun, which the key barely lights, keeps a bounded slope.
 pub const MAX_PLANE_SLOPE: f64 = 24.0;
 
+/// The widest penumbra is left to the cascade's tent where its half width
+/// (`MAX_SPREAD_M`) is no wider than the tent's own blur (`TENT_TEXELS` of the
+/// cascade's texels) or than this many of the frame's pixels at the point's
+/// distance: past either the search finds what the tent draws, and its loads
+/// are spared (from the city_overview path's 18 km a pixel is about 19 m).
+pub const SUBPIXEL_PX: f64 = 0.5;
+
+/// Whether the penumbra resolves at a point: its widest half width over a
+/// cascade texel of `texel_m` metres and a pixel of `pixel_m` metres there.
+pub fn resolves(texel_m: f64, pixel_m: f64) -> bool {
+    MAX_SPREAD_M > (texel_m * TENT_TEXELS).max(pixel_m * SUBPIXEL_PX)
+}
+
 /// tan of the sun's angular diameter.
 pub fn tan_diameter() -> f64 {
     (SUN_DIAMETER_DEG.to_radians()).tan()
@@ -121,6 +134,17 @@ pub fn disc_share_past_edge(x: f64, d: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_penumbra_is_left_to_the_tent_where_it_cannot_show() {
+        // the street at eye height: a 3072 map over 40 m (1.3 cm texels), a pixel of
+        // 1-10 cm (focal ~935 px, 10-100 m away): it resolves.
+        assert!(resolves(0.013, 0.01) && resolves(0.1, 0.1));
+        // a cascade whose texel is the penumbra's half width or more: the tent.
+        assert!(!resolves(0.3, 0.01) && !resolves(2.0, 0.01));
+        // 18 km up (city_overview, ~19 m a pixel), or past ~560 m from the eye at 935 px.
+        assert!(!resolves(0.013, 19.0) && !resolves(0.013, 0.6) && resolves(0.013, 0.59));
+    }
 
     #[test]
     fn widths_follow_the_sun_disc() {
