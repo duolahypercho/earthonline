@@ -337,3 +337,13 @@ Source SHA-256 values:
 
 - `2016_2021SanFranciscoBayWaterQualityData.csv` — `726906506c62e64b5a3e78a8c4e41100cf4e1f6f82c54a13e5adcf892639ddcf`
 - `SFBay_TableofStationLocations_v4.csv` — `55f28f5b4f706ec0b0d78feafc56be1779e665fc7e9ebd5dfc0041c8edec7726`
+
+## Procedural marine forms
+
+The two rock outcrops, sponges, branching colony, kelp-column arrangement and
+baitfish use mesh generators by Maksymilian Dendura, copyright 2026, licensed
+under MIT. Earth Online bakes these forms into a mesh library and supplies the blade
+surface, colors, animation and habitat placement. The shipped model includes
+[the original license](public/assets/ocean/reef-forms.LICENSE.txt) and a
+[provenance record](public/assets/ocean/reef-forms.provenance.json).
+[Upstream source at the pinned revision](https://github.com/Noniv/abyssal-garden/tree/a596354eff400d458bc2aeb9bdf5e0a9734b2bcf).
