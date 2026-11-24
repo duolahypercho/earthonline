@@ -1306,7 +1306,8 @@ fn sw_gum(q: vec2<f32>, fw: f32, kd: f32, act: f32, clean: f32) -> vec2<f32> {
     if (kd >= 0.0) {
         wait = (1.0 - smoothstep(0.25, 1.3, kd)) * smoothstep(0.35, 0.7, st_noise(q / 4.0 + 8.1));
     }
-    let dens = clamp(0.03 + 0.75 * max(patches, wait), 0.0, 1.0) * (1.0 - 0.75 * clean) * select(0.5, 1.0, kd >= 0.0);
+    // (an alley's kerb is no bus stop: at most a third of the cells hold a disc even where people wait)
+    let dens = clamp(0.02 + 0.32 * max(patches, 0.7 * wait), 0.0, 1.0) * (1.0 - 0.75 * clean) * select(0.5, 1.0, kd >= 0.0);
     var o = vec2<f32>(0.0, 0.5);
     for (var g = 0; g < 2; g = g + 1) {
         let c = WX_GUM_CELL_M * select(1.0, 1.61, g == 1);
@@ -1317,7 +1318,7 @@ fn sw_gum(q: vec2<f32>, fw: f32, kd: f32, act: f32, clean: f32) -> vec2<f32> {
         let a = st_hash(cell + vec2<f32>(4.9, 66.2)) * 6.2832;
         let off = vec2<f32>(st_hash(cell + vec2<f32>(5.3, 2.9)), st_hash(cell + vec2<f32>(91.1, 33.3)));
         // mostly specks, a few trodden wide (u^3), each squashed along its own heading
-        let r = WX_GUM_R_MIN * 0.7 + (WX_GUM_R_MAX * 1.6 - WX_GUM_R_MIN * 0.7) * u * u * u;
+        let r = WX_GUM_R_MIN * 0.5 + (WX_GUM_R_MAX * 1.8 - WX_GUM_R_MIN * 0.5) * u * u * u;
         let ctr = (cell + 0.15 + 0.7 * off) * c;
         let dv = pg - ctr;
         let ax = vec2<f32>(cos(a), sin(a));
