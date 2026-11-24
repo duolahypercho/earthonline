@@ -498,7 +498,7 @@ Start the single-player game at Aquatic Park:
 ```
 
 Other starts are `black-point`, `pacific` (Ocean Beach), `channel` (Golden Gate),
-`east-bay`, `south-bay`, `shelf` and `reef` (near Mile Rocks). With `--ocean-life` alone, walk into the
+`east-bay`, `south-bay`, `shelf` and the Mile Rocks entries `reef` and `kelp`. With `--ocean-life` alone, walk into the
 water from the usual city spawn. Swim with the movement keys and mouse, hold
 Space to rise, C or Ctrl to descend, and Shift for a faster stroke. Shallow
 water returns to walking. The dive uses the single-player fixed physics step.
@@ -510,7 +510,7 @@ the city, the relief represents a grid roughly 400 m across. The habitat window
 follows the diver. The start locations are bookmarks throughout the same sea.
 The switch also enables water optics and dive exposure unless explicitly disabled.
 
-Run `./target/release/eo-app --play --ocean-reef --dive-site reef` to enter the
+Run `./target/release/eo-app --play --ocean-reef --dive-detail --dive-site kelp` to enter the
 Pacific kelp habitat. The additional rock outcrops, colonies and schooling fish
 use the licensed procedural mesh generators credited in the third-party notices.
 The kelp grows on the modeled hard bottom within the lit coastal depth range.

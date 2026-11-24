@@ -315,7 +315,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     a.bench = o.bench;
     crate::apply_cove_look(&mut a, raw);
     if let Some(name) = &o.dive {
-        anyhow::ensure!(crate::ocean_habitat::STARTS.iter().any(|s| s.0 == name), "unknown swim site {name}; choose bay, black-point, pacific, channel, east-bay, south-bay, shelf or reef");
+        anyhow::ensure!(crate::ocean_habitat::STARTS.iter().any(|s| s.0 == name), "unknown swim site {name}; choose bay, black-point, pacific, channel, east-bay, south-bay, shelf, reef or kelp");
         anyhow::ensure!(a.look.ocean_life && a.look.water, "playable dive sites require --ocean-life and water");
     }
     a.test_character = test_character.selection(a.agents)?;
@@ -929,6 +929,9 @@ mod window {
         cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
         if opts.dive.is_none() { feet.y = cw.surface_y(feet.x, feet.z); }
         let mut player = Player::new(feet, yaw);
+        if opts.dive.as_deref() == Some("kelp") {
+            player.pitch = -12_f64.to_radians();
+        }
         if opts.dive.is_none() {
             player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
         }
