@@ -639,6 +639,7 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
         }
     };
     let mut cam = cam;
+    crate::ocean_habitat::dive_lens(world, &mut cam);
     let subject = spec.subject.as_ref().map(|s| {
         let (feet, yaw) = subject_place(world, s, cam.eye.as_dvec3());
         (feet, yaw, s.model, s.walking)

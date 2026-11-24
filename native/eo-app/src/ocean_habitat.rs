@@ -4,6 +4,17 @@ use eo_render::ocean_life::field::{SEA, Sampler, Site};
 use glam::Vec2;
 use std::sync::Arc;
 
+/// The city lens clips at half a metre. A diver can inspect objects within arm's reach.
+pub fn dive_lens(world: &crate::World, cam: &mut eo_render::camera::Camera) {
+    if cam.eye.y <= SEA + 0.3
+        && let Some(sample) = &world.marine_floor
+        && sample(Vec2::new(cam.eye.x, cam.eye.z))
+            .is_some_and(|s| s.shore > 0. && s.floor < cam.eye.y)
+    {
+        cam.near = cam.near.min(0.045);
+    }
+}
+
 pub fn sampler(world: &crate::World, cinematic: bool) -> Result<Sampler> {
     let grid =
         crate::props::vegetation::TerrainGrid::from_scene(&world.scene, &world.elevation.meta)
@@ -112,6 +123,7 @@ pub fn swim_ground(world: &crate::World, land: Arc<dyn GroundProvider>) -> Arc<d
 // Fixed bookmarks in surveyed plan metres, with the measured floor at each.
 // Keeping the reference lens independent of the feature gives matched bench paths.
 pub const STARTS: &[(&str, f64, f64, f64, f64)] = &[
+    ("reef", -8004.0, -1636.0, 0.8, -8.549),
     ("bay", -312.3512, -3311.1768, -0.8, -4.144),
     ("black-point", -639.4992, -3527.8256, -1.8, -5.412),
     ("pacific", -8513.0784, 866.3344, -1.4, -5.036),
@@ -135,7 +147,11 @@ pub fn start(sample: &Sampler, name: &str) -> Result<(DVec3, f64)> {
     let column = sample(Vec2::new(feet.x as f32, feet.z as f32))
         .filter(|s| s.shore > 0. && s.floor < SEA - 1.6)
         .with_context(|| format!("no swimmable entry at {name}"))?;
-    feet.y = f64::from(column.floor) + 0.18;
+    feet.y = if name == "reef" {
+        (f64::from(column.floor) + 3.3).min(f64::from(SEA) - 1.6)
+    } else {
+        f64::from(column.floor) + 0.18
+    };
     Ok((feet, heading))
 }
 /// Restore the measured sounding to wet carpet vertices. Keep the constructed quay

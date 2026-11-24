@@ -3,7 +3,8 @@ use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
 use std::sync::Arc;
 
-pub const KINDS: [&str; 14] = [
+pub const CORE_KINDS: usize = 14;
+pub const KINDS: [&str; 21] = [
     "perch",
     "topsmelt",
     "sculpin",
@@ -18,6 +19,13 @@ pub const KINDS: [&str; 14] = [
     "bull-kelp",
     "sanddab",
     "sea-pen",
+    "reef-block",
+    "reef-outcrop",
+    "cup-sponge",
+    "tube-sponge",
+    "branching-colony",
+    "kelp-column",
+    "baitfish",
 ];
 pub const TILE: f32 = 6.0;
 pub const RING: i32 = 2;
@@ -309,6 +317,99 @@ pub fn populate(x: i32, z: i32, sample: &Sampler, out: &mut [Vec<Instance>; KIND
     }
 }
 
+/// A second stream leaves the Blender populations stable on both sides of the switch.
+pub fn reef(x: i32, z: i32, sample: &Sampler, out: &mut [Vec<Instance>; KINDS.len()]) {
+    let mut rng = Rng(hash(x, z) ^ 0xe41859a1);
+    let centre = (Vec2::new(x as f32, z as f32) + 0.5) * TILE;
+    let p = centre + rng.offset(1.6);
+    let Some(site) = sample(p).filter(|s| s.shore > 1.5 && s.floor < SEA - 0.9) else {
+        return;
+    };
+    let d = SEA - site.floor;
+    let slope = |delta| sample(p + delta).map_or(0., |s| (s.floor - site.floor).abs());
+    let relief = slope(Vec2::new(2.4, 0.)).max(slope(Vec2::new(0., 2.4)));
+    let patch = patch(p * 0.76);
+    let exposed = site.pacific > 0.55;
+    // Rocky, wave-exposed headland. The sand across Ocean Beach stays open.
+    let rocky = site.beach < 0.42 && (relief > 0.20 || (site.shore < 120. && patch > 0.50));
+    if rocky && rng.unit() < 0.48 + 0.44 * patch {
+        let scale = rng.between(0.52, 1.46) * (0.7 + patch);
+        let h = scale * rng.between(0.54, 0.91);
+        let width = scale * rng.between(0.67, 1.24);
+        let yaw = rng.between(0., std::f32::consts::TAU);
+        let shape = if rng.unit() < 0.52 { 14 } else { 15 };
+        put(
+            out,
+            shape,
+            p,
+            site.floor + h * 0.10,
+            [scale, h, width],
+            yaw,
+            [0.; 3],
+            &mut rng,
+        );
+        // Vertical ray at the two baked chunks' local origins. Sink holdfasts into the crown.
+        let crown = site.floor + h * (0.10 + if shape == 14 { 0.83528 } else { 0.79038 });
+        let remaining = SEA - crown;
+        if exposed && (2.5..19.).contains(&remaining) && rng.unit() < 0.65 + 0.24 * patch {
+            let height = remaining * rng.between(0.51, 0.87);
+            let spread = height * rng.between(0.63, 1.05);
+            put(
+                out,
+                19,
+                p,
+                crown - 0.06,
+                [spread, height, spread],
+                yaw,
+                [rng.between(0., 6.28), 0., 0.],
+                &mut rng,
+            );
+        } else if remaining > 0.5 && rng.unit() < 0.83 {
+            let kind = 16 + (rng.unit() * 3.) as usize;
+            let h = rng.between(0.18, 0.53);
+            put(
+                out,
+                kind,
+                p,
+                crown - 0.035,
+                [h; 3],
+                yaw,
+                [rng.between(0., 6.28), 0., 0.],
+                &mut rng,
+            );
+        }
+    }
+    if !exposed || d < 3. || rng.unit() > 0.25 || patch < 0.34 {
+        return;
+    }
+    let heading = rng.between(0., std::f32::consts::TAU);
+    let phase = rng.between(0., std::f32::consts::TAU);
+    let clearance = (site.floor + 1.2).max(SEA - 8.);
+    if clearance > SEA - 0.8 {
+        return;
+    }
+    let y = rng.between(clearance, SEA - 0.8);
+    for _ in 0..8 + (rng.unit() * 11.) as usize {
+        let q = p + rng.offset(1.);
+        if !sample(q).is_some_and(|s| s.shore > 1.5 && s.floor < y - 0.65) {
+            continue;
+        }
+        let l = rng.between(0.095, 0.16);
+        let angle = heading + rng.between(-0.10, 0.10);
+        let motion = [rng.between(0., 6.28), phase, 0.61];
+        put(
+            out,
+            20,
+            q,
+            y + rng.between(-0.19, 0.19),
+            [l, l * 0.7, l],
+            angle,
+            motion,
+            &mut rng,
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,6 +444,54 @@ mod tests {
                 .iter()
                 .all(Vec::is_empty)
         );
+    }
+
+    #[test]
+    fn reef_life_respects_substrate_depth_and_the_original_population() {
+        let mut observed = [false; KINDS.len()];
+        for (floor, beach, shore, pacific, expect_reef) in [
+            (SEA - 7., 0., 24., 1., true),
+            (SEA - 7., 1., 24., 1., false),
+            (SEA - 48., 0., 24., 1., true),
+            (SEA + 1., 0., -5., 0., false),
+        ] {
+            let s: Sampler = Arc::new(move |_| {
+                Some(Site {
+                    floor,
+                    beach,
+                    shore,
+                    pacific,
+                    offshore: false,
+                })
+            });
+            for x in -5..5 {
+                for z in -5..5 {
+                    let core = census(x, z, &s);
+                    let mut a = core.clone();
+                    reef(x, z, &s, &mut a);
+                    let mut b = core.clone();
+                    reef(x, z, &s, &mut b);
+                    assert_eq!(a, b);
+                    assert_eq!(core[..CORE_KINDS], a[..CORE_KINDS]);
+                    if !expect_reef {
+                        assert!(a[14..20].iter().all(Vec::is_empty));
+                    }
+                    if floor < SEA - 25. {
+                        assert!(a[19].is_empty());
+                    }
+                    if shore < 0. {
+                        assert!(a[20].is_empty());
+                    }
+                    for (k, g) in a.iter().enumerate().skip(CORE_KINDS) {
+                        observed[k] |= !g.is_empty();
+                        for v in g {
+                            assert!(v.at[1] > floor && v.at[1] < SEA);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(observed[CORE_KINDS..].iter().all(|&found| found));
     }
 
     #[test]

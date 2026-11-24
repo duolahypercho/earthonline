@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use bytemuck::{Pod, Zeroable};
 use field::{Instance, KINDS, RING, Sampler, TILE};
 use glam::Vec2;
-use std::{ops::Range, path::Path, sync::Mutex};
+use std::{collections::HashMap, ops::Range, path::Path, sync::Mutex};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -32,8 +32,11 @@ struct Window {
     visible: bool,
     groups: [Draw; KINDS.len()],
     sediment_indices: u32,
+    bed: Vec<Vertex>,
+    tiles: HashMap<(i32, i32), [Vec<Instance>; KINDS.len()]>,
 }
 pub struct OceanLife {
+    reef: bool,
     sampler: Sampler,
     pipeline: wgpu::RenderPipeline,
     group: wgpu::BindGroup,
@@ -58,14 +61,31 @@ impl OceanLife {
         sampler: Sampler,
     ) -> Result<Self> {
         let dir = root.join("public/assets/ocean");
-        let source: eo_assets::AssetRef =
-            serde_json::from_slice(&std::fs::read(dir.join("sf-habitat.provenance.json"))?)?;
-        let bytes = eo_assets::glb::read_verified(&source.path(root), &source)?;
-        let glb = gltf::Gltf::from_slice(&bytes)?;
+        let load = |stem: &str| -> Result<gltf::Gltf> {
+            let source: eo_assets::AssetRef = serde_json::from_slice(&std::fs::read(
+                dir.join(format!("{stem}.provenance.json")),
+            )?)?;
+            let bytes = eo_assets::glb::read_verified(&source.path(root), &source)?;
+            Ok(gltf::Gltf::from_slice(&bytes)?)
+        };
+        let native = load("sf-habitat")?;
+        let reef = look
+            .options
+            .ocean_reef
+            .then(|| load("reef-forms"))
+            .transpose()?;
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut ranges = Vec::new();
-        for name in KINDS {
+        for (kind, name) in KINDS.iter().copied().enumerate() {
+            let glb = if kind < field::CORE_KINDS {
+                &native
+            } else if let Some(library) = &reef {
+                library
+            } else {
+                ranges.push(0..0);
+                continue;
+            };
             let mesh = glb
                 .meshes()
                 .find(|m| m.name() == Some(name))
@@ -160,9 +180,10 @@ impl OceanLife {
         let bed_inst = Instance {
             at: [0.; 4],
             shape: [1., 1., 1., 0.],
-            traits: [KINDS.len() as f32, 0., 0., 1.],
+            traits: [255., 0., 0., 1.],
         };
         Ok(Self {
+            reef: reef.is_some(),
             sampler,
             pipeline,
             group,
@@ -201,6 +222,8 @@ impl OceanLife {
                 cell: None,
                 visible: false,
                 sediment_indices: 0,
+                bed: Vec::new(),
+                tiles: HashMap::new(),
                 groups: std::array::from_fn(|i| Draw {
                     indices: ranges[i].clone(),
                     instances: 0..0,
@@ -232,27 +255,41 @@ impl OceanLife {
         if w.cell == Some((cell.x, cell.y)) {
             return wet;
         }
-        let mut buckets: [Vec<Instance>; KINDS.len()] = Default::default();
+        w.tiles
+            .retain(|&(x, z), _| (x - cell.x).abs() <= RING && (z - cell.y).abs() <= RING);
         for z in cell.y - RING..=cell.y + RING {
             for x in cell.x - RING..=cell.x + RING {
-                field::populate(x, z, &self.sampler, &mut buckets);
+                w.tiles.entry((x, z)).or_insert_with(|| {
+                    let mut groups = Default::default();
+                    field::populate(x, z, &self.sampler, &mut groups);
+                    if self.reef {
+                        field::reef(x, z, &self.sampler, &mut groups);
+                    }
+                    groups
+                });
             }
         }
-        let mut all = Vec::with_capacity(buckets.iter().map(Vec::len).sum());
-        for (i, b) in buckets.into_iter().enumerate() {
+        // Emit tiles in world order so a boundary crossing never reshuffles overlapping draws.
+        let mut all = Vec::new();
+        for i in 0..KINDS.len() {
             let start = all.len() as u32;
-            all.extend(b);
+            for z in cell.y - RING..=cell.y + RING {
+                for x in cell.x - RING..=cell.x + RING {
+                    all.extend_from_slice(&w.tiles[&(x, z)][i]);
+                }
+            }
             w.groups[i].instances = start..all.len() as u32;
         }
         assert!(all.len() <= MAX_INSTANCES);
         if !all.is_empty() {
             q.write_buffer(&self.instances, 0, bytemuck::cast_slice(&all));
         }
-        let (v, ix) = sediment((cell.as_vec2() + 0.5) * TILE, &self.sampler);
+        let (v, ix) = sediment((cell.as_vec2() + 0.5) * TILE, &self.sampler, &w.bed);
         if !ix.is_empty() {
             q.write_buffer(&self.sediment, 0, bytemuck::cast_slice(&v));
             q.write_buffer(&self.sediment_indices, 0, bytemuck::cast_slice(&ix));
         }
+        w.bed = v;
         w.sediment_indices = ix.len() as u32;
         w.cell = Some((cell.x, cell.y));
         wet
@@ -282,12 +319,24 @@ impl OceanLife {
         true
     }
 }
-fn sediment(centre: Vec2, sample: &Sampler) -> (Vec<Vertex>, Vec<u32>) {
+fn sediment(centre: Vec2, sample: &Sampler, previous: &[Vertex]) -> (Vec<Vertex>, Vec<u32>) {
     let mut verts = Vec::with_capacity(BED_SIDE * BED_SIDE);
     let mut wet = Vec::with_capacity(verts.capacity());
+    let old_origin = previous.first().map(|v| Vec2::new(v.pos[0], v.pos[2]));
     for z in 0..BED_SIDE {
         for x in 0..BED_SIDE {
             let q = centre + Vec2::new(x as f32 - 21., z as f32 - 21.);
+            if let Some(origin) = old_origin {
+                let offset = (q - origin).as_ivec2();
+                if (0..BED_SIDE as i32).contains(&offset.x)
+                    && (0..BED_SIDE as i32).contains(&offset.y)
+                {
+                    let v = previous[offset.y as usize * BED_SIDE + offset.x as usize];
+                    wet.push(v.color[3] != 0);
+                    verts.push(v);
+                    continue;
+                }
+            }
             let s = sample(q).filter(|s| s.shore > 0.05 && s.floor < field::SEA - 0.02);
             wet.push(s.is_some());
             let rgb = s.map_or([0; 4], |s| {
@@ -320,4 +369,43 @@ fn sediment(centre: Vec2, sample: &Sampler) -> (Vec<Vertex>, Vec<u32>) {
         }
     }
     (verts, ix)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[test]
+    fn scrolling_the_bed_reuses_only_the_overlapping_world_samples() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = calls.clone();
+        let sample: Sampler = Arc::new(move |p| {
+            count.fetch_add(1, Ordering::Relaxed);
+            Some(field::Site {
+                floor: -2.0 - p.y * 0.01,
+                shore: p.x + p.y,
+                beach: 0.3,
+                pacific: 0.8,
+                offshore: false,
+            })
+        });
+        let (before, _) = sediment(Vec2::new(-3., 3.), &sample, &[]);
+        calls.store(0, Ordering::Relaxed);
+        let centre = Vec2::new(-9., 9.);
+        let (v, ix) = sediment(centre, &sample, &before);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            BED_SIDE * BED_SIDE - (BED_SIDE - 6).pow(2)
+        );
+        let (fresh, indices) = sediment(centre, &sample, &[]);
+        assert_eq!(ix, indices);
+        assert_eq!(
+            bytemuck::cast_slice::<_, u8>(&v),
+            bytemuck::cast_slice::<_, u8>(&fresh)
+        );
+    }
 }

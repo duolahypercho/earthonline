@@ -286,7 +286,7 @@ pub fn habitat_segments(world: &World, args: &crate::Args, frames: usize, aspect
     // crosses several habitat tiles, including when viewed with the feature off.
     let regions = [
         ("ocean_bay", "bay"), ("ocean_rocks", "black-point"), ("ocean_coast", "pacific"),
-        ("ocean_channel", "channel"), ("ocean_east", "east-bay"), ("ocean_south", "south-bay"), ("ocean_shelf", "shelf"),
+        ("ocean_channel", "channel"), ("ocean_east", "east-bay"), ("ocean_south", "south-bay"), ("ocean_shelf", "shelf"), ("ocean_reef", "reef"),
     ];
     for (name, region) in regions {
         let wanted = args.segments.as_ref().map_or(args.look.ocean_life, |paths| paths.iter().any(|s| s == name));

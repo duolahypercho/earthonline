@@ -23,17 +23,17 @@ fn rotate_xz(p:vec3f,a:f32)->vec3f {
     var root=at.xyz;
     var yaw=at.w;
     var norm=normal;
-    if kind<=2u || kind==12u {
+    if kind<=2u || kind==12u || kind==20u {
         let tail=pow(clamp((.34-loc.x)/.84,0.,1.),2.);
-        let beat=sin(t*select(10.1,3.3,kind>=2u)+size.w-5.7*loc.x);
-        loc.z+=beat*tail*select(.083,.029,kind>=2u);
-        if kind<2u {
+        let beat=sin(t*select(10.1,3.3,(kind==2u || kind==12u))+size.w-5.7*loc.x);
+        loc.z+=beat*tail*select(.083,.029,(kind==2u || kind==12u));
+        if kind<2u || kind==20u {
             // Neighbours follow one orbit, with individual body beats and spacing.
             let lap=.37*t+traits.y;
             root+=rotate_xz(vec3f(cos(lap)*traits.z,.04*sin(lap*2.+size.w),.62*sin(lap)*traits.z),at.w);
             yaw+=atan2(.62*cos(lap),-sin(lap));
         }
-    } else if (kind>=3u && kind<=6u) || kind==11u || kind==13u {
+    } else if (kind>=3u && kind<=6u) || kind==11u || kind==13u || kind==19u {
         let height=clamp(pos.y,0.,1.2);
         let p=at.xz;
         let surge=sin(t*1.16+.34*p.x+.19*p.y)+.32*sin(t*1.83-.15*p.x+.22*p.y+pos.y*1.7);
@@ -56,7 +56,7 @@ fn grain(p:vec3f)->f32{
     let footprint=max(length(dpdx(i.world)),length(dpdy(i.world)));
     var n=normalize(i.normal+vec3f(0.,.000001,0.));var alb=i.color;
     let v=normalize(eye-i.world);let sun=light.dir.xyz;
-    if i.kind==14u {
+    if i.kind==255u {
         // Fine sediment and asymmetric crests use world metres. An irregular
         // phase and patches of quiet mud break up the wave trains.
         let p=i.world.xz;
@@ -71,19 +71,26 @@ fn grain(p:vec3f)->f32{
         if i.color.r>.5 && d>7. && grain(floor(i.world*21.))<smoothstep(7.,15.,d){discard;}
     } else {
         if d>10. && grain(floor(i.world*74.))<smoothstep(10.,15.,d){discard;}
-        if i.kind>=7u && i.kind<=10u {
+        if (i.kind>=7u && i.kind<=10u) || i.kind==14u || i.kind==15u {
             let p=i.local;
             alb*=.86+.10*sin(20.*p.x+6.*p.y+sin(12.*p.z))+.10*grain(floor(p*60.))*exp(-25.*footprint);
         }
     }
-    if !front && i.kind!=14u {n=-n;}
+    if i.kind==19u {
+        // Midrib and ruffled margins catch light differently as a frond turns.
+        alb*=0.87+0.13*sin(i.local.y*70.+i.local.x*26.);
+    }
+    if i.kind>=16u && i.kind<=18u {
+        alb*=0.84+0.25*grain(floor(i.local*64.))*exp(-8.*footprint);
+    }
+    if !front && i.kind!=255u {n=-n;}
     let lambert=max(dot(n,sun),0.);
     let ambient=mix(light.ground.rgb,light.sky.rgb,clamp(.52+.46*n.y,0.,1.))+light.ambient.rgb;
     var radiance=alb*(ambient+light.key.rgb*lambert)/3.14159;
-    if i.kind<=1u {
+    if i.kind<=1u || i.kind==20u {
         let h=normalize(sun+v);radiance+=light.key.rgb*.11*pow(max(dot(n,h),0.),24.)*(.32+.68*alb);
     }
-    if (i.kind>=3u && i.kind<=6u) || i.kind==11u {
+    if (i.kind>=3u && i.kind<=6u) || i.kind==11u || i.kind==19u {
         radiance+=alb*light.key.rgb*.095*max(-dot(n,sun),0.);
     }
     return vec4f(max(radiance,vec3f(0.)),1.);

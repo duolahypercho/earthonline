@@ -250,7 +250,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--blender-camera" => a.look.blender_camera = true,
             "--no-blender-camera" => a.look.blender_camera = false,
             "--dive-site" => o.dive = Some(val()?.to_string()),
-            "--ocean-life" | "--no-ocean-life" => {}
+            "--ocean-life" | "--no-ocean-life" | "--ocean-reef" | "--no-ocean-reef" => {}
             "--water-optics" => a.look.water_optics = true,
             "--cove-detail" => a.cove_detail = true,
             "--cove-canopy" => { a.cove_detail = true; a.look.cove_canopy = true; }
@@ -314,7 +314,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     a.bench = o.bench;
     crate::apply_cove_look(&mut a, raw);
     if let Some(name) = &o.dive {
-        anyhow::ensure!(crate::ocean_habitat::STARTS.iter().any(|s| s.0 == name), "unknown swim site {name}; choose bay, black-point, pacific, channel, east-bay, south-bay or shelf");
+        anyhow::ensure!(crate::ocean_habitat::STARTS.iter().any(|s| s.0 == name), "unknown swim site {name}; choose bay, black-point, pacific, channel, east-bay, south-bay, shelf or reef");
         anyhow::ensure!(a.look.ocean_life && a.look.water, "playable dive sites require --ocean-life and water");
     }
     a.test_character = test_character.selection(a.agents)?;
@@ -1080,6 +1080,7 @@ mod window {
                 cam = ph.camera(aspect, self.args.far);
                 view.body_visible = true; // the player is in the picture
             }
+            crate::ocean_habitat::dive_lens(&self.world, &mut cam);
             let (acquired, _) = g.pacer.around(&g.ctx.device, &g.ctx.queue, || g.surface.get_current_texture());
             let surf = match acquired {
                 wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
