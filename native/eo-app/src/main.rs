@@ -390,6 +390,13 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-cloud-shadows" => a.look.sky.cloud_shadows = false,
             "--cloud-depth-haze" => a.look.sky.cloud_depth_haze = true,
             "--no-cloud-depth-haze" => a.look.sky.cloud_depth_haze = false,
+            // the natural-detail shading (eo-render look::NATURE_*; off by default, compiled out while off).
+            "--foliage-light" => a.look.nature |= eo_render::look::NATURE_FOLIAGE,
+            "--no-foliage-light" => a.look.nature &= !eo_render::look::NATURE_FOLIAGE,
+            "--temporal-lod-fade" => a.look.nature |= eo_render::look::NATURE_LOD_FADE,
+            "--no-temporal-lod-fade" => a.look.nature &= !eo_render::look::NATURE_LOD_FADE,
+            "--turf" => a.look.nature |= eo_render::look::NATURE_TURF,
+            "--no-turf" => a.look.nature &= !eo_render::look::NATURE_TURF,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
