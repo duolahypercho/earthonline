@@ -316,7 +316,12 @@ fn amb_irradiance(c: vec4<f32>, n: vec3<f32>, env: vec3<f32>) -> vec3<f32> {
         let lower = 1.0 - t;
         amb_occ_m = amb_occluder_exitance(amb_vg);
         let lit = look.hemi_sky.xyz * vs + (look.hemi_ground.xyz - amb_lobe_sky() * (1.0 - amb_vg)) * lower + amb_occ_m * (t - vs);
-        return lit + (look.ambient.xyz + env) * (vs + lower * amb_vg);
+        // the rig's rim (a directional stand-in for the sky opposite the sun, never
+        // shadowed) hidden as the sky along it is, taken from the fill it stands for
+        // (so the screen-space occlusion takes its share of it too; look_light's
+        // direct sum stays as it was, which keeps the compiled-out frame bit for bit).
+        let rim = look.rim.xyz * (max(dot(n, look.rim_dir.xyz), 0.0) * amb_rim_hidden(c, look.rim_dir.xyz));
+        return lit + (look.ambient.xyz + env) * (vs + lower * amb_vg) - rim;
     }
     let fill = look.hemi_sky.xyz * vs + look.hemi_ground.xyz * (1.0 - t + AMB_OCCLUDER * (t - vs));
     return fill + look.ambient.xyz + env * (1.0 - t + vs);
