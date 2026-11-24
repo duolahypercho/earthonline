@@ -344,7 +344,9 @@ The two rock outcrops, sponges, branching colony, kelp-column arrangement and
 baitfish use mesh generators by Maksymilian Dendura, copyright 2026, licensed
 under MIT. The source leaf shader supplies the kelp's taper, curl, width, twist,
 edge ruffling and pigment. Earth Online bakes the geometry, adds a midrib and
-adapts the animation and placement to the coastal habitat. The shipped model includes
+adapts the animation and placement to the coastal habitat. Earth Online contributors
+modeled the separate bull-kelp crowns and eelgrass shoots. Their biological
+references are listed in the provenance record. The shipped model includes
 [the original license](public/assets/ocean/reef-forms.LICENSE.txt) and a
 [provenance record](public/assets/ocean/reef-forms.provenance.json).
 [Upstream source at the pinned revision](https://github.com/Noniv/abyssal-garden/tree/a596354eff400d458bc2aeb9bdf5e0a9734b2bcf).

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { coastalKelp } from './coastal-kelp.mjs';
+import { bullKelpBed, eelgrassBed } from './coastal-plants.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const out = path.join(root, 'public/assets/ocean');
@@ -113,6 +114,8 @@ const recipes = [
   ['kelp-column', null, null],
   ['baitfish', 'meshFish()', [.36,.44,.43]],
   ['coastal-kelp', null, null],
+  ['bull-kelp-crown', bullKelpBed, null],
+  ['eelgrass-shoots', eelgrassBed, null],
 ];
 const gltf={asset:{version:'2.0',generator:'Earth Online reef cook'},scene:0,scenes:[{nodes:[]}],nodes:[],meshes:[],bufferViews:[],accessors:[],buffers:[]};
 const chunks=[];let length=0;
@@ -128,7 +131,10 @@ function accessor(array,type,components,componentType,target,bounds=false,normal
   return gltf.accessors.push(a)-1;
 }
 for(const [name,recipe,tint] of recipes){
-  const mesh = name === 'coastal-kelp' ? coastalKelp(run('big'), stems) : recipe ? run(recipe) : kelp();
+  let mesh;
+  if (typeof recipe === 'function') mesh = recipe();
+  else if (name === 'coastal-kelp') mesh = coastalKelp(run('big'), stems);
+  else mesh = recipe ? run(recipe) : kelp();
   const p=Float32Array.from(mesh.p), indices=Uint16Array.from(mesh.i);
   if (p.length/3>65535 || mesh.i.some(i=>i<0 || i>=p.length/3)) throw Error('Index overflow '+name);
   const normals=new Float32Array(p.length), colors=new Uint8Array(p.length/3*4);
@@ -161,6 +167,10 @@ await writeFile(path.join(out,'reef-forms.LICENSE.txt'),license);
 await writeFile(path.join(out,'reef-forms.provenance.json'),JSON.stringify({
   url:'/assets/ocean/reef-forms.glb',bytes:glb.length,sha256:sha(glb),author:'Maksymilian Dendura and Earth Online contributors',
   source:upstream,revision,inputs:hashes,license:'MIT',licenseFile:'reef-forms.LICENSE.txt',builder:'scripts/blender-ocean/cook-reef.mjs',
+  originalPlantMeshes: {
+    'bull-kelp-crown': {author:'Earth Online contributors',reference:'https://farallones.noaa.gov/media/docs/201904-bull-kelp-recovery-plan.pdf'},
+    'eelgrass-shoots': {author:'Earth Online contributors',reference:'https://plants.sc.egov.usda.gov/DocumentLibrary/factsheet/pdf/fs_zoma.pdf'},
+  },
   adaptation:'Generated rock, sponge, fan and fish geometry. The source kelp-column generator and leaf shader supply blade placement, taper, width, twist, pigment and edge ruffling. The coastal variant joins blades and gas bladders to continuous sampled stipes, with per-vertex blade flex. Vertex pigments and game-scale placement are adapted to the Pacific coast.'
 },null,2)+'\n');
 console.log(gltf.meshes.map(x=>x.name).join(', '),glb.length,sha(glb));
