@@ -712,11 +712,15 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     // ---- at the glass: curtains, blinds, sheers ----
     var light_radiance = lamp_color * level * 0.3 * mix(1.0, 0.72, office);
     let lit_rooms = rd_on && SF_LIT_ROOMS && (skyu.flags.x & SKY_LIT_ROOMS) != 0u;
+    // (`--lit-rooms`) the night rig's share: the lamps' units per lux are the night
+    // rig's (a day sky in them would be hundreds of times too bright), so the
+    // photometric room comes in as the night does (`nightness`), the old level by day.
+    let lit_share = select(0.0, skyu.night.z, lit_rooms);
     if (lit_rooms) {
         // (`--lit-rooms`) a home's lamp on the street lamps' photometric scale: a white
         // surface where `illum` is 1 (1.5 m from the lamp) at RD_HOME_LUX, in the lamps'
         // units per lux without the practicals' gain (o.night carries it).
-        light_radiance = lamp_color * level * RD_HOME_LUX * skyu.bloom_w2.z / (lk_practical_gain() * LK_PI);
+        light_radiance = mix(light_radiance, lamp_color * level * RD_HOME_LUX * skyu.bloom_w2.z / (lk_practical_gain() * LK_PI), lit_share);
     }
     // (`--shop-light`) a shop room lit by its own light (its colour and its
     // window's luminance), or dark when its shop is closed; each room keeps the
@@ -799,7 +803,7 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         // (`--room-depth`) the cap on the room's level (its mean, about half its
         // light's), not on each pixel: the lamp's hot spot and the dark corners stay.
         let peak = max(max(light_radiance.x, light_radiance.y), light_radiance.z) * 0.5;
-        let over = peak / select(RD_ROOM_CAP, RD_LIT_CAP, lit_rooms);
+        let over = peak / mix(RD_ROOM_CAP, RD_LIT_CAP, lit_share);
         radiance = radiance * pow(1.0 + over * over * over, -1.0 / 3.0);
     } else if (shop_lit < 0.0) {
         let peak = max(max(max(radiance.x, radiance.y), radiance.z), 1e-4);
