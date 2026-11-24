@@ -9,17 +9,22 @@
 //!  * the carriageway at a weathered asphalt's albedo, one world-anchored
 //!    macro field across every lane (no tone step at the crown), wheel paths
 //!    polished smoother and lighter, an oil-drip band down each lane's middle,
-//!    the patch quilt in the road's own frame with sealed saw cuts and a lip;
+//!    the patch quilt in the road's own frame with sealed saw cuts and a lip,
+//!    the cracks' sealant as bitumen (black, glossy, a few millimetres proud)
+//!    and open cracks occluding their floor;
 //!  * the gutter pan as poured concrete with its cold joint to the asphalt and
 //!    the silt of its flow line;
-//!  * kerbs with a rounded arris and the concave corner's occlusion at the
-//!    flow line;
+//!  * kerbs with a rounded arris, chipped in pieces, and the concave
+//!    corner's occlusion at the flow line;
+//!  * markings worn through to the road in the asphalt's own texture, the
+//!    road's cracks and sealant running on through them;
 //!  * scored walks whose slabs settle each at its own small tilt, with dark
 //!    recessed joints, a few cracked slabs and broken corners;
 //!  * the plazas' paving from its scan, stochastically tiled (the random
 //!    setts: no repeat, no rails), parallax-occlusion mapped near the eye and
 //!    self-shadowed toward the sun (a march over the height near, the
-//!    relief's mean masking far), crowns polished along the foot traffic;
+//!    relief's mean masking far), crowns polished along the foot traffic,
+//!    at the measured albedo of its material;
 //!  * in the wet: the asphalt soaked to the film's tone, water standing where
 //!    the relief (ruts, birdbaths, the gutter's flow line) is deeper than
 //!    what has drained, the markings wet and glossy.
@@ -49,6 +54,10 @@ pub const TRACK_SHARE: f64 = 0.7;
 /// The rounded arris of a kerb as a share of the kerb height (a shading
 /// choice: a tooled, worn edge of a few centimetres).
 pub const ARRIS_SHARE: f64 = 0.17;
+/// How much further down the face a broken-out piece of the arris reaches
+/// than the rounded edge (a multiple of its radius: chips of a few
+/// centimetres; a shading choice from the look of SF kerbs).
+pub const ARRIS_BREAK: f64 = 2.2;
 /// A scored slab's settlement tilt (radians, one standard deviation-ish
 /// either way), and the share of heaved slabs (a shading choice from the
 /// look of SF walks: most within a degree, a few lifted by roots).
@@ -121,6 +130,11 @@ pub const POND_DRAIN_M: f64 = 0.0065;
 pub fn wet_darken() -> f64 {
     crate::cc0::ASPHALT_ALBEDO as f64 / ASPHALT_ALBEDO
 }
+/// How far the wet film flattens the asphalt's fine relief toward its own
+/// plane (at full wetness): a film of 0.2-0.5 mm over a dense-graded mix's
+/// mean texture depth of about 0.6 mm (ASTM E965) fills a little over half of
+/// it (a shading choice inside that band).
+pub const WET_FILL: f64 = 0.55;
 /// The gutter pan's concrete soaks as the wet layer has it (no extra).
 pub const GUTTER_WET_DARKEN: f64 = 1.0;
 /// Thermoplastic and paint do not soak: the film darkens them only by its
@@ -128,6 +142,47 @@ pub const GUTTER_WET_DARKEN: f64 = 1.0;
 /// non-porous surface) and makes them glossy (a water film's roughness).
 pub const PAINT_WET_DARKEN: f64 = 0.9;
 pub const PAINT_WET_ROUGH: f64 = 0.15;
+
+/// Crack sealant (hot-poured rubberised bitumen, ASTM D6690, laid as an
+/// overband over the routed crack): fresh, its reflectance is the binder's
+/// (LBNL Cool Pavements: new asphalt 0.04-0.05, the black of its binder);
+/// oxidised and holding the road's dust it greys toward a weathered
+/// surface's low end. Its finish is a cast film, near-smooth: glossy fresh
+/// and dulled as it ages (shading choices from the look of SF's sealed
+/// streets, still smoother than the open-textured binder round it).
+pub const SEAL_ALBEDO: f64 = 0.04;
+pub const SEAL_ALBEDO_AGED: f64 = 0.085;
+pub const SEAL_ROUGH: f64 = 0.3;
+pub const SEAL_ROUGH_AGED: f64 = 0.56;
+/// The overband's crown over the road (m): squeegeed bands stand 1/16-1/8 in
+/// proud (Caltrans Maintenance Manual, crack sealing), the middle of it.
+pub const SEAL_PROUD_M: f64 = 0.0024;
+/// How much of the sky an open crack's walls hide from its floor (the
+/// specular occlusion's input at the crack: a few millimetres wide, as deep).
+pub const CRACK_OCCLUSION: f64 = 0.7;
+/// Worn marking paint: the share of a line's area worn through to the road,
+/// on a lately re-striped line and on an old one (between them the
+/// weathering's slow age field), and the band at the line's edges where the
+/// wear is heavier (the edge of a film chips first) (shading choices from
+/// the look of SF's markings).
+pub const PAINT_WORN: f64 = 0.06;
+pub const PAINT_WORN_OLD: f64 = 0.22;
+pub const PAINT_EDGE_M: f64 = 0.012;
+/// A line's finish: thermoplastic is a cast resin film with its glass beads,
+/// smooth when laid and chalking as it weathers (a shading choice: the fresh
+/// film smoother than the road's polished wheel paths, so a line in a low
+/// sun's glare off the road glares with it and stays read).
+pub const PAINT_ROUGH: f64 = 0.4;
+pub const PAINT_ROUGH_AGED: f64 = 0.52;
+/// The open spaces' paving at its material's reflectance (the plaza styles'
+/// display tones are 0.45-0.7 linear): grey granite setts (granite's solar
+/// reflectance 0.25-0.40 clean, dark grey setts soiled by foot traffic and
+/// the street's dust below its low end: 0.2-0.25), clay brick pavers (LBNL Cool Pavements: brick about 0.3) and grey
+/// concrete pavers (ACPA / LBNL weathered concrete 0.20-0.30, the upper end:
+/// pavers are swept).
+pub const SETT_ALBEDO: f64 = 0.22;
+pub const BRICK_PAVER_ALBEDO: f64 = 0.28;
+pub const CONCRETE_PAVER_ALBEDO: f64 = 0.3;
 
 /// The street dimensions the pass reads from the standards table.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -170,6 +225,7 @@ pub fn wgsl() -> String {
         ("SP_PARKING_M", d.parking_m),
         ("SP_TRACK_M", d.vehicle_m * TRACK_SHARE),
         ("SP_ARRIS_SHARE", ARRIS_SHARE),
+        ("SP_ARRIS_BREAK", ARRIS_BREAK),
         ("SP_SLAB_TILT", SLAB_TILT_RAD),
         ("SP_SLAB_HEAVE_SHARE", SLAB_HEAVE_SHARE),
         ("SP_SLAB_CRACK_SHARE", SLAB_CRACK_SHARE),
@@ -194,9 +250,24 @@ pub fn wgsl() -> String {
         ("SP_GUTTER_DIP_M", GUTTER_DIP_M),
         ("SP_POND_DRAIN_M", POND_DRAIN_M),
         ("SP_WET_DARKEN", wet_darken()),
+        ("SP_WET_FILL", WET_FILL),
         ("SP_CONCRETE_WET_DARKEN", GUTTER_WET_DARKEN),
         ("SP_PAINT_WET_DARKEN", PAINT_WET_DARKEN),
         ("SP_PAINT_WET_ROUGH", PAINT_WET_ROUGH),
+        ("SP_SEAL_ALBEDO", SEAL_ALBEDO),
+        ("SP_SEAL_ALBEDO_AGED", SEAL_ALBEDO_AGED),
+        ("SP_SEAL_ROUGH", SEAL_ROUGH),
+        ("SP_SEAL_ROUGH_AGED", SEAL_ROUGH_AGED),
+        ("SP_SEAL_PROUD_M", SEAL_PROUD_M),
+        ("SP_CRACK_OCCLUSION", CRACK_OCCLUSION),
+        ("SP_PAINT_WORN", PAINT_WORN),
+        ("SP_PAINT_WORN_OLD", PAINT_WORN_OLD),
+        ("SP_PAINT_EDGE_M", PAINT_EDGE_M),
+        ("SP_PAINT_ROUGH", PAINT_ROUGH),
+        ("SP_PAINT_ROUGH_AGED", PAINT_ROUGH_AGED),
+        ("SP_SETT_ALBEDO", SETT_ALBEDO),
+        ("SP_BRICK_PAVER_ALBEDO", BRICK_PAVER_ALBEDO),
+        ("SP_CONCRETE_PAVER_ALBEDO", CONCRETE_PAVER_ALBEDO),
     ] {
         s.push_str(&format!("const {k}: f32 = {};\n", f(v)));
     }
@@ -226,6 +297,25 @@ mod tests {
             assert!(w.contains(&format!("const {k}: f32 = ")), "{k}");
         }
         assert!((0.10..=0.18).contains(&ASPHALT_ALBEDO), "inside the weathered band");
+    }
+
+    /// The sealant is darker and smoother than the road it seals (the tar
+    /// snakes catch the sky), fresh more than aged; the open spaces' paving
+    /// sits inside its materials' measured bands, darker than its display tones.
+    #[test]
+    fn sealant_and_paving_are_their_materials() {
+        assert!(SEAL_ALBEDO < SEAL_ALBEDO_AGED && SEAL_ALBEDO_AGED < ASPHALT_ALBEDO);
+        assert!(SEAL_ROUGH < ASPHALT_ROUGH_POLISHED && SEAL_ROUGH < SEAL_ROUGH_AGED && SEAL_ROUGH_AGED < ASPHALT_ROUGH);
+        assert!(SEAL_PROUD_M > 0.0015 && SEAL_PROUD_M < 0.0032, "1/16-1/8 in");
+        assert!(PAINT_WORN < PAINT_WORN_OLD && PAINT_WORN_OLD < 0.5);
+        assert!(PAINT_ROUGH < PAINT_ROUGH_AGED && PAINT_ROUGH_AGED <= ASPHALT_ROUGH_POLISHED);
+        for a in [SETT_ALBEDO, BRICK_PAVER_ALBEDO, CONCRETE_PAVER_ALBEDO] {
+            assert!((0.2..=0.4).contains(&a), "{a}");
+        }
+        let w = wgsl();
+        for k in ["SP_SEAL_ALBEDO", "SP_SEAL_ROUGH", "SP_CRACK_OCCLUSION", "SP_PAINT_WORN", "SP_SETT_ALBEDO"] {
+            assert!(w.contains(&format!("const {k}: f32 = ")), "{k}");
+        }
     }
 
     /// The soaked asphalt comes back to the scans' aged asphalt (no lifted

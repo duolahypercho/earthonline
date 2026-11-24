@@ -246,6 +246,10 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
     // and seen far: their scan fades out between 150 and 220 m, where its mips
     // are close to their mean.
     var vfade = 1.0;
+    if (SF_STREET_PBR && mode == CC0_MODE_PLAZA) {
+        // (`--street-pbr`, street_pbr.wgsl) the paving at its material's albedo, at every distance
+        (*s).albedo = (*s).albedo * sp_pave_cal(layer);
+    }
     if (vertex_colour) {
         vfade = 1.0 - smoothstep(150.0, 220.0, dist);
         if (vfade <= 0.0) {
@@ -559,7 +563,9 @@ fn cc0_street_concrete(f: ptr<function, StTap>, p: vec2<f32>, gx: vec2<f32>, gy:
         // (`--street-pbr`, street_pbr.wgsl) the pavers' scan stochastically tiled (the random setts),
         // in relief and self-shadowed, through the same post terms as below.
         let pv = sp_pave(la, p, gx, gy, world, la == CC0_L_COBBLESTONE_FLOOR_08);
-        cc0_p_plaza = vec4<f32>(pv.alb, 0.92);
+        // at its material's albedo: the post's 0.92 share of the pattern carries the scale over the tint's concrete base
+        let cal = max((sp_pave_cal(la) / max(ST_CONCRETE_BASE, 1e-3) - 0.08) / 0.92, 0.05);
+        cc0_p_plaza = vec4<f32>(pv.alb * cal, 0.92);
         cc0_p_n = vec3<f32>(pv.tn, 1.0);
         (*f).albedo = mean;
         (*f).rough = pv.rough * mean_rough;
@@ -859,7 +865,14 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     let fw = length(gxa) + length(gya);
                     let seam = 1.0 - smoothstep(0.02, 0.02 + fw, abs(edge - 0.03));
                     cc0_p_dark = cc0_p_dark * 0.74 * (1.0 - 0.35 * seam);
-                    cc0_p_rough = vec2<f32>(mean_rough * 0.82, max(cc0_p_rough.y, 1.0));
+                    // (`--street-pbr`: the hot-mix as open-textured as the road round it, no sheen of its own)
+                    cc0_p_rough = vec2<f32>(mean_rough * select(0.82, 1.0, SF_STREET_PBR), max(cc0_p_rough.y, 1.0));
+                    if (SF_STREET_PBR) {
+                        // (`--street-pbr`, street_pbr.wgsl) the saw cut sealed with a bead of binder, drawn as bitumen
+                        let ea = d1.x - abs(along) < d1.y - abs(across);
+                        let out_dir = select(px * sign(across), ax * sign(along), ea);
+                        sp_note_seal(seam, seam, 0.5 + 0.5 * fract(seed * 7.31), (0.03 - edge) / 0.02, 0.02, out_dir);
+                    }
                 }
             } else if (kind == CC0_DK_CRACK || kind == CC0_DK_WALK_CRACK) {
                 if ((asphalt && kind == CC0_DK_CRACK) || (walk && kind == CC0_DK_WALK_CRACK)) {

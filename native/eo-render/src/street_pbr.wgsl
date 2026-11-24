@@ -10,18 +10,23 @@
 //   the carriageway  calibrated to weathered asphalt, one world-anchored tone
 //                    field over every lane, polished and rutted wheel paths,
 //                    the oil band down each lane's middle, a cold joint at
-//                    the pan; in the wet, soaked darker, water standing in
-//                    the ruts and birdbaths deeper than what has drained;
+//                    the pan; the cracks' sealant as bitumen (glossy, proud)
+//                    and open cracks in their own shadow; in the wet, soaked
+//                    darker, the film filling its fine texture, water standing
+//                    in the ruts and birdbaths deeper than what has drained;
 //   the gutter pan   poured concrete holding the street's silt, the run-off
 //                    standing along its flow line;
-//   the kerb         a rounded arris, the flow line's concave corner;
+//   the kerb         a rounded arris chipped in pieces, the flow line's
+//                    concave corner;
 //   the walk         slabs each its own pour and tilt, a few replaced or
 //                    stained, dark recessed joints, cracked slabs, broken
 //                    corners, asphalt repairs;
 //   the plazas       the paving's scan stochastically tiled, in relief
 //                    (parallax occlusion) and self-shadowed toward the sun
-//                    (cc0.wgsl calls `sp_pave`);
-//   the paint        wet with the street (draw.wgsl calls `sp_paint_wet`).
+//                    (cc0.wgsl calls `sp_pave`), at its material's albedo;
+//   the paint        worn through to the road, cracked and sealed with it,
+//                    and wet with the street (draw.wgsl calls `sp_paint_wear`,
+//                    `sp_paint_wet`).
 // Every detail is filtered to its mean once it is under a few pixels.
 
 const SP_UP: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
@@ -58,9 +63,66 @@ fn sp_lean(s: ptr<function, Surface>, d: vec2<f32>) {
     (*s).n = normalize((*s).n + vec3<f32>(d.x, 0.0, d.y));
 }
 
+// ---- the cracks and their sealant ------------------------------------------------
+
+// The road's cracks under the fragment, noted by the stages that draw them
+// (weathering.wgsl `wx_cracks`, cc0.wgsl's patch seams) and drawn as their
+// own materials by `sp_crack_materials`: a sealed crack's hot-poured binder
+// (cover, age 0 fresh .. 1 oxidised and dusted, the fragment's signed distance
+// over the bead's half-width, that half-width in metres) along `sp_seal_dir`
+// (the crack's across direction, world xz) with the thick bead's own cover in
+// `sp_seal_bead`; an open crack's cover in `sp_crack`.
+var<private> sp_seal: vec4<f32> = vec4<f32>(0.0);
+var<private> sp_seal_dir: vec2<f32> = vec2<f32>(0.0);
+var<private> sp_seal_bead: f32 = 0.0;
+var<private> sp_crack: f32 = 0.0;
+
+fn sp_note_seal(k: f32, bead: f32, age: f32, sd: f32, hw: f32, dir: vec2<f32>) {
+    if (k > sp_seal.x) {
+        sp_seal = vec4<f32>(k, age, sd, hw);
+        sp_seal_dir = dir;
+        sp_seal_bead = bead;
+    }
+}
+
+fn sp_note_crack(k: f32) {
+    sp_crack = max(sp_crack, clamp(k, 0.0, 1.0));
+}
+
+// The noted cracks as materials, on the surface `a` / `rough` / `lean` the
+// caller composed (the carriageway, or a marking over it):
+//  * sealant: hot-poured rubberised bitumen, its own albedo whatever the road's
+//    (black fresh, greying as it oxidises and takes the road's dust) and its
+//    own finish: a cast, near-smooth film, glossy fresh and dulled with age, so
+//    a low sun or a bright sky down the street draws the "tar snakes" as bright
+//    ribbons across a matte road. The overband stands a few millimetres proud
+//    as a rounded cap: its sides lean out;
+//  * an open crack: its walls hide the sky from its floor (the specular
+//    occlusion reads `ao`), so the crack stays dark under the road's sheen.
+fn sp_crack_materials(s: ptr<function, Surface>, a: ptr<function, vec3<f32>>, rough: ptr<function, f32>, lean: ptr<function, vec2<f32>>, q: vec2<f32>, fw: f32) {
+    if (sp_seal.x > 0.0) {
+        let k = clamp(sp_seal.x, 0.0, 1.0);
+        // along the bead: dusted and scuffed stretches, and the pour's own wrinkles
+        let dust = mix(0.5, st_noise(q / 0.45 + 3.3) * 0.7 + st_noise(q / 0.12 + 8.1) * 0.3, wx_keep(0.12, fw));
+        let age = clamp(sp_seal.y + (dust - 0.5) * 0.6, 0.0, 1.0);
+        let tone = mix(SP_SEAL_ALBEDO, SP_SEAL_ALBEDO_AGED, age);
+        *a = mix(*a, vec3<f32>(tone) * vec3<f32>(1.0, 0.99, 0.97), k);
+        *rough = mix(*rough, mix(SP_SEAL_ROUGH, SP_SEAL_ROUGH_AGED, age), k);
+        let hw = max(sp_seal.w, 1e-3);
+        let x = clamp(sp_seal.z, -1.0, 1.0);
+        // h(x) = proud (1 - x^2) over the half-width: the slope 2 proud x / hw
+        let wr = (st_noise(q / 0.025 + 1.9) - 0.5) * 0.12 * wx_keep(0.025, fw);
+        *lean = *lean + sp_seal_dir * (2.0 * SP_SEAL_PROUD_M * x / hw + wr) * sp_seal_bead * wx_keep(hw, fw);
+    }
+    if (sp_crack > 0.0) {
+        (*s).ao = (*s).ao * (1.0 - SP_CRACK_OCCLUSION * sp_crack);
+        *rough = min(1.0, *rough + 0.1 * sp_crack);
+    }
+}
+
 // ---- the carriageway -----------------------------------------------------------
 
-fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, fw: f32) {
+fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_geom: vec3<f32>, fw: f32) {
     let q = world.xz;
     // The earlier composition's tone round the CC0 base (cc0.rs ASPHALT_ALBEDO,
     // the weathered band's lower end), lifted to the band's middle.
@@ -126,17 +188,26 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, fw
             dip = max(dip, depth * max(1.0 - (dt / w) * (dt / w), 0.0) * in_lane);
         }
     }
+    // the cracks the weathering drew: sealant as bitumen, open ones in their own shadow
+    sp_crack_materials(s, &a, &rough, &lean, q, fw);
     // A lid, grate or plate laid in the road (cc0.wgsl's decals: cast iron,
     // steel, a concrete-filled vault) keeps its own material: its tone, and
     // the low roughness of its worn metal that mirrors the sky down a street.
     let lid = clamp(cc0_p_alb.w, 0.0, 1.0);
     a = mix(a, (*s).albedo, lid);
-    rough = mix(clamp(rough, 0.3, 1.0), (*s).rough, lid);
+    rough = mix(clamp(rough, min(SP_SEAL_ROUGH, 0.3), 1.0), (*s).rough, lid);
     sp_wet_relief(&a, &rough, q, dip * (1.0 - lid), fw, SP_WET_DARKEN);
     (*s).albedo = a;
     (*s).rough = rough;
     if (any(lean != vec2<f32>(0.0))) {
         sp_lean(s, lean * (1.0 - lid));
+    }
+    // In the wet the film fills the aggregate's texture (a few tenths of a
+    // millimetre of water over a dense mix's ~0.6 mm texture depth): the
+    // fine relief under it no longer faces the eye stone by stone, so the
+    // detail normal eases toward the film's (no salt-and-pepper glints).
+    if (sky_on(skyu.flags.x, SKY_WET) && skyu.wet.x > 0.02) {
+        (*s).n = normalize(mix((*s).n, n_geom, SP_WET_FILL * skyu.wet.x * (1.0 - lid)));
     }
 }
 
@@ -278,7 +349,9 @@ fn sp_gutter(s: ptr<function, Surface>, world: vec3<f32>, kd: f32, tint: vec3<f3
         let gn = normalize(g);
         along = dot(world.xz, vec2<f32>(gn.y, -gn.x));
     }
-    let flow = 1.0 - smoothstep(0.0, ST_GUTTER_WIDTH * 0.7, max(kd, 0.0));
+    // (the silt's reach across the pan wanders with the run-off's reaches and the sweeper's last pass)
+    let reach_w = ST_GUTTER_WIDTH * (0.3 + 0.6 * st_noise(vec2<f32>(along / 3.1, 2.7)));
+    let flow = 1.0 - smoothstep(0.0, reach_w, max(kd, 0.0));
     let streak = mix(0.6, st_noise(vec2<f32>(along / 2.6, kd / 0.06) + 4.4), wx_keep(0.06, fw));
     a = a * (1.0 - 0.38 * flow * (0.55 + 0.45 * streak));
     var rough = clamp(0.9 * mix(1.0, t.rough / ST_CONCRETE_MEAN_ROUGH, 0.5) - 0.08 * flow, 0.5, 1.0);
@@ -309,20 +382,32 @@ fn sp_kerb(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_geo
             return;
         }
         fh = normalize(fh);
+        // along the kerb (its sign fixed on the world, so a chip is the same seen from either side)
+        var ft = vec3<f32>(-fh.z, 0.0, fh.x);
+        if (ft.x < 0.0 || (ft.x == 0.0 && ft.z < 0.0)) {
+            ft = -ft;
+        }
+        let along = dot(world, ft);
+        // the arris chipped by kerbing tyres and bumpers: broken out in pieces a
+        // few centimetres to a decimetre long (the break reaching further down
+        // the face), at no repeat along the kerb; each break a fresh fracture,
+        // lighter and rougher than the weathered skin round it
+        let cn = st_noise(vec2<f32>(along / 0.23, 4.1)) * 0.7 + st_noise(vec2<f32>(along / 0.071, 9.3)) * 0.3;
+        let chip = smoothstep(0.6, 0.76, cn) * wx_keep(0.05, fw);
+        let rr = r * (1.0 + SP_ARRIS_BREAK * chip);
         // the arris: over its radius below the top the face turns up toward the kerb top
-        let t = clamp((kd - (CC0_CURB_H - r)) / r, 0.0, 1.0);
-        let ang = t * 1.15;
+        let t = clamp((kd - (CC0_CURB_H - rr)) / rr, 0.0, 1.0);
+        let ang = t * mix(1.15, 0.8, chip);
         let bend = fh * cos(ang) + SP_UP * sin(ang) - fh;
         (*s).n = normalize((*s).n + bend * keep);
-        // its worn edge shows the aggregate: lighter, smoother
-        (*s).albedo = (*s).albedo * (1.0 + 0.12 * t * keep);
+        // its worn edge shows the aggregate: lighter, smoother; a break lighter still and rough
+        (*s).albedo = (*s).albedo * (1.0 + (0.12 + 0.16 * chip) * t * keep);
+        (*s).rough = min(1.0, (*s).rough + 0.1 * chip * t);
         // the concave corner with the gutter: occluded, with the grit it holds
         let c = 1.0 - smoothstep(0.0, CC0_CURB_H * 0.35, kd);
         (*s).ao = (*s).ao * (1.0 - 0.5 * c);
         (*s).albedo = (*s).albedo * (1.0 - 0.18 * c);
         // tyre scuffs: black rubber rubbed along the face a few centimetres up
-        let ft = vec3<f32>(-fh.z, 0.0, fh.x);
-        let along = dot(world, ft);
         let band = smoothstep(0.01, 0.025, kd) * (1.0 - smoothstep(0.06, 0.1, kd));
         let sc = smoothstep(0.6, 0.78, st_noise(vec2<f32>(along / 0.9, 1.3))) * band;
         let scuff = mix(0.12 * band, sc, wx_keep(0.05, fw));
@@ -452,7 +537,7 @@ fn sp_slabs(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, kd: f32
 fn sp_street(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32, kd: f32, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, tint: vec3<f32>) {
     let fw = wx_fw(dpx, dpy);
     if (cls == SC_ASPHALT || cls == SC_PAD) {
-        sp_asphalt(s, world, cls, kd, fw);
+        sp_asphalt(s, world, cls, kd, n_geom, fw);
     } else if (cls == SC_GUTTER) {
         sp_gutter(s, world, kd, tint, dpx, dpy, fw);
     } else if (cls == SC_KERB_FACE || cls == SC_KERB_TOP) {
@@ -639,6 +724,24 @@ fn sp_hex_plain() -> SpHex {
     return h;
 }
 
+// The open spaces' paving at its material's reflectance: the style's vertex
+// colour (plaza-paving.js's display tones, a linear 0.45-0.7) scaled, luma for
+// luma, to the measured albedo of the material its scan is (grey granite setts,
+// clay brick pavers, concrete pavers; street_pbr.rs), each bay's jitter kept.
+fn sp_pave_cal(la: i32) -> f32 {
+    var want = SP_SETT_ALBEDO;
+    var tone = CC0_PLAZA_STONE;
+    if (la == CC0_L_HERRINGBONE_PAVEMENT) {
+        want = SP_BRICK_PAVER_ALBEDO;
+        tone = CC0_PLAZA_BRICK;
+    } else if (la == CC0_L_PATTERNED_CONCRETE_PAVERS) {
+        want = SP_CONCRETE_PAVER_ALBEDO;
+        tone = CC0_PLAZA_CONCRETE;
+    }
+    let l = dot(tone, CC0_LUMA);
+    return select(1.0, want / l, l > 0.0);
+}
+
 // The paving at `p` (world xz, metres; `gx`/`gy` its screen derivatives) from
 // scan layer `la`. Near the eye the scan's own tiling (whole stones, as laid);
 // from SP_HEX_NEAR out, where its repeat would line up into rails, the
@@ -778,6 +881,76 @@ fn sp_pave(la: i32, p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, world: vec3<f32>
         sp_sun_vis = vis;
     }
     return o;
+}
+
+// ---- worn paint (draw.wgsl, the street paint) ------------------------------------------
+
+// Marking paint worn by the traffic, after the weathering's soil and tyre
+// streaks (draw.wgsl, `--grime` on): a line is a film over the asphalt, and
+// what wears it away first are the tops of the asphalt's aggregate under it,
+// so where it is worn the road shows through in the road's own texture (the
+// asphalt scan at the fragment, the carriageway's tone and finish), in
+// patches a few decimetres long drawn out along the line by the tyres, more
+// at the line's ragged edges and on older lines (the weathering's slow age
+// field); the road's cracks run on through the paint (open ones crack it,
+// sealed ones are sealed over it, as a crew seals a street). Each term goes
+// to its mean cover once it is under a pixel. `an`: the marking's across
+// coordinate (0..1).
+fn sp_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, an: f32, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let fw = wx_fw(dpx, dpy);
+    let q = world.xz;
+    let g = wx_kerb_grad();
+    let gl = length(g);
+    var along = vec2<f32>(1.0, 0.0);
+    var de = 1.0;
+    if (gl > 0.05) {
+        along = vec2<f32>(-g.y, g.x) / gl;
+        if (an >= 0.0) {
+            de = min(clamp(an, 0.0, 1.0), 1.0 - clamp(an, 0.0, 1.0)) / gl;
+        }
+    }
+    let u = dot(q, along);
+    let v = dot(q, vec2<f32>(-along.y, along.x));
+    let age = smoothstep(0.2, 0.8, st_noise(q / 17.0 + 2.9));
+    // the worn share here: the line's age, patches drawn out along it, its ragged edges
+    let p1 = mix(0.5, st_noise(vec2<f32>(u / 0.9, v / 0.28) + 3.1), wx_keep(0.28, fw));
+    let p2 = mix(0.5, st_noise(vec2<f32>(u / 0.3, v / 0.1) + 8.4), wx_keep(0.1, fw));
+    let edge = 1.0 - smoothstep(0.0, SP_PAINT_EDGE_M, de);
+    let wear = clamp(mix(SP_PAINT_WORN, SP_PAINT_WORN_OLD, age) + (p1 - 0.5) * 0.5 + (p2 - 0.5) * 0.25 + 0.3 * edge * wx_keep(SP_PAINT_EDGE_M, fw), 0.0, 1.0);
+    // the asphalt under the line: its scan at the fragment, as the carriageway draws it
+    let k = 1.0 / ST_ASPHALT_TILE;
+    let t = st_tap(q * k, dpx.xz * k, dpy.xz * k, 0);
+    let rel = clamp(t.albedo / ST_ASPHALT_MEAN, vec3<f32>(0.6), vec3<f32>(1.6));
+    let road = CC0_ASPHALT_TINT * SP_ASPHALT_ALBEDO * rel;
+    // which of it reaches through: the aggregate's tops first (the scan's least
+    // occluded texels), decorrelated by the stones' own scatter
+    let top = clamp(0.5 + (t.ao - ST_ASPHALT_MEAN_AO) * 1.5, 0.0, 1.0) * 0.6 + st_noise(q / 0.014 + 5.5) * 0.4;
+    let worn = mix(wear, smoothstep(1.0 - wear - 0.06, 1.0 - wear + 0.06, top), wx_keep(0.03, fw));
+    var a = mix((*s).albedo, road, worn);
+    // the line's own finish: a cast resin film, smooth fresh and chalking with
+    // age (the weathering's soil, chips and tyre polish kept round it), so in a
+    // low sun's glare off the polished road the line glares with it and stays read
+    let finish = clamp(mix(SP_PAINT_ROUGH, SP_PAINT_ROUGH_AGED, age) + 0.5 * ((*s).rough - ST_PAINT_ROUGHNESS), 0.2, 1.0);
+    var rough = mix(finish, SP_ASPHALT_ROUGH, worn);
+    var lean = vec2<f32>(0.0);
+    if (wx_level() != 0u) {
+        // the road's own crack network on through the line (its frame from the
+        // line's across direction, the road's along a lane line)
+        sp_seal = vec4<f32>(0.0);
+        sp_crack = 0.0;
+        var c: Surface = *s;
+        c.albedo = a;
+        c.rough = rough;
+        wx_cracks(&c, world, g, fw, length(world - frame.cam_pos.xyz));
+        a = c.albedo;
+        rough = c.rough;
+        sp_crack_materials(s, &a, &rough, &lean, q, fw);
+    }
+    (*s).albedo = a;
+    (*s).rough = rough;
+    if (any(lean != vec2<f32>(0.0))) {
+        sp_lean(s, lean);
+    }
 }
 
 // ---- wet paint (draw.wgsl, the street paint) -------------------------------------------
