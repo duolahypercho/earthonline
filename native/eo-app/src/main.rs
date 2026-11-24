@@ -428,6 +428,9 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // the traffic by street class and hour: each lane round the focus at its class's density (eo-sim `TrafficDensity`; off by default).
             "--car-density" => crate::agents::set_car_density(true),
             "--no-car-density" => crate::agents::set_car_density(false),
+            // the cars' panels cooked taut (the paint's normals filtered) and their badges as pressed chrome emblems (eo-agents `filter_panel_normals`, agents_draw.wgsl `ag_car_badge`; off by default; needs --car-materials).
+            "--car-panels" => eo_render::agents::set_car_panels(true),
+            "--no-car-panels" => eo_render::agents::set_car_panels(false),
             "--night-photometry" => a.look.sky.night_photometry = true,
             "--no-night-photometry" => a.look.sky.night_photometry = false,
             "--lamp-bounce" => a.look.sky.lamp_bounce = true,

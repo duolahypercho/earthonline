@@ -422,7 +422,9 @@ impl AgentRuntime {
         // (`--car-contact`) the bodies' occluder boxes, cooked with them (nothing of the
         // roles draws without `--car-materials`'s shader code); (`--people-motion`) the
         // people's heads held steady in the bake.
-        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0, car_materials: args.look.car_materials > 0 || args.look.car_contact > 0, steady_heads: eo_agents::motion::steady_heads() };
+        // (`--car-panels`) the panels' filter and the badges, cooked with the cars' materials.
+        let car_materials = args.look.car_materials > 0 || args.look.car_contact > 0;
+        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0, car_materials, car_panels: car_materials && eo_render::agents::car_panels(), steady_heads: eo_agents::motion::steady_heads() };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-load".into())
