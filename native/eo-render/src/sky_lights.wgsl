@@ -246,10 +246,37 @@ fn lt_cine_lamp(l: ptr<function, SkyLight>, head: vec3<f32>, h: f32, tint: u32, 
     (*l).range = h * LT_CINE_RANGE_MH;
 }
 
+// ---- (`--night-photometry`; eo-sky `lit_fog::luminaire_shape`) ----
+// A full-cutoff street luminaire (SF's LED cobra heads and the fallback's
+// cobras and columns) sends little toward an eye near its horizontal plane:
+// its candela falls from the batwing's peak to none at 90 deg from the
+// nadir (IES cutoff classification), the shape the lit fog gives its tail.
+// The sprite's lens, air light and glare take the luminaire's intensity
+// toward the eye, not its nadir intensity (the lamps far down a long street
+// no longer show at full strength and sum to a wedge); the lens never under
+// `LT_EYE_LENS_FLOOR` of the nadir (INFERRED: the optics' edge and housing
+// glow a few per cent, so a row of far lamps still reads as dots). A globe,
+// a banner pendant, a landmark's and a bore's lamps keep their nadir.
+const LT_EYE_FULL_DEG: f32 = 72.0;
+const LT_EYE_TAIL_POWER: f32 = 3.0;
+const LT_EYE_LENS_FLOOR: f32 = 0.03;
+
+/// The luminaire at `head`'s intensity toward the eye over its nadir's, in [floor, 1].
+fn lt_eye_share(head: vec3<f32>) -> f32 {
+    let d = normalize(skyu.eye.xyz - head);
+    let c = -d.y;
+    if (c <= 0.0) {
+        return LT_EYE_LENS_FLOOR;
+    }
+    let tail = pow(min(c / cos(LT_EYE_FULL_DEG * 0.017453292), 1.0), LT_EYE_TAIL_POWER);
+    return clamp((1.0 + 1.5 * (1.0 - c * c)) * tail, LT_EYE_LENS_FLOOR, 1.0);
+}
+
 /// A street lamp into the frame's lights (near) and the luminaires (to the
 /// sprite reach). `head` is the luminaire (the lens; the source may stand
-/// above it).
-fn lt_emit(l: SkyLight, head: vec3<f32>) {
+/// above it); `cutoff` a full-cutoff street luminaire (`--night-photometry`:
+/// its sprite carries its intensity toward the eye, `lt_eye_share`).
+fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool) {
     let near = lt_visible(l.pos, l.range);
     if (near) {
         lt_push(l);
@@ -271,9 +298,60 @@ fn lt_emit(l: SkyLight, head: vec3<f32>) {
                 var s = l;
                 // bit 0: shaded by the clusters (no pool decal); bit 1: by the water (its glitter in the sea).
                 s.pad = select(0.0, 1.0, near && v.z - l.range <= skyu.cluster.y) + select(0.0, 2.0, by_water);
+                if (LT_NIGHT_PHOTOMETRY && cutoff && (skyu.flags.x & LT_NIGHT_PHOTOMETRY_BIT) != 0u) {
+                    // (`--night-photometry`) its share toward the eye in the fraction (sky_fx.wgsl `fx_eye_share`).
+                    s.pad = s.pad + 0.999 * (1.0 - lt_eye_share(head));
+                }
                 lt_sprites[k] = s;
             }
         }
+    }
+}
+
+// ---- (`--lamp-bounce`; eo-sky `lamp_bounce`, sky.rs `lamp_bounce_wgsl`) ----
+// A street lamp's pool lights what stands round it: the street returns
+// `GROUND_REFLECTANCE` of the lamp's flux as an upward Lambertian emitter
+// (one bounce of instant radiosity), standing LT_BOUNCE_DEPTH_MH mounting
+// heights under the pool's centre so the pool reads as a disc at its own
+// level and a point far off. Shaded as a light of a hemisphere's cone
+// (sky_light.wgsl kinds from 3: smoothstep(0, 1, cos), ~ the cosine) with
+// its lobe widened by `size` (the pool's diameter squared: a broad source,
+// no glint); no shadow map (light_shadow.wgsl `ls_pads`: -1, the surface's
+// occlusion only), no sprite, no lit fog, no streak. Near the eye only
+// (faded out from LT_BOUNCE_NEAR_M to LT_BOUNCE_FAR_M, where the rig's
+// unlit fill stands for the street's inter-reflection), so the clusters'
+// cap never drops it in a far cluster and keeps it in the next.
+
+fn lt_bounce_on() -> bool {
+    return LT_LAMP_BOUNCE && (skyu.flags.x & LT_LAMP_BOUNCE_BIT) != 0u;
+}
+
+/// The pool of a street luminaire at `head`, `h` m over the street, of nadir
+/// intensity `i_nadir` (irradiance units at 1 m) and colour `color`.
+fn lt_bounce(head: vec3<f32>, h: f32, i_nadir: f32, color: vec3<f32>) {
+    if (!lt_bounce_on() || h <= 0.0 || i_nadir <= 0.0) {
+        return;
+    }
+    let pool = head - vec3<f32>(0.0, h, 0.0);
+    let fade = smoothstep(LT_BOUNCE_FAR_M, LT_BOUNCE_NEAR_M, distance(pool, skyu.eye.xyz));
+    if (fade <= 0.0) {
+        return;
+    }
+    let d = LT_BOUNCE_DEPTH_MH * h;
+    let reach = LT_BOUNCE_RANGE_MH * h;
+    var b: SkyLight;
+    b.pos = pool - vec3<f32>(0.0, d, 0.0);
+    b.intensity = LT_BOUNCE_I_OVER_NADIR * i_nadir * fade;
+    b.color = color;
+    b.range = sqrt(reach * reach + d * d);
+    b.dir = vec3<f32>(0.0, 1.0, 0.0);
+    b.cos_outer = 0.0;
+    b.cos_inner = 1.0;
+    b.kind = LT_BOUNCE_KIND;
+    b.size = 4.0 * d * d;
+    b.pad = 0.0;
+    if (lt_visible(b.pos, b.range)) {
+        lt_push(b);
     }
 }
 
@@ -295,7 +373,10 @@ fn lights_lamps(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else {
         l.color = lt_led(l.color);
     }
-    lt_emit(l, l.pos);
+    lt_emit(l, l.pos, l.kind == 0u);
+    if (LT_LAMP_BOUNCE && l.kind == 0u) {
+        lt_bounce(l.pos, l.size, l.intensity, l.color); // (`--lamp-bounce`) its pool (`size`: the head's height)
+    }
 }
 
 /// `lampPracticals.sourceLiftMH`: the JS lamp practical's virtual source
@@ -347,7 +428,12 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
         let warm = p.kind == LT_MODEL_HISTORIC || p.kind == LT_MODEL_BANNER;
         lt_cine_lamp(&l, p.pos, h, select(4u, 3u, warm), p.kind == LT_MODEL_HISTORIC);
     }
-    lt_emit(l, p.pos);
+    lt_emit(l, p.pos, !tunnel && p.kind != LT_LANDMARK && p.kind != LT_MODEL_HISTORIC && p.kind != LT_MODEL_BANNER);
+    if (LT_LAMP_BOUNCE && !tunnel && p.kind != LT_LANDMARK && p.source_lift > 0.0) {
+        // (`--lamp-bounce`) its pool: the nadir at the RP-8 peak from its head's height.
+        let hb = p.source_lift / LT_JS_SOURCE_LIFT_MH;
+        lt_bounce(p.pos, hb, lt.props.z * hb * hb, l.color);
+    }
 }
 
 @compute @workgroup_size(64)
@@ -464,11 +550,12 @@ fn lights_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocati
     let total = g.x * g.y * g.z;
     // (`--shop-light`) the street lamps and vehicle lamps first, then the shop
     // windows' lights in what room is left (none without them: one pass).
-    let phases = select(1u, 2u, lt.shops.x > 0.0);
+    let phases = select(1u, 2u, lt.shops.x > 0.0 || lt_bounce_on());
     for (var phase = 0u; phase < phases; phase = phase + 1u) {
         for (var i = lid; i < n; i = i + 64u) {
             let l = lt_frame[i];
-            if (phases == 2u && (l.kind == SHOP_KIND) != (phase == 1u)) {
+            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND); // (`--lamp-bounce`: the pools with the shops, last)
+            if (phases == 2u && late != (phase == 1u)) {
                 continue;
             }
             let v = lt_view(l.pos);

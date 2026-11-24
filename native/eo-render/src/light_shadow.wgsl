@@ -224,9 +224,13 @@ fn ls_view(p: vec3<f32>) -> vec3<f32> {
 /// (`--shop-light`) A shop window's light ranks after every other light
 /// (its distance pushed past any in the clusters' reach), nearest first
 /// among them: a cluster keeps its street lamps and headlamps first.
+/// (`--lamp-bounce`) A pool's bounce ranks after the shop windows.
 fn ls_key(l: LsLight) -> vec4<u32> {
     let d = l.pos - skyu.eye.xyz;
-    let d2 = select(dot(d, d), dot(d, d) + LS_SHOP_RANK_M2, l.kind == SHOP_KIND);
+    var d2 = select(dot(d, d), dot(d, d) + LS_SHOP_RANK_M2, l.kind == SHOP_KIND);
+    if (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) {
+        d2 = dot(d, d) + 2.0 * LS_SHOP_RANK_M2;
+    }
     return vec4<u32>(bitcast<u32>(d2), bitcast<u32>(l.pos.x), bitcast<u32>(l.pos.y), bitcast<u32>(l.pos.z));
 }
 

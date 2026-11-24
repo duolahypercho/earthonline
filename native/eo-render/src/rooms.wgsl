@@ -121,6 +121,280 @@ fn rm_filtered3(pattern: vec3<f32>, mean: vec3<f32>, footprint: f32, period: f32
 // of reach, where a room gives way to the rooms' own rule at its own distance.
 var<private> rm_shop_override: vec4<f32>;
 
+// (`--night-photometry`; `rm_kit_pane` sets it for an office pane, then clears
+// it) the office floor's lighting zone the room lies in: x the zone's switch
+// roll, y its lamp's roll (colour temperature), z its dimmer roll, w 1 set.
+var<private> rm_office_zone: vec4<f32>;
+
+/// (`--night-photometry`) An office zone's lamp: lit offices seen from the
+/// street at night are not one neutral white but a tenant's mix: 4000 K
+/// fluorescent with its green bias (most), 5000 K LED panels, 3300 K warm LED
+/// retrofits, a few 5300 K and 2700 K (IES Lighting Handbook 10th ed., office
+/// lighting practice: 3000-5000 K; fluorescent triphosphor lamps sit ~+0.003
+/// Duv above the Planckian locus, a green cast).
+fn rm_office_lamp(roll: f32) -> vec3<f32> {
+    if (roll < 0.34) {
+        return RM_COOL_A * vec3<f32>(0.95, 1.03, 0.93);
+    } else if (roll < 0.58) {
+        return RM_OFFICE_A;
+    } else if (roll < 0.82) {
+        return RM_WARM_B;
+    } else if (roll < 0.92) {
+        return RM_COOL_B;
+    }
+    return RM_WARM_A;
+}
+
+// ---- (`--office-floors`) an office storey seen through its glass ----
+// Not a 3.6 m box per pane: one open-plan floor behind the whole facade, so
+// the street reads floors and tenants, not a checkerboard of cells.
+// Dimensions: a 3.6 m storey (the rooms' anchored cells), a 2.75 m finished
+// ceiling (9 ft, the US office norm; the slab, plenum and spandrel above it),
+// a curtain wall on a 1.5 m (5 ft) module with 65 mm (2.5 in) mullions, the
+// core 9-14 m behind the glass (lease depths 30-45 ft), workstation panels
+// 1.05-1.2 m high in rows 3.2 m apart with a 1.5 m aisle every 7.2 m. The
+// light: a 2x4 troffer grid, continuous linear rows or 2x2 panels per
+// tenant; a lit zone at the rooms' office level, a dark one at the egress
+// lighting's ~3 % (IBC 1008: 1 fc on the path vs. 300-500 lux on desks),
+// a lit zone's light reaching ~2.5 m into its dark neighbour. Lit floors and
+// tenants: a storey is lit by the office share (its phase), its zones mostly
+// on; a dark storey keeps a few late zones. Blinds on a third of the zones,
+// each module's roller at its own drop. INFERRED from office practice
+// (BOMA lease depths, IES RP-1 office lighting).
+const OF_STOREY: f32 = 3.6;
+const OF_CEILING: f32 = 2.75;
+const OF_SILL: f32 = 0.85;
+const OF_MODULE: f32 = 1.5;
+const OF_MULLION: f32 = 0.065;
+const OF_ROW_PITCH: f32 = 3.2;
+const OF_AISLE_PITCH: f32 = 7.2;
+const OF_EGRESS: f32 = 0.03;
+const OF_SPILL_M: f32 = 2.5;
+const OF_LIT_FLOOR_ZONES: f32 = 0.75;
+const OF_DARK_FLOOR_ZONES: f32 = 0.05;
+const OF_BLIND_ZONES: f32 = 0.35;
+
+// A box-filtered pulse train: the share of [x - w / 2, x + w / 2] (in
+// periods) covered by pulses of `duty` starting at each whole number; past a
+// period it tends to the duty, so mullions and spandrels fade to their mean.
+fn rm_pulse_int(t: f32, duty: f32) -> f32 {
+    let f = floor(t);
+    return f * duty + min(t - f, duty);
+}
+
+fn rm_pulse(x: f32, duty: f32, w: f32) -> f32 {
+    let ww = max(w, 1e-3);
+    return (rm_pulse_int(x + 0.5 * ww, duty) - rm_pulse_int(x - 0.5 * ww, duty)) / ww;
+}
+
+// a zone's lights on (0..1) on storey `storey` of the face `face`, given its floor lit (0..1)
+fn rm_of_zone(face: f32, storey: f32, zone: f32, floor_lit: f32) -> f32 {
+    let roll = rm_h(fract(face * 7.13 + storey * 0.6180339 + zone * 0.4142136), 63.0);
+    let share = mix(OF_DARK_FLOOR_ZONES, OF_LIT_FLOOR_ZONES, floor_lit);
+    return rm_ss(roll - 0.04, roll + 0.04, share);
+}
+
+// `pos` the glass fragment, `tangent` the facade's +u, `dir` the view ray in
+// the pane frame, `local`/`size` the pane (rm_kit_pane), `anchored` x, y 1
+// where the frame did not locate its window (a curtain wall's 3.6 m cells:
+// mullions and spandrels are drawn here), `face` the facade plane's hash.
+fn rm_office_floor(pos: vec3<f32>, tangent: vec3<f32>, dir: vec3<f32>, local: vec2<f32>, size: vec2<f32>, anchored: vec2<f32>, face: f32, distance: f32, env: vec4<f32>, work: vec4<f32>) -> RmOut {
+    var o: RmOut;
+    let into = max(dir.z, 0.02);
+    let d = vec3<f32>(dir.x, dir.y, into);
+    let a0 = dot(pos, tangent);
+    // the storey and the eye ray's height over its floor at the glass
+    var storey = 0.0;
+    var y0 = 0.0;
+    var ceil_h = OF_CEILING;
+    if (anchored.y > 0.5) {
+        storey = floor(pos.y / OF_STOREY);
+        y0 = pos.y - storey * OF_STOREY;
+    } else {
+        storey = floor((pos.y - local.y - OF_SILL) / OF_STOREY + 0.5);
+        y0 = local.y + OF_SILL;
+        ceil_h = max(OF_CEILING, size.y + OF_SILL + 0.05);
+    }
+    let fs = fract(face + storey * 0.377);
+    // the glass's footprint of a pixel (m), and the frame over it: spandrel, mullions
+    let glass_fp = distance * work.y / into;
+    var spandrel = 0.0;
+    if (anchored.y > 0.5) {
+        spandrel = rm_pulse((pos.y - ceil_h) / OF_STOREY, (OF_STOREY - ceil_h) / OF_STOREY, glass_fp / OF_STOREY);
+    }
+    var mullion = 0.0;
+    if (anchored.x > 0.5) {
+        mullion = rm_pulse(a0 / OF_MODULE + 0.5 * OF_MULLION / OF_MODULE, OF_MULLION / OF_MODULE, glass_fp / OF_MODULE);
+    } else if (size.x > 1.6 * OF_MODULE) {
+        // a wide window split into equal modules on its own frame
+        let wm = size.x / round(size.x / OF_MODULE);
+        mullion = rm_pulse(local.x / wm + 0.5 * OF_MULLION / wm, OF_MULLION / wm, glass_fp / wm) * step(0.5 * OF_MULLION, local.x) * step(local.x, size.x - 0.5 * OF_MULLION);
+    }
+    let frame_cov = 1.0 - (1.0 - spandrel) * (1.0 - mullion);
+
+    // ---- the ray: the core, the ceiling or the floor, a workstation row ----
+    let depth = mix(9.0, 14.0, rm_h(face, 70.0));
+    var t = depth / d.z;
+    var kind = 0u; // 0 the core, 1 the ceiling, 2 the floor, 3 a panel
+    if (d.y > 1e-4) {
+        let tc = (ceil_h - y0) / d.y;
+        if (tc < t) {
+            t = tc;
+            kind = 1u;
+        }
+    } else if (d.y < -1e-4) {
+        let tf = -y0 / d.y;
+        if (tf < t) {
+            t = tf;
+            kind = 2u;
+        }
+    }
+    let bench = rm_h(fs, 71.0) > 0.6;
+    let panel_h = select(1.2, 1.05, bench);
+    let row0 = mix(1.6, 2.6, rm_h(fs, 72.0));
+    let aisle_off = rm_h(fs, 73.0) * OF_AISLE_PITCH;
+    if (glass_fp < 0.4) {
+        for (var k = 0; k < 3; k = k + 1) {
+            let tk = (row0 + f32(k) * OF_ROW_PITCH) / d.z;
+            if (tk >= t) {
+                break;
+            }
+            let yk = y0 + d.y * tk;
+            let ak = a0 + d.x * tk;
+            if (yk > 0.0 && yk < panel_h && fract((ak + aisle_off) / OF_AISLE_PITCH) > 0.21) {
+                t = tk;
+                kind = 3u;
+                break;
+            }
+        }
+    }
+    let p = vec3<f32>(a0 + d.x * t, y0 + d.y * t, d.z * t);
+    let cos_inc = max(select(select(d.z, abs(d.y), kind == 1u || kind == 2u), d.z, kind == 3u), 0.05);
+    let fp = (distance + t) * work.y / cos_inc;
+
+    // ---- the zones' light at the hit (its own, a lit neighbour's spill) ----
+    let floor_share = min(work.x / 0.7, 1.0);
+    let floor_phase = rm_h(fract(face + storey * 0.6180339), 41.0);
+    let floor_lit = rm_ss(floor_phase - 0.05, floor_phase + 0.05, floor_share);
+    let zone_m = mix(7.2, 21.6, rm_h(fract(face + storey * 0.173), 61.0));
+    let zq = (p.x + rm_h(face, 62.0) * 30.0) / zone_m;
+    let zi = floor(zq);
+    let zf = zq - zi;
+    let on = rm_of_zone(face, storey, zi, floor_lit);
+    let spill = max(rm_of_zone(face, storey, zi - 1.0, floor_lit) * exp(-zf * zone_m / OF_SPILL_M), rm_of_zone(face, storey, zi + 1.0, floor_lit) * exp(-(1.0 - zf) * zone_m / OF_SPILL_M)) * 0.4;
+    let light = max(max(on, spill), OF_EGRESS);
+    let zs = fract(face * 3.71 + storey * 0.6180339 + zi * 0.4142136);
+    // the tenant's lamps (the floor's, a zone's own now and then) and the zone's dimmer
+    let lamp_roll = select(rm_h(fs, 64.0), rm_h(zs, 64.0), rm_h(zs, 66.0) < 0.25);
+    let lamp = rm_office_lamp(lamp_roll);
+    let level = mix(0.7, 1.0, rm_h(zs, 65.0));
+    let light_rad = lamp * level * 0.3 * 0.72;
+
+    // ---- the surfaces and fixtures ----
+    var albedo = vec3<f32>(0.5);
+    var illum = 1.0;
+    var glow = 0.0;
+    var day_face = 0.78;
+    if (kind == 1u) {
+        // the ceiling: 600 mm tiles in a T-bar grid, the tenant's fixtures
+        let tb = max(rm_pulse(p.x / 0.6 + 0.012, 0.024, fp / 0.6), rm_pulse(p.z / 0.6 + 0.012, 0.024, fp / 0.6));
+        albedo = vec3<f32>(0.78) * (1.0 - 0.35 * tb);
+        let fit = rm_h(fs, 74.0);
+        var fix = 0.0;
+        if (fit < 0.5) {
+            // 2x4 troffers (0.6 along x 1.2 deep) on a 2.4 x 3.0 m grid
+            fix = rm_pulse(p.x / 2.4, 0.25, fp / 2.4) * rm_pulse(p.z / 3.0 - 0.2, 0.4, fp / 3.0);
+        } else if (fit < 0.85) {
+            // continuous linear rows along the glass, 2.4 m apart, a break every 3.6 m
+            fix = rm_pulse(p.z / 2.4 - 0.3, 0.05, fp / 2.4) * rm_pulse(p.x / 3.6, 0.9, fp / 3.6);
+        } else {
+            // 2x2 LED panels on a 1.8 m grid
+            fix = rm_pulse(p.x / 1.8, 0.333, fp / 1.8) * rm_pulse(p.z / 1.8 - 0.3, 0.333, fp / 1.8);
+        }
+        glow = fix * 1.8 * on;
+        illum = 0.28 * (1.0 - fix);
+        day_face = 0.38;
+    } else if (kind == 2u) {
+        // carpet tile
+        albedo = mix(vec3<f32>(0.11, 0.12, 0.14), vec3<f32>(0.16, 0.15, 0.13), rm_h(fs, 75.0)) * (0.9 + 0.2 * rm_h(floor(p.x / 0.5) + floor(p.z / 0.5) * 7.0, 76.0));
+        illum = 1.0;
+        day_face = 1.0;
+    } else if (kind == 3u) {
+        // a workstation panel (fabric), its cap lit; benching: the desks' screens over it
+        let fabric = mix(mix(vec3<f32>(0.30, 0.30, 0.31), vec3<f32>(0.22, 0.25, 0.30), step(0.4, rm_h(fs, 77.0))), vec3<f32>(0.34, 0.31, 0.27), step(0.75, rm_h(fs, 77.0)));
+        let cap = rm_ss(panel_h - 0.06, panel_h - 0.03, p.y);
+        albedo = mix(fabric, vec3<f32>(0.62), cap);
+        illum = 0.75 * (0.55 + 0.45 * p.y / panel_h);
+        if (bench) {
+            let cell = floor(p.x / 1.6);
+            let scr = rm_ss(panel_h - 0.35, panel_h - 0.33, p.y) * rm_pulse(p.x / 1.6 - 0.3, 0.35, fp / 1.6);
+            albedo = mix(albedo, vec3<f32>(0.03), scr);
+            glow = scr * step(rm_h(cell + zs * 37.0, 78.0), 0.45) * 0.6 * on;
+        }
+        day_face = 0.7;
+    } else {
+        // the core wall: painted, a door every 7-9 m
+        let door_p = mix(7.0, 9.0, rm_h(fs, 79.0));
+        let door = rm_pulse(p.x / door_p, 1.0 / door_p, fp / door_p) * step(p.y, 2.1);
+        albedo = mix(mix(vec3<f32>(0.55, 0.53, 0.49), vec3<f32>(0.48, 0.5, 0.52), rm_h(face, 80.0)), vec3<f32>(0.18, 0.16, 0.14), door);
+        illum = mix(0.5, 0.75, clamp(p.y / ceil_h, 0.0, 1.0));
+    }
+    var rad = (albedo * illum * light + vec3<f32>(glow)) * light_rad;
+    var day_room = (albedo * day_face * mix(1.0, 0.24, sqrt(clamp(p.z / depth, 0.0, 1.0))) + vec3<f32>(glow * 1.1)) * RM_DAY_DEPTH;
+
+    // ---- a roller blind at the glass, each module at its own drop ----
+    let zg = floor((a0 + rm_h(face, 62.0) * 30.0) / zone_m);
+    let zsg = fract(face * 3.71 + storey * 0.6180339 + zg * 0.4142136);
+    if (rm_h(zsg, 67.0) < OF_BLIND_ZONES) {
+        let m = floor(a0 / OF_MODULE);
+        let mr = select(rm_h(zsg, 68.0), rm_h(fract(zsg + m * 0.137), 69.0), rm_h(fract(zsg + m * 0.071), 70.0) < 0.35);
+        let drop = floor(mr * 4.0) / 3.0 * 0.95;
+        let covered = rm_ss(ceil_h * (1.0 - drop) - glass_fp, ceil_h * (1.0 - drop) + glass_fp, y0) * step(0.01, drop);
+        let own = max(rm_of_zone(face, storey, zg, floor_lit), OF_EGRESS);
+        rad = mix(rad, vec3<f32>(0.2) * own * light_rad, covered);
+        day_room = mix(day_room, vec3<f32>(0.62, 0.6, 0.56) * 0.7, covered);
+    }
+
+    let fresnel = 0.04 + 0.96 * pow(1.0 - into, 5.0);
+    let far = rm_ss(140.0, 420.0, distance) * 0.55;
+    let show = (1.0 - fresnel) * (1.0 - far) * 0.95;
+    o.day = vec4<f32>(min(day_room * 1.2, vec3<f32>(1.0)) * RM_DAY_THROUGH, show);
+    // the frame: dark anodised mullions, the spandrel's back-painted glass
+    let frame_col = mix(vec3<f32>(0.08, 0.085, 0.09), vec3<f32>(0.05, 0.06, 0.07), spandrel / max(frame_cov, 1e-3));
+    o.day = mix(o.day, vec4<f32>(frame_col, 1.0), frame_cov);
+    o.night = rad * (1.0 - frame_cov) * (1.0 - fresnel) * env.x * lk_practical_gain();
+    return o;
+}
+
+// ---- (`--room-depth`) a lit home and a lit shop seen from the night street ----
+// A home's lamp as a point source (inverse square and cosine) over the room's
+// inter-reflection: most homes by a ceiling fixture, the rest by a floor or
+// table lamp low by a side wall with the ceiling light off, its shade seen
+// lit; the coverings at the glass (curtains, blinds, sheers) glow by the
+// light reaching their backs, a hot spot over the lamp; the pane cap on the
+// room's level, not each pixel's. `RD_LAMP_K` puts a surface 1.5 m from the
+// lamp, facing it at 45 deg, at about 1.0 (the old falloff's near level), 3 m
+// off at a third; `RD_BOUNCE` the room's inter-reflection, about an eighth of
+// it in a pale room; `RD_FABRIC` an unlined curtain's transmittance (light
+// cotton or linen 0.3-0.6) with its colour, `RD_SLATS` a blind's or sheer's,
+// each against the light at the glass (about 0.5 half a room's depth from
+// the lamp): the covering's middle a little over the old flat level, its
+// edges under it; `RD_ROOM_CAP` half the old pane cap (0.24), on the room's
+// mean: a bright room's mean comes down to a dim one's, its lit wall by the
+// lamp a little over the old cap, its corners well under. A shop's lit surfaces (its walls,
+// floor, goods: not its fixtures' glow) at `RD_SHOP_SURFACE` of the
+// window-adapted level (shop_lights.rs `ROOM_GAIN`): seen at the street's
+// exposure the room sits ~1.5 stops over a lamp's pool, not the 3-4 that
+// clipped a pale wall to white; the fixtures stay blown. INFERRED.
+const RD_CEILING_SHARE: f32 = 0.6;
+const RD_LAMP_K: f32 = 3.5;
+const RD_BOUNCE: f32 = 0.12;
+const RD_SHADE: f32 = 1.6;
+const RD_FABRIC: f32 = 1.2;
+const RD_SLATS: f32 = 2.5;
+const RD_ROOM_CAP: f32 = 0.12;
+const RD_SHOP_SURFACE: f32 = 0.4;
+
 // (stage W5, `--street-life`; weathering.wgsl `wx_window_life_pre` sets it,
 // `wx_window` clears it) x 1 on, y the building's wear, z 1 a vacant shop, w
 // the share of a flat's windows with sill plants: `rm_room` hands what shows at
@@ -176,7 +450,18 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let floor_share = min(work.x / 0.7, 1.0);
     let floor_lit = rm_ss(floor_phase - band / 2.0, floor_phase + band / 2.0, floor_share);
     let bay_lit = step(rm_h(seed, 42.0), 0.7);
-    let lit = mix(lit_home, floor_lit * bay_lit, office);
+    var lit = mix(lit_home, floor_lit * bay_lit, office);
+    // (`--night-photometry`) an office floor is lit in zones (a tenant's open plan, a
+    // stretch of perimeter offices) that switch with the office share (the storey's
+    // phase and the zone's own roll, uniform together), the lit share the bays had
+    // (the floors' share x 0.7), with a few dark bays in a lit zone: bands of lit
+    // windows, not a per-bay checkerboard.
+    let zoned = SF_NIGHT_PHOTOMETRY && look.fog.z > 0.0 && rm_office_zone.w > 0.5 && office > 0.5;
+    if (zoned) {
+        let zk = fract(floor_phase + rm_office_zone.x);
+        let zone_share = floor_share * 0.7 / 0.93;
+        lit = rm_ss(zk - band / 2.0, zk + band / 2.0, zone_share) * step(rm_h(seed, 42.0), 0.93);
+    }
     // (`--look cinematic`, stage L2: work z the screens' share, w the clock; rooms.rs `drive_look`)
     let cine = SF_CINEMATIC && work.z > 0.0;
     let tv = step(rm_h(seed, 2.0), select(0.12, work.z, cine)) * (1.0 - shop) * (1.0 - office);
@@ -184,10 +469,17 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     if (fg_on()) {
         level = mix(level, mix(0.4, 1.05, rm_h(seed, 3.0)), office); // (`--facade-glass`) offices as varied as homes
     }
+    if (zoned) {
+        // the zone's dimmer, and a little from bay to bay
+        level = mix(0.5, 1.0, rm_office_zone.z) * mix(0.85, 1.0, rm_h(seed, 3.0));
+    }
     let cool = step(rm_h(seed, 4.0), env.w - shop * 0.1);
     let temp_mix = rm_h(seed, 5.0);
     let home_color = mix(mix(RM_WARM_A, RM_WARM_B, temp_mix), mix(RM_COOL_A, RM_COOL_B, temp_mix), cool);
     var lamp_color = mix(home_color, mix(RM_OFFICE_A, RM_OFFICE_B, temp_mix), office);
+    if (zoned) {
+        lamp_color = rm_office_lamp(rm_office_zone.y);
+    }
     if (cine) {
         // the look's wider spread of homes: a low amber lamp, a cold daylight LED.
         let roll = rm_h(seed, 44.0);
@@ -257,6 +549,36 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         let face_k = floor_face + (back + side) * FG_OFFICE_WALL_K + ceiling * FG_OFFICE_CEILING_K;
         illum = mix(illum, illum * face_k * FG_OFFICE_FILL, office);
     }
+    // (`--room-depth`) a home lit by its lamp as a point source: inverse square
+    // and cosine from a ceiling fixture or, in some, a floor or table lamp low
+    // by a side wall (the ceiling's light off), over the room's inter-reflection.
+    let rd_on = SF_ROOM_DEPTH && (skyu.flags.x & SKY_ROOM_DEPTH) != 0u && shop < 0.5 && office < 0.5;
+    var lamp_at = lamp_pos;
+    var low_lamp = false;
+    var shade_glow = 0.0;
+    if (rd_on) {
+        low_lamp = rm_h(seed, 81.0) > RD_CEILING_SHARE;
+        if (low_lamp) {
+            lamp_at = vec3<f32>(select(0.4 - pad_x, W + pad_x - 0.4, rm_h(seed, 82.0) > 0.5), floor_y + mix(1.1, 1.5, rm_h(seed, 83.0)), depth * mix(0.55, 0.85, rm_h(seed, 84.0)));
+        }
+        let nrm = vec3<f32>(-sign(along) * side, floor_face - ceiling, -back);
+        let tl = lamp_at - vec3<f32>(px, py, pz);
+        let dl2 = dot(tl, tl);
+        let cosl = max(dot(nrm, tl) * inverseSqrt(max(dl2, 1e-4)), 0.0);
+        illum = RD_LAMP_K * cosl / (dl2 + 0.25) + RD_BOUNCE;
+        // the shade's light up on the ceiling round it
+        let r2 = (px - lamp_at.x) * (px - lamp_at.x) + (pz - lamp_at.z) * (pz - lamp_at.z);
+        illum = illum + ceiling * select(0.5 / (1.0 + r2 * 3.0), 0.9 / (1.0 + r2 * 1.2), low_lamp);
+        if (low_lamp) {
+            // the lit shade itself, where the ray passes it before the room's surface
+            let o = vec3<f32>(local.x, local.y, 0.0);
+            let dv = vec3<f32>(along, up, into);
+            let tc = dot(lamp_at - o, dv) / dot(dv, dv);
+            if (tc > 0.0 && tc < t) {
+                shade_glow = rm_ss(0.24, 0.17, length(o + dv * tc - lamp_at));
+            }
+        }
+    }
 
     // ---- surfaces ----
     let paint = rm_h(seed, 8.0);
@@ -296,6 +618,10 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     albedo = albedo * (1.0 - tbar * 0.45);
     let fixture = mix(mix(fixture_disc, shop_panel, shop), troffer, office);
     var glow = vec3<f32>(fixture * mix(1.2, 1.5, office));
+    if (rd_on) {
+        // (`--room-depth`) a low lamp's room: the ceiling fixture off, the shade lit
+        glow = select(glow, vec3<f32>(shade_glow * RD_SHADE), low_lamp);
+    }
 
     // ---- furniture: back-wall features (homes), workstations (offices) ----
     {
@@ -393,7 +719,17 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         let in_curtain = max(step(ux, cl), step(1.0 - cr, ux)) * curtain_style;
         let folds = rm_filtered(sin(local.x * 11.0 + seed * 40.0) * 0.1 + sin(local.x * 4.3 + seed * 13.0) * 0.06, 0.0, glass_footprint, 0.3) + 0.84;
         let curtain_col = mix(mix(vec3<f32>(0.85, 0.78, 0.62), vec3<f32>(0.62, 0.22, 0.18), step(0.6, rm_h(seed, 33.0))), vec3<f32>(0.35, 0.45, 0.62), step(0.85, rm_h(seed, 33.0)));
-        let curtain = curtain_col * folds * 0.5 * light_radiance * max(illum, 0.5);
+        var curtain = curtain_col * folds * 0.5 * light_radiance * max(illum, 0.5);
+        // (`--room-depth`) a covering at the glass glows by the light its lamp
+        // sends to its back (inverse square, cosine): a hot spot over the lamp,
+        // falling off across the window (a screen's dim light in a TV room).
+        var e_glass = 1.0;
+        if (rd_on) {
+            let tg = lamp_at - vec3<f32>(local.x, local.y, 0.0);
+            let dg2 = dot(tg, tg);
+            e_glass = mix(RD_LAMP_K * lamp_at.z * inverseSqrt(max(dg2, 1e-4)) / (dg2 + 0.25) + RD_BOUNCE, 0.15, tv);
+            curtain = curtain_col * folds * light_radiance * RD_FABRIC * e_glass;
+        }
         radiance = mix(radiance, curtain, in_curtain);
         day_room = mix(day_room, curtain_col * folds * 0.62, in_curtain);
         var blind_style = max(step(0.26, style) * step(style, 0.46) * (1.0 - shop), step(style, 0.3) * office);
@@ -415,7 +751,7 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         let slat = fract(local.y / 0.045);
         // a solar screen's open weave lets FG_SCREEN_OPEN of the room through, with no slats.
         let gap = mix(rm_filtered(rm_ss(0.78, 0.86, slat), 0.17, glass_footprint, 0.045) * detail, FG_SCREEN_OPEN, screen);
-        let blind = mix(blind_col * 0.42 * light_radiance, radiance * 0.7, gap);
+        let blind = mix(blind_col * 0.42 * light_radiance * select(1.0, RD_SLATS * e_glass, rd_on), radiance * 0.7, gap);
         radiance = mix(radiance, blind, covered);
         day_room = mix(day_room, mix(blind_col * 0.7, day_room * 0.7, gap), covered);
         if (fg) {
@@ -435,11 +771,17 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
             day_room = mix(day_room, shade_col * 0.72, shaded);
         }
         let sheer_style = step(0.46, style) * step(style, 0.58) * (1.0 - shop) * (1.0 - office);
-        radiance = mix(radiance, radiance * 0.45 + light_radiance * 0.18, sheer_style);
+        radiance = mix(radiance, radiance * 0.45 + light_radiance * 0.18 * select(1.0, RD_SLATS * e_glass, rd_on), sheer_style);
         day_room = mix(day_room, day_room * 0.5 + vec3<f32>(0.25), sheer_style);
     }
     // Soft cap on the max channel toward paneCap 0.24 (not on a shop lit by its own light).
-    if (shop_lit < 0.0) {
+    if (rd_on && shop_lit < 0.0) {
+        // (`--room-depth`) the cap on the room's level (its mean, about half its
+        // light's), not on each pixel: the lamp's hot spot and the dark corners stay.
+        let peak = max(max(light_radiance.x, light_radiance.y), light_radiance.z) * 0.5;
+        let over = peak / RD_ROOM_CAP;
+        radiance = radiance * pow(1.0 + over * over * over, -1.0 / 3.0);
+    } else if (shop_lit < 0.0) {
         let peak = max(max(max(radiance.x, radiance.y), radiance.z), 1e-4);
         let over = peak / 0.24;
         radiance = radiance * pow(1.0 + over * over * over, -1.0 / 3.0);
@@ -451,7 +793,8 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let kind_gain = mix(mix(1.0, 1.2, office), 1.0, shop);
     // all of it is seen through the pane (RM_DAY_THROUGH, the tinted glass's transmission).
     o.day = vec4<f32>(min(day_room * day_level * kind_gain, vec3<f32>(1.0)) * RM_DAY_THROUGH, show);
-    o.night = radiance * (1.0 - fresnel) * lit * env.x * has_room;
+    // (`--night-photometry`) a room lit by its own lamp carries the practicals' gain (a shop's own light below has it already).
+    o.night = radiance * (1.0 - fresnel) * lit * env.x * has_room * lk_practical_gain();
     if (shop_lit >= 0.0) {
         // the light carries the dusk (sky.rs: the lamps' units times the rooms' dusk).
         o.night = radiance * (1.0 - fresnel) * shop_lit * has_room;
@@ -527,7 +870,10 @@ fn rm_shop_pane(f: SrFront, pos: vec3<f32>, n: vec3<f32>, dir: vec3<f32>, distan
     r.work = f.work;
     r.kind = f.kind;
     let ro = vec3<f32>(clamp(f.x, 0.0, w), clamp(pos.y - f.floor, 0.0, r.size.y), max(f.z, 0.0));
+    // (`--room-depth`) the lit surfaces at the street's exposure (`RD_SHOP_SURFACE`)
+    sr_surface = select(1.0, RD_SHOP_SURFACE, SF_ROOM_DEPTH && (skyu.flags.x & SKY_ROOM_DEPTH) != 0u);
     let room = sr_room(ro, vec3<f32>(dir.x, dir.y, into), r, work.y, distance);
+    sr_surface = 1.0;
     // (seen as the eye adapted to this window sees it: `sr_adapt`)
     let light = select(vec3<f32>(0.0), rm_shop_override.rgb, rm_shop_override.w > 0.0) * sr_adapt(f.lum);
     let fresnel = 0.04 + 0.96 * pow(1.0 - into, 5.0);
@@ -637,17 +983,33 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
         trade = front.found && distance < reach && (env.x <= 0.0 || lit_rule);
     }
     var r: RmOut;
-    if (trade) {
+    if (SF_NIGHT_PHOTOMETRY && look.fog.z > 0.0 && office > 0.5) {
+        // (`--night-photometry`) the office zone: a stretch of 9-24 m along the
+        // facade on each storey (3.6 m storeys anchored in the world), its own rolls.
+        let storey = floor(pos.y / 3.6);
+        let zone_m = mix(9.0, 24.0, rm_h(plane_hash + storey * 0.173, 61.0));
+        let zone = floor((dot(pos, tangent) + rm_h(plane_hash, 62.0) * 30.0) / zone_m);
+        let zs = fract(plane_hash * 7.13 + storey * 0.6180339 + zone * 0.4142136);
+        rm_office_zone = vec4<f32>(rm_h(zs, 63.0), rm_h(zs, 64.0), rm_h(zs, 65.0), 1.0);
+    }
+    // (`--office-floors`) the open-plan storey behind the whole facade, with its own
+    // mullions and spandrels (so `--facade-glass`'s frame below is not laid over it again)
+    let office_floor = SF_OFFICE_FLOORS && (skyu.flags.x & SKY_OFFICE_FLOORS) != 0u && office * (1.0 - shop) > 0.5 && !trade;
+    if (office_floor) {
+        let anchored = vec2<f32>(select(0.0, 1.0, RM_FRAMES && qw >= 127.0), select(0.0, 1.0, RM_FRAMES && abs(nwq) >= 127.0));
+        r = rm_office_floor(pos, tangent, dir, local, size, anchored, plane_hash, distance, env, work);
+    } else if (trade) {
         r = rm_shop_pane(front, pos, n, dir, distance, work);
     } else {
         r = rm_room(local, size, dir, vec4<f32>(seed, shop, office, distance), vec2<f32>(shop_key, pane_bottom), env, work, true, true);
     }
     rm_shop_override = vec4<f32>(0.0);
-    if (fg && fg_block > 0.0) {
+    if (fg && fg_block > 0.0 && !office_floor) {
         // (`--facade-glass`) the mullions and the spandrels' opaque panels behind the glass
         r.night = r.night * (1.0 - fg_block);
         r.day = vec4<f32>(mix(r.day.xyz, FG_PANEL, fg_block), mix(r.day.w, 0.95, fg_block));
     }
+    rm_office_zone = vec4<f32>(0.0);
     if (rm_w5.x > 0.5) {
         // stage W5 (`--street-life`, weathering.wgsl): plants on a flat's sill, a vacant shop's taped paper
         wx_room_life(&r, local, max(size, vec2<f32>(0.05)), dir, seed, shop, office * (1.0 - shop), work.y, distance);

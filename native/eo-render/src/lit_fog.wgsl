@@ -152,6 +152,9 @@ fn lf_light_visibility(index: u32, li: LfLight, p: vec3<f32>) -> f32 {
 /// it, `sigma` the fog's extinction there, `rmin` the nearest a light is held
 /// to (the froxel's own size: it stands for its whole cell).
 fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32, sigma: f32, rmin: f32) -> vec3<f32> {
+    if (SF_LAMP_BOUNCE && li.kind == LF_BOUNCE_KIND) {
+        return vec3<f32>(0.0); // (`--lamp-bounce`) a pool's bounce stands under the street: it lights no fog
+    }
     // where the light leaves its luminaire: a props street light's (kind 3) source stands `size` m
     // over its head (the JS practical's lift, which widens the pool), its intensity carrying the
     // pool gain (1 + lift)^2 (sky_fx `fx_luminaire`): the fog glows round the head, not over it.

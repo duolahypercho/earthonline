@@ -63,6 +63,63 @@ fn sky_stars(d: vec3<f32>) -> vec3<f32> {
     return tint * (b * limit * core * 1.3);
 }
 
+// (`--urban-sky`; eo-sky `urban_sky`) the stars a city sky leaves: the
+// field's candidate in this cell (as `sky_stars`), its magnitude from its
+// rank (counts grow as 10^(0.5 m) to the faintest's 6), the sky's surface
+// brightness here from the city's glow (its clear zenith US_ZENITH_MAG,
+// brighter toward the horizon and under a brighter weather's glow by the
+// glow's own shape), the naked eye's limiting magnitude for it (Schaefer
+// 1990), and the stars over it drawn at the field's scale by their flux
+// relative to a first-magnitude star's (faded in over US_FADE_MAG).
+fn sky_stars_urban(d: vec3<f32>) -> vec3<f32> {
+    let lat = 37.7749 * LK_DEG;
+    let pole = vec3<f32>(0.0, sin(lat), -cos(lat));
+    let a = skyu.stars.y;
+    let c = cos(a);
+    let s = sin(a);
+    let q = d * c + cross(pole, d) * s + pole * dot(pole, d) * (1.0 - c);
+    let aq = abs(q);
+    var face = 0u;
+    var uv = vec2<f32>(0.0);
+    if (aq.x >= aq.y && aq.x >= aq.z) {
+        face = select(1u, 0u, q.x > 0.0);
+        uv = q.yz / aq.x;
+    } else if (aq.y >= aq.z) {
+        face = select(3u, 2u, q.y > 0.0);
+        uv = q.xz / aq.y;
+    } else {
+        face = select(5u, 4u, q.z > 0.0);
+        uv = q.xy / aq.z;
+    }
+    let n = 160.0;
+    let g = (uv * 0.5 + 0.5) * n;
+    let cell = floor(g);
+    let id = face * 25600u + u32(cell.y) * 160u + u32(cell.x);
+    let h = sky_hash1(id * 4u + 1u);
+    if (h > 0.03) {
+        return vec3<f32>(0.0);
+    }
+    let t = h / 0.03;
+    let m = max(US_FAINTEST_MAG + log2(max(t, 1e-9)) * 0.30103 / US_COUNT_SLOPE, US_BRIGHTEST_MAG);
+    // the city's glow here over its clear zenith (the weather's glow over clear's: the uniform's
+    // `amb_top.w` over the practicals' gain `look.fog.z`, 1 without `--night-photometry`).
+    let g_rel = skyu.amb_top.w / max(look.fog.z, 1.0);
+    let zen = lk_luma(sky_city_glow(vec3<f32>(0.0, 1.0, 0.0), look.cam_pos.xyz, 1.0));
+    let here = lk_luma(sky_city_glow(d, look.cam_pos.xyz, 1.0)) * max(g_rel, 0.02);
+    let b = US_ZENITH_MAG - 2.5 * log2(max(here / max(zen, 1e-9), 1e-6)) * 0.30103;
+    let nelm = 7.93 - 5.0 * log2(exp2((4.316 - b / 5.0) * 3.321928) + 1.0) * 0.30103;
+    let vis = smoothstep(0.0, 1.0, (nelm - m) / US_FADE_MAG);
+    if (vis <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let bright = clamp(exp2(-0.4 * (m - US_FULL_MAG) * 3.321928), US_FAINTEST_DRAWN, 1.0) * vis;
+    let pos = vec2<f32>(sky_hash1(id * 4u + 2u), sky_hash1(id * 4u + 3u)) * 0.7 + 0.15;
+    let r = length(g - cell - pos);
+    let core = exp(-r * r / 0.012);
+    let tint = mix(vec3<f32>(0.78, 0.86, 1.0), vec3<f32>(1.0, 0.96, 0.84), sky_hash1(id * 4u + 4u));
+    return tint * (bright * core * 1.3);
+}
+
 // the moon's disc (0.5181 deg), lit by the sun across it (the phase),
 // earthshine on the dark limb (0.022 x the unlit share), and a faint aureole.
 fn sky_moon(d: vec3<f32>) -> vec3<f32> {
@@ -119,8 +176,16 @@ fn sky_color(ndc: vec2<f32>) -> vec4<f32> {
     // the stars where the sky is dark enough, and the moon.
     if (skyu.stars.x > 0.0 && d.y > 0.0) {
         // washed by the city's skyglow too (the volume pass draws it over this).
-        let wash = 1.0 - smoothstep(0.010, 0.030, lk_luma(rgb + sky_city_glow(d, look.cam_pos.xyz, skyu.amb_top.w)));
-        rgb = rgb + sky_stars(d) * skyu.stars.x * wash * smoothstep(0.0, 0.1045, d.y);
+        let bg = rgb + sky_city_glow(d, look.cam_pos.xyz, skyu.amb_top.w);
+        if (SF_URBAN_SKY && sky_on(skyu.flags.x, SKY_URBAN_SKY)) {
+            // (`--urban-sky`) the city's glow sets which stars show (its limiting magnitude); the
+            // dome's own twilight still washes them out.
+            let wash = 1.0 - smoothstep(0.010, 0.030, lk_luma(rgb));
+            rgb = rgb + sky_stars_urban(d) * skyu.stars.x * wash * smoothstep(0.0, 0.1045, d.y);
+        } else {
+            let wash = 1.0 - smoothstep(0.010, 0.030, lk_luma(bg));
+            rgb = rgb + sky_stars(d) * skyu.stars.x * wash * smoothstep(0.0, 0.1045, d.y);
+        }
     }
     if (skyu.moon.w > 0.0) {
         // a moon in a bright sky is a pale disc (its contrast with

@@ -744,6 +744,18 @@ pub struct ShaderFeatures {
     /// The cars' reflections of the street's brightest lights (`--car-reflections`;
     /// `SF_CAR_REFLECTIONS`, agents_draw.wgsl `ag_car_far_lights`): the agents' pipelines only.
     pub car_reflections: bool,
+    /// The night's photometric scale (`--night-photometry`; `SF_NIGHT_PHOTOMETRY`):
+    /// the practicals' gain on the emission the shaders carry in the rig's units.
+    pub night_photometry: bool,
+    /// Each street lamp's pool as a bounce light (`--lamp-bounce`; `SF_LAMP_BOUNCE`,
+    /// sky.rs `lamp_bounce_wgsl`'s `LT_LAMP_BOUNCE`).
+    pub lamp_bounce: bool,
+    /// The city sky's stars by its limiting magnitude (`--urban-sky`; `SF_URBAN_SKY`).
+    pub urban_sky: bool,
+    /// Office storeys behind the glass (`--office-floors`; `SF_OFFICE_FLOORS`, rooms.wgsl).
+    pub office_floors: bool,
+    /// Lit homes and shops seen from the night street (`--room-depth`; `SF_ROOM_DEPTH`, rooms.wgsl).
+    pub room_depth: bool,
 }
 
 impl ShaderFeatures {
@@ -758,6 +770,7 @@ impl ShaderFeatures {
         wet_surfaces: true, screen_reflect: true, // the reflect track
         camera: true, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
+        night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, // the night track
     };
     /// No feature compiled in (the default frame's pipelines).
     pub const NONE: Self = Self {
@@ -768,6 +781,7 @@ impl ShaderFeatures {
         wet_surfaces: false, screen_reflect: false, // the reflect track
         camera: false, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
+        night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, // the night track
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -797,6 +811,11 @@ impl ShaderFeatures {
             camera: o.look.is_cinematic() && o.sky.cine_camera,
             car_materials: o.car_materials > 0,
             car_reflections: o.car_materials > 0 && o.car_reflections > 0,
+            night_photometry: o.sky.night_photometry,
+            lamp_bounce: o.sky.lamp_bounce,
+            urban_sky: o.sky.urban_sky,
+            office_floors: o.sky.office_floors,
+            room_depth: o.sky.room_depth,
         }
     }
 
@@ -864,6 +883,11 @@ impl ShaderFeatures {
         if !self.car_reflections {
             l.car_reflections = 0;
         }
+        l.sky.night_photometry &= self.night_photometry;
+        l.sky.lamp_bounce &= self.lamp_bounce;
+        l.sky.urban_sky &= self.urban_sky;
+        l.sky.office_floors &= self.office_floors;
+        l.sky.room_depth &= self.room_depth;
         l
     }
 
@@ -900,6 +924,12 @@ impl ShaderFeatures {
                 // the vehicles track
                 ("SF_CAR_MATERIALS", self.car_materials),
                 ("SF_CAR_REFLECTIONS", self.car_reflections),
+                // the night track
+                ("SF_NIGHT_PHOTOMETRY", self.night_photometry),
+                ("SF_LAMP_BOUNCE", self.lamp_bounce),
+                ("SF_URBAN_SKY", self.urban_sky),
+                ("SF_OFFICE_FLOORS", self.office_floors),
+                ("SF_ROOM_DEPTH", self.room_depth),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
@@ -925,6 +955,12 @@ fn penumbra_wgsl() -> String {
         p::SEARCH_TAPS,
         p::FILTER_TAPS
     )
+}
+
+/// (`--night-photometry`) the look uniform's `fog.z`: the practicals' gain
+/// at the frame's sun, 0 with the switch off (the uniform as before).
+fn night_gain(on: bool, f: &LookFrame) -> f32 {
+    if on { eo_sky::night_photometry::practical_gain(f.model.sun.altitude_deg) as f32 } else { 0.0 }
 }
 
 static SHADER_FEATURES: std::sync::RwLock<ShaderFeatures> = std::sync::RwLock::new(ShaderFeatures::ALL);
@@ -1486,7 +1522,7 @@ impl LookGpu {
         let depth_pipeline_sloped = depth_with("shadow-depth (slope bias)", wgpu::DepthBiasState { constant: 0, slope_scale: SLOPE_BIAS_SCALE, clamp: SLOPE_BIAS_CLAMP });
 
         // Sky (inside the city pass: same targets and sample count).
-        let sky_src = format!("{}\n{}", look_common_source(), include_str!("look_sky.wgsl"));
+        let sky_src = format!("{}\n{}\n{}", look_common_source(), crate::sky::urban_sky_wgsl(), include_str!("look_sky.wgsl")); // (`--urban-sky`) the stars' constants
         let sky_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("look_sky.wgsl"), source: wgpu::ShaderSource::Wgsl(sky_src.into()) });
         // + the sky uniform (moon, stars).
         let look_only_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("look-only-bgl"), entries: &[entry(0, vf, ubuf), entry(1, vf, ubuf)] });
@@ -2120,6 +2156,7 @@ impl LookGpu {
                 let fi = s.frame_index;
                 let (mut f, mut terms) = s.keys.frame(h, inputs, fi, true);
                 self.cinematic_night(&mut f, terms.as_mut());
+                self.night_photometry(opts.night_photometry, &mut f, terms.as_mut()); // (`--night-photometry`)
                 s.frame = Some(f);
                 s.terms = terms;
             }
@@ -2138,6 +2175,7 @@ impl LookGpu {
                 }
                 let (mut f, mut terms) = eo_sky::frame::look_frame_from_with(&s.sky_base.as_ref().unwrap().2, &c, t, fo);
                 self.cinematic_night(&mut f, Some(&mut terms));
+                self.night_photometry(opts.night_photometry, &mut f, Some(&mut terms)); // (`--night-photometry`)
                 s.frame = Some(f);
                 s.terms = Some(terms);
             }
@@ -2184,6 +2222,18 @@ impl LookGpu {
         // only the night solve's share moves (the day part is the frame's, stage L4's included).
         t.exposure_target += eo_sky::night::cinematic_night_shift(f);
         f.exposure = t.exposure_target;
+    }
+
+    /// (`--night-photometry`) the night on one photometric scale on a frame
+    /// `frame` has built (after `cinematic_night`): the lamps' units per lux
+    /// with the practicals' gain and the exposure's night share metered on the
+    /// lit street (eo-sky `night_photometry::apply`). Nothing without the switch.
+    fn night_photometry(&self, on: bool, f: &mut LookFrame, terms: Option<&mut eo_sky::SkyTerms>) {
+        if !on {
+            return;
+        }
+        let Some(t) = terms else { return };
+        eo_sky::night_photometry::apply(f, t, self.options.look.is_cinematic());
     }
 
     /// the weather and night terms of the frame in force (None with every sky stage off).
@@ -2308,7 +2358,8 @@ impl LookGpu {
             // with the atmosphere tables the volume pass carries the aerial
             // perspective (sky_volume `vol_aerial`) for the city, the far land and
             // the sea: the range fog every pass applies is pushed out of reach.
-            fog: if atmo_ap { [1.0e7, 2.0e7, 0.0, 0.0] } else { [f.aerial.near as f32, f.aerial.far as f32, 0.0, 0.0] },
+            // z: (`--night-photometry`) the practicals' gain (eo-sky `night_photometry::practical_gain`; 0 without it).
+            fog: { let g = night_gain(self.sky.options().night_photometry && terms.is_some(), &f); if atmo_ap { [1.0e7, 2.0e7, g, 0.0] } else { [f.aerial.near as f32, f.aerial.far as f32, g, 0.0] } },
             fog_color: v4(fog, 0.0),
             cam_pos: [cam.eye.x, cam.eye.y, cam.eye.z, 1.0],
             cam_fwd: [fwd.x, fwd.y, fwd.z, 0.0],

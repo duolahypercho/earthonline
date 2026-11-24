@@ -563,6 +563,9 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         m.emissive = vec4<f32>(select(hue * 0.04, hue, lit) * pr.lens.x, 0.0);
         s.albedo = vec3<f32>(0.02);
     }
+    // (`--night-photometry`) a lens's radiance is solved in display terms (x 1 / exposure):
+    // look_light's practicals' gain does not apply to it (it lit the dark aspects).
+    m.emissive = vec4<f32>(m.emissive.rgb / lk_practical_gain(), 0.0);
     s.rough = clamp(s.rough, 0.03, 1.0);
     var c = look_light(s, m, v, in.world, n, 0u);
     if ((m.flags & PR_LEAF) != 0u && (pr.mode.z & PR_F_LEAF) != 0u) {
