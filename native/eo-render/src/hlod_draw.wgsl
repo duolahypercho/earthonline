@@ -588,6 +588,13 @@ fn ff_window_room(in: HlOut, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> ve
 // first corner come flat from the quad's first vertex (hlod_bake.rs: an
 // untextured wall quad starts at its top corner). INFERRED proportions.
 const FB_BAY_M: f32 = 4.6;
+// (`--far-relief`) the stone front's sandstone (linear albedo of a weathered buff freestone, sRGB
+// about 182/175/161: a light grey-buff), the soot crust where the rain never washes it (its
+// multiplier at full shelter) and the rain-washed upper faces of its projections (their
+// multiplier). INFERRED from photographs of the waterfront's sandstone fronts.
+const FB_SANDSTONE: vec3<f32> = vec3<f32>(0.47, 0.43, 0.355);
+const FB_SOOT: vec3<f32> = vec3<f32>(0.42, 0.40, 0.38);
+const FB_WASHED: f32 = 1.12;
 const FB_PIER_M: f32 = 1.4;
 const FB_STOREY_M: f32 = 5.0;
 const FB_CORNICE_M: f32 = 1.15;
@@ -676,6 +683,11 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
     let lum = dot(tone, vec3<f32>(0.2126, 0.7152, 0.0722));
     var stone = mix(vec3<f32>(lum) * vec3<f32>(1.08, 1.0, 0.86), tone, 0.25);
     stone = clamp(stone * mix(0.78, 0.98, hl_h3(g, 3, 501u)), vec3<f32>(0.1), vec3<f32>(0.46));
+    if (SF_FAR_RELIEF) {
+        // (`--far-relief`) a buff sandstone, not the prism's far tone (a plain prism's palette tone is
+        // its glass's pale blue): warm, matte, each building a little its own
+        stone = FB_SANDSTONE * mix(0.86, 1.04, hl_h3(g, 3, 501u));
+    }
     let trim = min(stone * 1.18, vec3<f32>(0.56));
     var col = stone;
     var nn = n;
@@ -755,6 +767,11 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
                 nn = -up;
                 occ = 0.55;
                 sky = 0.35;
+                if (relief) {
+                    col = trim * FB_SOOT * 0.9; // (`--far-relief`) sooted: the rain never reaches it
+                    occ = 0.42;
+                    sky = 0.22;
+                }
                 tau = depth * clamp((y1 - 0.3 - py) / max(hit.y - py, 1e-3), 0.0, 1.0);
             } else if (hit.y < 0.05) {
                 col = stone * 0.7; // the arcade's paving
@@ -779,7 +796,7 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
                 let ceiling = smoothstep(2.0, 2.45, hit.y);
                 let interior = mix(mix(goods, vec3<f32>(0.08, 0.07, 0.06), shelf), vec3<f32>(0.55, 0.50, 0.42), ceiling * select(0.0, 1.0, hit.y < 2.46));
                 let pane = shop * (1.0 - frame);
-                col = mix(mix(stone * 0.8, vec3<f32>(0.06, 0.05, 0.04), shop * frame), interior * mix(0.75, 1.15, hs), pane);
+                col = mix(mix(stone * select(0.8, 0.62, relief), vec3<f32>(0.06, 0.05, 0.04), shop * frame), interior * mix(0.75, 1.15, hs), pane);
                 glass = pane;
                 lit = mix(0.35 + 0.5 * item * (1.0 - shelf), 1.6, ceiling);
                 rough = mix(0.85, 0.2, pane);
@@ -853,7 +870,7 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
         if (in_bays && opening < 1e2 && !arcade) {
             // the sill: a projecting slab, its shade, and the wash below its ends
             let sill = fb_cov(fb_rect(pq, vec2<f32>(0.0, y0 - 0.08), vec2<f32>(hw + 0.2, 0.08)), fwm);
-            col = mix(col, trim * 1.05, sill);
+            col = mix(col, trim * select(1.05, 1.05 * FB_WASHED, relief), sill); // (`--far-relief`: its top washed by the rain)
             nn = normalize(mix(nn, n + up * 1.0, sill));
             let below = y0 - 0.16 - py;
             if (below > 0.0 && abs(x) < hw + 0.22) {
@@ -872,7 +889,7 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
         // the belt course at each floor and over the attic's foot, and its shade
         let bb = select(py - FB_STOREY_M + 0.15, py + 0.18, attic);
         let belt = fb_cov(abs(bb) - 0.16, fw.y) * select(0.0, 1.0, dt > FB_CORNICE_M);
-        col = mix(col, trim, belt);
+        col = mix(col, trim * select(1.0, FB_WASHED, relief), belt); // (`--far-relief`: its top washed by the rain)
         nn = normalize(mix(nn, n + up * 0.7, belt));
         if (relief && !attic && dt > FB_CORNICE_M) {
             // (`--far-relief`) the belt's shade down the storey under it, and the sky it hides
@@ -952,6 +969,11 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
         fr_sun_vis = vis;
     } else {
         col = col * mix(1.0, 0.35, sun_cut * facing);
+    }
+    if (relief) {
+        // (`--far-relief`) the soot crust where the rain never washes the stone: under the cornice, the
+        // belt courses and the sills, in the reveals and the arcade (the shelter the sky cut measures)
+        col = col * mix(vec3<f32>(1.0), FB_SOOT, clamp((1.0 - sky) * 1.4, 0.0, 1.0) * (1.0 - glass));
     }
     o.albedo = col * mix(1.0, occ, 0.6);
     o.glass = glass;
