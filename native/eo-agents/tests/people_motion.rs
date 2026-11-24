@@ -81,12 +81,14 @@ fn hand_to_head(rows: &[[f32; 4]], sk: &BipSkeleton, f: usize) -> f32 {
 fn manifests_pin_the_sources() {
     let c = Manifest::clips().unwrap();
     assert_eq!(c.files.iter().filter(|f| f.path.starts_with("objects/")).count(), 326, "every Rocketbox in-place clip is listed");
-    for r in ROLES {
+    // (`--people-idles` adds `MORE_IDLES` after `ROLES`.)
+    for r in motion::roles(true) {
         for id in [r.female, r.male] {
             assert!(c.file(&motion::clip_file(id)).is_some(), "{id} has no digest");
         }
         assert!(r.fps * r.seconds >= 60.0 && r.slot >= 1 && r.slot <= 3, "{}", r.name);
     }
+    assert_eq!(motion::roles(false).len(), ROLES.len(), "without --people-idles the roles are as before");
     for f in [Family::Idle, Family::Wait, Family::Talk, Family::Listen, Family::Call, Family::Text] {
         assert!(ROLES.iter().any(|r| r.family == f), "no loop for {f:?}");
     }
@@ -130,11 +132,20 @@ fn clips_and_walks_on_every_group() {
     let Some(cp) = copies() else { return };
     let cm = Manifest::clips().unwrap();
     let sm = Manifest::styles().unwrap();
-    let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| [r.female, r.male]).collect();
+    // every role, `--people-idles`' `MORE_IDLES` with them.
+    let roles = motion::roles(true);
+    let mut ids: Vec<&str> = roles.iter().flat_map(|r| [r.female, r.male]).collect();
     ids.sort_unstable();
     ids.dedup();
     let clips: Vec<motion::RbClip> = ids.iter().map(|id| motion::load_rb_clip(&cp.clips, &cm, id).unwrap_or_else(|e| panic!("{id}: {e:#}"))).collect();
     let clip = |id: &str| clips.iter().find(|c| c.id == id).unwrap();
+    // Each window inside its clips, clear of the held last pose.
+    for r in &roles {
+        for (id, start) in [(r.female, r.start_s), (r.male, r.start_m)] {
+            let c = clip(id);
+            assert!(start >= 0.2 && c.start + motion::role_needs_s(r, id) <= c.clip.duration, "{} {id}: window {start}+{} s in a {:.2} s clip", r.name, r.seconds, c.clip.duration);
+        }
+    }
     let mut styles: Vec<motion::StyleCycle> = STYLES.iter().filter_map(|(s, p)| motion::load_style(&cp.styles, &sm, s, *p).ok()).collect();
     motion::level_heads(&mut styles);
     let gs = groups(&cp.people);
@@ -144,8 +155,8 @@ fn clips_and_walks_on_every_group() {
         let female = id.contains("female");
         let relaxed = rocketbox::relaxed_hands(sk, clip(if female { ROLES[0].female } else { ROLES[0].male }), &ROLES[0]).unwrap();
         let mut srcs: Vec<BakeSrc> = styles.iter().map(|c| BakeSrc::Style { cycle: c }).collect();
-        let role_frames: Vec<u32> = ROLES.iter().map(|r| (r.seconds * r.fps).round() as u32 + 1).collect();
-        for (r, role) in ROLES.iter().enumerate() {
+        let role_frames: Vec<u32> = roles.iter().map(|r| (r.seconds * r.fps).round() as u32 + 1).collect();
+        for (r, role) in roles.iter().enumerate() {
             srcs.push(BakeSrc::Clip { clip: clip(if female { role.female } else { role.male }), role, frames: role_frames[r] });
         }
         let b = rocketbox::bake_list(sk, &srcs, Some(&relaxed)).unwrap();
@@ -193,7 +204,11 @@ fn clips_and_walks_on_every_group() {
                     if let BakeSrc::Clip { role, .. } = s {
                         if role.family == Family::Idle {
                             assert!(median(bend) > 8.0, "{id} {}: the elbows hang straight", role.name);
-                            assert!(median(hand_y) < 0.0, "{id} {}: a hand above the pelvis", role.name);
+                            // (`--people-idles`' stances with the hands at the hips or in
+                            // front, and a hand to the face or the head: the stance itself)
+                            if !matches!(role.name, "hips" | "hands-rest" | "hands-front" | "touch-face" | "scratch-head") {
+                                assert!(median(hand_y) < 0.0, "{id} {}: a hand above the pelvis", role.name);
+                            }
                         }
                         if role.family == Family::Call {
                             assert!(median(ear.clone()) < 0.12, "{id} {}: the knuckles are {:.3} m from the ear", role.name, median(ear));

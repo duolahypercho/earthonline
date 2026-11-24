@@ -213,3 +213,21 @@ fn people_keep_their_personal_room() {
     keep_personal_space(&mut two);
     assert_eq!(two, vec![[0.0, 0.0], [1.0, 0.0]]);
 }
+
+/// (`--people-groups`) A social group's members keep their own formation's
+/// spacing, inside a stranger's no-touch zone: a pair of one group 0.75 m
+/// apart stays so, a stranger beside them is kept to the zone from both.
+#[test]
+fn a_group_keeps_its_own_spacing() {
+    use eo_agents::feed::keep_personal_space_with;
+    let mut pos = vec![[0.0, 0.0], [0.75, 0.0], [1.2, 0.0]];
+    keep_personal_space_with(&mut pos, &[7, 7, 0]);
+    let d = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).hypot(a[1] - b[1]);
+    assert!(d(pos[2], pos[1]) >= 2.0 * PERSONAL_RADIUS_M - 1e-6 && d(pos[2], pos[0]) >= 2.0 * PERSONAL_RADIUS_M - 1e-6, "{pos:?}");
+    let mut pair = vec![[0.0, 0.0], [0.75, 0.0]];
+    keep_personal_space_with(&mut pair, &[3, 3]);
+    assert_eq!(pair, vec![[0.0, 0.0], [0.75, 0.0]], "one group's pair keeps its spacing");
+    let mut strangers = vec![[0.0, 0.0], [0.75, 0.0]];
+    keep_personal_space_with(&mut strangers, &[3, 4]);
+    assert!((d(strangers[0], strangers[1]) - 2.0 * PERSONAL_RADIUS_M).abs() < 1e-9);
+}
