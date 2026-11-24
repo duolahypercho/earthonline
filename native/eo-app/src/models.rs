@@ -220,6 +220,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "screen_reflect" => features.screen_reflect = true, // (`--screen-reflect`)
             "probe_sky" => features.probe_sky = true, // (`--probe-sky`)
             "wet_relief" => features.wet_relief = true, // (`--wet-relief`)
+            "lamp_streaks" => features.lamp_streaks = true, // (`--lamp-streaks`)
             _ => {}
         }
     }
