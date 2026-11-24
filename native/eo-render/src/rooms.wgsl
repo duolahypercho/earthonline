@@ -709,7 +709,9 @@ fn rm_pane_normal(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>) -> vec3<f32> {
 // the sky the window sees straight out (a wall facing a long wall across a
 // street sees (1 - sin e) / 2 of the sky). The reflected ray is cast against
 // that canyon and what it meets is shaded as the frame shades it: the sky
-// (the dome; the probe where it sees open sky, with its clouds), the
+// (the dome, as bright as the probe grid sees the sky straight up and greyed
+// by the cloud deck's cover; the probe itself where it sees open sky along
+// the ray), the
 // opposite wall (the sun by the shadow maps a step in front of it, the sky
 // and street light by the ambient volume there, an albedo by building, its
 // storeys of windows and its cornice), the street (the same at its floor).
@@ -728,6 +730,11 @@ const CG_CORNICE_M: f32 = 0.9;
 // the opposite glass: a dark room behind (its albedo-like share of the light on the wall) and the sky it reflects
 const CG_GLASS_ROOM: f32 = 0.05;
 const CG_GLASS_SKY: f32 = 0.09;
+// the probe's zenith read as broad as a cloud deck's patches (a rough lobe), the brightness it
+// may set the dome to (a guard), and how far the deck's cover greys the reflected sky
+const CG_ZENITH_ROUGH: f32 = 0.6;
+const CG_ZENITH_GAIN: vec2<f32> = vec2<f32>(0.5, 2.0);
+const CG_CLOUD_GREY: f32 = 0.6;
 
 // (rgb, cover): the opposite wall or street the pane's ray meets, and how much of the pixel it covers
 var<private> cg_env: vec4<f32>;
@@ -781,7 +788,20 @@ fn cg_canyon(world: vec3<f32>, ng: vec3<f32>, r: vec3<f32>, cam_d: f32) {
     let sin_e = clamp(1.0 - 2.0 * amb_vis(amb_sample(world, nf), nf), 0.0, 0.995);
     let roof = h + width * sin_e / sqrt(1.0 - sin_e * sin_e);
     let paint_w = look.ambient.w * look.env_class.x;
-    let sky = lk_sky_sample(r);
+    var sky = lk_sky_sample(r);
+    if (pg_live()) {
+        // the dome has no clouds: the sky the probe grid sees straight up (open even in a
+        // narrow street) against the dome's there sets its brightness (its luminance only: the
+        // dome's and the sky pass's colours differ, so a ratio by channel would tint it), and
+        // the cloud deck's cover greys it
+        let sel = pg_select(world);
+        if (sel.cover > 0.0) {
+            let up = vec3<f32>(0.0, 1.0, 0.0);
+            let k = clamp(lk_luma(pg_sample(sel, up, pg_lod(CG_ZENITH_ROUGH))) / max(lk_luma(lk_sky_sample(up)), 1e-5), CG_ZENITH_GAIN.x, CG_ZENITH_GAIN.y);
+            sky = mix(sky, sky * k, sel.cover);
+        }
+    }
+    sky = mix(sky, vec3<f32>(lk_luma(sky)), clamp(skyu.cloud0.z, 0.0, 1.0) * CG_CLOUD_GREY);
     cg_sky = vec4<f32>(sky, mix(0.5, 1.0, rm_ss(2.5, 7.0, h)));
     let rn = dot(r, nf);
     let t_wall = select(1e6, width / rn, rn > 1e-3);
