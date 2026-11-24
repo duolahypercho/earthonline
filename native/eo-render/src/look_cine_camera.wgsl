@@ -7,6 +7,16 @@
 
 const CAM_LW: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
 
+/// The camera's response in log2 about middle grey (cine_post.rs `tone_log`):
+/// the contrast `CAM_CONTRAST` from the mid-tones up, easing to `CAM_TOE.x` in
+/// the deep shadows (a softplus about `CAM_TOE.y` EV, `CAM_TOE.z` EV wide), so
+/// the shadows roll into black over several stops as a cine camera's do.
+fn cam_tone_log(u: vec3<f32>) -> vec3<f32> {
+    let x = (u - vec3<f32>(CAM_TOE.y)) / CAM_TOE.z;
+    let sp = max(x, vec3<f32>(0.0)) + log(vec3<f32>(1.0) + exp(-abs(x)));
+    return CAM_TOE.x * u + (CAM_CONTRAST - CAM_TOE.x) * CAM_TOE.z * sp - vec3<f32>(CAM_TOE_K);
+}
+
 /// The filmic curve: an AgX-style log sigmoid applied per channel in an inset
 /// gamut (the primaries pulled toward white), so a bright saturated colour
 /// runs smoothly to white along its own hue instead of one channel clipping
@@ -25,9 +35,10 @@ fn cam_agx(x0: vec3<f32>) -> vec3<f32> {
         vec3<f32>(-0.0990297440797205, -0.0989611768448433, 1.15107367264116),
     );
     var v = m_in * max(x0, vec3<f32>(0.0));
-    // the scene's contrast about middle grey (`CAM_CONTRAST`: a film's gamma over the sigmoid's own).
+    // the camera's response about middle grey (`cam_tone_log`: a film's gamma over the
+    // sigmoid's own in the mid-tones, a long toe under them).
     let g = log2(0.18);
-    v = vec3<f32>(g) + (log2(max(v, vec3<f32>(1e-10))) - vec3<f32>(g)) * CAM_CONTRAST;
+    v = vec3<f32>(g) + cam_tone_log(log2(max(v, vec3<f32>(1e-10))) - vec3<f32>(g));
     v = clamp(v, vec3<f32>(CAM_AGX_LO), vec3<f32>(CAM_AGX_HI));
     v = (v - vec3<f32>(CAM_AGX_LO)) / (CAM_AGX_HI - CAM_AGX_LO);
     // the sigmoid (its sixth-order fit): display-encoded (about a 2.2 power).
@@ -45,9 +56,10 @@ fn cam_agx(x0: vec3<f32>) -> vec3<f32> {
 /// The local exposure's gain at a pixel of log2 luminance `lx` (exposed by the
 /// hour's exposure, the grid's units). The base luminance round it (the
 /// bilateral grid sliced at its own luminance, blended with the wider blur of
-/// the grid's columns) is compressed about middle grey by the meter's
-/// `k_shadow` or `k_high` (1 when the frame's range fits the display: then
-/// the base keeps its contrast); the pixel's detail against the edge-aware
+/// the grid's columns) is compressed under middle grey by the meter's
+/// `k_shadow`, and over the highlights' knee (`cam3.w`) by its `k_high` (1 when
+/// the frame's range fits the display: then the base keeps its contrast; over
+/// 1 at night when the brightest sources fall short); the pixel's detail against the edge-aware
 /// base alone (the grid's slice: only neighbours within about 1.5 EV of it,
 /// so an edge's other side takes no part) is raised by `cam3.z`, rolled off
 /// past `CAM_DETAIL_SPAN` so a step is not doubled. A print's local contrast:
@@ -62,11 +74,33 @@ fn cam_local(pos: vec2<f32>, lx: f32) -> f32 {
     let support = smoothstep(0.004, 0.06, g.y);
     let bn = mix(blur, bil, CAM_BILATERAL_SHARE * support);
     let base = CAM_GRID_LO + bn * span + log2(max(cam_state.gain, 1e-6));
-    let mid = log2(0.18);
-    let k = select(cam_state.k_shadow, cam_state.k_high, base > mid);
+    let rb = base - log2(0.18);
+    let knee = cine.cam3.w;
+    var shift = 0.0;
+    if (rb < 0.0) {
+        shift = rb * (clamp(cam_state.k_shadow, 0.0, 1.0) - 1.0);
+    } else if (rb > knee) {
+        // (an expansion, over 1, is the pixel's own: `cam_push`)
+        shift = (rb - knee) * (clamp(cam_state.k_high, 0.0, 1.0) - 1.0);
+    }
     let d = (gz - bil) * span * support;
     let ds = d / sqrt(1.0 + (d / CAM_DETAIL_SPAN) * (d / CAM_DETAIL_SPAN));
-    return exp2((base - mid) * (clamp(k, 0.0, 1.0) - 1.0) + (cine.cam3.z - 1.0) * ds);
+    return exp2(shift + (cine.cam3.z - 1.0) * ds);
+}
+
+/// (night) the highlights pushed: when even the frame's brightest sources fall
+/// short of `cam4.y` the meter's `k_high` is over 1 and a pixel's own exposed
+/// luminance over the knee (`cam3.w`) is expanded by it, as a pushed stock's
+/// steeper curve: a lamp's core, its glare and a lit window's glint burn toward
+/// white while everything under the knee keeps its level. On the pixel, not the
+/// local base: a lamp a few pixels across is detail to the bilateral grid.
+fn cam_push(x: vec3<f32>) -> vec3<f32> {
+    let k = clamp(cam_state.k_high, 1.0, 2.0);
+    let u = log2(max(dot(x, CAM_LW), 1e-12) / 0.18) - cine.cam3.w;
+    if (k <= 1.0 || u <= 0.0) {
+        return x;
+    }
+    return x * exp2(u * (k - 1.0));
 }
 
 /// A robust contrast-adaptive sharpen of the resolved frame's luminance (after
@@ -133,19 +167,68 @@ fn cam_lens(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
     return vec3<f32>(r, c.g, b);
 }
 
+/// The blur circle's diameter (px of this frame) of a pixel whose resolved
+/// alpha is `a` (2 + its distance in metres, the sky 65504; under 2: no
+/// distance, no blur): a lens on a `CAM_SENSOR_MM` sensor whose focal length the
+/// frame's vertical field gives, at f-number `cam4.w`, focused at the meter's
+/// `focus` (dioptres): (f^2 / N) |1/S - 1/D| on the sensor.
+fn cam_coc(a: f32, dims: vec2<f32>) -> f32 {
+    if (!(a >= 2.0) || !(cine.cam4.w > 0.0) || cam_state.focus_ok < 0.5) {
+        return 0.0;
+    }
+    let dd = select(1.0 / max(a - 2.0, 0.05), 0.0, a > 60000.0);
+    let f_mm = 0.5 * CAM_SENSOR_MM / max(skyu.cluster.z, 1e-3);
+    let px_per_dioptre = f_mm * f_mm / cine.cam4.w * 0.001 / CAM_SENSOR_MM * dims.y;
+    return min(px_per_dioptre * abs(dd - cam_state.focus), CAM_DOF_MAX_PX * dims.y / 1080.0);
+}
+
+/// The depth of field at a pixel whose blur circle is `coc0` px across: a
+/// gather over `CAM_DOF_TAPS` taps on a Vogel disc of its radius, each tap
+/// counted where its own circle reaches this pixel (scatter as gather), one
+/// farther than the pixel only as far as the pixel's own circle (a sharp
+/// background does not bleed into a blurred foreground's edge), in the scene's
+/// linear light (a bright point keeps its energy).
+fn cam_dof(pos: vec2<f32>, dims: vec2<f32>, c0: vec3<f32>, a0: f32, coc0: f32) -> vec3<f32> {
+    let r0 = 0.5 * coc0;
+    let dmax = vec2<i32>(dims) - vec2<i32>(1);
+    var acc = c0;
+    var wsum = 1.0;
+    for (var i = 0; i < CAM_DOF_TAPS; i = i + 1) {
+        let rr = r0 * sqrt((f32(i) + 0.5) / f32(CAM_DOF_TAPS));
+        let th = f32(i) * 2.3999632;
+        let q = pos + vec2<f32>(cos(th), sin(th)) * rr;
+        let a = textureLoad(hdr, clamp(vec2<i32>(q), vec2<i32>(0), dmax), 0).a;
+        var rt = 0.5 * cam_coc(a, dims);
+        if (a > a0) {
+            rt = min(rt, r0);
+        }
+        let w = smoothstep(rr - 0.5, rr + 0.5, rt);
+        acc = acc + max(textureSampleLevel(hdr, ph_lin, q / dims, 0.0).rgb, vec3<f32>(0.0)) * w;
+        wsum = wsum + w;
+    }
+    return acc / wsum;
+}
+
 /// A hexagon's signed distance (apothem `r`), turned by `rot` (cos, sin).
 fn cam_hex(p0: vec2<f32>, r: f32, rot: vec2<f32>) -> f32 {
     let p = abs(vec2<f32>(rot.x * p0.x + rot.y * p0.y, -rot.y * p0.x + rot.x * p0.y));
     return max(dot(p, vec2<f32>(0.8660254, 0.5)), p.y) - r;
 }
 
-/// The sun's glare, exposed units, added before the curve: a six-ray
-/// starburst (three aperture blades' diffraction) and a line of ghosts (the
-/// lens's inter-reflections) through the frame's centre, both scaled by the
+/// The sun's glare, exposed units, added before the curve, all scaled by the
 /// sun's measured energy over its disc (`cam_state.sun_e`: nothing when it is
-/// hidden by a building or a deck, a little when it shows through haze).
+/// hidden by a building or a deck, a little when it shows through haze):
+/// - the veiling glare (`cam4.z` at its core): the lens's scatter round the
+///   source, a hot core over the disc and a long skirt falling as about 1/r^2
+///   over the frame, so a wall beside the sun loses contrast toward it;
+/// - a six-ray starburst (three aperture blades' diffraction), soft and short,
+///   only once the disc is many stops over white;
+/// - a line of ghosts (the lens's inter-reflections) through the frame's centre:
+///   the aperture's hexagon, a faint body and a rim split by the coatings'
+///   dispersion (blue inside, red outside), tracking the sun across the axis.
 fn cam_flare(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
-    let s = smoothstep(CAM_FLARE_EV.x, CAM_FLARE_EV.y, log2(max(cam_state.sun_e, 1e-6))) * cine.cam2.y;
+    let le = log2(max(cam_state.sun_e, 1e-6));
+    let s = smoothstep(CAM_FLARE_EV.x, CAM_FLARE_EV.y, le) * cine.cam2.y;
     if (s <= 0.0) {
         return vec3<f32>(0.0);
     }
@@ -159,41 +242,48 @@ fn cam_flare(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
     // the sun's colour (the key's chromaticity), unit luminance.
     let key = max(look.key.rgb, vec3<f32>(0.0));
     let col = mix(vec3<f32>(1.0), key / max(dot(key, CAM_LW), 1e-6), 0.6);
-    // the starburst: three blades' rays, a few pixels wide, r^-1.35 out to a third of the frame.
     let d = pos - sp;
-    let r = length(d);
+    let r = length(d) / px;
+    // the veiling glare: the core whitens a little toward its middle, the skirt keeps the sun's colour.
+    let core = pow(1.0 + (r / 7.0) * (r / 7.0), -1.5);
+    let skirt = 1.0 / (1.0 + (r / 32.0) * (r / 32.0));
+    var out = (mix(col, vec3<f32>(1.0), 0.3 * core) * (1.6 * core) + col * skirt) * cine.cam4.z;
+    // the starburst: three blades' rays a little over a pixel wide, widening outward, r^-1.6.
+    let ss = smoothstep(CAM_FLARE_EV.x + 1.5, CAM_FLARE_EV.y + 1.0, le);
     var star = 0.0;
     for (var k = 0; k < 3; k = k + 1) {
         let ang = 0.2618 + f32(k) * 1.0471976;
-        let across = abs(dot(d, vec2<f32>(-sin(ang), cos(ang))));
-        let w = (0.8 + 0.01 * r) * px;
+        let across = abs(dot(d, vec2<f32>(-sin(ang), cos(ang)))) / px;
+        let w = 1.3 + 0.012 * r;
         star = star + exp(-(across * across) / (w * w));
     }
-    let len = 360.0 * px * (0.5 + 0.5 * s);
-    let fall = pow(1.0 + r / (6.0 * px), -1.35) * (1.0 - smoothstep(0.25 * len, len, r));
-    var out = col * (star * fall * 5.0);
-    // the ghosts: discs of the aperture's hexagon along the line from the sun through
-    // the centre (t: 0 the sun, 1 the centre's mirror), tinted by the coatings, soft-edged.
+    let len = 260.0 * (0.5 + 0.5 * ss);
+    let fall = pow(1.0 + r / 8.0, -1.6) * (1.0 - smoothstep(0.3 * len, len, r));
+    out = out + col * (star * fall * 1.4 * ss);
+    // the ghosts: the aperture's hexagon along the line from the sun through the centre
+    // (t: 0 the sun, 1 the centre's mirror), tinted by the coatings, a faint body and a
+    // dispersed rim.
     let axis = vec2<f32>(0.5) - suv;
     let rot = vec2<f32>(cos(0.2618), sin(0.2618));
     for (var i = 0; i < 6; i = i + 1) {
         var g = vec4<f32>(0.0);
         var tint = vec3<f32>(0.0);
         switch i {
-            case 0: { g = vec4<f32>(0.62, 26.0, 0.09, 0.0); tint = vec3<f32>(1.0, 0.62, 0.30); }
-            case 1: { g = vec4<f32>(1.22, 64.0, 0.040, 0.0); tint = vec3<f32>(0.45, 1.0, 0.72); }
-            case 2: { g = vec4<f32>(1.48, 16.0, 0.11, 0.0); tint = vec3<f32>(0.85, 0.50, 1.0); }
-            case 3: { g = vec4<f32>(1.80, 105.0, 0.022, 0.0); tint = vec3<f32>(1.0, 0.70, 0.40); }
-            case 4: { g = vec4<f32>(2.20, 38.0, 0.06, 0.0); tint = vec3<f32>(0.50, 0.85, 1.0); }
-            default: { g = vec4<f32>(-0.32, 12.0, 0.07, 0.0); tint = vec3<f32>(0.9, 0.55, 1.0); }
+            case 0: { g = vec4<f32>(0.62, 26.0, 0.07, 0.0); tint = vec3<f32>(1.0, 0.62, 0.30); }
+            case 1: { g = vec4<f32>(1.22, 64.0, 0.030, 0.0); tint = vec3<f32>(0.45, 1.0, 0.72); }
+            case 2: { g = vec4<f32>(1.48, 16.0, 0.08, 0.0); tint = vec3<f32>(0.85, 0.50, 1.0); }
+            case 3: { g = vec4<f32>(1.80, 105.0, 0.016, 0.0); tint = vec3<f32>(1.0, 0.70, 0.40); }
+            case 4: { g = vec4<f32>(2.20, 38.0, 0.045, 0.0); tint = vec3<f32>(0.50, 0.85, 1.0); }
+            default: { g = vec4<f32>(-0.32, 12.0, 0.05, 0.0); tint = vec3<f32>(0.9, 0.55, 1.0); }
         }
         let gc = (suv + axis * g.x) * dims;
         let rad = g.y * px;
         let h = cam_hex(pos - gc, rad, rot);
         let soft = 0.2 * rad;
         let body = 1.0 - smoothstep(-soft, soft, h);
-        let rim = exp(-(h * h) / (0.012 * rad * rad));
-        out = out + tint * (g.z * (0.55 * body + 0.45 * rim));
+        let rim = exp(-(h * h) / (0.02 * rad * rad));
+        let disp = mix(vec3<f32>(0.55, 0.75, 1.0), vec3<f32>(1.0, 0.6, 0.35), smoothstep(-0.12 * rad, 0.12 * rad, h));
+        out = out + tint * (g.z * (0.35 * body + 0.65 * rim * disp));
     }
     return out * s;
 }
@@ -201,13 +291,31 @@ fn cam_flare(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
 /// The camera model's display value of a pixel.
 fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     var c = cam_lens(pos, dims);
+    // the depth of field (its circle from the resolve's distance), before anything spreads light.
+    let a0 = textureLoad(hdr, vec2<i32>(pos), 0).a;
+    let coc0 = cam_coc(a0, dims);
+    if (coc0 > 0.6 && cine.cam2.z < 1.5) {
+        c = cam_dof(pos, dims, c, a0, coc0);
+    }
     if (any(c != c)) {
         c = vec3<f32>(0.0);
     }
     c = clamp(c, vec3<f32>(0.0), vec3<f32>(65504.0));
     let e0 = look.key.w;
-    // the sharpen, before the lens spreads anything (the bloom is smooth already).
-    c = cam_sharpen(vec2<i32>(pos), c, e0 * cam_state.gain);
+    // (`EO_CAM_DEBUG=2`) the scene's log2 luminance exposed by the hour's exposure (before the
+    // lens spreads anything and before the meter), over -16 .. +10 in two 8-bit channels (red
+    // the coarse, green the fine part): the frame's own luminance, read back for tuning.
+    if (cine.cam2.z > 1.5) {
+        let t = clamp((log2(max(dot(c, CAM_LW) * e0, 1e-12)) + 16.0) / 26.0, 0.0, 1.0) * 255.0;
+        var q = vec3<f32>(floor(t) / 255.0, fract(t), 0.0);
+        if (look.post2.z > 0.5) {
+            q = from_srgb(q);
+        }
+        return vec4<f32>(q, 1.0);
+    }
+    // the sharpen, before the lens spreads anything (the bloom is smooth already); not where
+    // the focus blurs (it reads the unblurred neighbours).
+    c = mix(cam_sharpen(vec2<i32>(pos), c, e0 * cam_state.gain), c, smoothstep(0.6, 1.5, coc0));
     // the bloom, energy kept: the pixel gives up the share the lens spreads
     // (`cam_bloom_part`, as the prefilter took it) and the levels give it back.
     if (skyu.bloom.w > 0.5) {
@@ -222,17 +330,18 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     // the exposure (the hour's x the meter's), the local exposure, the sun's glare.
     var x = c * (e0 * cam_state.gain);
     x = x * cam_local(pos, log2(max(dot(c * e0, CAM_LW), 1e-12)));
+    x = cam_push(x);
     x = x + cam_flare(pos, dims);
     var d = to_srgb(cam_agx(x));
     // the hour's grade (cine_post.rs bakes the camera's keys when the model is on).
     d = textureSampleLevel(cine_lut, cine_samp, d * cine.grade.y + vec3<f32>(cine.grade.z), 0.0).rgb;
-    // film grain: one luminance pattern a pixel across (about Gaussian: two uniforms), in the
-    // shadows' upper half and the low mid-tones only: nothing over display 0.55 (a bright sky
-    // stays clean) and little under 0.1 (a night sky stays a clean dark).
+    // film grain: one luminance pattern a little over a pixel across (`ph_grain`, about
+    // Gaussian), in the shadows and the low mid-tones (`cam2.x` at its peak: more at night):
+    // nothing over display 0.65 (a bright sky stays clean), fading under 0.12 (black stays black).
     let y = clamp(dot(d, CAM_LW), 0.0, 1.0);
     let seed = u32(max(look.post2.w, 0.0)) % 4096u;
-    let gw = smoothstep(0.06, 0.2, y) * (1.0 - smoothstep(0.32, 0.55, y));
-    let gn = (ph_rand(vec2<i32>(pos), seed, 5u) + ph_rand(vec2<i32>(pos), seed, 6u)) * 1.2247449 * cine.cam2.x * gw;
+    let gw = smoothstep(0.02, 0.12, y) * (1.0 - smoothstep(0.35, 0.65, y));
+    let gn = ph_grain(vec2<i32>(pos), seed, 5u) * cine.cam2.x * gw;
     d = clamp(d + vec3<f32>(gn), vec3<f32>(0.0), vec3<f32>(1.0));
     // Display dither: triangular, +-1 step of 8-bit (as `finish_color`).
     let amp = look.post2.y;
@@ -240,9 +349,9 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     d = clamp(d + vec3<f32>(n * amp), vec3<f32>(0.0), vec3<f32>(1.0));
     // (`EO_CAM_DEBUG=1`) the meter's state as bars along the top: the sun's energy (log2,
     // 0 .. 10), the meter's gain (log2, -4 .. +4 about the middle), its metered mean (-12 .. +2),
-    // the local exposure's shadow and highlight compression (0 .. 1), the range's dark end
-    // (EV about grey, -10 .. 0).
-    if (cine.cam2.z > 0.5 && pos.y < 60.0) {
+    // the local exposure's shadow compression (0 .. 1) and highlight compression (0 .. 2), the range's dark end
+    // (EV about grey, -10 .. 0), the focus (dioptres, 0 .. 1).
+    if (cine.cam2.z > 0.5 && pos.y < 70.0) {
         let row = u32(pos.y / 10.0);
         let w = dims.x * 0.5;
         var v = 0.0;
@@ -255,9 +364,11 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
         } else if (row == 3u) {
             v = clamp(cam_state.k_shadow, 0.0, 1.0);
         } else if (row == 4u) {
-            v = clamp(cam_state.k_high, 0.0, 1.0);
-        } else {
+            v = clamp(0.5 * cam_state.k_high, 0.0, 1.0);
+        } else if (row == 5u) {
             v = clamp(cam_state.lo / 10.0 + 1.0, 0.0, 1.0);
+        } else {
+            v = clamp(cam_state.focus, 0.0, 1.0);
         }
         let tick = fract(pos.x / (w / select(10.0, 8.0, row == 1u) + 1e-6) + 1e-4) < 0.01;
         d = select(vec3<f32>(0.05), select(vec3<f32>(1.0, 0.3, 0.2), vec3<f32>(0.3, 1.0, 0.4), row == 1u), pos.x < v * w);

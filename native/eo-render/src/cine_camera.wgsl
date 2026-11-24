@@ -5,15 +5,20 @@
 //
 // - `cam_build`: one workgroup a grid column (`CAM_CELL_PX` pixels square), a
 //   thread a 4 x 4 pixel block: the block's log luminance (exposed by the hour's
-//   exposure) into the meter's histogram (weighted toward the lower centre) and
-//   into the column's luminance slices (sum of positions, count);
+//   exposure) into the meter's histogram (weighted toward the lower centre), into
+//   the frame's plain histogram (every block alike) and into the column's
+//   luminance slices (sum of positions, count);
 // - `cam_adapt`: one workgroup: the histogram's log-average over the meter's
 //   window, the correction of the hour's exposure (clamped; snapped on a cut,
-//   else converging), the frame's range (where `CAM_RANGE_SHARE` of the
-//   metered weight lies at each end) and from it the local exposure's
-//   compression each side of middle grey (only as much as brings that range
-//   into the display's room, `cine.cam3.xy`), and the visible sun's energy
-//   over its disc;
+//   else converging), the frame's range (its dark end where `CAM_RANGE_SHARE.x`
+//   of the metered weight lies, its bright end where `CAM_RANGE_SHARE.y` of the
+//   whole frame does, its brightest sources at `CAM_TOP_SHARE`) and from it the
+//   local exposure's compression under middle grey and over the highlights'
+//   knee (only as much as brings that range into the display's room,
+//   `cine.cam3.xy`), or the highlights' expansion when the frame's brightest
+//   sources fall short of `cine.cam4.y` (at night: the lamps' cores burn), the
+//   visible sun's energy over its disc, and the lens's focus (the mean dioptre
+//   of the frame's middle, from the distances the resolve leaves in its alpha);
 // - `cam_blur`: the grid blurred ([1 2 1] in x, y and the slices) and, beside
 //   it, the 5 x 5 column blur of each column's mean, into a 3D texture the
 //   post pass samples.
@@ -22,6 +27,7 @@
 @group(0) @binding(1) var<uniform> skyu: Sky;
 @group(0) @binding(2) var cam_src: texture_2d<f32>;
 @group(0) @binding(3) var cam_lin: sampler;
+// the meter's histogram (weighted, bins 0 .. CAM_HIST_BINS) and the frame's plain one (after it).
 @group(0) @binding(4) var<storage, read_write> cam_hist: array<atomic<u32>>;
 @group(0) @binding(5) var<storage, read_write> cam_state: CamState;
 // per cell (column-major in z: (row * columns + column) * CAM_GRID_Z + slice): the
@@ -36,7 +42,7 @@ const CAM_POS_SCALE: f32 = 65535.0;
 /// a cell's blocks (8 x 8): the grid's counts are written as shares of it.
 const CAM_CELL_BLOCKS: f32 = 64.0;
 
-var<workgroup> wg_hist: array<atomic<u32>, CAM_HIST_BINS>;
+var<workgroup> wg_hist: array<atomic<u32>, 2u * CAM_HIST_BINS>;
 var<workgroup> wg_sum: array<atomic<u32>, CAM_GRID_Z>;
 var<workgroup> wg_cnt: array<atomic<u32>, CAM_GRID_Z>;
 
@@ -54,7 +60,7 @@ fn cam_columns(dims: vec2<u32>) -> vec2<u32> {
 
 @compute @workgroup_size(8, 8)
 fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>, @builtin(local_invocation_index) li: u32) {
-    for (var i = li; i < CAM_HIST_BINS; i = i + 64u) {
+    for (var i = li; i < 2u * CAM_HIST_BINS; i = i + 64u) {
         atomicStore(&wg_hist[i], 0u);
     }
     if (li < CAM_GRID_Z) {
@@ -78,6 +84,7 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
             let uv = (b + vec2<f32>(2.0)) * inv;
             let hb = u32(clamp((l - CAM_HIST_LO) / (CAM_HIST_HI - CAM_HIST_LO) * f32(CAM_HIST_BINS), 0.0, f32(CAM_HIST_BINS) - 1.0));
             atomicAdd(&wg_hist[hb], u32(cam_meter_weight(uv) * 64.0 + 0.5));
+            atomicAdd(&wg_hist[CAM_HIST_BINS + hb], 64u);
             let gz = clamp((l - CAM_GRID_LO) / (CAM_GRID_HI - CAM_GRID_LO), 0.0, 1.0);
             let zb = min(u32(gz * f32(CAM_GRID_Z)), CAM_GRID_Z - 1u);
             atomicAdd(&wg_sum[zb], u32(gz * CAM_POS_SCALE + 0.5));
@@ -85,7 +92,7 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
         }
     }
     workgroupBarrier();
-    for (var i = li; i < CAM_HIST_BINS; i = i + 64u) {
+    for (var i = li; i < 2u * CAM_HIST_BINS; i = i + 64u) {
         let v = atomicLoad(&wg_hist[i]);
         if (v > 0u) {
             atomicAdd(&cam_hist[i], v);
@@ -105,33 +112,42 @@ fn cam_build(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id
     }
 }
 
-var<workgroup> wa_w: array<f32, CAM_HIST_BINS>;
 var<workgroup> wa_cum: array<f32, CAM_HIST_BINS>;
+// the plain histogram's prefix sum.
+var<workgroup> wa_cum2: array<f32, CAM_HIST_BINS>;
 var<workgroup> wa_num: array<f32, CAM_HIST_BINS>;
 var<workgroup> wa_den: array<f32, CAM_HIST_BINS>;
 var<workgroup> wa_sun: array<f32, 64>;
-// the frame's range: the log luminance (exposed by the hour's exposure) at the
-// `CAM_RANGE_SHARE` ends of the metered weight.
-var<workgroup> wa_range: array<f32, 2>;
+// the focus's taps: (dioptres, 1 if the frame carried a distance there).
+var<workgroup> wa_af: array<vec2<f32>, 64>;
+// the frame's range: the log luminance (exposed by the hour's exposure) at its dark
+// end (`CAM_RANGE_SHARE.x` of the metered weight), its bright end (`CAM_RANGE_SHARE.y`
+// of the whole frame) and its brightest sources (`CAM_TOP_SHARE` of the whole frame).
+var<workgroup> wa_range: array<f32, 3>;
 
 @compute @workgroup_size(128)
 fn cam_adapt(@builtin(local_invocation_index) li: u32) {
     let i = li;
     let v = f32(atomicLoad(&cam_hist[i]));
-    wa_w[i] = v;
+    let v2 = f32(atomicLoad(&cam_hist[CAM_HIST_BINS + i]));
     wa_cum[i] = v;
+    wa_cum2[i] = v2;
     workgroupBarrier();
-    // the inclusive prefix sum (Hillis and Steele).
+    // the inclusive prefix sums (Hillis and Steele).
     for (var off = 1u; off < CAM_HIST_BINS; off = off * 2u) {
         var t = 0.0;
+        var t2 = 0.0;
         if (i >= off) {
             t = wa_cum[i - off];
+            t2 = wa_cum2[i - off];
         }
         workgroupBarrier();
         wa_cum[i] = wa_cum[i] + t;
+        wa_cum2[i] = wa_cum2[i] + t2;
         workgroupBarrier();
     }
     let total = wa_cum[CAM_HIST_BINS - 1u];
+    let total2 = wa_cum2[CAM_HIST_BINS - 1u];
     // this bin's part of the window [lo, hi] of the metered weight.
     let lo = cine.cam1.x * total;
     let hi = cine.cam1.y * total;
@@ -144,14 +160,20 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
     if (i == 0u) {
         wa_range[0] = CAM_HIST_LO;
         wa_range[1] = CAM_HIST_HI;
+        wa_range[2] = CAM_HIST_HI;
     }
     workgroupBarrier();
     let bw = (CAM_HIST_HI - CAM_HIST_LO) / f32(CAM_HIST_BINS);
     let edge = CAM_HIST_LO + f32(i) * bw;
-    for (var e = 0u; e < 2u; e = e + 1u) {
-        let q = select(CAM_RANGE_SHARE.x, CAM_RANGE_SHARE.y, e == 1u) * total;
-        if (v > 0.0 && a < q && wa_cum[i] >= q) {
-            wa_range[e] = edge + bw * clamp((q - a) / v, 0.0, 1.0);
+    let q0 = CAM_RANGE_SHARE.x * total;
+    if (v > 0.0 && a < q0 && wa_cum[i] >= q0) {
+        wa_range[0] = edge + bw * clamp((q0 - a) / v, 0.0, 1.0);
+    }
+    let a2 = wa_cum2[i] - v2;
+    for (var e = 1u; e < 3u; e = e + 1u) {
+        let q = select(CAM_RANGE_SHARE.y, CAM_TOP_SHARE, e == 2u) * total2;
+        if (v2 > 0.0 && a2 < q && wa_cum2[i] >= q) {
+            wa_range[e] = edge + bw * clamp((q - a2) / v2, 0.0, 1.0);
         }
     }
     // the sun's disc: 64 taps over 1.2 x its radius (the first 64 threads).
@@ -171,6 +193,18 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
             }
         }
         wa_sun[i] = select(0.0, e, e == e);
+    } else {
+        // the focus: an 8 x 8 grid over the frame's middle (a third across, 30 % down), each
+        // tap's distance from the resolve's alpha (2 + metres; the sky 65504: 0 dioptres).
+        let j = i - 64u;
+        let dims = vec2<f32>(textureDimensions(cam_src));
+        let uv = vec2<f32>(0.333 + 0.333 * (f32(j % 8u) + 0.5) / 8.0, 0.35 + 0.3 * (f32(j / 8u) + 0.5) / 8.0);
+        let a = textureLoad(cam_src, vec2<i32>(uv * dims), 0).a;
+        var t = vec2<f32>(0.0);
+        if (a >= 2.0) {
+            t = vec2<f32>(select(1.0 / max(a - 2.0, 0.3), 0.0, a > 60000.0), 1.0);
+        }
+        wa_af[j] = t;
     }
     workgroupBarrier();
     for (var s = CAM_HIST_BINS / 2u; s > 0u; s = s / 2u) {
@@ -179,6 +213,7 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
             wa_den[i] = wa_den[i] + wa_den[i + s];
             if (i < 32u && s <= 32u) {
                 wa_sun[i] = wa_sun[i] + wa_sun[i + s];
+                wa_af[i] = wa_af[i] + wa_af[i + s];
             }
         }
         workgroupBarrier();
@@ -205,15 +240,24 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
         st.gain = exp2(rel);
         // the local exposure's compression: the range's ends about middle grey once the
         // meter has exposed the frame, brought inside the display's room (`cam3.xy`), each
-        // side only as far as it needs and never past `cam0.xy`; converging as the meter does.
+        // side only as far as it needs and never past `cam0.xy` (the highlights above
+        // their knee `cam3.w`); or, when even the frame's brightest sources fall short of
+        // `cam4.y`, the highlights expanded over the knee toward it, never past `cam4.x`;
+        // converging as the meter does.
         let mid = log2(0.18);
         let lo = wa_range[0] + rel - mid;
         let hi = wa_range[1] + rel - mid;
+        let top = wa_range[2] + rel - mid;
+        let knee = cine.cam3.w;
         var ks = 1.0;
         var kh = 1.0;
-        if (total > 0.5) {
+        if (total > 0.5 && total2 > 0.5) {
             ks = clamp(cine.cam3.x / max(-lo, 1e-3), cine.cam0.x, 1.0);
-            kh = clamp(cine.cam3.y / max(hi, 1e-3), cine.cam0.y, 1.0);
+            if (hi > cine.cam3.y) {
+                kh = clamp((cine.cam3.y - knee) / max(hi - knee, 1e-3), cine.cam0.y, 1.0);
+            } else if (top > knee + 0.5 && top < cine.cam4.y) {
+                kh = clamp((cine.cam4.y - knee) / (top - knee), 1.0, max(cine.cam4.x, 1.0));
+            }
         }
         if (cut || !(st.k_shadow > 0.0) || !(st.k_high > 0.0)) {
             st.k_shadow = ks;
@@ -225,6 +269,19 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
             st.k_high = st.k_high + (kh - st.k_high) * f;
         }
         st.lo = lo;
+        // the focus pulled toward the middle's mean dioptre (snapped on a cut).
+        if (wa_af[0].y > 32.0) {
+            let target_f = wa_af[0].x / wa_af[0].y;
+            if (cut || st.focus_ok < 0.5 || !(st.focus == st.focus)) {
+                st.focus = target_f;
+            } else {
+                let dt = clamp(skyu.taa.w, 1.0 / 240.0, 0.25);
+                st.focus = st.focus + (target_f - st.focus) * (1.0 - exp(-dt * CAM_FOCUS_RATE));
+            }
+            st.focus_ok = 1.0;
+        } else {
+            st.focus_ok = 0.0;
+        }
         st.sun_e = wa_sun[0] / 64.0 * st.gain;
         st.init = 1.0;
         cam_state = st;
