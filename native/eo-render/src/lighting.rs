@@ -244,8 +244,9 @@ mod tests {
                 let props = format!("{}\n{}\n{}", look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), include_str!("props_draw.wgsl"));
                 parse(&format!("{name}: props"), &props);
                 let agents = format!(
-                    "{}\n{}\n{}\n{}\n{}",
+                    "{}\n{}\n{}\n{}\n{}\n{}",
                     look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, look::ShadowLevels::Full, false),
+                    crate::agents::people_shading_wgsl(), // (`--people-shading`)
                     include_str!("agents_types.wgsl"),
                     include_str!("agents_common.wgsl"),
                     include_str!("agents_draw.wgsl"),

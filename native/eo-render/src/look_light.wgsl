@@ -146,6 +146,14 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 // the room behind kit glazing at night (rooms.wgsl), set by the city
 // shader before `look_light`: the pane's emission (kit/materials.js emissiveNode).
 var<private> rm_emit: vec3<f32>;
+// (`--people-shading`, agents_draw.wgsl `pp_person`) what `look_light` found:
+// the key's visibility (shadow x clouds x contact; 0 where it did not look)
+// and the fog it laid over the point; and how far past the terminator (n.l
+// down to minus this) the caller wants the visibility looked up (skin: its
+// wrap's tail; 0, everywhere else, as before). Read and set only by the people.
+var<private> lk_key_vis: f32;
+var<private> lk_fog_out: f32;
+var<private> lk_vis_wrap: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -184,8 +192,10 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let l = look.key_dir.xyz;
     let nl = max(dot(n, l), 0.0);
     var key = vec3<f32>(0.0);
-    if (nl > 0.0 && dot(ng, l) > -0.05) {
-        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng); // cloud and contact shadows
+    if (nl > -lk_vis_wrap && dot(ng, l) > -0.05 - lk_vis_wrap) {
+        let kv = vec3<f32>(lk_shadow(world, ng), sky_cloud_transmittance(world), sky_contact_shadow(world, ng));
+        key = look.key.xyz * max(nl, 0.0) * kv.x * kv.y * kv.z; // cloud and contact shadows
+        lk_key_vis = kv.x * kv.y * kv.z; // (`--people-shading`)
     }
     var direct_d = key * diffuse / LK_PI;
     var direct_s = key * lk_ggx(n, v, l, f0, rough);
@@ -362,6 +372,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         }
     }
     let fog = lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd)); // the set's capped sight distance
+    lk_fog_out = fog; // (`--people-shading`)
     lit = mix(lit, look.fog_color.xyz, fog);
     return vec4<f32>(lit, alpha);
 }

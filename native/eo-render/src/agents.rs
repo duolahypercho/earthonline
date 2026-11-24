@@ -44,6 +44,25 @@ pub const STATS_WORDS: usize = 12;
 /// Timestamps this module writes per frame: cull begin/end, casters begin/end.
 pub const QUERIES_PER_FRAME: u32 = 4;
 
+/// `--people-shading`: the people's skin, cloth and hair shading
+/// (agents_draw.wgsl `pp_person`) compiled into the agents' pipelines made
+/// after this is set (eo-app sets it before the library attaches); off, the
+/// code is compiled out and the frame is as before.
+static PEOPLE_SHADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_people_shading(on: bool) {
+    PEOPLE_SHADING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn people_shading() -> bool {
+    PEOPLE_SHADING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The generated constant agents_draw.wgsl reads (`SF_PEOPLE_SHADING`).
+pub fn people_shading_wgsl() -> String {
+    format!("const SF_PEOPLE_SHADING: bool = {};", people_shading())
+}
+
 /// Distance tiers and caps (`HERO_OVERLAY` / the crowd's bands and budget), metres.
 #[derive(Clone, Copy, Debug)]
 pub struct Tiers {
@@ -482,9 +501,10 @@ impl AgentsGpu {
             ],
         });
         let draw_src = format!(
-            "{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}",
             // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
             crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
+            people_shading_wgsl(), // (`--people-shading`) compiled out without it
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
             include_str!("agents_draw.wgsl"),
@@ -910,5 +930,58 @@ mod tests {
         assert!(src.contains(&format!("const AG_BORE_DEPTH_SHIFT: u32 = {}u;", eo_agents::BORE_DEPTH_SHIFT)), "AG_BORE_DEPTH_SHIFT");
         assert!(src.contains(&format!("const AG_BORE_DEPTH_QUANT: f32 = {:.1};", eo_agents::BORE_DEPTH_QUANT)), "AG_BORE_DEPTH_QUANT");
         assert_eq!(eo_agents::AGENT_IN_BORE & (eo_agents::AGENT_PLAYER | eo_agents::AGENT_BLINK_ON | 0xffff), 0, "a bit of its own");
+    }
+
+    /// (`--people-shading`) each class roughness the Rocketbox cook writes,
+    /// as BC1 keeps it (6 bits of green; a block of one value keeps it
+    /// exactly), lands in its class's band of agents_draw.wgsl `pp_class`,
+    /// and no two classes share a band.
+    #[test]
+    fn the_people_classes_read_back_from_the_cooks_roughness() {
+        use eo_agents::rocketbox::{ROUGH_CLOTH, ROUGH_GEAR, ROUGH_GLASS, ROUGH_HAIR, ROUGH_HEAD, ROUGH_SKIN};
+        let src = include_str!("agents_draw.wgsl");
+        let band = |name: &str| -> (f32, f32) {
+            let line = src.lines().find(|l| l.starts_with(&format!("const {name}: vec2<f32> = vec2<f32>("))).unwrap_or_else(|| panic!("{name}"));
+            let inner = &line[line.find("vec2<f32>(").unwrap() + 10..line.rfind(')').unwrap()];
+            let v: Vec<f32> = inner.split(',').map(|x| x.trim().parse().unwrap()).collect();
+            (v[0], v[1])
+        };
+        let bc1 = |r: f32| (r * 63.0).round() / 63.0;
+        let inside = |r: f32, b: (f32, f32)| r >= b.0 && r < b.1;
+        let (hair, skin, cloth) = (band("PP_HAIR_BAND"), band("PP_SKIN_BAND"), band("PP_CLOTH_BAND"));
+        for r in [ROUGH_HEAD, ROUGH_SKIN] {
+            assert!(inside(bc1(r), skin) && !inside(bc1(r), hair) && !inside(bc1(r), cloth), "skin {r}");
+        }
+        assert!(inside(bc1(ROUGH_HAIR), hair) && !inside(bc1(ROUGH_HAIR), skin), "hair");
+        assert!(inside(bc1(ROUGH_CLOTH), cloth), "cloth");
+        for r in [ROUGH_GEAR, ROUGH_GLASS] {
+            assert!(!inside(bc1(r), skin) && !inside(bc1(r), hair) && !inside(bc1(r), cloth), "neither {r}");
+        }
+        // a block mixing skin and cloth (BC1's thirds between the two) reads as neither or cloth, never skin.
+        let (s, c) = (bc1(ROUGH_SKIN), bc1(ROUGH_CLOTH));
+        assert!(!inside(s + (c - s) / 3.0, skin));
+    }
+
+    /// (`--people-shading`) the agents' colour shader validates with the
+    /// people's shading compiled in and out, and the constant says which.
+    #[test]
+    fn the_people_shading_compiles_in_and_out() {
+        for on in [false, true] {
+            super::set_people_shading(on);
+            let konst = super::people_shading_wgsl();
+            assert_eq!(konst, format!("const SF_PEOPLE_SHADING: bool = {on};"));
+            let src = format!(
+                "{}\n{}\n{}\n{}\n{}\n{}",
+                crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
+                konst,
+                include_str!("agents_types.wgsl"),
+                include_str!("agents_common.wgsl"),
+                include_str!("agents_draw.wgsl"),
+                include_str!("sky_velocity.wgsl")
+            );
+            let module = wgpu::naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("people shading {on}: {}", e.emit_to_string(&src)));
+            wgpu::naga::valid::Validator::new(wgpu::naga::valid::ValidationFlags::all(), wgpu::naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("people shading {on}: {e:?}"));
+        }
+        super::set_people_shading(false);
     }
 }

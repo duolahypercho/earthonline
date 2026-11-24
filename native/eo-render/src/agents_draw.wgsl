@@ -208,6 +208,141 @@ fn ag_surface(in: AgOut, bore: bool) -> AgSurf {
 const AG_CINE_COAT_ROUGH: f32 = 0.07;
 const AG_CINE_COAT_GRIME_ROUGH: f32 = 0.35;
 
+// ---- the people's materials (`--people-shading`; agents.rs `SF_PEOPLE_SHADING`) ----
+// The Rocketbox atlases carry colour, a normal map and the roughness the cook
+// sets per material class (eo-agents rocketbox.rs `ROUGH_*`: skin 0.5 on the
+// head and 0.55 on the body, hair 0.45, cloth 0.85, gear 0.6, glasses 0.15;
+// agents.rs tests that each lands in its band). The ORM atlas is BC1, 6 bits
+// of green, so a texel's class is read back from the band its roughness falls
+// in; a texel between classes (a block or mip that mixes them) reads as none
+// and keeps the city's shading.
+const PP_NONE: u32 = 0u;
+const PP_SKIN: u32 = 1u;
+const PP_CLOTH: u32 = 2u;
+const PP_HAIR: u32 = 3u;
+const PP_HAIR_BAND: vec2<f32> = vec2<f32>(0.42, 0.47);
+const PP_SKIN_BAND: vec2<f32> = vec2<f32>(0.47, 0.58);
+const PP_CLOTH_BAND: vec2<f32> = vec2<f32>(0.75, 0.95);
+
+fn pp_class(rough: f32) -> u32 {
+    if (rough >= PP_SKIN_BAND.x && rough < PP_SKIN_BAND.y) {
+        return PP_SKIN;
+    }
+    if (rough >= PP_CLOTH_BAND.x && rough < PP_CLOTH_BAND.y) {
+        return PP_CLOTH;
+    }
+    if (rough >= PP_HAIR_BAND.x && rough < PP_HAIR_BAND.y) {
+        return PP_HAIR;
+    }
+    return PP_NONE;
+}
+
+// Skin: light enters and leaves the skin apart, so the lit side's light
+// spreads across the shadow terminator, red furthest. A diffusion profile of
+// mean free path ld on a feature of radius R blurs the key's Lambert term
+// over an angle sigma = ld / R: near the terminator the clamped cosine is the
+// ramp max(d, 0) in d = asin(n.l), which a Gaussian of sigma turns into
+// d Phi(d / sigma) + sigma phi(d / sigma), so the term adds that minus the
+// ramp (a soft, red-weighted band either side of the terminator, nothing far
+// from it, the energy it adds of order sigma^2). Mean free paths
+// ld = 1 / sqrt(3 sa (sa + ss')) from Jensen et al. 2001 (skin1: sa 0.032 /
+// 0.17 / 0.48 per mm, ss' 0.74 / 0.88 / 1.01 per mm): 3.67 / 1.37 / 0.68 mm;
+// R 15 mm, between a nose's or a lip's and a cheek's. The skin's specular
+// keeps the city's lobe at the cook's roughness and adds a second, sharper
+// one for its oily film at the skin's F0 (n 1.4: 0.028), a two-lobe skin
+// specular.
+const PP_SKIN_MFP_MM: vec3<f32> = vec3<f32>(3.67, 1.37, 0.68);
+const PP_SKIN_FEATURE_MM: f32 = 15.0;
+const PP_SKIN_F0: f32 = 0.028;
+const PP_SKIN_SHARP_ROUGH: f32 = 0.3;
+const PP_SKIN_SHARP_WEIGHT: f32 = 0.15;
+// Cloth: the fibres' grazing sheen, the Charlie sheen (Estevez and Kulla
+// 2017) with the Neubelt-Pettineo visibility, from the key, its colour the
+// fabric's own at half strength (sqrt(albedo), the cloth model's default
+// sheen colour, x 0.5: everyday cotton, denim and wool, not velvet) and a
+// broad roughness.
+const PP_CLOTH_SHEEN: f32 = 0.5;
+const PP_CLOTH_SHEEN_ROUGH: f32 = 0.7;
+// Hair: Kajiya-Kay strand highlights (1989) on two shifted lobes (Scheuermann
+// 2004: a white primary shifted toward the tip, a broader secondary in the
+// hair's colour toward the root, the light that passes through a strand), the
+// strands taken to run down the head (gravity on the surface: the cards carry
+// no strand direction).
+const PP_HAIR_SHIFT: vec2<f32> = vec2<f32>(0.08, -0.08);
+const PP_HAIR_EXP: vec2<f32> = vec2<f32>(80.0, 20.0);
+const PP_HAIR_SPEC: vec2<f32> = vec2<f32>(0.10, 0.25);
+
+// The Gaussian-blurred terminator's addition to the key's Lambert term, per
+// channel (sigma in radians): d Phi(d / sigma) + sigma phi(d / sigma) - max(d, 0),
+// Phi by its tanh form (within 1e-3).
+fn pp_terminator(nl: f32, sigma: vec3<f32>) -> vec3<f32> {
+    let d = asin(clamp(nl, -1.0, 1.0));
+    let z = vec3<f32>(d) / sigma;
+    let cdf = 0.5 * (vec3<f32>(1.0) + tanh(0.7978846 * (z + 0.044715 * z * z * z)));
+    let pdf = exp(-0.5 * z * z) * 0.3989423;
+    return max(vec3<f32>(d) * cdf + sigma * pdf - vec3<f32>(max(d, 0.0)), vec3<f32>(0.0));
+}
+
+fn pp_charlie(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, alpha: f32) -> f32 {
+    let h = normalize(l + v);
+    let nh = clamp(dot(n, h), 0.0, 1.0);
+    let nl = max(dot(n, l), 0.0);
+    let nv = max(dot(n, v), 1e-4);
+    let sin2 = max(1.0 - nh * nh, 0.0);
+    let inv = 1.0 / alpha;
+    let d = (2.0 + inv) * pow(sin2, 0.5 * inv) / (2.0 * LK_PI);
+    let vis = 1.0 / max(4.0 * (nl + nv - nl * nv), 1e-4);
+    return d * vis;
+}
+
+fn pp_strand(t: vec3<f32>, n: vec3<f32>, h: vec3<f32>, shift: f32, e: f32) -> f32 {
+    let ts = normalize(t + n * shift);
+    let th = dot(ts, h);
+    let s = sqrt(max(1.0 - th * th, 0.0));
+    return smoothstep(-1.0, 0.0, th) * pow(s, e);
+}
+
+// The light the city's rig leaves out for a person's skin, cloth and hair,
+// from the key (the sun or the moon), added after `look_light` under the fog
+// it laid (look_light.wgsl `lk_fog_out`), at the key's visibility it found
+// (`lk_key_vis`: shadow, clouds, contact; 0 where the key does not reach; for
+// skin looked up past the terminator as far as its band reaches,
+// `lk_vis_wrap`, set before `look_light`: one shadow lookup, the city's own;
+// a second does not fit the agents' pipeline on Apple's compiler). The
+// band reaches past the terminator about three red sigmas (0.73 rad: n.l
+// down to -0.67).
+const PP_SKIN_WRAP_REACH: f32 = 0.67;
+
+fn pp_person(g: AgSurf) -> vec3<f32> {
+    let cls = pp_class(g.s.rough);
+    let n = g.s.n;
+    let l = look.key_dir.xyz;
+    let nl = dot(n, l);
+    if (cls == PP_NONE || lk_key_vis <= 0.0 || (nl <= 0.0 && cls != PP_SKIN)) {
+        return vec3<f32>(0.0);
+    }
+    let v = g.v;
+    let key = look.key.xyz * lk_key_vis;
+    var out = vec3<f32>(0.0);
+    if (cls == PP_SKIN) {
+        out = key * pp_terminator(nl, PP_SKIN_MFP_MM / PP_SKIN_FEATURE_MM) * g.s.albedo / LK_PI;
+        out = out + key * max(nl, 0.0) * lk_ggx(n, v, l, vec3<f32>(PP_SKIN_F0), PP_SKIN_SHARP_ROUGH) * PP_SKIN_SHARP_WEIGHT;
+    } else if (cls == PP_CLOTH) {
+        out = key * nl * pp_charlie(n, v, l, PP_CLOTH_SHEEN_ROUGH) * PP_CLOTH_SHEEN * sqrt(max(g.s.albedo, vec3<f32>(0.0)));
+    } else {
+        let down = vec3<f32>(0.0, -1.0, 0.0);
+        let t0 = down - n * dot(n, down);
+        if (dot(t0, t0) > 1e-6) {
+            let t = normalize(t0);
+            let h = normalize(l + v);
+            let s1 = pp_strand(t, n, h, PP_HAIR_SHIFT.x, PP_HAIR_EXP.x) * PP_HAIR_SPEC.x;
+            let s2 = pp_strand(t, n, h, PP_HAIR_SHIFT.y, PP_HAIR_EXP.y) * PP_HAIR_SPEC.y;
+            out = key * smoothstep(0.0, 0.25, nl) * (vec3<f32>(s1) + s2 * g.s.albedo);
+        }
+    }
+    return out * (1.0 - lk_fog_out);
+}
+
 // Every agent but those in a tunnel's bore: the city's light rig (look_light.wgsl).
 fn ag_shade(in: AgOut) -> vec4<f32> {
     let g = ag_surface(in, false);
@@ -216,7 +351,16 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
         sky_coat = 1.0;
         sky_coat_rough = mix(AG_CINE_COAT_ROUGH, AG_CINE_COAT_GRIME_ROUGH, grime);
     }
-    return look_light(g.s, g.m, g.v, in.world, g.n, 0u);
+    // (`--people-shading`) a person's skin, cloth and hair; compiled out without it.
+    let person = SF_PEOPLE_SHADING && (g.m.flags & AG_M_ATLAS) != 0u && ag_models[ag_agents[in.agent].model].model_class == AG_PERSON;
+    if (person && pp_class(g.s.rough) == PP_SKIN) {
+        lk_vis_wrap = PP_SKIN_WRAP_REACH; // the key's visibility past the terminator, for the band's tail
+    }
+    var c = look_light(g.s, g.m, g.v, in.world, g.n, 0u);
+    if (person) {
+        c = vec4<f32>(c.rgb + pp_person(g), c.a);
+    }
+    return c;
 }
 
 // A car (or the player) in a tunnel's bore (`--tunnels`; the feed's
