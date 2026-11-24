@@ -198,6 +198,8 @@ fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32
         let hl = normalize(vec2<f32>(lt.x, lt.z) + vec2<f32>(1e-6, 0.0));
         let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
         shape = vert * smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
+    } else if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+        shape = sf_rear_lamp_shape(lt, li.dir); // (`--car-lamps`) a car's rear lamp lights the fog behind it, not round it
     }
     if (shape <= 0.0) {
         return vec3<f32>(0.0);

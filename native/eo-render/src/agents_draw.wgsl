@@ -1254,13 +1254,24 @@ fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>
             shape = max(sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578) * side, SKY_CINE_STREAK_HEAD_LENS * smoothstep(-0.2, 0.2, dot(hl, ha)));
         } else if (li.kind >= 4u) {
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+            if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+                shape = sf_rear_lamp_shape(-l, li.dir); // (`--car-lamps`) a car's rear lamp's field
+            }
         }
         let e = li.intensity * shape * rest / d2 * nl;
         if (e <= 0.0) {
             continue;
         }
         let rc = sqrt(rc2);
-        let bound = d2 / (LK_PI * src * src * nl);
+        var bound = d2 / (LK_PI * src * src * nl);
+        if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+            // (`--car-lamps`) a rear lamp's mirror image no brighter than the lamp
+            // is drawn (its luminance held under AG_CAR_LAMP_WHITE x the
+            // exposure's white, `ag_car_prepare`): a chrome badge or a bumper
+            // shows a lamp behind the eye as the lamp itself looks, not as a
+            // spark over it
+            bound = min(bound, AG_CAR_LAMP_WHITE / max(look.key.w * e, 1e-12));
+        }
         var c = li.color * e * min(lk_ggx(n, v, l, f0, rc), vec3<f32>(bound));
         // the lamp's map only where its highlight shows (most lights leave a
         // sharp lacquer nothing: four compares a light were the term's cost),

@@ -251,6 +251,9 @@ fn ag_ct_lamp_shape(li: SkyLight, l: vec3<f32>, dist: f32, cine: bool) -> vec2<f
         }
         return vec2<f32>(vert * side * near * near, SKY_CINE_SRC_HEADLAMP);
     }
+    if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+        return vec2<f32>(sf_rear_lamp_shape(-l, li.dir), 0.5 * sqrt(max(li.size, 0.0))); // (`--car-lamps`) a rear lamp's field
+    }
     if (li.kind >= 3u) {
         return vec2<f32>(smoothstep(li.cos_outer, li.cos_inner, ca), select(SKY_CINE_SRC_STREET, 0.5 * sqrt(max(li.size, 0.0)), li.kind >= 4u));
     }
@@ -482,6 +485,9 @@ fn ag_ct_streak_shape(li: SkyLight, l: vec3<f32>) -> vec2<f32> {
         let hr = vec2<f32>(-ha.y, ha.x);
         let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
         return vec2<f32>(max(sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578) * side, SKY_CINE_STREAK_HEAD_LENS * smoothstep(-0.2, 0.2, dot(hl, ha))), SKY_CINE_SRC_HEADLAMP);
+    }
+    if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+        return vec2<f32>(sf_rear_lamp_shape(-l, li.dir), 0.5 * sqrt(max(li.size, 0.0))); // (`--car-lamps`) a rear lamp's field
     }
     if (li.kind >= 4u) {
         return vec2<f32>(smoothstep(li.cos_outer, li.cos_inner, ca), 0.5 * sqrt(max(li.size, 0.0)));

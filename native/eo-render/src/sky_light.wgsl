@@ -209,6 +209,9 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
             src = SKY_CINE_SRC_HEADLAMP;
         } else if (li.kind >= 4u) {
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+            if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+                shape = sf_rear_lamp_shape(-l, li.dir); // (`--car-lamps`) a car's rear lamp's field (agents.rs)
+            }
             src = 0.5 * sqrt(max(li.size, 0.0));
         }
         // the source's size widens the lobe both ways (as the clusters' specular)
@@ -308,6 +311,9 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
             // SpotLight: smoothstep(cos angle, cos (angle (1 - penumbra))));
             // a shop window's light (kind 4, `--shop-light`) its window's lobe the same way.
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+            if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+                shape = sf_rear_lamp_shape(-l, li.dir); // (`--car-lamps`) a car's rear lamp's field (agents.rs)
+            }
         }
         let nl = max(dot(n, l), 0.0);
         var e = li.intensity * shape * w * w / d2 * nl;

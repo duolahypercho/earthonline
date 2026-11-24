@@ -9,8 +9,11 @@
 // at the body's own tail lamps (eo-agents `vehicles::rear_lamp`, in the
 // model's spare words `wheel[2].w`, `wheel[3].w`), aimed back along the body,
 // each a red LED lamp of the regulations' intensity (the tail lamp's, or the
-// stop lamp's while the car brakes) shaped as their photometric field, its
-// lens the size of a lamp's. They light the street and the car behind in red
+// stop lamp's while the car brakes) shaped as their photometric field (a lobe
+// wider across than up and down over the lens's diffuse floor: agents.rs
+// `rear_lamp_shape_fn`, read as `sf_rear_lamp_shape` wherever a light of the
+// list is shaded; the record's cone only bounds it), its lens the size of a
+// lamp's. They light the street and the car behind in red
 // as every other light does (the clusters), and the wet street mirrors them
 // in its streaks where they are among the frame's brightest toward the eye.
 
@@ -79,7 +82,8 @@ fn lt_car_toward_eye(l: SkyLight, to_eye: vec3<f32>) -> f32 {
         return max(smoothstep(l.cos_outer, l.cos_inner, c), LT_HEAD_LENS_SHARE * smoothstep(-0.2, 0.2, c));
     }
     if (l.kind == LT_REAR_KIND) {
-        return smoothstep(l.cos_outer, l.cos_inner, c);
+        // its field toward the eye's side (`lt_rear_lamp_shape`, agents.rs, level): the lobe across, the lens's floor
+        return lt_rear_lamp_shape(normalize(vec3<f32>(to_eye.x, 0.0, to_eye.z) + vec3<f32>(1e-6, 0.0, 0.0)), l.dir);
     }
     return 1.0;
 }
