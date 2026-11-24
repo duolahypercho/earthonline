@@ -174,8 +174,14 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
         t = cross(n, vec3<f32>(1.0, 0.0, 0.0));
     }
     t = normalize(t);
-    let a_along = mix(SKY_CINE_STREAK_ALONG, SKY_CINE_PUDDLE_ALPHA, sky_streak_pud);
-    let a_across = mix(SKY_CINE_STREAK_ACROSS, SKY_CINE_PUDDLE_ALPHA, sky_streak_pud);
+    // (`--wet-surfaces`) a puddle's own lobe, and in rain its rings' (`sky_w2_lobe`; 0 without)
+    let a_pud = select(SKY_CINE_PUDDLE_ALPHA, max(SKY_CINE_PUDDLE_ALPHA, sky_w2_pud_alpha), SKY_W2_FULL);
+    let a_along = mix(SKY_CINE_STREAK_ALONG, a_pud, sky_streak_pud);
+    let a_across = mix(SKY_CINE_STREAK_ACROSS, a_pud, sky_streak_pud);
+    let ring_w = select(0.0, sky_w2_ring * sky_streak_pud, SKY_W2_FULL);
+    let r_along = mix(SKY_CINE_STREAK_ALONG, SKY_W2_RING_LOBE.y, sky_streak_pud);
+    let r_across = mix(SKY_CINE_STREAK_ACROSS, SKY_W2_RING_LOBE.y, sky_streak_pud);
+    let lobes = select(1, 2, SKY_W2_FULL && ring_w > 0.0);
     var out = vec3<f32>(0.0);
     for (var k = 0u; k < count; k = k + 1u) {
         let li = sky_lights[sky_clusters[base + 1u + k]];
@@ -207,7 +213,14 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
         }
         // the source's size widens the lobe both ways (as the clusters' specular)
         let wide = src / (2.0 * dist);
-        let f = sky_cine_film(n, v, l, t, min(a_along + wide, 1.0), min(a_across + wide, 1.0));
+        // (`--wet-surfaces`, in rain) the rings' lobe over their share (one
+        // call site: the lit pipelines stand at Apple's compiler's limit)
+        var f = 0.0;
+        for (var lb = 0; lb < lobes; lb = lb + 1) {
+            let second = lb == 1;
+            let wl = select(select(1.0, 1.0 - ring_w, lobes == 2), ring_w, second);
+            f = f + wl * sky_cine_film(n, v, l, t, min(select(a_along, r_along, second) + wide, 1.0), min(select(a_across, r_across, second) + wide, 1.0));
+        }
         // a mirror's bound: no more than the film's Fresnel (<= 1) times the source's luminance
         let e = li.intensity * shape / d2;
         out = out + li.color * e * min(f, d2 / (LK_PI * src * src));
@@ -711,10 +724,31 @@ const SKY_W2_GROUND: vec2<f32> = vec2<f32>(0.5, 0.24);
 /// and length scales (1/m).
 const SKY_W2_WALL: vec4<f32> = vec4<f32>(0.3, 0.9, 0.62, 0.4);
 const SKY_W2_RUNS: vec2<f32> = vec2<f32>(2.9, 0.16);
+/// A puddle's surface is not a mirror. The wind's capillary wavelets finer
+/// than the drawn ones tilt it: their mean square slope a m/s of wind, a
+/// puddle's fetch of a metre or two taking a fortieth of the open sea's
+/// (Cox & Munk 1954: 0.003 + 0.00512 W), capped at `x` m/s; the GGX alpha is
+/// its root.
+const SKY_W2_WAVELET_MSS: vec2<f32> = vec2<f32>(6.0, 0.000128);
+/// Rain rings (Lagarde 2012; drop counts from Marshall-Palmer): about 66 drops
+/// of ~2 mm a square metre a second for each mm/h, each ring living ~0.4 s,
+/// its packet (two crests, ~4 cm wide) covering ~0.005 m2 on average, so
+/// the share of the water under rings is 1 - exp(-x rate); under them the
+/// water's slopes (rms ~0.08) make a second lobe of alpha `y`.
+const SKY_W2_RING_LOBE: vec2<f32> = vec2<f32>(0.15, 0.08);
+/// A ring drawn where the pixel can hold it: its wavelength (m), the speed
+/// of its front (m/s), its life (s), its peak slope; the cells drops land in (m).
+const SKY_W2_RING: vec4<f32> = vec4<f32>(0.022, 0.25, 0.42, 0.16);
+const SKY_W2_RING_CELL: f32 = 0.25;
 
 /// (`--wet-surfaces`) the share of the shaded surface that is water (the film
 /// and puddles): look_light reads its environment whole there (`sky_w2_env`).
 var<private> sky_w2_water: f32;
+/// (`--wet-surfaces`) a puddle's lobe (set with the puddle; 0 elsewhere):
+/// the still water's alpha with the wind's wavelets, and the share of the
+/// water under rain rings (the second lobe's weight).
+var<private> sky_w2_pud_alpha: f32;
+var<private> sky_w2_ring: f32;
 
 fn sky_w2_on() -> bool {
     return SKY_W2_FULL && sky_on(skyu.flags.x, SKY_WET_SURFACES);
@@ -761,6 +795,51 @@ fn sky_w2_puddle(p: vec2<f32>, kerb: f32, fill: f32, fp: f32) -> vec2<f32> {
     return vec2<f32>(pud, halo);
 }
 
+/// Rain rings where the pixel's footprint `fp` holds their wavelength: in
+/// each of two offset grids of `SKY_W2_RING_CELL` cells a drop lands once a
+/// life at a random phase (only in the share of cells the rate fills), and
+/// sends out a capillary packet of about two crests whose slope falls as it
+/// spreads and ages. Past the footprint the rings are the second lobe instead
+/// (`sky_w2_lobe`). Returns a tangent-plane slope.
+fn sky_w2_rings(p: vec2<f32>, fp: f32) -> vec2<f32> {
+    let rate = skyu.wet.z;
+    let lam = SKY_W2_RING.x;
+    let fade = 1.0 - smoothstep(0.15 * lam, 0.35 * lam, fp);
+    if (rate <= 0.0 || fade <= 0.0) {
+        return vec2<f32>(0.0);
+    }
+    let cover = 1.0 - exp(-SKY_W2_RING_LOBE.x * rate);
+    var sl = vec2<f32>(0.0);
+    for (var layer = 0; layer < 2; layer = layer + 1) {
+        let o = f32(layer) * vec2<f32>(0.47, 0.71);
+        let cell = floor(p / SKY_W2_RING_CELL + o);
+        let s = cell * 1.37 + vec2<f32>(3.1, 7.9) * f32(layer + 1);
+        let h = st_hash(s);
+        let age = fract(skyu.wet.w / SKY_W2_RING.z + h);
+        let live = step(st_hash(s + vec2<f32>(5.3, 1.7) + floor(skyu.wet.w / SKY_W2_RING.z + h)), cover);
+        let c = (cell - o + 0.3 + 0.4 * vec2<f32>(st_hash(s + 9.2), st_hash(s + 4.4))) * SKY_W2_RING_CELL;
+        let d = p - c;
+        let r = length(d);
+        let x = (r - age * SKY_W2_RING.z * SKY_W2_RING.y) / lam;
+        let amp = SKY_W2_RING.w * (1.0 - age) * (1.0 - age) * exp(-0.5 * x * x) / (1.0 + r / 0.03);
+        sl = sl + d / max(r, 1e-4) * sin(6.2831853 * x) * amp * live;
+    }
+    return sl * fade;
+}
+
+/// A puddle's lobe (sets `sky_w2_pud_alpha`, `sky_w2_ring`; returns its
+/// roughness): the still water's alpha widened by the wind's unresolved
+/// wavelets (their mean square slope adds to alpha squared), and in rain the
+/// share of the water under rings, which reflects through a second, rough lobe.
+fn sky_w2_lobe() -> f32 {
+    let ws = min(length(skyu.wind.xy), SKY_W2_WAVELET_MSS.x);
+    let a0 = SKY_W2_WATER_ROUGH * SKY_W2_WATER_ROUGH;
+    let a = sqrt(a0 * a0 + SKY_W2_WAVELET_MSS.y * ws);
+    sky_w2_pud_alpha = a;
+    sky_w2_ring = select(0.0, 1.0 - exp(-SKY_W2_RING_LOBE.x * skyu.wet.z), skyu.wet.z > 0.0);
+    return sqrt(a);
+}
+
 /// Still water's normal: the wind's capillary wavelets (a finite-difference
 /// slope of animated value noise, faded with the footprint) and the rain's rings.
 fn sky_w2_water_normal(p: vec2<f32>, n_geom: vec3<f32>, fp: f32) -> vec3<f32> {
@@ -776,7 +855,7 @@ fn sky_w2_water_normal(p: vec2<f32>, n_geom: vec3<f32>, fp: f32) -> vec3<f32> {
         let amp = SKY_W2_WAVELET.x * (0.4 + 0.6 * min(ws, 4.0)) * fade / 0.35;
         n = normalize(n + vec3<f32>(hx - h0, 0.0, hz - h0) * amp);
     }
-    let sl = sky_ripple(p);
+    let sl = sky_w2_rings(p, fp);
     return normalize(n + vec3<f32>(sl.x, 0.0, sl.y));
 }
 
@@ -812,9 +891,9 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
     let graze = smoothstep(0.26, 0.05, abs(dot(n_geom, v))) * select(0.0, 1.0, n_geom.y > 0.95);
     let film = mix(wet_rough, 0.06, graze * 0.92);
     (*s).rough = mix(mix((*s).rough, film, soak), min(film, SKY_W2_WATER_ROUGH * 2.0), ph.y * 0.5);
-    (*s).rough = mix((*s).rough, SKY_W2_WATER_ROUGH, pud);
     var n = normalize(mix((*s).n, n_geom, clamp(soak * select(0.70, 0.75, asphalt), 0.0, 1.0)));
     if (pud > 0.01) {
+        (*s).rough = mix((*s).rough, sky_w2_lobe(), pud);
         n = normalize(mix(n, sky_w2_water_normal(world.xz, n_geom, fp), pud));
     }
     (*s).n = n;
@@ -844,9 +923,10 @@ fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
         }
         sky_w2_water = max(soak, pud);
         (*s).albedo = (*s).albedo * mix(1.0, mix(1.0, SKY_W2_GROUND.x, porosity), soak) * mix(1.0, SKY_W2_UNDER_WATER, pud);
-        (*s).rough = mix(mix((*s).rough, min((*s).rough, SKY_W2_GROUND.y), soak), SKY_W2_WATER_ROUGH, pud);
+        (*s).rough = mix((*s).rough, min((*s).rough, SKY_W2_GROUND.y), soak);
         var n = normalize(mix((*s).n, ng, clamp(soak * 0.7, 0.0, 1.0)));
         if (pud > 0.01) {
+            (*s).rough = mix((*s).rough, sky_w2_lobe(), pud);
             n = normalize(mix(n, sky_w2_water_normal(world.xz, ng, fp), pud));
         }
         (*s).n = n;
@@ -870,36 +950,80 @@ fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
 // street's pipelines only) ----
 // The screen-space reflection, second generation, on glossy ground, car paint's
 // clearcoat and glass:
-// * the trace: the cinematic march through the previous frame's depth (24
-//   steps x 1.32 from 0.15 m, scaled by range / 30 m; 6 refinements; the
-//   thickness test), its start jittered per pixel and frame (interleaved
-//   gradient noise, golden-ratio steps), so the history accumulates what a
-//   fixed march draws as steps and bands;
+// * the trace (`sky_sr_trace`): the ray's own path across the previous frame's
+//   depth (the occlusion pass's half-resolution view depth, with the camera it
+//   was made with), stepped on the screen (McGuire & Mara 2014): the ray's 1/w
+//   and its depth over w are linear on the screen, so its depth at each step
+//   is exact and every stretch of its path is looked at, near and far alike (a
+//   march in metres, its steps growing, skips more of the screen the further it
+//   goes: a reflected tower broke into stepped blocks, puddles' far images
+//   into stairs). At most `SKY_SR_STEPS` steps and never more than one a
+//   texel, denser toward the start (contact), the first a texel and a half
+//   out, all jittered per pixel and frame (interleaved gradient noise,
+//   golden-ratio steps) so the history accumulates what a fixed march draws as
+//   bands. A step hits where the depth there lies within the ray's depth over
+//   the step (passed by a small bias) and no more than the sample's assumed
+//   thickness in front of it; bisections on the screen place the hit;
 // * the filter: the surface's lobe at the hit seen through the mirror. A
-//   lobe of half-width alpha (along the view's plane, and across it) spreads
-//   the reflected ray by 2 alpha; at the hit, L along the ray, that is 2 alpha
-//   L, seen from the eye over the mirrored path D + L: an angle of
-//   2 alpha L / (D + L). So the reflection is sharp where the reflected thing
-//   stands on the surface (a pole's foot in a puddle) and long for far lamps,
-//   windows and signs (the wet film's anisotropic lobe, sky_streak_w). Eight
-//   taps on the jittered ellipse, each weighted by 1 / (1 + luma) against
-//   fireflies (Karis 2014);
+//   lobe of half-width alpha spreads the reflected ray by 2 alpha; at the hit,
+//   L along the ray, that is 2 alpha L, seen from the eye over the mirrored
+//   path D + L: an angle of 2 alpha L / (D + L). So the reflection is sharp
+//   where the reflected thing stands on the surface (a pole's foot in a puddle)
+//   and long for far lamps, windows and signs (the wet film's anisotropic lobe;
+//   a puddle's own, `sky_w2_lobe`, and in rain its rings' second lobe). Taps
+//   on the jittered ellipse, one every 3 pixels of its long half-axis (2 to
+//   20), averaged as they are (weighting bright taps down took the tail lamps
+//   and signals out of the wet road), the mean capped at 24 x the exposure;
 // * the open sky: a ray the trace does not stop reads the previous frame along
 //   its own direction, the point at infinity, where that pixel is open sky or
 //   scenery past 1.5-3 km (no parallax under a pixel there): the clouds, the
 //   low sun's glow and the city's night glow as the frame draws them, not the
-//   probes' analytic dome (puddles, car roofs, glass toward the sky);
+//   probes' analytic dome (puddles, car roofs, glass toward the sky). A
+//   direction off the frame (a near puddle's view of the sky overhead) reads
+//   the frame's edge toward it where that is sky (on ground facing up: a
+//   pane's or a car flank's ray off the frame runs low into the facades,
+//   which only the probes know), scaled by the weather dome's
+//   gradient between the two directions (by its overcast weight the CIE
+//   overcast's (1 + 2 sin el) / 3, held within 0.5-2) and trusted less with
+//   the angle between them (fully within 0.3 rad, not past 0.9): the probes
+//   keep only what the frame cannot say, so a puddle at the frame's foot is
+//   never darker than its sky. The sky is read with one tap (smooth on the
+//   scale of any lobe here);
 // * glass (look_light `sky_sr_glass`, `sky_sr_glass_mix`): panes trace too, in
 //   any orientation, and their clearcoat reads the trace where it finds
 //   something (the facade across the street, the street, the sky) over the
 //   probe grid.
 const SKY_SCREEN_REFLECT: u32 = 16777216u;
 const SKY_SR_FULL: bool = SF_SCREEN_REFLECT && LK_SHADOW_CASCADES && LK_SHADOW_FAR;
-/// The filter's taps.
-const SKY_SR_TAPS: i32 = 8;
+/// The filter's taps: one every `SKY_SR_TAP_PX` pixels of the lobe's long
+/// half-axis, at least x and at most y (a sharp lobe takes few, a long streak
+/// many: its noise falls as the root of their count).
+const SKY_SR_TAPS: vec2<i32> = vec2<i32>(2, 20);
+const SKY_SR_TAP_PX: f32 = 3.0;
+/// The trace: its most steps, the power that packs them toward the start,
+/// the bisections that place a hit.
+const SKY_SR_STEPS: i32 = 40;
+const SKY_SR_SPACING: f32 = 1.6;
+const SKY_SR_REFINE: i32 = 5;
+/// The ray's reach (m) and the nearest view depth it is followed to (m).
+const SKY_SR_REACH_M: f32 = 800.0;
+const SKY_SR_NEAR_M: f32 = 0.25;
+/// A depth sample's assumed thickness, x + y x its depth (m), and the margin a
+/// ray must pass behind it by to count, x + y x its depth (m: the
+/// half-resolution texel's own depth slope on ground seen low).
+const SKY_SR_THICK: vec2<f32> = vec2<f32>(0.4, 0.04);
+const SKY_SR_BIAS: vec2<f32> = vec2<f32>(0.03, 0.004);
 /// Scenery past this view distance (m) counts as open sky for the direction
 /// lookup (fully past the second).
 const SKY_SR_FAR_M: vec2<f32> = vec2<f32>(1500.0, 3000.0);
+/// A direction off the frame: the frame's edge read this far in (uv), trusted
+/// fully within 0.3 rad of it (cosine x) and not at all past 0.9 rad (y), the
+/// dome's gradient between them held within z..w.
+const SKY_SR_EDGE_IN: f32 = 0.01;
+/// Only a surface facing up past this normal y extends the frame's sky (its
+/// ray off the frame climbs over the street; a pane's runs into the facades).
+const SKY_SR_EXTEND_NY: f32 = 0.6;
+const SKY_SR_OFF_FRAME: vec4<f32> = vec4<f32>(0.9553365, 0.6216100, 0.5, 2.0);
 /// (look_light) the surface being shaded is glass (set before `sky_ssr`).
 var<private> sky_sr_glass: bool;
 
@@ -916,31 +1040,141 @@ fn sky_sr_glass_mix(rad: vec3<f32>, ssr: vec4<f32>, env_i: f32) -> vec3<f32> {
     return mix(rad, ssr.rgb / max(env_i, 1e-3), ssr.a);
 }
 
-/// The previous frame round `uv`: `SKY_SR_TAPS` taps on the ellipse of
-/// half-axes `s` (uv), jittered by `j`, `j2`, weighted against fireflies.
-fn sky_sr_taps(uv: vec2<f32>, s: vec2<f32>, j: f32, j2: f32) -> vec3<f32> {
-    let ex = look.key.w;
+/// The previous frame round `uv`: `count` taps on the ellipse of half-axes
+/// `s` (uv), jittered by `j`, `j2`, Gaussian-weighted.
+fn sky_sr_taps(uv: vec2<f32>, s: vec2<f32>, count: i32, j: f32, j2: f32) -> vec3<f32> {
     var c = vec3<f32>(0.0);
     var wsum = 0.0;
-    for (var k = 0; k < SKY_SR_TAPS; k = k + 1) {
-        let o = (f32(k) + j) / f32(SKY_SR_TAPS) * 2.0 - 1.0;
+    for (var k = 0; k < count; k = k + 1) {
+        let o = (f32(k) + j) / f32(count) * 2.0 - 1.0;
         let ox = fract(j2 + f32(k) * 0.618034) * 2.0 - 1.0;
         let ut = clamp(uv + vec2<f32>(ox * s.x, o * s.y), vec2<f32>(0.0), vec2<f32>(1.0));
-        let ct = textureSampleLevel(sky_prev, lk_ao_samp, ut, 0.0).rgb;
-        let wk = exp(-2.0 * (o * o + ox * ox)) / (1.0 + lk_luma(ct) * ex * 0.25);
-        c = c + ct * wk;
+        let wk = exp(-2.0 * (o * o + ox * ox));
+        c = c + textureSampleLevel(sky_prev, lk_ao_samp, ut, 0.0).rgb * wk;
         wsum = wsum + wk;
     }
-    c = c / max(wsum, 1e-6);
-    let cap = SKY_CINE_SSR_CAP / max(ex, 0.1);
+    return c / max(wsum, 1e-6);
+}
+
+/// The taps an ellipse of half-axes `s` (uv) takes: one every
+/// `SKY_SR_TAP_PX` pixels along its long axis, `SKY_SR_TAPS.x` to `.y`.
+fn sky_sr_tap_count(s: vec2<f32>) -> i32 {
+    let long = max(s.x * skyu.res.x, s.y * skyu.res.y);
+    return clamp(i32(ceil(long / SKY_SR_TAP_PX)), SKY_SR_TAPS.x, SKY_SR_TAPS.y);
+}
+
+/// The lobe's reflection round `uv`: half-axes `s` (uv) of the surface's lobe,
+/// `sr` of the rain rings' second lobe at weight `ring`; capped at 24 x the exposure.
+fn sky_sr_lobe(uv: vec2<f32>, s: vec2<f32>, sr: vec2<f32>, ring: f32, j: f32, j2: f32) -> vec3<f32> {
+    var c = vec3<f32>(0.0);
+    let lobes = select(1, 2, ring > 0.0);
+    for (var lb = 0; lb < lobes; lb = lb + 1) {
+        let second = lb == 1;
+        let e = select(s, sr, second);
+        let wl = select(select(1.0, 1.0 - ring, lobes == 2), ring, second);
+        c = c + wl * sky_sr_taps(uv, e, sky_sr_tap_count(e), select(j, j2, second), select(j2, j, second));
+    }
+    let cap = SKY_CINE_SSR_CAP / max(look.key.w, 0.1);
     return c * min(1.0, cap / max(lk_luma(c), 1e-4));
 }
 
-/// The frame's edge fade over `b` of it (the trace's hits 0.05, the sky's
-/// directions a wider 0.15: the probes take over a puddle's steep reflections
-/// without a line across it).
+/// The frame's edge fade over `b` of it (the trace's hits: 0.05).
 fn sky_sr_edge(q: vec2<f32>, b: f32) -> f32 {
     return smoothstep(0.0, b, min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y)));
+}
+
+/// The previous frame's view depth (m, <= 0 nothing) at texel `s`.
+fn sky_sr_depth(s: vec2<f32>, top: vec2<i32>) -> f32 {
+    return textureLoad(lk_ao_z, clamp(vec2<i32>(s), vec2<i32>(0), top), 0).r;
+}
+
+/// The trace (see above) from `p0` along `r`, jittered by `j`: the hit's uv,
+/// its distance along the ray (m) and its weight (0: none; the thickness
+/// test's fade).
+fn sky_sr_trace(p0: vec3<f32>, r: vec3<f32>, j: f32) -> vec4<f32> {
+    let dims = vec2<f32>(textureDimensions(lk_ao_z));
+    let top = vec2<i32>(dims) - 1;
+    let fwd = look.ao_fwd.xyz;
+    let d0 = dot(p0 - look.ao_cam.xyz, fwd);
+    let dr = dot(r, fwd);
+    var reach = SKY_SR_REACH_M;
+    if (dr < -1e-4) {
+        reach = min(reach, (SKY_SR_NEAR_M - d0) / dr);
+    }
+    let c0 = look.ao_vp * vec4<f32>(p0, 1.0);
+    let c1 = look.ao_vp * vec4<f32>(p0 + r * reach, 1.0);
+    if (reach < 0.1 || c0.w <= 1e-3 || c1.w <= 1e-3) {
+        return vec4<f32>(0.0);
+    }
+    // 1 / w and depth / w, linear on the screen
+    let k0 = 1.0 / c0.w;
+    let k1 = 1.0 / c1.w;
+    let q0 = d0 * k0;
+    let q1 = (d0 + dr * reach) * k1;
+    let s0 = vec2<f32>(c0.x * k0 * 0.5 + 0.5, 0.5 - c0.y * k0 * 0.5) * dims;
+    let s1 = vec2<f32>(c1.x * k1 * 0.5 + 0.5, 0.5 - c1.y * k1 * 0.5) * dims;
+    let ds = s1 - s0;
+    // the part of the path on the texture
+    var fe = 1.0;
+    if (s1.x < 0.0) {
+        fe = min(fe, -s0.x / ds.x);
+    }
+    if (s1.x > dims.x) {
+        fe = min(fe, (dims.x - s0.x) / ds.x);
+    }
+    if (s1.y < 0.0) {
+        fe = min(fe, -s0.y / ds.y);
+    }
+    if (s1.y > dims.y) {
+        fe = min(fe, (dims.y - s0.y) / ds.y);
+    }
+    let len = length(ds);
+    let span = len * max(fe, 0.0);
+    if (span < 2.0) {
+        return vec4<f32>(0.0);
+    }
+    let n = min(f32(SKY_SR_STEPS), ceil(span));
+    var f_prev = 0.0;
+    var z_prev = d0;
+    var f_hit = -1.0;
+    for (var i = 0; i < SKY_SR_STEPS; i = i + 1) {
+        if (f32(i) >= n) {
+            break;
+        }
+        let f = (1.5 + (span - 1.5) * pow((f32(i) + j) / n, SKY_SR_SPACING)) / len;
+        let k = mix(k0, k1, f);
+        let zr = mix(q0, q1, f) / k;
+        let z = sky_sr_depth(s0 + ds * f, top);
+        if (z > 0.0 && max(zr, z_prev) > z + SKY_SR_BIAS.x + SKY_SR_BIAS.y * z && min(zr, z_prev) < z + SKY_SR_THICK.x + SKY_SR_THICK.y * z) {
+            f_hit = f;
+            break;
+        }
+        f_prev = f;
+        z_prev = zr;
+    }
+    if (f_hit < 0.0) {
+        return vec4<f32>(0.0);
+    }
+    var lo = f_prev;
+    var hi = f_hit;
+    for (var i = 0; i < SKY_SR_REFINE; i = i + 1) {
+        let mid = 0.5 * (lo + hi);
+        let z = sky_sr_depth(s0 + ds * mid, top);
+        if (z > 0.0 && mix(q0, q1, mid) / mix(k0, k1, mid) > z) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    let k = mix(k0, k1, hi);
+    let z = sky_sr_depth(s0 + ds * hi, top);
+    let thick = SKY_SR_THICK.x + SKY_SR_THICK.y * z;
+    let solid = 1.0 - smoothstep(thick, 2.0 * thick, mix(q0, q1, hi) / k - z);
+    if (z <= 0.0 || solid <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    // the distance along the ray, perspective-correct
+    return vec4<f32>((s0 + ds * hi) / dims, reach * k1 * hi / k, solid);
 }
 
 /// The reflection with the switch on (see above): rgb radiance, a weight.
@@ -959,80 +1193,61 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     let fi = f32(skyu.flags.y % 64u);
     let j = fract(sky_ign(px) + fi * 0.618034);
     let j2 = fract(sky_ign(px + vec2<f32>(37.0, 11.0)) + fi * 0.754878);
-    // the lobe's half-widths (alpha): the wet film's anisotropic one where the street is wet
-    let a_along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG, SKY_CINE_PUDDLE_ALPHA, sky_streak_pud), sky_streak_w);
-    let a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS, SKY_CINE_PUDDLE_ALPHA, sky_streak_pud), sky_streak_w);
-    let ang = vec2<f32>(a_across / max(skyu.cluster.z * skyu.cluster.w, 0.1), a_along / max(skyu.cluster.z, 0.1));
+    // the lobe's half-widths (alpha): the wet film's anisotropic one where the
+    // street is wet, a puddle's own (`--wet-surfaces`: the wind's wavelets),
+    // and in rain the rings' second lobe
+    let a_pud = max(SKY_CINE_PUDDLE_ALPHA, sky_w2_pud_alpha);
+    let a_along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG, a_pud, sky_streak_pud), sky_streak_w);
+    let a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS, a_pud, sky_streak_pud), sky_streak_w);
+    let tn = max(skyu.cluster.z, 0.1);
+    let tw = max(skyu.cluster.z * skyu.cluster.w, 0.1);
+    let ang = vec2<f32>(a_across / tw, a_along / tn);
+    let ang_r = vec2<f32>(SKY_W2_RING_LOBE.y / tw, SKY_W2_RING_LOBE.y / tn);
+    let ring = sky_w2_ring * sky_streak_pud;
     let fade = 1.0 - smoothstep(SKY_CINE_SSR_ROUGH.x, SKY_CINE_SSR_ROUGH.y, rough);
     let range = length(world - skyu.eye.xyz);
     var hit_c = vec3<f32>(0.0);
     var hit_w = 0.0;
-    if (r.y < 0.6) {
-        let dims = vec2<i32>(textureDimensions(lk_ao_z));
-        var step = SKY_CINE_SSR_STEP.x * max(range / 30.0, 1.0);
-        var t = 0.05 + step * j;
-        var t_prev = 0.0;
-        var hit = -1.0;
-        for (var i = 0; i < SKY_CINE_SSR_STEPS; i = i + 1) {
-            let p = world + r * t;
-            let q = sky_ssr_cine_uv(p);
-            if (q.z < 0.0 || any(q.xy < vec2<f32>(0.0)) || any(q.xy > vec2<f32>(1.0))) {
-                break;
-            }
-            let z = textureLoad(lk_ao_z, clamp(vec2<i32>(q.xy * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
-            let zr = dot(p - look.ao_cam.xyz, look.ao_fwd.xyz);
-            if (z > 0.0 && zr > z + 0.03) {
-                hit = t;
-                break;
-            }
-            t_prev = t;
-            t = t + step;
-            step = step * SKY_CINE_SSR_STEP.y;
-        }
-        if (hit > 0.0) {
-            var lo = t_prev;
-            var hi = hit;
-            for (var i = 0; i < 6; i = i + 1) {
-                let mid = 0.5 * (lo + hi);
-                let p = world + r * mid;
-                let q = sky_ssr_cine_uv(p);
-                let z = textureLoad(lk_ao_z, clamp(vec2<i32>(q.xy * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
-                let zr = dot(p - look.ao_cam.xyz, look.ao_fwd.xyz);
-                if (z > 0.0 && zr > z) {
-                    hi = mid;
-                } else {
-                    lo = mid;
-                }
-            }
-            let p = world + r * hi;
-            let q = sky_ssr_cine_uv(p);
-            let z = textureLoad(lk_ao_z, clamp(vec2<i32>(q.xy * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
-            let zr = dot(p - look.ao_cam.xyz, look.ao_fwd.xyz);
-            let thick = 0.8 + 0.06 * z;
-            let solid = 1.0 - smoothstep(thick, 2.0 * thick, zr - z);
-            if (solid > 0.0) {
-                // the lobe at the hit seen through the mirror: 2 alpha L / (D + L) each way
-                let contact = hi / (range + hi);
-                hit_c = sky_sr_taps(q.xy, ang * contact, j, j2);
-                hit_w = sky_sr_edge(q.xy, 0.05) * solid;
-            }
-        }
+    let h = sky_sr_trace(world, r, j);
+    if (h.w > 0.0) {
+        // the lobe at the hit seen through the mirror: 2 alpha L / (D + L) each way
+        let contact = h.z / (range + h.z);
+        hit_c = sky_sr_lobe(h.xy, ang * contact, ang_r * contact, ring, j, j2);
+        hit_w = sky_sr_edge(h.xy, 0.05) * h.w;
     }
-    // the open sky along the ray's own direction (the point at infinity)
+    // the open sky along the ray's own direction (the point at infinity); a
+    // direction off the frame reads the frame's edge toward it (the sky as
+    // the frame draws it, where the edge is sky), scaled by the dome's own
+    // gradient between the two and trusted less the further it is
     var sky_c = vec3<f32>(0.0);
     var sky_w = 0.0;
     if (hit_w < 1.0) {
         let clip = look.ao_vp * vec4<f32>(r, 0.0);
         if (clip.w > 1e-4) {
             let q = vec2<f32>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5);
-            if (all(q >= vec2<f32>(0.0)) && all(q <= vec2<f32>(1.0))) {
-                let dims = vec2<i32>(textureDimensions(lk_ao_z));
-                let z = textureLoad(lk_ao_z, clamp(vec2<i32>(q * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
-                let open = select(smoothstep(SKY_SR_FAR_M.x, SKY_SR_FAR_M.y, z), 1.0, z <= 0.0);
-                if (open > 0.0) {
-                    sky_c = sky_sr_taps(q, ang, j, j2);
-                    sky_w = open * sky_sr_edge(q, 0.15);
-                }
+            let qc = clamp(q, vec2<f32>(SKY_SR_EDGE_IN), vec2<f32>(1.0 - SKY_SR_EDGE_IN));
+            let dims = vec2<f32>(textureDimensions(lk_ao_z));
+            let z = sky_sr_depth(qc * dims, vec2<i32>(dims) - 1);
+            var open = select(smoothstep(SKY_SR_FAR_M.x, SKY_SR_FAR_M.y, z), 1.0, z <= 0.0);
+            var gain = 1.0;
+            if (n.y < SKY_SR_EXTEND_NY) {
+                // a pane's or a flank's ray off the frame runs low along the
+                // street, where the frame cannot say what blocks it: the probes
+                open = open * select(sky_sr_edge(q, 0.15), 0.0, any(q != qc));
+            } else if (open > 0.0 && any(q != qc)) {
+                let tn = skyu.cluster.z;
+                let rc = normalize(skyu.cam_fwd.xyz + skyu.cam_right.xyz * ((2.0 * qc.x - 1.0) * tn * skyu.cluster.w) + skyu.cam_up.xyz * ((1.0 - 2.0 * qc.y) * tn));
+                open = open * smoothstep(SKY_SR_OFF_FRAME.y, SKY_SR_OFF_FRAME.x, dot(r, rc));
+                // the weather's dome (lk_sky_upper): toward the CIE overcast
+                // gradient by its overcast weight, toward flat by its isotropy
+                let cie = (1.0 + 2.0 * max(r.y, 0.0)) / (1.0 + 2.0 * max(rc.y, 0.0));
+                gain = clamp(mix(mix(1.0, cie, look.wx.x), 1.0, look.wx.y), SKY_SR_OFF_FRAME.z, SKY_SR_OFF_FRAME.w);
+            }
+            if (open > 0.0) {
+                // one tap: the sky is smooth on the scale of the lobe
+                let c = textureSampleLevel(sky_prev, lk_ao_samp, qc, 0.0).rgb * gain;
+                sky_c = c * min(1.0, SKY_CINE_SSR_CAP / max(look.key.w, 0.1) / max(lk_luma(c), 1e-4));
+                sky_w = open;
             }
         }
     }
