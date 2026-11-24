@@ -72,6 +72,10 @@ pub struct RegionConfig {
     /// The crowd by place and hour (eo-app `--crowd`, `CrowdDensity`) in
     /// place of `people`'s fixed resident disc; None (the default) as before.
     pub crowd: Option<CrowdDensity>,
+    /// (eo-app `--people-groups`; false, the default, as before) social
+    /// groups keep together (`Crowd::keep_parties`), and window-shopping
+    /// stops only where the walk has shop windows.
+    pub groups: bool,
 }
 
 /// The game camera of the JS harnesses: 52 degrees vertical at 16:9.
@@ -93,6 +97,7 @@ impl RegionConfig {
             view_half_angle: game_camera_half_angle(),
             draw_horizon: traffic_window(Level::High).1,
             crowd: None,
+            groups: false,
         }
     }
 
@@ -110,6 +115,7 @@ impl RegionConfig {
             view_half_angle: game_camera_half_angle(),
             draw_horizon: traffic_window(Level::High).1,
             crowd: None,
+            groups: false,
         }
     }
 }
@@ -339,6 +345,19 @@ impl Region {
             self.crowd.next_key += 1;
             self.crowd.push(Walker::new(key, footway, s, dir, walker_speed, lateral, f.road_side, as_group, gait));
             self.crowd.stats.spawned += 1;
+        }
+        // (`--people-groups`) the group keeps together: its first member leads
+        // from the group's middle (its station and mean lateral), the others
+        // keep their places about it (`Crowd::keep_parties`).
+        if self.cfg.groups && members > 1 {
+            let first = self.crowd.walkers.len() - members as usize;
+            let leader = self.crowd.walkers[first].key;
+            let mean = self.crowd.walkers[first..].iter().map(|w| w.lateral).sum::<f64>() / members as f64;
+            self.crowd.walkers[first].s = js_clamp(base, 0.0, total);
+            self.crowd.walkers[first].lateral = mean;
+            for (k, w) in self.crowd.walkers[first..].iter_mut().enumerate() {
+                w.party = Some(crate::pedestrians::Party { leader, slot: k as u8, size: members as u8, at: [f64::NAN; 2], frame: f64::NAN, yaw: f64::NAN });
+            }
         }
         members as usize
     }
@@ -1136,6 +1155,7 @@ impl Region {
                 car_yaw: &self.fleet.yaw,
                 car_speed: &self.fleet.spd,
                 car_level: &self.fleet.level,
+                groups: self.cfg.groups,
             };
             self.crowd.step(&wctx, dt, parity);
         }
@@ -1195,6 +1215,10 @@ impl Region {
             }
             if w.far {
                 flags |= FLAG_FAR;
+            }
+            // (`--people-groups`) a member of a social group, and its place in it.
+            if let Some(p) = w.party.filter(|p| p.size > 1) {
+                flags |= FLAG_PARTY | (((p.slot as u16) << FLAG_PARTY_SLOT_SHIFT) & FLAG_PARTY_SLOT_MASK);
             }
             out.walkers.push(AgentInstance {
                 pos: [(self.crowd.x[i] - origin[0]) as f32, 0.0, (self.crowd.z[i] - origin[1]) as f32],

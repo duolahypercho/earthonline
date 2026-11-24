@@ -51,6 +51,12 @@ pub const FLAG_KERB_WAIT: u16 = 32;
 /// Stepped at the reduced far cadence this frame (level of detail).
 pub const FLAG_FAR: u16 = 64;
 pub const FLAG_CORNERING: u16 = 128;
+/// (`--people-groups`) A walker in a social group that keeps together: bit
+/// 14 set, its place in the group in bits 12..13 (0 the leader; members'
+/// keys follow their leader's, so the leader's key is `id - place`).
+pub const FLAG_PARTY: u16 = 0x4000;
+pub const FLAG_PARTY_SLOT_SHIFT: u16 = 12;
+pub const FLAG_PARTY_SLOT_MASK: u16 = 0x3000;
 /// A car's structure level (`network::Lane::level`, -8..=7) in bits 8..11
 /// of `flags`, two's complement: 0 at grade (and so for every car without
 /// a level table), 1 the first deck level, negative in a tunnel. The feed

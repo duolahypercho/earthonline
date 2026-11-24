@@ -21,6 +21,7 @@ use crate::consts::*;
 use crate::geom::{self, P2, js_clamp, normalize_angle};
 use crate::network::{FootwayId, JunctionId, NONE, Network};
 use crate::rng::{walker_draw, walker_draw_salt};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LegKind {
@@ -63,6 +64,26 @@ pub struct KerbWait {
     pub elapsed: f64,
 }
 
+/// (`--people-groups`) A member of a social group that keeps together: the
+/// group's anchor is its leader's place on the walk (the leader keeps the
+/// schedule; the others are stepped as copies of it), and each member stands
+/// at its own place about that anchor.
+#[derive(Clone, Copy, Debug)]
+pub struct Party {
+    /// The leader's key (this walker's own when it leads).
+    pub leader: u32,
+    /// Its place in the group (0 the leader) and the group's size.
+    pub slot: u8,
+    pub size: u8,
+    /// Where it stands about the anchor now, in the anchor's frame (across
+    /// to the right, along ahead), metres; NaN until first placed.
+    pub at: [f64; 2],
+    /// The heading the group's frame keeps (the leader's while walking,
+    /// held while the group stands), and this member's own drawn heading.
+    pub frame: f64,
+    pub yaw: f64,
+}
+
 #[derive(Clone, Debug)]
 pub struct Walker {
     /// `ambient-<key>`: the walker's identity for every keyed draw.
@@ -93,6 +114,8 @@ pub struct Walker {
     pub gait_freq: f64,
     pub far: bool,
     pub lod_debt: f64,
+    /// (`--people-groups`; None as before) the social group it keeps with.
+    pub party: Option<Party>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -132,6 +155,9 @@ pub struct WalkCtx<'a> {
     /// Each car's structure level (`Fleet::level`): walkers at grade wait
     /// only for cars at grade.
     pub car_level: &'a [i8],
+    /// (`--people-groups`, `RegionConfig::groups`; false as before) social
+    /// groups keep together, and window-shopping stops only at shop fronts.
+    pub groups: bool,
 }
 
 /// `cadenceForSpeed(speed)` at the reference height, steps/s (gait-activity-contract.js).
@@ -171,6 +197,7 @@ impl Walker {
             gait_freq: std::f64::consts::PI * cadence_for_speed(speed),
             far: false,
             lod_debt: 0.0,
+            party: None,
         }
     }
 
@@ -226,7 +253,7 @@ impl Walker {
     }
 
     /// `advancePedestrianActivity`: returns whether the walker moves this step.
-    fn advance_activity(&mut self, net: &Network, hour: f64, dt: f64) -> bool {
+    fn advance_activity(&mut self, net: &Network, hour: f64, dt: f64, groups: bool) -> bool {
         if self.activity_timer.is_nan() {
             self.activity_leg = 0;
             self.activity_timer = 4.0 + walker_draw_salt(self.key, "seed") * 24.0;
@@ -274,10 +301,16 @@ impl Walker {
         }
         let total = self.total(net);
         let near_corner = self.s.min(total - self.s) <= 6.0;
+        // (`--people-groups`) a window is looked into where the walk has
+        // windows: the browsing stop's weight is taken by the share of the
+        // walk's frontage that is walk-in shops (none beside a blank wall, a
+        // car park or houses; with the frontage survey, `--crowd`).
+        let shops = net.footways[self.footway as usize].activity.shops as f64;
+        let weight = |e: &(Activity, f64, f64, f64, bool)| if groups && e.0 == Activity::Browse { e.1 * shops.clamp(0.0, 1.0) } else { e.1 };
         let mut weight_total = 0.0;
         for e in PAUSE_TABLE.iter() {
             if !e.4 || near_corner {
-                weight_total += e.1;
+                weight_total += weight(e);
             }
         }
         let mut roll = walker_draw(self.key, "act-", leg) * weight_total;
@@ -286,8 +319,8 @@ impl Walker {
             if e.4 && !near_corner {
                 continue;
             }
-            roll -= e.1;
-            if roll <= 0.0 {
+            roll -= weight(e);
+            if roll <= 0.0 && weight(e) > 0.0 {
                 chosen = *e;
                 break;
             }
@@ -351,7 +384,13 @@ impl Crowd {
     /// One fixed step of every walker (`updatePedestrians`).
     pub fn step(&mut self, ctx: &WalkCtx, dt: f64, parity: u64) {
         let mut stats = std::mem::take(&mut self.stats);
+        // (`--people-groups`) each group's leader by its key: a member whose
+        // leader is here is not stepped on its own but as a copy of it, after it.
+        let leaders = if ctx.groups { self.leader_index() } else { HashMap::new() };
         for i in 0..self.walkers.len() {
+            if self.walkers[i].party.is_some_and(|p| p.slot > 0 && leaders.contains_key(&p.leader)) {
+                continue;
+            }
             let w = &mut self.walkers[i];
             let mut step_dt = dt;
             if w.far {
@@ -374,6 +413,120 @@ impl Crowd {
             self.z[i] = z;
         }
         self.stats = stats;
+        if ctx.groups {
+            self.keep_parties(ctx.net, dt, &leaders);
+        }
+    }
+
+    /// (`--people-groups`) Each group's leader (a walker leading a party of
+    /// two or more) by its key.
+    fn leader_index(&self) -> HashMap<u32, usize> {
+        let mut m = HashMap::new();
+        for (i, w) in self.walkers.iter().enumerate() {
+            if let Some(p) = w.party {
+                if p.slot == 0 && p.size > 1 {
+                    m.insert(w.key, i);
+                }
+            }
+        }
+        m
+    }
+
+    /// (`--people-groups`) Keep each social group together after a step: a
+    /// member takes its leader's state (where it is on its walk or leg, its
+    /// activity and its schedule: they walk, wait, cross and stop together),
+    /// keeping its own key, gait and place; a member whose leader is gone
+    /// walks on alone from there. Then every member, the leader too, is drawn
+    /// at its place about the anchor (the leader's point on the walk): abreast
+    /// (three in a V) while the group walks, side by side along the kerb or
+    /// the window while it waits or looks in, on a circle facing its middle
+    /// while it stands talking; each place reached at a side step's pace and
+    /// each heading at a walker's turning rate.
+    fn keep_parties(&mut self, net: &Network, dt: f64, leaders: &HashMap<u32, usize>) {
+        let n = self.walkers.len();
+        // The leaders' frames: their heading while they walk, held while they stand.
+        for &li in leaders.values() {
+            let w = &mut self.walkers[li];
+            let moving = w.ground_speed > 0.0 || w.leg.is_some();
+            if let Some(p) = w.party.as_mut() {
+                if moving || p.frame.is_nan() {
+                    p.frame = w.yaw;
+                }
+            }
+        }
+        // The members take their leader's state.
+        for i in 0..n {
+            let Some(p) = self.walkers[i].party else { continue };
+            if p.slot == 0 {
+                continue;
+            }
+            let Some(&li) = leaders.get(&p.leader) else {
+                self.walkers[i].party = None;
+                continue;
+            };
+            let lead = self.walkers[li].clone();
+            let w = &mut self.walkers[i];
+            let (key, gait, gait_freq, yaw) = (w.key, w.gait, w.gait_freq, w.yaw);
+            *w = lead;
+            w.key = key;
+            w.party = Some(p);
+            w.yaw = yaw;
+            w.gait_freq = gait_freq;
+            w.gait = gait + if w.ground_speed > 0.0 { gait_freq * dt } else { 0.0 };
+            w.lod_debt = 0.0;
+        }
+        // Every member at its place about the anchor.
+        let turn = PEDESTRIAN_TURN_RATE * dt.max(0.0);
+        for i in 0..n {
+            let Some(mut p) = self.walkers[i].party else { continue };
+            if p.size < 2 {
+                continue;
+            }
+            let li = if p.slot == 0 { i } else { leaders[&p.leader] };
+            let lead = &self.walkers[li];
+            let frame = lead.party.map(|q| q.frame).filter(|f| f.is_finite()).unwrap_or(lead.yaw);
+            let (ax, az) = position(net, lead);
+            let moving = lead.ground_speed > 0.0 || lead.leg.is_some();
+            let line = !moving && (lead.kerb.is_some() || matches!(lead.facing, Facing::Across | Facing::Inward));
+            let (k, size) = (p.slot as f64, p.size as f64);
+            let mid = k - (size - 1.0) / 2.0;
+            let target = if moving {
+                [mid * GROUP_ABREAST_M, if p.size == 3 && p.slot == 1 { -GROUP_V_BACK_M } else { 0.0 }]
+            } else if line && lead.kerb.is_some() {
+                // at the kerb the leader stands at the crossing's foot; the
+                // others along the kerb behind it, none past it into the junction.
+                [0.0, -k * GROUP_ABREAST_M]
+            } else if line {
+                [0.0, mid * GROUP_ABREAST_M]
+            } else {
+                let r = GROUP_TALK_GAP_M / (2.0 * (std::f64::consts::PI / size).sin());
+                let a = std::f64::consts::PI + std::f64::consts::TAU * k / size;
+                [r * a.cos(), r * a.sin()]
+            };
+            if p.at[0].is_nan() || p.at[1].is_nan() {
+                p.at = target;
+            } else {
+                let (dx, dz) = (target[0] - p.at[0], target[1] - p.at[1]);
+                let d = dx.hypot(dz);
+                let reach = GROUP_STEP_ASIDE_MPS * dt.max(0.0);
+                if d <= reach {
+                    p.at = target;
+                } else {
+                    p.at = [p.at[0] + dx * reach / d, p.at[1] + dz * reach / d];
+                }
+            }
+            // forward (sin, cos) of the frame's heading, across (cos, -sin).
+            let (fs, fc) = frame.sin_cos();
+            let (x, z) = (ax + fc * p.at[0] + fs * p.at[1], az - fs * p.at[0] + fc * p.at[1]);
+            let want = if moving || line { lead.yaw } else { (ax - x).atan2(az - z) };
+            let from = if p.yaw.is_nan() { lead.yaw } else { p.yaw };
+            p.yaw = normalize_angle(from + js_clamp(normalize_angle(want - from), -turn, turn));
+            let w = &mut self.walkers[i];
+            w.yaw = p.yaw;
+            w.party = Some(Party { frame, ..p });
+            self.x[i] = x;
+            self.z[i] = z;
+        }
     }
 
     /// Recompute positions without stepping (after spawning).
@@ -538,8 +691,9 @@ fn consider_crossing(net: &Network, w: &mut Walker, end: usize, stats: &mut Crow
     if signal == NONE && !junction {
         return;
     }
-    // (`--crowd`) no crosswalk mapped at this band: crossed only on a signal.
-    if signal == NONE && f.ends[end].no_crossing {
+    // (`--crowd`) no crosswalk mapped at this band: crossed only on a signal;
+    // (`--people-crosswalks`) no zebra drawn: not crossed, signal or not.
+    if f.ends[end].no_crossing && (signal == NONE || f.ends[end].zebra_only) {
         return;
     }
     w.cross_leg += 1;
@@ -591,15 +745,53 @@ fn consider_crossing(net: &Network, w: &mut Walker, end: usize, stats: &mut Crow
     stats.kerb_waits += 1;
 }
 
+/// Where a footway's walking line meets its end's kerb (its kerb trim in from the end).
+fn kerb_point(net: &Network, fw: FootwayId, end: u8) -> P2 {
+    let f = &net.footways[fw as usize];
+    let arc = if end == 1 { f.length - f.ends[1].kerb_trim } else { f.ends[0].kerb_trim };
+    let (x, z, _, _, _) = geom::at_arc(&f.pts, &f.cum, arc.clamp(0.0, f.length));
+    [x, z]
+}
+
+/// (`--people-crosswalks`) Whether footway end `b` is on the same corner of
+/// foot node `node` as end `a`: no street leg of the node (a footway's own
+/// direction out of it) points between their kerb points, as seen from the
+/// node. The JS joins every footway end at a junction's node, so a corner
+/// leg could take a walker off one corner and across the road to another,
+/// with no crosswalk or signal.
+fn same_corner(net: &Network, node: &crate::network::FootNode, a: (FootwayId, u8), b: (FootwayId, u8)) -> bool {
+    let c = node.pos;
+    let angle = |p: P2| (p[1] - c[1]).atan2(p[0] - c[0]);
+    let ta = angle(kerb_point(net, a.0, a.1));
+    let arc = normalize_angle(angle(kerb_point(net, b.0, b.1)) - ta);
+    for &(fw, e) in &node.ends {
+        let f = &net.footways[fw as usize];
+        if !f.alive || f.pts.len() < 2 {
+            continue;
+        }
+        let n = f.pts.len();
+        let (p, q) = if e == 0 { (f.pts[0], f.pts[1]) } else { (f.pts[n - 1], f.pts[n - 2]) };
+        let x = normalize_angle((q[1] - p[1]).atan2(q[0] - p[0]) - ta);
+        let inside = if arc >= 0.0 { x > 1e-3 && x < arc - 1e-3 } else { x < -1e-3 && x > arc + 1e-3 };
+        if inside {
+            return false;
+        }
+    }
+    true
+}
+
 /// `continueAlongFootway(pedestrian, node, fromIndex, fromEnd)`.
 fn continue_along(net: &Network, w: &mut Walker, node_id: u32, from_end: usize, stats: &mut CrowdStats) -> bool {
     let node = &net.foot_nodes[node_id as usize];
     let from = w.footway;
     let from_segment = net.footways[from as usize].segment;
+    // (`--people-crosswalks`, the drawn zebras known) a corner leg keeps to its corner.
+    let corner_only = net.footways[from as usize].ends[from_end].zebra_only;
+    let admitted = |fw: FootwayId, e: u8| !corner_only || same_corner(net, node, (from, from_end as u8), (fw, e));
     let mut total_weight = 0.0;
     let mut count = 0;
-    for &(fw, _) in &node.ends {
-        if fw == from || !net.footways[fw as usize].alive {
+    for &(fw, e) in &node.ends {
+        if fw == from || !net.footways[fw as usize].alive || !admitted(fw, e) {
             continue;
         }
         let p = &net.footways[fw as usize];
@@ -618,7 +810,7 @@ fn continue_along(net: &Network, w: &mut Walker, node_id: u32, from_end: usize, 
     let mut chosen = None;
     let mut last = None;
     for &(fw, e) in &node.ends {
-        if fw == from || !net.footways[fw as usize].alive {
+        if fw == from || !net.footways[fw as usize].alive || !admitted(fw, e) {
             continue;
         }
         let p = &net.footways[fw as usize];
@@ -725,7 +917,7 @@ fn step_walker(ctx: &WalkCtx, w: &mut Walker, dt: f64, stats: &mut CrowdStats) {
     let net = ctx.net;
     let waiting = update_kerb_wait(ctx, w, dt, stats);
     let on_leg = w.leg.is_some();
-    let scheduled = if waiting || on_leg { false } else { w.advance_activity(net, ctx.hour, dt) };
+    let scheduled = if waiting || on_leg { false } else { w.advance_activity(net, ctx.hour, dt, ctx.groups) };
     if on_leg {
         w.activity = Activity::Walk;
         w.facing = Facing::Keep;

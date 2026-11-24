@@ -333,6 +333,7 @@ impl Oracle {
                         .filter(|v| *v > 0.0)
                         .unwrap_or(crate::consts::CROSSING_SETBACK_M),
                     no_crossing: false,
+                    zebra_only: false,
                 };
                 FootwayBuild {
                     points: pts(&f.points),

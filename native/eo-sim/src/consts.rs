@@ -105,6 +105,33 @@ pub const WALK_LEG_SECONDS: [f64; 2] = [14.0, 52.0];
 pub const GROUP_SHARE: f64 = 0.34;
 pub const GROUP_SIZE: [u32; 2] = [2, 3];
 
+// ---------------------------------------------------------------- social groups (`--people-groups`)
+// Without the switch a group's members are walkers of their own that set out
+// together (0.38 m apart across the walk, 0.9 m along it, the JS spawn) and
+// part at the first pause: each keeps its own schedule. With it a group keeps
+// together as people out together do (Moussaid, Perozo, Garnier, Helbing and
+// Theraulaz, "The walking behaviour of pedestrian social groups and its
+// impact on crowd dynamics", PLoS ONE 5(4) e10047, 2010: a pair walks side by
+// side; three walk in a V, the middle one a little behind, so each can see
+// and hear the others): the first member keeps the schedule and the others
+// walk, wait, cross and stop with it. Stopped to talk they stand on a circle
+// about a shared middle, each facing it (Kendon's F-formation: Conducting
+// Interaction, 1990), at a personal distance (Hall, The Hidden Dimension,
+// 1966: 0.45-1.2 m); waiting at a kerb or a window they stand side by side
+// along it. These are model choices within those observations, not measured
+// constants of San Francisco's walkers.
+
+/// Between neighbours' centres walking abreast (a body's breadth, about
+/// 0.45 m, and a hand's room between shoulders), metres.
+pub const GROUP_ABREAST_M: f64 = 0.75;
+/// How far the middle one of three walks behind the others (the V), metres.
+pub const GROUP_V_BACK_M: f64 = 0.35;
+/// Between neighbours' centres on a talking group's circle, metres.
+pub const GROUP_TALK_GAP_M: f64 = 1.0;
+/// How fast a member steps to its new place when the group's formation
+/// changes (stopping, setting off, turning to talk), m/s: a side step.
+pub const GROUP_STEP_ASIDE_MPS: f64 = 0.6;
+
 /// What a walker is doing (`PEDESTRIAN_ACTIVITIES` + `AMBULATORY_ACTIVITIES`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]

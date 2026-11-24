@@ -104,6 +104,10 @@ pub struct FootEndBuild {
     /// this end's crossing band: the street is crossed here only on a signal.
     /// False (crossed as the JS crosses) unless the crosswalks are known.
     pub no_crossing: bool,
+    /// (`--people-crosswalks`, `NativeSource::with_zebras`) the band is the
+    /// drawn zebra's, and `no_crossing` (no zebra drawn across this end)
+    /// holds at a signal too. False as before.
+    pub zebra_only: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -219,6 +223,8 @@ pub struct FootEnd {
     pub crossing_arc: f64,
     /// `FootEndBuild::no_crossing`.
     pub no_crossing: bool,
+    /// `FootEndBuild::zebra_only`.
+    pub zebra_only: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -478,8 +484,8 @@ impl Network {
             let tile = fb.tile.unwrap_or_else(|| TileKey::of(mid[0], mid[1]));
             let segment = self.intern(&fb.segment);
             let mut ends = [
-                FootEnd { node: NONE, kerb_trim: fb.ends[0].kerb_trim, crossing_arc: fb.ends[0].crossing_arc, no_crossing: fb.ends[0].no_crossing },
-                FootEnd { node: NONE, kerb_trim: fb.ends[1].kerb_trim, crossing_arc: fb.ends[1].crossing_arc, no_crossing: fb.ends[1].no_crossing },
+                FootEnd { node: NONE, kerb_trim: fb.ends[0].kerb_trim, crossing_arc: fb.ends[0].crossing_arc, no_crossing: fb.ends[0].no_crossing, zebra_only: fb.ends[0].zebra_only },
+                FootEnd { node: NONE, kerb_trim: fb.ends[1].kerb_trim, crossing_arc: fb.ends[1].crossing_arc, no_crossing: fb.ends[1].no_crossing, zebra_only: fb.ends[1].zebra_only },
             ];
             if let Some(keys) = &fb.node_keys {
                 for (e, end) in ends.iter_mut().enumerate() {
