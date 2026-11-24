@@ -126,6 +126,8 @@ pub struct SurfaceMesh {
 pub trait GroundProvider: Send + Sync {
     /// Bare ground height at (x, z), game metres (what the heightfield samples).
     fn ground_y(&self, x: f64, z: f64) -> f64;
+    /// Sea floor and still-water surface for a playable water column, in world metres.
+    fn water_column(&self, _x: f64, _z: f64) -> Option<(f64, f64)> { None }
     /// Street/sidewalk/kerb triangles inside a tile, if this provider has them.
     fn surface_tile(&self, _key: TileKey) -> Option<SurfaceMesh> {
         None
