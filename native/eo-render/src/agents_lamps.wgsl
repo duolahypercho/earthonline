@@ -16,13 +16,22 @@
 
 /// A body's left rear lamp (x from the centre line, y up, z along: the right
 /// one mirrors it), or a stand-in at the body's tail for a body without one.
+/// The light leaves from just behind the body's tail (its occluder box's end,
+/// eo-agents `vehicles::contact_words`, where the library carries it): the
+/// mean of a lamp's lens lies inside the body where the lens wraps round the
+/// corner, and a source there lit its own tailgate red from a few centimetres.
 fn lt_rear_lamp_at(m: LtModel) -> vec3<f32> {
+    var p = vec3<f32>(abs(m.wheel[2].x) * 0.85, m.wheel[2].y + LT_REAR_STAND_IN.y, m.wheel[2].z - LT_REAR_STAND_IN.z);
     let w = m.wheel[3].w;
     if (w > 0.0) {
         let xi = floor(w / LT_REAR_PACK);
-        return vec3<f32>(xi / 100.0, (w - xi * LT_REAR_PACK) / 100.0, m.wheel[2].w);
+        p = vec3<f32>(xi / 100.0, (w - xi * LT_REAR_PACK) / 100.0, m.wheel[2].w);
     }
-    return vec3<f32>(abs(m.wheel[2].x) * 0.85, m.wheel[2].y + LT_REAR_STAND_IN.y, m.wheel[2].z - LT_REAR_STAND_IN.z);
+    if (m.pad.y != 0u) {
+        p.z = min(p.z, unpack2x16snorm(m.pad.y).x * 32.767);
+    }
+    p.z = p.z - LT_REAR_OUT_M;
+    return p;
 }
 
 /// `lights_agents`' rear lamps for agent `a` of model `m` (lamps on, not parked).
