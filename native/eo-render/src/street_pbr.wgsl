@@ -1286,6 +1286,14 @@ fn sw_note_wheel(w: f32, along: f32, across: f32, hw: f32, seed: f32, px: vec2<f
     sw_wheel_lean = sw_wheel_lean - px * (2.0 * depth * u / max(hw, 1e-3) * w);
 }
 
+// How wet the street is (0 dry .. 1 the film whole; 0 with the wet layer off).
+fn sw_wet() -> f32 {
+    if (!sky_on(skyu.flags.x, SKY_WET)) {
+        return 0.0;
+    }
+    return smoothstep(0.02, 0.3, skyu.wet.x);
+}
+
 // Utility patches of one pour (cc0.wgsl's DK_PATCH decals): the cut's fill a
 // tone of its own keyed on the world (so the pieces of one repair, decals
 // side by side, read as one pour: no panels), its seam darkening the cut.
@@ -1314,11 +1322,7 @@ fn sg_top_share(n_geom: vec3<f32>, v: vec3<f32>, slope: f32, tops: f32) -> f32 {
 // plane, its own roughness, the base under it by 1 - k F). Dry only: the wet
 // layer brings its own film.
 fn sg_coat(k: f32, rough: f32) {
-    var w = 0.0;
-    if (sky_on(skyu.flags.x, SKY_WET)) {
-        w = skyu.wet.x;
-    }
-    let kk = k * (1.0 - smoothstep(0.02, 0.3, w));
+    let kk = k * (1.0 - sw_wet());
     if (kk > sky_coat) {
         sky_coat = kk;
         sky_coat_rough = rough;

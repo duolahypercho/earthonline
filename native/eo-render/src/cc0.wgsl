@@ -803,7 +803,8 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
             } else if (kind == CC0_DK_OIL_LINE) {
                 if (asphalt && SF_STREET_WEAR) {
                     // (`--street-wear`, street_pbr.wgsl) drips' pools down the lane, not a streak
-                    let cov = sw_drips(along, across, d1.y, seed, length(gxa) + length(gya));
+                    // (under the wet road's film the drips no longer show: the water's surface is the street's)
+                    let cov = sw_drips(along, across, d1.y, seed, length(gxa) + length(gya)) * (1.0 - sw_wet());
                     cc0_p_dark = cc0_p_dark * (1.0 - SW_DRIP_DARK * cov);
                     cc0_p_rough = vec2<f32>(mean_rough * 0.8, max(cc0_p_rough.y, cov * 0.6));
                 } else if (asphalt) {
