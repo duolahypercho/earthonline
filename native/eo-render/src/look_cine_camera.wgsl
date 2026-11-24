@@ -1,6 +1,6 @@
 // The camera model's post path (`--cine-camera`, camera track; cine_post.rs
 // lists the steps). Composed after look_cine.wgsl (its bindings, the grade's
-// table), the photo finish's lens and grain (`ph_lens`, `ph_grain`), and
+// table), the photo finish's noise source (`ph_rand`), and
 // cine_post.rs's camera constants (`CAM_*`), `cam_bloom_part` and the
 // meter's bindings (`cam_state`, `cam_grid`). Called from `cine_fs` only when
 // the model is compiled in (`SF_CAMERA`) and on.
@@ -43,52 +43,94 @@ fn cam_agx(x0: vec3<f32>) -> vec3<f32> {
 }
 
 /// The local exposure's gain at a pixel of log2 luminance `lx` (exposed by the
-/// hour's exposure, the grid's units): the base luminance round it (the
+/// hour's exposure, the grid's units). The base luminance round it (the
 /// bilateral grid sliced at its own luminance, blended with the wider blur of
-/// the grid's columns) compressed about middle grey by the shadows' or the
-/// highlights' contrast; the pixel's detail against its base is kept.
+/// the grid's columns) is compressed about middle grey by the meter's
+/// `k_shadow` or `k_high` (1 when the frame's range fits the display: then
+/// the base keeps its contrast); the pixel's detail against the edge-aware
+/// base alone (the grid's slice: only neighbours within about 1.5 EV of it,
+/// so an edge's other side takes no part) is raised by `cam3.z`, rolled off
+/// past `CAM_DETAIL_SPAN` so a step is not doubled. A print's local contrast:
+/// texture, mortar lines and a crevice's dark read, the blacks are not lifted.
 fn cam_local(pos: vec2<f32>, lx: f32) -> f32 {
     let gd = vec3<f32>(textureDimensions(cam_grid));
-    let gz = clamp((lx - CAM_GRID_LO) / (CAM_GRID_HI - CAM_GRID_LO), 0.0, 1.0);
+    let span = CAM_GRID_HI - CAM_GRID_LO;
+    let gz = clamp((lx - CAM_GRID_LO) / span, 0.0, 1.0);
     let g = textureSampleLevel(cam_grid, ph_lin, vec3<f32>(pos / (f32(CAM_CELL_PX) * gd.xy), gz), 0.0);
     let blur = select(gz, g.z / max(g.w, 1e-6), g.w > 1e-4);
     let bil = select(blur, g.x / max(g.y, 1e-6), g.y > 1e-5);
-    let bn = mix(blur, bil, CAM_BILATERAL_SHARE * smoothstep(0.004, 0.06, g.y));
-    let base = CAM_GRID_LO + bn * (CAM_GRID_HI - CAM_GRID_LO) + log2(max(cam_state.gain, 1e-6));
+    let support = smoothstep(0.004, 0.06, g.y);
+    let bn = mix(blur, bil, CAM_BILATERAL_SHARE * support);
+    let base = CAM_GRID_LO + bn * span + log2(max(cam_state.gain, 1e-6));
     let mid = log2(0.18);
-    let k = select(cine.cam0.x, cine.cam0.y, base > mid);
-    return exp2((base - mid) * (k - 1.0));
+    let k = select(cam_state.k_shadow, cam_state.k_high, base > mid);
+    let d = (gz - bil) * span * support;
+    let ds = d / sqrt(1.0 + (d / CAM_DETAIL_SPAN) * (d / CAM_DETAIL_SPAN));
+    return exp2((base - mid) * (clamp(k, 0.0, 1.0) - 1.0) + (cine.cam3.z - 1.0) * ds);
 }
 
-/// A contrast-adaptive sharpen of the resolved frame's luminance (after
-/// Lottes's CAS): the four neighbours' luminance, range-compressed at the
-/// exposure (`l / (1 + l)`), a negative lobe as strong as `CAM_SHARPEN` where
-/// the neighbourhood has room for it and weaker toward an edge's extremes
-/// (no ringing on a silhouette, no halo on a lamp); the colour keeps its
-/// chromaticity, only its luminance moves. Restores the detail the temporal
-/// resolve's history blend softens.
+/// A robust contrast-adaptive sharpen of the resolved frame's luminance (after
+/// AMD's RCAS): on the luminance range-compressed at the exposure (`l / (1 +
+/// l)`), a negative lobe over the four neighbours as strong as it can be
+/// without taking the pixel past its neighbourhood's range (no clipping, no
+/// ringing on a silhouette, no halo on a lamp), `CAM_SHARPEN` of RCAS's limit,
+/// halved where the pixel stands out of its neighbours as noise does, and off
+/// in a flat gradient (`CAM_SHARPEN_GATE`: a clear sky's or a wall's faint
+/// noise is not raised); the colour keeps its chromaticity, only its luminance
+/// moves. Restores the detail the temporal resolve's history blend softens.
 fn cam_sharpen(p: vec2<i32>, c: vec3<f32>, e: f32) -> vec3<f32> {
     let dims = vec2<i32>(textureDimensions(hdr));
     let lc0 = dot(c, CAM_LW) * e;
-    let lc = lc0 / (1.0 + lc0);
-    var t = array<f32, 4>(0.0, 0.0, 0.0, 0.0);
+    let ec = lc0 / (1.0 + lc0);
+    var n = array<f32, 4>(0.0, 0.0, 0.0, 0.0);
     let o = array<vec2<i32>, 4>(vec2<i32>(0, -1), vec2<i32>(-1, 0), vec2<i32>(1, 0), vec2<i32>(0, 1));
-    var mn = lc;
-    var mx = lc;
+    var mn4 = 1.0;
+    var mx4 = 0.0;
     var sum = 0.0;
     for (var k = 0; k < 4; k = k + 1) {
         let v = max(textureLoad(hdr, clamp(p + o[k], vec2<i32>(0), dims - 1), 0).rgb, vec3<f32>(0.0));
         let l0 = dot(v, CAM_LW) * e;
-        let l = select(l0 / (1.0 + l0), lc, l0 != l0);
-        mn = min(mn, l);
-        mx = max(mx, l);
+        let l = select(l0 / (1.0 + l0), ec, l0 != l0);
+        mn4 = min(mn4, l);
+        mx4 = max(mx4, l);
         sum = sum + l;
     }
-    let amp = sqrt(clamp(min(mn, 1.0 - mx) / max(mx, 1e-5), 0.0, 1.0));
-    let w = -amp * CAM_SHARPEN;
-    let ls = clamp((lc + w * sum) / (1.0 + 4.0 * w), 0.0, 0.999);
+    let mn = min(mn4, ec);
+    let mx = max(mx4, ec);
+    // RCAS's lobe: the strongest negative weight that keeps the result inside [mn, mx].
+    let hit_min = mn / max(4.0 * mx4, 1e-6);
+    let hit_max = (1.0 - mx) / min(4.0 * mn4 - 4.0, -1e-6);
+    // its noise term: a pixel unlike the mean of its neighbours by its range's whole width.
+    let nz = 1.0 - 0.5 * clamp(abs(0.25 * sum - ec) / max(mx - mn, 1e-6), 0.0, 1.0);
+    let gate = smoothstep(CAM_SHARPEN_GATE.x, CAM_SHARPEN_GATE.y, (mx - mn) / max(mx, 1e-5));
+    let lobe = max(-0.1875, min(max(-hit_min, hit_max), 0.0)) * CAM_SHARPEN * nz * gate;
+    let ls = clamp((lobe * sum + ec) / (4.0 * lobe + 1.0), 0.0, 0.999);
     let ratio = (ls / (1.0 - ls)) / max(lc0, 1e-9);
     return c * select(1.0, clamp(ratio, 0.5, 2.0), lc0 > 1e-9);
+}
+
+/// The frame through the camera's lens: its lateral colour (`cam2.w` px of a
+/// 1080-line frame, red against blue at the corner, red outward and blue
+/// inward as the square of the radius; three taps a side across each colour's
+/// band, so the fringe is a soft spectrum, not a doubled edge).
+fn cam_lens(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
+    var c = textureLoad(hdr, vec2<i32>(pos), 0).rgb;
+    let ca = cine.cam2.w * dims.y / 1080.0;
+    if (!(ca > 0.0)) {
+        return c;
+    }
+    let half = 0.5 * dims;
+    let pc = pos - half;
+    let k = 0.5 * ca * length(pc) / dot(half, half);
+    var r = 0.0;
+    var b = 0.0;
+    for (var i = 0; i < 3; i = i + 1) {
+        let f = 0.5 + 0.5 * f32(i);
+        let wt = select(0.25, 0.5, i == 1);
+        r = r + wt * textureSampleLevel(hdr, ph_lin, (pos + pc * k * f) / dims, 0.0).r;
+        b = b + wt * textureSampleLevel(hdr, ph_lin, (pos - pc * k * f) / dims, 0.0).b;
+    }
+    return vec3<f32>(r, c.g, b);
 }
 
 /// A hexagon's signed distance (apothem `r`), turned by `rot` (cos, sin).
@@ -158,12 +200,7 @@ fn cam_flare(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
 
 /// The camera model's display value of a pixel.
 fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
-    var c: vec3<f32>;
-    if (photo.lens.x >= 1.0) {
-        c = ph_lens(pos, dims); // the photo finish's lateral colour
-    } else {
-        c = textureLoad(hdr, vec2<i32>(pos), 0).rgb;
-    }
+    var c = cam_lens(pos, dims);
     if (any(c != c)) {
         c = vec3<f32>(0.0);
     }
@@ -189,17 +226,23 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     var d = to_srgb(cam_agx(x));
     // the hour's grade (cine_post.rs bakes the camera's keys when the model is on).
     d = textureSampleLevel(cine_lut, cine_samp, d * cine.grade.y + vec3<f32>(cine.grade.z), 0.0).rgb;
-    // film grain: one luminance pattern a little over a pixel across, strongest in the mid-tones.
+    // film grain: one luminance pattern a pixel across (about Gaussian: two uniforms), in the
+    // shadows' upper half and the low mid-tones only: nothing over display 0.55 (a bright sky
+    // stays clean) and little under 0.1 (a night sky stays a clean dark).
     let y = clamp(dot(d, CAM_LW), 0.0, 1.0);
-    let gn = ph_grain(vec2<i32>(pos), u32(max(look.post2.w, 0.0)) % 4096u, 5u) * cine.cam2.x * 4.0 * y * (1.0 - y);
+    let seed = u32(max(look.post2.w, 0.0)) % 4096u;
+    let gw = smoothstep(0.06, 0.2, y) * (1.0 - smoothstep(0.32, 0.55, y));
+    let gn = (ph_rand(vec2<i32>(pos), seed, 5u) + ph_rand(vec2<i32>(pos), seed, 6u)) * 1.2247449 * cine.cam2.x * gw;
     d = clamp(d + vec3<f32>(gn), vec3<f32>(0.0), vec3<f32>(1.0));
     // Display dither: triangular, +-1 step of 8-bit (as `finish_color`).
     let amp = look.post2.y;
     let n = hash(pos, look.post2.w) + hash(pos.yx * 1.31, look.post2.w + 3.7) - 1.0;
     d = clamp(d + vec3<f32>(n * amp), vec3<f32>(0.0), vec3<f32>(1.0));
     // (`EO_CAM_DEBUG=1`) the meter's state as bars along the top: the sun's energy (log2,
-    // 0 .. 10), the meter's gain (log2, -4 .. +4 about the middle), its metered mean (-12 .. +2).
-    if (cine.cam2.z > 0.5 && pos.y < 30.0) {
+    // 0 .. 10), the meter's gain (log2, -4 .. +4 about the middle), its metered mean (-12 .. +2),
+    // the local exposure's shadow and highlight compression (0 .. 1), the range's dark end
+    // (EV about grey, -10 .. 0).
+    if (cine.cam2.z > 0.5 && pos.y < 60.0) {
         let row = u32(pos.y / 10.0);
         let w = dims.x * 0.5;
         var v = 0.0;
@@ -207,8 +250,14 @@ fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
             v = clamp(log2(max(cam_state.sun_e, 1e-6)) / 10.0, 0.0, 1.0);
         } else if (row == 1u) {
             v = clamp(log2(max(cam_state.gain, 1e-6)) / 8.0 + 0.5, 0.0, 1.0);
-        } else {
+        } else if (row == 2u) {
             v = clamp((cam_state.mean + 12.0) / 14.0, 0.0, 1.0);
+        } else if (row == 3u) {
+            v = clamp(cam_state.k_shadow, 0.0, 1.0);
+        } else if (row == 4u) {
+            v = clamp(cam_state.k_high, 0.0, 1.0);
+        } else {
+            v = clamp(cam_state.lo / 10.0 + 1.0, 0.0, 1.0);
         }
         let tick = fract(pos.x / (w / select(10.0, 8.0, row == 1u) + 1e-6) + 1e-4) < 0.01;
         d = select(vec3<f32>(0.05), select(vec3<f32>(1.0, 0.3, 0.2), vec3<f32>(0.3, 1.0, 0.4), row == 1u), pos.x < v * w);

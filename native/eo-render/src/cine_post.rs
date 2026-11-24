@@ -45,12 +45,22 @@
 //!    (`CAM_VIGNETTE` of cos^4), the sun's starburst and ghosts scaled by
 //!    its measured energy (no lamp starbursts: sky.rs skips the sprite glare);
 //! 3. the exposure (the hour's x the meter's) and the local exposure: the
-//!    grid's base luminance compressed about middle grey by `cam0.x`
-//!    (shadows) and `cam0.y` (highlights), detail kept;
+//!    grid's base luminance compressed about middle grey only as far as the
+//!    frame's own range needs (the meter measures where its darkest and
+//!    brightest few percent sit and compresses each side just enough to bring
+//!    them inside the display's room, `cam3.xy`, never past `cam0.xy`), and
+//!    the detail against the grid's edge-aware base raised by `cam3.z` (a
+//!    print's local contrast: texture and crevices read, the blacks are not
+//!    lifted);
 //! 4. a hue-preserving filmic curve (an AgX-style log sigmoid in an inset
 //!    gamut, so a bright colour runs to white without per-channel clipping),
-//!    sRGB, the hour's grade (`CAM_GRADE_KEYS`), film grain strongest in the
-//!    mid-tones and the dither.
+//!    sRGB, the hour's grade (`CAM_GRADE_KEYS`), a fine grain in the shadows
+//!    and low mid-tones only (none in a bright sky) and the dither.
+//!
+//! The sharpen is a robust contrast-adaptive one (after AMD's RCAS: its
+//! lobe limited so nothing clips or rings, halved on noise, and gated off in
+//! flat gradients so a clear sky is not roughened), and the lens's lateral
+//! colour is the model's own (`CAM_LATERAL_CA`).
 
 use bytemuck::{Pod, Zeroable};
 use eo_look::cinematic::grade;
@@ -64,20 +74,25 @@ pub struct CineUniform {
     pub bloom: [f32; 4],
     /// x the display vignette, y the table's coordinate scale, z its offset; w unused.
     pub grade: [f32; 4],
-    /// (`--cine-camera`) x the local exposure's contrast in the shadows, y in the
-    /// highlights (1: none), z the meter's largest lift (EV), w the model on (1/0).
+    /// (`--cine-camera`) x the local exposure's strongest compression in the
+    /// shadows, y in the highlights (1: none), z the meter's largest lift (EV),
+    /// w the model on (1/0).
     pub cam0: [f32; 4],
     /// x, y the meter's window (shares of the metered weight), z the exposure
     /// compensation (EV against middle grey), w the meter's largest cut (EV).
     pub cam1: [f32; 4],
-    /// x the grain's amount (display, at mid grey), y the sun glare's gain, zw unused.
+    /// x the grain's amount (display, at its peak), y the sun glare's gain, z the
+    /// debug bars (1/0), w the lateral colour (px, red to blue, at the corner).
     pub cam2: [f32; 4],
+    /// x, y the display's room below and above middle grey (EV) before the local
+    /// exposure compresses, z the detail's gain (1: none), w unused.
+    pub cam3: [f32; 4],
 }
 
 impl CineUniform {
     pub fn new() -> Self {
         let n = grade::LUT_SIZE as f32;
-        Self { bloom: [grade::CINE_BLOOM_SHARE as f32, 0.0, 0.0, 0.0], grade: [grade::CINE_VIGNETTE as f32, (n - 1.0) / n, 0.5 / n, 0.0], cam0: [0.0; 4], cam1: [0.0; 4], cam2: [0.0; 4] }
+        Self { bloom: [grade::CINE_BLOOM_SHARE as f32, 0.0, 0.0, 0.0], grade: [grade::CINE_VIGNETTE as f32, (n - 1.0) / n, 0.5 / n, 0.0], cam0: [0.0; 4], cam1: [0.0; 4], cam2: [0.0; 4], cam3: [0.0; 4] }
     }
 
     /// (`--cine-camera`) the uniform with the camera model's terms for the sun's altitude.
@@ -89,7 +104,8 @@ impl CineUniform {
         // (`EO_CAM_DEBUG=1`: the meter's state drawn as bars along the frame's top, for tuning.)
         static DEBUG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         let debug = *DEBUG.get_or_init(|| std::env::var("EO_CAM_DEBUG").is_ok_and(|v| v == "1"));
-        u.cam2 = [CAM_GRAIN as f32, CAM_FLARE_GAIN as f32, if debug { 1.0 } else { 0.0 }, 0.0];
+        u.cam2 = [CAM_GRAIN as f32, CAM_FLARE_GAIN as f32, if debug { 1.0 } else { 0.0 }, CAM_LATERAL_CA as f32];
+        u.cam3 = [p.shadow_room_ev as f32, p.highlight_room_ev as f32, p.detail as f32, 0.0];
         u
     }
 }
@@ -115,22 +131,34 @@ pub const CAM_ADAPT_RATE: f64 = 3.0;
 /// The optical fall-off: this share of cos^4 of the field angle (a 26 deg half
 /// field down, 16:9: the corners about 0.45 EV under the centre).
 pub const CAM_VIGNETTE: f64 = 0.33;
-/// Film grain: the standard deviation in display values at mid grey (falling
-/// to 0 at black and white).
-pub const CAM_GRAIN: f64 = 0.006;
+/// Film grain: the standard deviation in display values at its peak (the
+/// upper shadows and low mid-tones, display 0.2 .. 0.32), one pixel across, none
+/// over display 0.55 (a clear sky stays a clean gradient), little under 0.1.
+pub const CAM_GRAIN: f64 = 0.0035;
+/// The lens's lateral colour: red against blue at the frame's corner (px of a
+/// 1080-line frame), growing as the square of the radius (faint, at the edges only).
+pub const CAM_LATERAL_CA: f64 = 1.6;
+/// The share of the meter's weight at each end of the frame's range the local
+/// exposure fits into the display's room (the darkest and brightest few
+/// percent may sit outside it: a doorway's black, a glint).
+pub const CAM_RANGE_SHARE: [f64; 2] = [0.03, 0.97];
+/// How hard the detail's gain rolls off (EV): detail this far from its base
+/// gets half the gain's lift, so an edge's step is not doubled.
+pub const CAM_DETAIL_SPAN: f64 = 1.5;
 /// The sun's glare (starburst and ghosts) at full strength, exposed units.
 pub const CAM_FLARE_GAIN: f64 = 1.0;
 /// The sun's measured energy (mean exposed luminance over its disc) where its
 /// glare starts and where it is full: log2.
 pub const CAM_FLARE_EV: [f64; 2] = [2.5, 6.0];
 
-/// The bloom: the share of every pixel the lens spreads (veiling glare), the
+/// The bloom: the share of every pixel the lens spreads (veiling glare: a
+/// coated prime's 1-2 %; at 3 % the shadows took a milky lift), the
 /// added share of a bright one (the highlights' halation through a light
 /// diffusion), from `CAM_BLOOM_MIST_EV[0]` to `[1]` (log2, exposed: +1.5 and
 /// +4 EV over middle grey); above `CAM_BLOOM_CAP` (exposed) a source's energy
 /// grows only logarithmically (the sun's disc, a glint).
-pub const CAM_BLOOM_VEIL: f64 = 0.03;
-pub const CAM_BLOOM_MIST: f64 = 0.12;
+pub const CAM_BLOOM_VEIL: f64 = 0.012;
+pub const CAM_BLOOM_MIST: f64 = 0.10;
 pub const CAM_BLOOM_MIST_EV: [f64; 2] = [-1.0, 1.5];
 pub const CAM_BLOOM_CAP: f64 = 64.0;
 /// The levels' weights (half resolution to 1/128), summing to 1: about equal
@@ -176,9 +204,18 @@ fn cam_bloom_part(c: vec3<f32>, e: f32) -> vec3<f32> {
 /// The meter and the local exposure by the hour (`camera_params`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CameraParams {
-    /// The local exposure's contrast about middle grey: below it, above it (1: none).
+    /// The local exposure's strongest compression about middle grey: below it,
+    /// above it (1: none). It compresses only as far as the frame's range needs.
     pub shadow_contrast: f64,
     pub highlight_contrast: f64,
+    /// The display's room below and above middle grey (EV, after the meter):
+    /// the frame's darkest and brightest few percent (`CAM_RANGE_SHARE`) are
+    /// brought inside it by the local exposure, which does nothing to a frame
+    /// that fits (the curve holds about -4 .. +4 EV: 7 and 244 of 255).
+    pub shadow_room_ev: f64,
+    pub highlight_room_ev: f64,
+    /// The detail's gain against the grid's edge-aware base (1: none).
+    pub detail: f64,
     /// The meter's window: the shares of the metered weight it averages between.
     pub window: [f64; 2],
     /// Where the window's log-average lands, EV against middle grey.
@@ -190,20 +227,25 @@ pub struct CameraParams {
 
 /// By day (and through the golden hour) the meter averages the middle of the
 /// frame's tones and may lift a shaded street by 1.5 EV over the hour's
-/// exposure, and the local exposure opens the shadows a little; at night it
-/// meters the lit part (the upper tones), keeps a darker key and the shadows'
-/// depth (a lamp's pool against the unlit gap). Blended over the sun at -9 ..
-/// +2 deg (the blue hour, the sun 4-8 deg down, takes about half of each).
+/// exposure; the local exposure fits a deep shade or a bright sky into the
+/// display's room and raises the detail by a fifth; at night it meters the
+/// lit part (the upper tones), keeps a darker key and most of the shadows'
+/// depth (a lamp's pool against the unlit gap), holding a trunk or a doorway
+/// off pure black. Blended over the sun at -9 .. +2 deg (the blue hour, the
+/// sun 4-8 deg down, takes about half of each).
 pub fn camera_params(sun_alt_deg: f64) -> CameraParams {
     let a = if sun_alt_deg.is_nan() { 90.0 } else { sun_alt_deg };
     let t = ((a + 9.0) / 11.0).clamp(0.0, 1.0);
     let day = t * t * (3.0 - 2.0 * t);
     let mix = |n: f64, d: f64| n + (d - n) * day;
     CameraParams {
-        shadow_contrast: mix(1.0, 0.88),
-        highlight_contrast: mix(0.92, 0.78),
+        shadow_contrast: mix(0.88, 0.70),
+        highlight_contrast: mix(0.75, 0.60),
+        shadow_room_ev: mix(5.0, 3.5),
+        highlight_room_ev: mix(3.5, 2.8),
+        detail: mix(1.12, 1.22),
         window: [mix(0.75, 0.35), mix(0.99, 0.90)],
-        compensation_ev: mix(-1.5, -0.5),
+        compensation_ev: mix(-1.4, -0.5),
         max_lift_ev: mix(0.75, 1.5),
         max_cut_ev: 2.0,
     }
@@ -211,30 +253,40 @@ pub fn camera_params(sun_alt_deg: f64) -> CameraParams {
 
 /// The grade's keyframes under the camera model (`GRADE_KEYS` order, so
 /// `grade::key_weights` blends them): the curve's flatter mid-tones take more
-/// contrast, the golden hour a warm key against cool shadows, the blue hour a
-/// cool ambient with warm lights, the night coloured blacks.
+/// contrast; by day a sky-cool shade against a slightly warm sun (daylight
+/// balanced for the sun and the sky together, as a camera's daylight preset:
+/// the shade the sky lights reads cool, not grey), the golden hour a warm key
+/// against cool shadows, the blue hour a cool ambient with warm lights, the
+/// night coloured blacks. The balances stay within about 12 % a channel.
 pub const CAM_GRADE_KEYS: [grade::GradeKey; grade::KEY_COUNT] = [
-    grade::GradeKey { name: "cam-night", contrast: 1.22, pivot: 0.30, sat_shadow: 0.92, sat_highlight: 1.22, shadow_balance: [0.90, 0.99, 1.14], highlight_balance: [1.05, 1.0, 0.93], split: 0.30, gain: [1.0, 1.0, 1.0] },
-    grade::GradeKey { name: "cam-blue-hour", contrast: 1.16, pivot: 0.38, sat_shadow: 1.10, sat_highlight: 1.15, shadow_balance: [0.90, 0.98, 1.14], highlight_balance: [1.06, 1.0, 0.92], split: 0.36, gain: [0.97, 1.0, 1.05] },
-    grade::GradeKey { name: "cam-golden-am", contrast: 1.16, pivot: 0.42, sat_shadow: 1.0, sat_highlight: 1.12, shadow_balance: [0.95, 1.0, 1.06], highlight_balance: [1.06, 1.0, 0.92], split: 0.38, gain: [1.01, 1.0, 0.98] },
-    grade::GradeKey { name: "cam-golden-pm", contrast: 1.18, pivot: 0.42, sat_shadow: 1.0, sat_highlight: 1.16, shadow_balance: [0.93, 1.0, 1.08], highlight_balance: [1.10, 1.0, 0.86], split: 0.36, gain: [1.03, 1.0, 0.95] },
-    grade::GradeKey { name: "cam-day", contrast: 1.15, pivot: 0.45, sat_shadow: 1.06, sat_highlight: 1.08, shadow_balance: [0.98, 1.0, 1.03], highlight_balance: [1.02, 1.0, 0.97], split: 0.40, gain: [1.0, 1.0, 1.0] },
-    grade::GradeKey { name: "cam-overcast", contrast: 1.10, pivot: 0.45, sat_shadow: 0.98, sat_highlight: 1.02, shadow_balance: [0.97, 1.0, 1.04], highlight_balance: [1.01, 1.0, 0.99], split: 0.40, gain: [0.99, 1.0, 1.01] },
+    grade::GradeKey { name: "cam-night", contrast: 1.20, pivot: 0.30, sat_shadow: 0.95, sat_highlight: 1.25, shadow_balance: [0.90, 0.99, 1.14], highlight_balance: [1.06, 1.0, 0.92], split: 0.30, gain: [1.0, 1.0, 1.0] },
+    grade::GradeKey { name: "cam-blue-hour", contrast: 1.16, pivot: 0.38, sat_shadow: 1.12, sat_highlight: 1.18, shadow_balance: [0.90, 0.98, 1.14], highlight_balance: [1.07, 1.0, 0.91], split: 0.36, gain: [0.97, 1.0, 1.05] },
+    grade::GradeKey { name: "cam-golden-am", contrast: 1.14, pivot: 0.42, sat_shadow: 1.04, sat_highlight: 1.15, shadow_balance: [0.94, 0.98, 1.08], highlight_balance: [1.08, 1.0, 0.90], split: 0.38, gain: [1.01, 1.0, 0.97] },
+    grade::GradeKey { name: "cam-golden-pm", contrast: 1.16, pivot: 0.42, sat_shadow: 1.05, sat_highlight: 1.20, shadow_balance: [0.93, 0.97, 1.10], highlight_balance: [1.12, 1.0, 0.84], split: 0.36, gain: [1.03, 1.0, 0.94] },
+    grade::GradeKey { name: "cam-day", contrast: 1.12, pivot: 0.45, sat_shadow: 1.10, sat_highlight: 1.12, shadow_balance: [0.95, 0.99, 1.07], highlight_balance: [1.05, 1.0, 0.93], split: 0.40, gain: [1.015, 1.0, 0.975] },
+    grade::GradeKey { name: "cam-overcast", contrast: 1.10, pivot: 0.45, sat_shadow: 1.0, sat_highlight: 1.04, shadow_balance: [0.96, 1.0, 1.05], highlight_balance: [1.02, 1.0, 0.98], split: 0.40, gain: [0.995, 1.0, 1.005] },
 ];
 
 /// The filmic curve's constants: an AgX-style log sigmoid (Sobotka's formulation
 /// and its inset and outset matrices, as published with Blender's AgX view; the
 /// sixth-order fit of its sigmoid) over -10 .. +6.5 EV about middle grey.
 pub const CAM_AGX_EV: [f64; 2] = [-12.47393, 4.026069];
-/// The sharpen's lobe at full strength (CAS: 1/8 its softest, 1/5 its strongest).
-pub const CAM_SHARPEN: f64 = 0.15;
+/// The sharpen's strength in stops under RCAS's limit (0: the strongest, a
+/// lobe of 3/16; 0.5: 0.13), on the range-compressed luminance after the
+/// temporal resolve.
+pub const CAM_SHARPEN_STOPS: f64 = 0.5;
+/// The sharpen is off where the neighbourhood's range is under the first share
+/// of its brightest and full over the second: a flat gradient (a clear sky, a
+/// painted wall) is left smooth instead of having its noise raised.
+pub const CAM_SHARPEN_GATE: [f64; 2] = [0.012, 0.05];
 /// The scene's contrast about middle grey before the sigmoid (log over log):
 /// the sigmoid alone is a flat film (about 0.8-1.1 at grey); 1.25 puts -3 EV at
 /// sRGB 31, grey at 127, +2 EV at 201 and white near +5 EV.
 pub const CAM_CONTRAST: f64 = 1.25;
 /// The look's saturation on the curve's encoded values (the sigmoid's inset
-/// desaturates the mid-tones a little).
-pub const CAM_SATURATION: f64 = 1.10;
+/// desaturates the mid-tones; a print stock's dyes give them back: sunlit
+/// paint, foliage and brick read as colours, not tints).
+pub const CAM_SATURATION: f64 = 1.18;
 
 /// eo-look's curve as WGSL constants (`CN_*`).
 pub fn wgsl() -> String {
@@ -267,8 +319,10 @@ struct Cine {
     cam0: vec4<f32>,
     // x, y the meter's window, z the compensation (EV), w the meter's largest cut (EV)
     cam1: vec4<f32>,
-    // x grain, y the sun glare's gain
+    // x grain, y the sun glare's gain, z debug bars, w lateral colour (px at the corner)
     cam2: vec4<f32>,
+    // x, y the display's room below and above middle grey (EV), z the detail's gain
+    cam3: vec4<f32>,
 };
 
 // (`--cine-camera`) the meter's state (cine_camera.wgsl `cam_adapt` writes it, the post pass reads it).
@@ -283,9 +337,12 @@ struct CamState {
     sun_e: f32,
     // 1 once a frame has been metered
     init: f32,
-    pad0: f32,
-    pad1: f32,
-    pad2: f32,
+    // the local exposure's compression in the shadows and the highlights (1: none), smoothed
+    k_shadow: f32,
+    k_high: f32,
+    // the frame's range (EV about middle grey after the meter): its dark end (the bright end is
+    // not kept; `EO_CAM_DEBUG` draws this one)
+    lo: f32,
 };
 ";
 
@@ -293,7 +350,7 @@ struct CamState {
 pub fn camera_wgsl() -> String {
     let f = |v: f64| format!("{:?}", v as f32);
     format!(
-        "\n// generated by cine_post.rs camera_wgsl (`--cine-camera`)\nconst CAM_HIST_BINS: u32 = {}u;\nconst CAM_HIST_LO: f32 = {};\nconst CAM_HIST_HI: f32 = {};\nconst CAM_CELL_PX: u32 = {}u;\nconst CAM_GRID_Z: u32 = {}u;\nconst CAM_GRID_LO: f32 = {};\nconst CAM_GRID_HI: f32 = {};\nconst CAM_BILATERAL_SHARE: f32 = {};\nconst CAM_ADAPT_RATE: f32 = {};\nconst CAM_VIGNETTE: f32 = {};\nconst CAM_FLARE_EV: vec2<f32> = vec2<f32>({}, {});\nconst CAM_AGX_LO: f32 = {};\nconst CAM_AGX_HI: f32 = {};\nconst CAM_CONTRAST: f32 = {};\nconst CAM_SATURATION: f32 = {};\nconst CAM_SHARPEN: f32 = {};\n",
+        "\n// generated by cine_post.rs camera_wgsl (`--cine-camera`)\nconst CAM_HIST_BINS: u32 = {}u;\nconst CAM_HIST_LO: f32 = {};\nconst CAM_HIST_HI: f32 = {};\nconst CAM_CELL_PX: u32 = {}u;\nconst CAM_GRID_Z: u32 = {}u;\nconst CAM_GRID_LO: f32 = {};\nconst CAM_GRID_HI: f32 = {};\nconst CAM_BILATERAL_SHARE: f32 = {};\nconst CAM_ADAPT_RATE: f32 = {};\nconst CAM_VIGNETTE: f32 = {};\nconst CAM_FLARE_EV: vec2<f32> = vec2<f32>({}, {});\nconst CAM_AGX_LO: f32 = {};\nconst CAM_AGX_HI: f32 = {};\nconst CAM_CONTRAST: f32 = {};\nconst CAM_SATURATION: f32 = {};\nconst CAM_SHARPEN: f32 = {};\nconst CAM_SHARPEN_GATE: vec2<f32> = vec2<f32>({}, {});\nconst CAM_RANGE_SHARE: vec2<f32> = vec2<f32>({}, {});\nconst CAM_DETAIL_SPAN: f32 = {};\n",
         CAM_HIST_BINS,
         f(CAM_HIST_EV[0]),
         f(CAM_HIST_EV[1]),
@@ -310,7 +367,12 @@ pub fn camera_wgsl() -> String {
         f(CAM_AGX_EV[1]),
         f(CAM_CONTRAST),
         f(CAM_SATURATION),
-        f(CAM_SHARPEN),
+        f(2f64.powf(-CAM_SHARPEN_STOPS)),
+        f(CAM_SHARPEN_GATE[0]),
+        f(CAM_SHARPEN_GATE[1]),
+        f(CAM_RANGE_SHARE[0]),
+        f(CAM_RANGE_SHARE[1]),
+        f(CAM_DETAIL_SPAN),
     )
 }
 
@@ -741,9 +803,18 @@ mod tests {
         let (n, d) = (camera_params(-20.0), camera_params(30.0));
         assert!(n.shadow_contrast > d.shadow_contrast && n.max_lift_ev < d.max_lift_ev && n.window[0] > d.window[0]);
         assert!(n.compensation_ev < d.compensation_ev);
+        // the night keeps more of its shadows' depth, gives its lamps more room and raises less detail.
+        assert!(n.shadow_room_ev > d.shadow_room_ev && n.highlight_room_ev > d.highlight_room_ev && n.detail < d.detail);
+        for p in [n, d] {
+            assert!(p.shadow_contrast > 0.5 && p.shadow_contrast <= 1.0 && p.highlight_contrast > 0.5 && p.highlight_contrast <= 1.0);
+            assert!(p.detail >= 1.0 && p.detail < 1.5);
+        }
         assert_eq!(camera_params(f64::NAN), d);
         let u = CineUniform::with_camera(30.0);
         assert_eq!(u.cam0[3], 1.0);
+        assert_eq!(u.cam3[2], d.detail as f32);
+        assert_eq!(u.cam2[3], CAM_LATERAL_CA as f32);
+        assert!(CAM_RANGE_SHARE[0] < 0.1 && CAM_RANGE_SHARE[1] > 0.9);
         assert_eq!(CineUniform::new().cam0[3], 0.0);
     }
 

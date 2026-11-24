@@ -9,7 +9,11 @@
 //   into the column's luminance slices (sum of positions, count);
 // - `cam_adapt`: one workgroup: the histogram's log-average over the meter's
 //   window, the correction of the hour's exposure (clamped; snapped on a cut,
-//   else converging), and the visible sun's energy over its disc;
+//   else converging), the frame's range (where `CAM_RANGE_SHARE` of the
+//   metered weight lies at each end) and from it the local exposure's
+//   compression each side of middle grey (only as much as brings that range
+//   into the display's room, `cine.cam3.xy`), and the visible sun's energy
+//   over its disc;
 // - `cam_blur`: the grid blurred ([1 2 1] in x, y and the slices) and, beside
 //   it, the 5 x 5 column blur of each column's mean, into a 3D texture the
 //   post pass samples.
@@ -106,6 +110,9 @@ var<workgroup> wa_cum: array<f32, CAM_HIST_BINS>;
 var<workgroup> wa_num: array<f32, CAM_HIST_BINS>;
 var<workgroup> wa_den: array<f32, CAM_HIST_BINS>;
 var<workgroup> wa_sun: array<f32, 64>;
+// the frame's range: the log luminance (exposed by the hour's exposure) at the
+// `CAM_RANGE_SHARE` ends of the metered weight.
+var<workgroup> wa_range: array<f32, 2>;
 
 @compute @workgroup_size(128)
 fn cam_adapt(@builtin(local_invocation_index) li: u32) {
@@ -133,6 +140,20 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
     let centre = CAM_HIST_LO + (f32(i) + 0.5) / f32(CAM_HIST_BINS) * (CAM_HIST_HI - CAM_HIST_LO);
     wa_num[i] = inw * centre;
     wa_den[i] = inw;
+    // the range's ends: the bin the cumulative weight crosses each share in (interpolated in it).
+    if (i == 0u) {
+        wa_range[0] = CAM_HIST_LO;
+        wa_range[1] = CAM_HIST_HI;
+    }
+    workgroupBarrier();
+    let bw = (CAM_HIST_HI - CAM_HIST_LO) / f32(CAM_HIST_BINS);
+    let edge = CAM_HIST_LO + f32(i) * bw;
+    for (var e = 0u; e < 2u; e = e + 1u) {
+        let q = select(CAM_RANGE_SHARE.x, CAM_RANGE_SHARE.y, e == 1u) * total;
+        if (v > 0.0 && a < q && wa_cum[i] >= q) {
+            wa_range[e] = edge + bw * clamp((q - a) / v, 0.0, 1.0);
+        }
+    }
     // the sun's disc: 64 taps over 1.2 x its radius (the first 64 threads).
     if (i < 64u) {
         var e = 0.0;
@@ -182,6 +203,28 @@ fn cam_adapt(@builtin(local_invocation_index) li: u32) {
         let rel = clamp(ev - ev_hour, -cine.cam1.w, cine.cam0.z);
         st.ev = ev_hour + rel;
         st.gain = exp2(rel);
+        // the local exposure's compression: the range's ends about middle grey once the
+        // meter has exposed the frame, brought inside the display's room (`cam3.xy`), each
+        // side only as far as it needs and never past `cam0.xy`; converging as the meter does.
+        let mid = log2(0.18);
+        let lo = wa_range[0] + rel - mid;
+        let hi = wa_range[1] + rel - mid;
+        var ks = 1.0;
+        var kh = 1.0;
+        if (total > 0.5) {
+            ks = clamp(cine.cam3.x / max(-lo, 1e-3), cine.cam0.x, 1.0);
+            kh = clamp(cine.cam3.y / max(hi, 1e-3), cine.cam0.y, 1.0);
+        }
+        if (cut || !(st.k_shadow > 0.0) || !(st.k_high > 0.0)) {
+            st.k_shadow = ks;
+            st.k_high = kh;
+        } else {
+            let dt = clamp(skyu.taa.w, 1.0 / 240.0, 0.25);
+            let f = 1.0 - exp(-dt * CAM_ADAPT_RATE);
+            st.k_shadow = st.k_shadow + (ks - st.k_shadow) * f;
+            st.k_high = st.k_high + (kh - st.k_high) * f;
+        }
+        st.lo = lo;
         st.sun_e = wa_sun[0] / 64.0 * st.gain;
         st.init = 1.0;
         cam_state = st;
