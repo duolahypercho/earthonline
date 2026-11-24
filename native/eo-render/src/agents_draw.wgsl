@@ -122,7 +122,13 @@ fn ag_lamp(flags: u32, mflags: u32, local_x: f32) -> f32 {
         i = max(i, head);
     }
     if ((mflags & AG_M_DRL) != 0u) {
-        i = max(i, max(head, ag.lamp_misc.y));
+        // (`--car-lamps`) a moving car's running lamps by day at their own
+        // luminance (agents.rs `DRL_CD`: a bright strip in sunlight), as before at night
+        var drl = max(head, ag.lamp_misc.y);
+        if (SF_CAR_LAMPS && ag_car_lamps_on()) {
+            drl = mix(AG_CAR_DRL_DAY, drl, night);
+        }
+        i = max(i, drl);
     }
     if ((mflags & AG_M_INDICATOR) != 0u && (flags & AG_BLINK_ON) != 0u) {
         // +x is the body's left flank.
@@ -543,6 +549,7 @@ const AG_ROLE_REFLECTOR: u32 = 10u;
 const AG_ROLE_EMERGENCY: u32 = 11u;
 const AG_ROLE_BRAKE: u32 = 12u;
 const AG_ROLE_LIVERY: u32 = 13u;
+const AG_ROLE_BADGE: u32 = 14u;
 
 // Specular anti-aliasing (Tokuyoshi and Kaplanyan 2019, as Filament filters
 // a normal): the GGX alpha^2 widened by 2 x variance x the normal's squared
@@ -609,6 +616,20 @@ const AG_CAR_LED_RED: vec3<f32> = vec3<f32>(1.0, 0.012, 0.004);
 const AG_CAR_LED_AMBER: vec3<f32> = vec3<f32>(1.0, 0.32, 0.0);
 // LEDs and reflector facets on a 12 mm pitch.
 const AG_CAR_LED_PITCH: f32 = 0.012;
+// (`--car-lamps`) A red or amber lamp's emitter (its light guide or LED row)
+// held under this many times the exposure's white, where its cover keeps
+// `AG_CAR_LAMP_WHITE`: a lamp's emitter is far brighter than its cover (a
+// tail lamp's 8 cd from a few square centimetres of light guide is tens of
+// times a lit street's white at night, a stop lamp's hundreds), so its core
+// runs past the camera's red and the crosstalk (eo-look
+// `tone::SENSOR_CROSSTALK`) turns it orange-white, as a photograph shows a
+// lamp, while the cover round it stays a deep red.
+const AG_CAR_LAMP_CORE_WHITE: f32 = 24.0;
+// (`--car-lamps`) A lamp housing's pillow optics: its chrome facets (18 mm)
+// each throw the emitter's light (at night) or the sky's (by day) through the
+// cover as a spot (a Gaussian of 0.15 of a facet), the cover between them
+// dimmer.
+const AG_CAR_FACET_M: f32 = 0.018;
 // Carbon-black rubber (albedo ~0.03), road dust on it, raised lettering faded grey.
 const AG_CAR_RUBBER: vec3<f32> = vec3<f32>(0.028, 0.028, 0.03);
 const AG_CAR_ROAD_DUST: vec3<f32> = vec3<f32>(0.11, 0.095, 0.08);
@@ -686,6 +707,17 @@ fn ag_car_led(p: vec2<f32>, px: f32) -> f32 {
     let led = 1.0 - smoothstep(0.2, 0.38, length(c));
     let keep = 1.0 - smoothstep(0.3, 0.7, px / AG_CAR_LED_PITCH);
     return mix(1.0, 0.25 + 2.4 * led, keep);
+}
+
+// (`--car-lamps`) The pillow optics' glints at a point of the cover (`p` in
+// the body's frame across the cover, m): mean 1, a spot of up to five times
+// the mean at each facet's centre over a third of it between, where a pixel
+// spans a third of a facet or less; the mean where it spans a sixth or more.
+fn ag_car_facets(p: vec2<f32>, px: f32) -> f32 {
+    let c = fract(p / AG_CAR_FACET_M) - 0.5;
+    // a Gaussian spot of sigma 0.15 has a mean of 2 pi 0.15^2 over the facet
+    let spot = exp(-dot(c, c) / (2.0 * 0.15 * 0.15)) / (6.2831853 * 0.15 * 0.15);
+    return mix(1.0, 0.35 + 0.65 * spot, 1.0 - smoothstep(AG_CAR_FACET_M * 0.16, AG_CAR_FACET_M * 0.33, px));
 }
 
 // A seven-segment code (bits a..g) for a tyre sidewall character: digits, then letters.
@@ -891,7 +923,10 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
         }
         var hold = 1.0;
         if ((base.flags & (AG_M_TAIL | AG_M_BRAKE | AG_M_INDICATOR)) != 0u) {
-            hold = min(1.0, AG_CAR_LAMP_WHITE / max(ag.lamp_tail.w * look.key.w, 1e-4));
+            // (`--car-lamps`: the emitter itself, a light guide or an LED row, at
+            // its core's hold; the cover round it keeps the lamp's)
+            let white = select(AG_CAR_LAMP_WHITE, AG_CAR_LAMP_CORE_WHITE, ag_car_lamps_on());
+            hold = min(1.0, white / max(ag.lamp_tail.w * look.key.w, 1e-4));
         }
         let face = select(local.zy, local.xy, abs(nb.z) > 0.5);
         (*g).m.emissive = vec4<f32>(col * i * hold * ag_car_led(face, d.px), 0.0);
@@ -977,11 +1012,19 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
                     // (a bumper's passive reflector: no bowl behind it, a deeper red)
                     let reflector = red && local.y < AG_CAR_LAMP_LOWEST * md.center.y;
                     (*g).s.albedo = select(AG_CAR_LENS_AMBER_BACK, AG_CAR_LENS_RED_BACK, red) * select(1.0, AG_CAR_REFLECTOR_BACK, reflector);
+                    // (`--car-lamps`) the housing's pillow optics through the cover
+                    // (`ag_car_facets`): its lamp's fill and, by day, its bowl's
+                    // return broken into a grid of glints of the same mean
+                    var facets = 1.0;
+                    if (SF_CAR_LAMPS && ag_car_lamps_on() && !reflector) {
+                        facets = ag_car_facets(select(local.zy, local.xy, abs(nb.z) > 0.5), d.px);
+                        (*g).s.albedo = (*g).s.albedo * mix(1.0, facets, 0.5);
+                    }
                     (*g).s.metal = 0.0;
                     (*g).s.rough = ag_car_aa(0.35, d.dn);
                     (*g).s.alpha = absorb;
                     (*g).m.flags = (*g).m.flags | F_GLASS;
-                    (*g).m.emissive = vec4<f32>(fill / absorb, 0.0);
+                    (*g).m.emissive = vec4<f32>(fill * facets / absorb, 0.0);
                     sky_coat = 1.0;
                     sky_coat_rough = ag_car_aa(AG_CAR_GLASS_COAT_ROUGH + 0.04 * dirt * age, d.dn);
                     k.far = 1u;
@@ -1075,7 +1118,8 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             k.far = 2u;
             if (role == AG_ROLE_REFLECTOR && !parked) {
                 let front = local.z > md.center.z;
-                let i = ag_lamp(a.flags, select(AG_M_TAIL, AG_M_HEAD | AG_M_DRL, front), local.x);
+                // (`--car-lamps`: a front bowl glows with the headlamps alone, not the running lamps' strip)
+                let i = ag_lamp(a.flags, select(AG_M_TAIL, select(AG_M_HEAD | AG_M_DRL, AG_M_HEAD, ag_car_lamps_on()), front), local.x);
                 let col = select(AG_CAR_LED_RED, vec3<f32>(1.0, 0.97, 0.92), front);
                 let ring = 0.6 + 0.4 * sin(length(local.xy - vec2<f32>(sign(local.x) * abs(piv.x) * 0.75, piv.y + 0.28)) / AG_CAR_LED_PITCH * 3.14159);
                 (*g).m.emissive = vec4<f32>(col * i * 0.3 * mix(1.0, ring, 1.0 - smoothstep(0.004, 0.012, d.px)), 0.0);
@@ -1117,6 +1161,15 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             let on = answering && ((fract(ag.lamp_misc.z * 1.5) < 0.5) == (local.x > 0.0));
             (*g).s.albedo = (*g).s.albedo * 0.4;
             (*g).m.emissive = vec4<f32>(select(vec3<f32>(0.0), base.emissive.rgb * 6.0, on), 0.0);
+        }
+        case 14u: {
+            // (`--car-panels`) a badge: a pressed chrome emblem (`ag_car_badge`)
+            if (SF_CAR_PANELS) {
+                ag_car_badge(g, in.uv, d, nb, a);
+                k.far = 2u;
+            } else {
+                (*g).s.rough = ag_car_aa((*g).s.rough, d.dn);
+            }
         }
         case 12u: {
             // (`--car-finish`) a caliper (the painted part of the brake) as street
@@ -1170,6 +1223,47 @@ fn ag_car_normal(p: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(x, y, sign(q.z) * sqrt(max(1.0 - x * x - y * y, 0.0)));
 }
 
+// ---- (`--car-panels`; SF_CAR_PANELS, agents.rs `car_wgsl`: compiled out
+// without it) A badge (eo-agents `ROLE_BADGE`: a `Badge_*` chrome emblem, its
+// vertices' uv its own disc coordinates, 0..1 across and up): a pressed chrome
+// emblem, flat across its face with a bevelled rim turning to the side, a
+// raised polished ring and a polished bar on a satin field inside it, the
+// patterns' mean where a pixel does not resolve them. The mesh is a thin lens
+// of a few vertices whose interpolated normals sweep across the whole face, so
+// it shaded as a chrome ball mirroring the whole sky round it (a glowing white
+// sphere in the low sun); its face now mirrors what stands before it. ----
+// The face is flat to this share of the radius; the rim's tilt at the edge
+// (radians, 60 degrees); the polished and the satin chrome's roughness.
+const AG_CAR_BADGE_FLAT: f32 = 0.86;
+const AG_CAR_BADGE_BEVEL: f32 = 1.05;
+const AG_CAR_BADGE_POLISH: f32 = 0.06;
+const AG_CAR_BADGE_SATIN: f32 = 0.3;
+fn ag_car_badge(g: ptr<function, AgSurf>, uv: vec2<f32>, d: AgCarD, nb: vec3<f32>, a: AgAgent) {
+    let q = uv * 2.0 - 1.0;
+    let r = length(q);
+    // the pixel's footprint across the disc (q spans 2 where uv spans 1)
+    let f = max(2.0 * max(d.duv.x, d.duv.y), 1e-4);
+    // the face's axis (the body's nose or tail) and the way out from its
+    // centre (the lens's own normal leans outward from it)
+    let axis = vec3<f32>(0.0, 0.0, select(-1.0, 1.0, nb.z >= 0.0));
+    let out = normalize(vec3<f32>(nb.x, nb.y, 0.0) + vec3<f32>(0.0, 1e-4, 0.0));
+    let bevel = smoothstep(AG_CAR_BADGE_FLAT, 1.0, r);
+    let tilt = AG_CAR_BADGE_BEVEL * bevel;
+    let n = ag_rotate(a.rot, normalize(axis * cos(tilt) + out * sin(tilt)));
+    (*g).s.n = n;
+    (*g).n = n;
+    // the ring and the bar polished, the field satin, the rim polished
+    let ring = smoothstep(0.66 - f, 0.66 + f, r) * (1.0 - smoothstep(0.82 - f, 0.82 + f, r));
+    let bar = ag_car_box(q, vec2<f32>(0.0), vec2<f32>(0.42, 0.1), vec2<f32>(f));
+    let polish = clamp(max(max(ring, bar), smoothstep(0.84, 0.88, r)), 0.0, 1.0);
+    let p = mix(0.45, polish, 1.0 - smoothstep(0.15, 0.4, f));
+    // specular anti-aliasing from the bevel's own turn across the pixel (the face does not turn)
+    let turn = AG_CAR_BADGE_BEVEL / (1.0 - AG_CAR_BADGE_FLAT) * f;
+    (*g).s.rough = ag_car_aa(mix(AG_CAR_BADGE_SATIN, AG_CAR_BADGE_POLISH, p), turn * turn * smoothstep(AG_CAR_BADGE_FLAT - f, AG_CAR_BADGE_FLAT, r));
+    (*g).s.metal = 1.0;
+    (*g).s.env = ENV_PAINTED_METAL;
+}
+
 // A lit lamp's cover: its lamp fills it (the light the lamp's optic and bowl
 // spread across it, its colour round the brighter LEDs or bulb, instead of
 // lit edges round a dark cover). A red or amber cover is its tail, brake or
@@ -1190,7 +1284,8 @@ fn ag_car_lens(tinted: bool, red: bool, local: vec3<f32>, md: AgModel, a: AgAgen
         if (ag_car_parked(a)) {
             return vec3<f32>(0.0); // a parked car's headlamps are off
         }
-        lf = AG_M_HEAD | AG_M_DRL;
+        // (`--car-lamps`: a clear cover is filled by its headlamps, not the running lamps' strip under it)
+        lf = select(AG_M_HEAD | AG_M_DRL, AG_M_HEAD, ag_car_lamps_on());
     }
     return col * ag_lamp(a.flags, lf, local.x) * hold * select(AG_CAR_LENS_FILL_CLEAR, AG_CAR_LENS_FILL, tinted);
 }

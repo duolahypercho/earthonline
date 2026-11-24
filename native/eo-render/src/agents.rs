@@ -93,6 +93,31 @@ pub fn people_shading_wgsl() -> String {
     format!("const SF_PEOPLE_SHADING: bool = {};\nconst SF_PEOPLE_BOUNCE: bool = {};", people_shading(), people_bounce())
 }
 
+/// `--car-panels`: the cars' panels cooked taut (eo-agents
+/// `vehicles::filter_panel_normals`) and their badges drawn as pressed chrome
+/// emblems (agents_draw.wgsl `ag_car_badge`, role `ROLE_BADGE`), compiled into
+/// the agents' pipelines made after this is set (eo-app sets it before the
+/// library attaches, and cooks the library with it); off, the code is compiled
+/// out, the library is cooked as before and the frame is as before.
+static CAR_PANELS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_car_panels(on: bool) {
+    CAR_PANELS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn car_panels() -> bool {
+    CAR_PANELS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The vehicles' generated constants agents_draw.wgsl reads: `SF_CAR_PANELS`
+/// (`--car-panels`), and (`--car-lamps`) a daytime running lamp's luminance in
+/// the rig's radiance units (`DRL_CD` over `DRL_LENS_M2`, eo-sky
+/// `photometry::cd_m2`'s scale).
+pub fn car_wgsl() -> String {
+    let drl = DRL_CD / DRL_LENS_M2 / eo_sky::photometry::lux_per_unit();
+    format!("const SF_CAR_PANELS: bool = {};\nconst AG_CAR_DRL_DAY: f32 = {:.6};\n", car_panels() && crate::look::shader_features().car_materials, drl)
+}
+
 /// The people's ground occlusion's shader, appended to the agents' colour
 /// shader only with `--people-contact` (empty without it).
 pub fn people_contact_wgsl() -> &'static str {
@@ -108,10 +133,13 @@ pub const TAIL_LAMP_CD: f64 = 8.0;
 pub const STOP_LAMP_CD: f64 = 100.0;
 /// (`--car-lamps`) The rear lamps' photometric field: a lobe about the body's
 /// axis, wider across than up and down, as FMVSS 108 and UN ECE R7 shape a
-/// tail or stop lamp's test points (about two thirds of the axis value at 10
-/// degrees up or down, a third at 20 degrees left or right), over the
-/// lens's own diffuse emission into the whole rear half-space (an LED light
-/// guide's lens glows from every side it faces). The lobe is
+/// tail or stop lamp's test points (a third of the axis value at 20 degrees
+/// left or right; up and down the lamp is made for the following driver's
+/// eye, a third to a half of the axis value at 10 degrees: two fifths here,
+/// an eighth at 15, so the road a few metres behind the car, 10 to 20 degrees
+/// below the lamp, takes only the lobe's edge), over the lens's own diffuse
+/// emission into the whole rear half-space (an LED light guide's lens glows
+/// from every side it faces). The lobe is
 /// exp(-(tan h / tan H)^2 - (tan v / tan V)^2) for the angles h across and v
 /// up or down; the floor is this share of the axis value times the cosine off
 /// the axis. The floor is what lights the bumper and the street right behind
@@ -119,13 +147,20 @@ pub const STOP_LAMP_CD: f64 = 100.0;
 /// lobe the car behind and the wet street's streak; neither has an edge.
 /// Degrees, and the floor's share.
 pub const REAR_LAMP_SPREAD_H_DEG: f64 = 20.0;
-pub const REAR_LAMP_SPREAD_V_DEG: f64 = 15.0;
+pub const REAR_LAMP_SPREAD_V_DEG: f64 = 10.5;
 pub const REAR_LAMP_FLOOR: f64 = 0.06;
 /// (`--car-lamps`) The cone the light list's record carries for a reader
 /// that shapes it as a spot (none does: every one reads `sf_rear_lamp_shape`):
 /// its lobe's reach. Degrees.
 pub const REAR_LAMP_FULL_DEG: f64 = 5.0;
 pub const REAR_LAMP_EDGE_DEG: f64 = 40.0;
+/// (`--car-lamps`) A daytime running lamp's intensity on its axis, cd (UN ECE
+/// R87: 400-1200 cd), and its lit lens, m^2 (a 30 x 2 cm LED light guide):
+/// a moving car's running lamps by day at their luminance (~1.2e5 cd/m^2, a
+/// bright strip in sunlight; agents_draw.wgsl `ag_lamp`).
+pub const DRL_CD: f64 = 700.0;
+pub const DRL_LENS_M2: f64 = 0.006;
+
 /// (`--car-lamps`) A rear lamp's lit lens, m^2 (a 25 x 5 cm LED light guide).
 pub const REAR_LAMP_LENS_M2: f64 = 0.0125;
 /// (`--car-lamps`) A rear lamp lights the clusters out to where it gives this
@@ -673,10 +708,11 @@ impl AgentsGpu {
         // (`--car-contact`) the cars' occlusion of the street, appended only with the switch on.
         let contact_on = look.options.car_contact > 0;
         let draw_src = format!(
-            "{}\n{}\n{}\n{}\n{}\n{}{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}{}\n{}",
             // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
             agents_city_source(),
             people_shading_wgsl(), // (`--people-shading`, `--people-bounce`) compiled out without them
+            car_wgsl(), // (`--car-panels`, `--car-lamps`) the vehicles' generated constants
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
             include_str!("agents_draw.wgsl"),
@@ -1211,6 +1247,7 @@ mod tests {
             ("EMERGENCY", v::ROLE_EMERGENCY),
             ("BRAKE", v::ROLE_BRAKE),
             ("LIVERY", v::ROLE_LIVERY),
+            ("BADGE", v::ROLE_BADGE),
         ] {
             assert!(src.contains(&format!("const AG_ROLE_{name}: u32 = {role}u;")), "AG_ROLE_{name}");
         }
@@ -1263,9 +1300,10 @@ mod tests {
             assert_eq!(konst, format!("const SF_PEOPLE_SHADING: bool = {shading};\nconst SF_PEOPLE_BOUNCE: bool = {bounce};"));
             assert_eq!(super::people_contact_wgsl().contains("fn agent_contact_vs"), contact);
             let src = format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
                 crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
                 konst,
+                super::car_wgsl(),
                 include_str!("agents_types.wgsl"),
                 include_str!("agents_common.wgsl"),
                 include_str!("agents_draw.wgsl"),
@@ -1278,6 +1316,36 @@ mod tests {
         super::set_people_shading(false);
         super::set_people_bounce(false);
         super::set_people_contact(false);
+    }
+
+    /// (`--car-panels`, `--car-lamps`) the agents' colour shader validates with the panels compiled in
+    /// and out, the constant says which, and a running lamp by day is a bright strip in sunlight
+    /// (several times the white of a sunlit card, under a headlamp's core).
+    #[test]
+    fn the_car_panels_compile_in_and_out() {
+        for on in [false, true] {
+            super::set_car_panels(on);
+            let konst = super::car_wgsl();
+            let want = on && crate::look::shader_features().car_materials;
+            assert!(konst.contains(&format!("const SF_CAR_PANELS: bool = {want};")), "{konst}");
+            let src = format!(
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
+                super::people_shading_wgsl(),
+                konst,
+                include_str!("agents_types.wgsl"),
+                include_str!("agents_common.wgsl"),
+                include_str!("agents_draw.wgsl"),
+                include_str!("sky_velocity.wgsl"),
+            );
+            let module = wgpu::naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("panels {on}: {}", e.emit_to_string(&src)));
+            wgpu::naga::valid::Validator::new(wgpu::naga::valid::ValidationFlags::all(), wgpu::naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("panels {on}: {e:?}"));
+        }
+        super::set_car_panels(false);
+        // a white card in the noon sun (90 klx) is ~2.9e4 cd/m^2; a running lamp's strip four times that
+        let drl = super::DRL_CD / super::DRL_LENS_M2;
+        let card = 90_000.0 / std::f64::consts::PI;
+        assert!(drl > 3.0 * card && drl < 1e6, "{drl:.0} cd/m^2");
     }
 
     /// (`--soft-shadows` with `--car-materials`) the agents' module takes the tent, not the penumbra

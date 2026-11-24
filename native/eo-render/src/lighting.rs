@@ -298,9 +298,10 @@ mod tests {
                 let far_trees = format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{}", look::city_shader_source_far(), crate::cove_canopy::VIEWS, crate::cove_canopy::LAYERS, look::sf_select(crate::hlod_trees::WGSL));
                 parse(&format!("{name}: far trees"), &far_trees);
                 let agents = format!(
-                    "{}\n{}\n{}\n{}\n{}\n{}",
+                    "{}\n{}\n{}\n{}\n{}\n{}\n{}",
                     look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, look::ShadowLevels::Full, false),
                     crate::agents::people_shading_wgsl(), // (`--people-shading`)
+                    crate::agents::car_wgsl(), // (`--car-panels`, `--car-lamps`)
                     include_str!("agents_types.wgsl"),
                     include_str!("agents_common.wgsl"),
                     include_str!("agents_draw.wgsl"),
