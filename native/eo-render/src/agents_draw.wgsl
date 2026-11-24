@@ -298,8 +298,10 @@ const AG_CAR_CHALK: vec3<f32> = vec3<f32>(0.96, 0.94, 0.89);
 // A red or amber lamp's luminance (the brightest lamp, the brake at night)
 // held under this many times the exposure's white: past it the camera's
 // crosstalk (eo-look `tone::SENSOR_CROSSTALK`) whitens the core, as a real
-// sensor does; held under it the core keeps its red and the bloom its hue.
-const AG_CAR_LAMP_WHITE: f32 = 4.0;
+// sensor does; held under it the core keeps its red and the bloom its hue
+// (8 x: still bright enough that a wet street mirrors it, the crosstalk
+// tinting the core only a little).
+const AG_CAR_LAMP_WHITE: f32 = 8.0;
 // Glass: the key light's lobe as wide as the sun's disc gives (0.27 deg:
 // GGX ~0.06), the lacquer-like lobe that takes the screen-space reflection
 // and the lamps' glints sharp; absorption of a clear laminated screen (about
@@ -976,23 +978,32 @@ fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>
 }
 
 // Road grime on a car (`--grime`; in ag_weather's place under the cars'
-// materials, at its per-car levels and colours): the spray band up the lower
-// body to about the wheels' tops, highest just behind each wheel, its top in
-// vertical run-off streaks (8 cm across, kept where a pixel resolves them);
-// the grime round each arch; on a dusty car a fine film on the roof, bonnet
-// and boot. No blotches: the only noise runs up the body.
+// materials, at its per-car levels and colours), where the road and the
+// weather put it: the tyres' spray as a road film (asphalt fines, tyre and
+// brake dust: a dark grey-brown, darker than the airborne dust) densest at
+// the sill and fading up the lower body to about the wheels' tops, highest
+// just behind each wheel, its top rising and falling slowly along the body
+// and broken into run-off drips (3.5 cm across, only where a pixel resolves
+// them; the mean otherwise); the grime round each arch; on a dusty car a
+// fine film of dust on the roof, bonnet and boot (the surfaces facing up).
+// The paint between stays as it is: no blotches, no noise across a panel.
+const AG_CAR_ROAD_FILM: vec3<f32> = vec3<f32>(0.12, 0.11, 0.095);
 fn ag_car_grime(s: ptr<function, Surface>, local: vec3<f32>, nb: vec3<f32>, piv: vec3<f32>, r: f32, arch: f32, dirt: f32, px: f32) {
     let y = local.y - (piv.y - r);
-    let along = local.z + local.x * 0.37;
-    let streak = mix(0.5, st_noise(vec2<f32>(along / 0.08, y / 1.2) + dirt * 17.0), wx_keep(0.08, px));
+    let wave = st_noise(vec2<f32>(local.z / 0.45 + local.x * 3.1, dirt * 13.0)) - 0.5;
+    let drip = mix(0.5, st_noise(vec2<f32>(local.z / 0.035 + local.x * 7.3, y / 0.5) + dirt * 17.0), wx_keep(0.035, px)) - 0.5;
     let spray = 1.0 - smoothstep(0.0, r * 2.2, abs(local.z - (piv.z - r * 1.3)));
-    let top = r * (1.5 + 0.9 * (streak - 0.5) + 0.7 * spray);
-    let band = (1.0 - smoothstep(top * 0.5, top, y)) * dirt;
+    let top = r * (1.35 + 0.35 * wave + 0.7 * spray);
+    let band = (1.0 - smoothstep(top * 0.3, top * (1.0 + 0.3 * drip), y)) * dirt;
     let ring = (1.0 - smoothstep(1.02, 1.5, arch)) * (0.35 + 0.65 * dirt);
     let film = dirt * 0.35 * smoothstep(0.55, 0.9, nb.y);
-    (*s).albedo = mix((*s).albedo, WX_CAR_DUST, clamp(band * WX_CAR_DUST_COVER + film * 0.45, 0.0, 1.0));
+    (*s).albedo = mix((*s).albedo, AG_CAR_ROAD_FILM, clamp(band * WX_CAR_DUST_COVER, 0.0, 1.0));
+    (*s).albedo = mix((*s).albedo, WX_CAR_DUST, clamp(film * 0.45, 0.0, 1.0));
     (*s).albedo = mix((*s).albedo, WX_CAR_GRIME, clamp(ring * WX_CAR_GRIME_COVER, 0.0, 1.0));
-    (*s).rough = clamp(mix((*s).rough, 0.85, max(band, ring) * 0.8 + film * 0.5), 0.03, 1.0);
+    // the film's haze on the lacquer follows the band without its drips: a
+    // roughness changing from one pixel to the next sparkles under a lamp.
+    let haze = (1.0 - smoothstep(top * 0.3, top, y)) * dirt;
+    (*s).rough = clamp(mix((*s).rough, 0.85, max(haze, ring) * 0.8 + film * 0.5), 0.03, 1.0);
 }
 
 // A car (or the player) in a tunnel's bore (`--tunnels`; the feed's
