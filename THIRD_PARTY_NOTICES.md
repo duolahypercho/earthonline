@@ -313,6 +313,8 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 | `ISC` | 1 | libloading 0.8.9 |
 <!-- END GENERATED: cargo-licences -->
 
+The submerged reef uses reduced colour, normal and roughness maps from *Coast Sand 04* by Rob Tuytel, Dario Barresi ([source](https://polyhaven.com/a/coast_sand_04), [provenance](public/assets/shore/coast-sand-04.provenance.json)) and *Damp Beach Sand* by Dimitrios Savva ([source](https://polyhaven.com/a/damp_beach_sand), [provenance](public/assets/shore/damp-beach-sand.provenance.json)). Both scans are from Poly Haven under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The reef rocks also use the credited *Seaside Rock* scan.
+
 The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
 
 The optional 21 Beaver sitting-room carpet uses the public-domain recto photograph of *Carpet*, attributed to Turkey, first half of the nineteenth century, Bequest of Joseph V. McMullan, 1973, accession 1974.149.36. The material builder rectifies and resamples the photograph. [The Metropolitan Museum of Art object record](https://www.metmuseum.org/art/collection/search/452588) · [The Met Open Access policy](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access).

@@ -25,10 +25,10 @@ def check_root(root):
         raise ValueError("use the external CC0 store (<repo>/external/cc0, or a copy outside the repository)")
 
 
-def cook(root):
+def cook(root, material="seaside_rock"):
     check_root(root)
     manifest = json.loads((REPO / "native/assets/cc0-manifest.json").read_text())
-    source = next(a for a in manifest["assets"] if a["id"] == "seaside_rock")
+    source = next(a for a in manifest["assets"] if a["id"] == material)
     inputs = []
     image = Image.new("RGB", (SIZE, SIZE * len(ROLES)))
     for i, role in enumerate(ROLES):
@@ -41,7 +41,7 @@ def cook(root):
         image.paste(tile, (0, i * SIZE))
         inputs.append({k: file[k] for k in ("role", "url", "sha256", "bytes")})
 
-    out = REPO / "public/assets/shore/seaside-rock.png"
+    out = REPO / "public/assets/shore" / (material.replace("_", "-") + ".png")
     out.parent.mkdir(parents=True, exist_ok=True)
     image.save(out, format="PNG", compress_level=9)
     record = {k: source[k] for k in ("name", "page", "authors", "licence", "size_m")}
@@ -54,4 +54,6 @@ def cook(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source_root", type=Path)
-    cook(parser.parse_args().source_root.resolve())
+    parser.add_argument("--material", choices=["seaside_rock", "coast_sand_04", "damp_beach_sand"], default="seaside_rock")
+    args = parser.parse_args()
+    cook(args.source_root.resolve(), args.material)

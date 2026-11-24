@@ -1,0 +1,42 @@
+{
+  "name": "Coast Sand 04",
+  "page": "https://polyhaven.com/a/coast_sand_04",
+  "authors": [
+    "Rob Tuytel",
+    "Dario Barresi"
+  ],
+  "licence": "CC0-1.0",
+  "size_m": [
+    3.94,
+    3.94
+  ],
+  "cooker": "native/tools/cook-intertidal-rock.py",
+  "inputs": [
+    {
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_04/coast_sand_04_diff_2k.jpg",
+      "sha256": "02744081f9aef538b829b00db8ef9d5a11d25c22fc439d5acb4c4353d7dcd4dc",
+      "bytes": 4264697
+    },
+    {
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_04/coast_sand_04_nor_gl_2k.jpg",
+      "sha256": "c2cd2fdd652229e0f4978ac7d6db2935d9845bcccb3dadecb01d6005221e17df",
+      "bytes": 5418999
+    },
+    {
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_04/coast_sand_04_arm_2k.jpg",
+      "sha256": "40ea69a79f8f88a1158ca62c3211f54a756e6014b835415021469b225d47f6c4",
+      "bytes": 3646398
+    }
+  ],
+  "panels": [
+    "albedo",
+    "normal",
+    "arm"
+  ],
+  "width": 512,
+  "image": "coast-sand-04.png",
+  "sha256": "671052cc1469af30cbf3bb3400efb4a06612d50ad283ac176f088a977a0389f3"
+}
