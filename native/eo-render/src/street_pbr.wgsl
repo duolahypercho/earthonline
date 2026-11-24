@@ -1730,7 +1730,7 @@ fn ss_setts(p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, world: vec3<f32>) -> SpP
         let edge_soil = 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.025, st.inside)) * (0.6 + 0.4 * m1);
         let clean = 1.0 + 0.07 * (1.0 - smoothstep(0.2, 0.9, rr)) * (0.5 + traffic);
         // (the worn crown's falloff: the sides turn from the sky and hold the grime, over a third of the sett)
-        let curve = 1.0 - 0.22 * smoothstep(0.35, 1.0, max(abs(st.un.x), abs(st.un.y)));
+        let curve = 1.0 - 0.3 * smoothstep(0.35, 1.0, max(abs(st.un.x), abs(st.un.y)));
         let stone = (0.66 + 0.62 * g1 * g1) * hue * mottle * cryst * edge_soil * clean * curve;
         // the joint: sand and grit, moss where it stays damp
         var joint = vec3<f32>(SS_JOINT_TONE) * mix(1.0, 0.7 + 0.6 * st_noise(p / 0.05 + 6.3), wx_keep(0.05, fw_short));

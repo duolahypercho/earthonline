@@ -924,8 +924,16 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     let t = cc0_dtap(uv, gxa / sz, gya / sz, lg);
                     // Trodden gum: flat grey-black discs, in patches that grow with the field's density.
                     let gpatch = smoothstep(0.78 - 0.33 * dens, 0.95 - 0.2 * dens, st_noise(vec2<f32>(along, across) / 2.3 + rnd * 11.0));
-                    let a = t.alb.a * gpatch * 0.6;
-                    let c = mix(t.alb.rgb, vec3<f32>(0.06, 0.06, 0.055), 0.75);
+                    var a = t.alb.a * gpatch * 0.6;
+                    var c = mix(t.alb.rgb, vec3<f32>(0.06, 0.06, 0.055), 0.75);
+                    if (SF_STREET_WEAR) {
+                        // (`--street-wear`) the scan's discs thinned in irregular gaps (no even field of
+                        // one size: some cut to a trodden fragment) and each stretch its own age,
+                        // fresh near black or old and greying toward the concrete
+                        let ga = vec2<f32>(along, across);
+                        a = a * smoothstep(0.48, 0.62, st_noise(ga / 0.07 + rnd * 7.0)) * (0.6 + 0.4 * st_noise(ga / 0.9 + 2.0));
+                        c = mix(c, vec3<f32>(0.14, 0.135, 0.125), smoothstep(0.35, 0.8, st_noise(ga / 0.35 + rnd * 5.0)));
+                    }
                     cc0_p_alb = vec4<f32>(mix(cc0_p_alb.rgb, c, a), max(cc0_p_alb.w, a));
                     cc0_p_rough = vec2<f32>(0.55, max(cc0_p_rough.y, a));
                 }

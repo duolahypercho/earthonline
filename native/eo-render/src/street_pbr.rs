@@ -270,7 +270,7 @@ pub const SETT_JOINT_MAX_M: f64 = 0.009;
 /// the joint's sand under the arrises (m: BS 7533 fills joints to within a
 /// few millimetres; traffic and sweeping take more), and the settlement tilt
 /// (slope, either way).
-pub const SETT_CROWN_M: f64 = 0.006;
+pub const SETT_CROWN_M: f64 = 0.008;
 pub const SETT_ARRIS_M: f64 = 0.012;
 pub const SETT_ARRIS_DROP_M: f64 = 0.005;
 pub const SETT_JOINT_DEPTH_M: f64 = 0.009;
