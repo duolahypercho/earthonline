@@ -46,6 +46,14 @@ struct PrOut {
     // the model-space position (plates, pads) and the cross-fade (t, arriving 1 / leaving 0).
     @location(6) local: vec3<f32>,
     @location(7) @interpolate(flat) fade: vec2<f32>,
+// sf:PROP_FAR+
+    // (`--prop-far-shadow`) the far map's sun visibility at the vertex (`pr_far_sun`).
+    @location(8) far_sun: f32,
+// sf:end
+// sf:CROWN+
+    // (`--crown-light`) the wind weight: a tree vertex's height in its crown (props_lib2.rs `tree_mesh`).
+    @location(9) sway: f32,
+// sf:end
 };
 
 @vertex
@@ -73,8 +81,32 @@ fn prop_vs(
     out.local = pos;
     let view = ii / max(pr.counts.z, 1u);
     out.fade = vec2<f32>(f32((word >> 17u) & 255u) / 255.0, select(0.0, 1.0, view == 5u));
+// sf:PROP_FAR+
+    out.far_sun = pr_far_sun(world);
+// sf:end
+// sf:CROWN+
+    out.sway = sway;
+// sf:end
     return out;
 }
+// sf:PROP_FAR+
+
+// (`--prop-far-shadow`) The sun's visibility from the far map (far_shadow.wgsl)
+// at a vertex past the cascades' fade start (`cascade_split.w`): the props'
+// fragment shaders compile the cascades alone (look.rs `ShadowLevels::Near`,
+// the cut-out pipeline at the edge of what Apple's compiler takes), so past the
+// cascades a street tree, palm or pole in a building's shadow stood in full sun.
+// Looked up here, once a vertex, and read by `lk_shadow` through
+// `lk_far_vertex`. The map holds buildings, terrain and structures, not props,
+// so a prop never shadows itself in it; the normal offset is the ground's (up).
+fn pr_far_sun(world: vec3<f32>) -> f32 {
+    let vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
+    if (vd < look.cascade_split.w || look.key_dir.w <= 0.0 || !lk_far_on()) {
+        return 1.0;
+    }
+    return lk_far_shadow(world, vec3<f32>(0.0, 1.0, 0.0));
+}
+// sf:end
 
 // interleaved gradient noise, the dither of the cross-fade.
 fn pr_dither(p: vec2<f32>) -> f32 {
@@ -506,9 +538,29 @@ fn pr_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>, s
     if (frame.copy_step.z < 0.5) {
         ao = ao_multi_bounce(ao_fetch(world).a);
     }
+// sf:end
+// sf:FOLIAGE&CROWN+
+    ao = ao * pr_crown_sky; // (`--crown-light`) the sky through the leaves above
+// sf:end
+// sf:FOLIAGE+
     return t * (e + irr * ao) / LK_PI;
 }
 
+// sf:end
+// sf:CROWN+
+// ---- (`--crown-light`) a street tree's leaves in their crown ----
+// A leaf card takes a measured mature leaf's chroma (hlod_trees.wgsl
+// `FT_LEAF_CHROMA`, as the far crowns do, so the two levels agree; the
+// cooked tints ran to a saturation of 0.7 on screen where a leaf's is about
+// 0.35-0.45), its luminance kept; and the sky light reaching it falls with the
+// leaf area above it (Monsi and Saeki's vertical Beer-Lambert profile, k 0.5
+// over a crown's leaf area index of 2: e^-(1 - f), f its height in the crown
+// from the wind weight), so a crown in shade is lit from its top, not
+// evenly through. The sun's shade inside the crown is the cascades' (the
+// leaves cast) and the cooked crown tone's.
+const PR_LEAF_CHROMA: vec3<f32> = vec3<f32>(0.64, 1.17, 0.50);
+const PR_CROWN_KL: f32 = 1.0; // k 0.5 x leaf area index 2
+var<private> pr_crown_sky: f32 = 1.0;
 // sf:end
 // sf:FOLIAGE|PALM+
 const PR_PALM: u32 = 7u; // eo_props::Model::Palm
@@ -577,6 +629,8 @@ struct PrPalmVariety {
     bark: vec3<f32>,
     skin: f32, // 0 or 1: the lower trunk skinned
     skin_h: f32, // up to here (model m)
+    around: f32, // leaf bases round the trunk (9 to 13, whole)
+    base_h: f32, // a leaf base's height over PR_PALM_BASE_H
 };
 
 fn pr_palm_variety(inst: PrInstance) -> PrPalmVariety {
@@ -593,6 +647,10 @@ fn pr_palm_variety(inst: PrInstance) -> PrPalmVariety {
     o.bark = mix(vec3<f32>(0.88, 0.93, 1.04), vec3<f32>(1.1, 0.99, 0.88), h3) * (0.85 + 0.3 * h4);
     o.skin = select(0.0, 1.0, h1 > 0.8);
     o.skin_h = mix(0.7, 1.6, h4);
+    // (r2i2) the lattice's own count and pitch: the spirals a palm grew (8 to 13
+    // contact parastichies on Canary Island date palms), the bases' heights with its vigour
+    o.around = 9.0 + floor(fract(h2 * 7.13 + h4 * 3.7) * 4.999);
+    o.base_h = mix(0.82, 1.3, fract(h1 * 5.31 + h3 * 2.9));
     return o;
 }
 // sf:end
@@ -620,6 +678,21 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
     let fw = max(length(dpx), length(dpy)); // the pixel's footprint (world m)
     let sc = max(inst.scale.y, 1e-3);
     if (uv.x < 0.5) {
+// sf:end
+// sf:PALM&PALM_VARIETY+
+        // (`--palm-variety`) this palm's lattice: its count round the trunk and its
+        // bases' height (these function-scope lets stand in for the module's
+        // constants of the same names in the lines below), and the weathering
+        // that breaks it up: patches where the bases are worn down to the fibre
+        // (their relief nearly gone), on the lower and middle trunk.
+        let pvt = pr_palm_variety(inst);
+        let relief0 = PR_PALM_RELIEF;
+        let wear = smoothstep(0.52, 0.74, st_noise(vec2<f32>(uv.x * 6.0 + seed * 5.0, local.y * 0.55 + seed * 3.0))) * (1.0 - smoothstep(3.5, 5.5, local.y));
+        let PR_PALM_AROUND = pvt.around;
+        let PR_PALM_BASE_H = 0.17 * pvt.base_h;
+        let PR_PALM_RELIEF = relief0 * (1.0 - 0.8 * wear);
+// sf:end
+// sf:PALM+
         // the trunk: the leaf-base lattice in bases round (a) and up (b).
         let b = local.y / PR_PALM_BASE_H;
         let a = uv.x * 2.0 * PR_PALM_AROUND + 0.6 * (st_noise(vec2<f32>(b * 0.45, seed * 9.0)) - 0.5) + 0.25 * (st_noise(vec2<f32>(b * 1.7, seed * 5.0)) - 0.5); // the spirals waver (in b only: the seam still closes)
@@ -667,6 +740,14 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
         // (`--palm-variety`) this palm's bark, and on some the lower trunk skinned smooth
         let pv = pr_palm_variety(inst);
         alb = alb * pv.bark;
+        // the worn patches' fibre, weathered grey; rain's dark streaks run down from
+        // under the crown; grey-green crustose lichen on the trunk's damper side
+        alb = mix(alb, vec3<f32>(0.20, 0.188, 0.165) * (0.9 + 0.2 * st_noise(vec2<f32>(uv.x * 30.0, local.y * 4.0))), 0.65 * wear * k);
+        let drip = smoothstep(0.6, 0.85, st_noise(vec2<f32>(uv.x * 36.0 + seed * 11.0, local.y * 0.22))) * smoothstep(0.8, 2.5, local.y);
+        alb = alb * (1.0 - 0.3 * drip * k);
+        let side = 0.5 + 0.5 * cos((uv.x * 2.0 + seed) * 6.2831853);
+        let lichen = smoothstep(0.66, 0.82, st_noise(vec2<f32>(uv.x * 24.0 + 3.0, local.y * 2.2 + seed * 9.0))) * side * (1.0 - smoothstep(4.0, 6.0, local.y));
+        alb = mix(alb, vec3<f32>(0.235, 0.245, 0.200), 0.7 * lichen * k);
         let skin = pv.skin * (1.0 - smoothstep(pv.skin_h - 0.25, pv.skin_h + 0.25, local.y + 0.3 * (st_noise(vec2<f32>(uv.x * 20.0, seed * 3.0)) - 0.5)));
         if (skin > 0.0) {
             // the cut leaf bases' scars: shallow rings a base's height apart, fibre between
@@ -792,6 +873,9 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
 }
 // sf:end
 fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
+// sf:PROP_FAR+
+    lk_far_vertex = in.far_sun; // (`--prop-far-shadow`)
+// sf:end
     var m = materials[in.material];
     let inst = pr_instances[in.inst];
     let dpx = dpdx(in.world);
@@ -918,6 +1002,16 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     }
 // sf:end
     s.rough = clamp(s.rough, 0.03, 1.0);
+// sf:CROWN+
+    if ((m.flags & PR_LEAF) != 0u) {
+        // (`--crown-light`) a measured leaf's chroma, the sky through the leaves above
+        let lum = dot(s.albedo, vec3<f32>(0.2126, 0.7152, 0.0722));
+        s.albedo = mix(s.albedo, PR_LEAF_CHROMA * lum, 0.5);
+        let f = pow(clamp((in.sway - 0.15) / 0.85, 0.0, 1.0), 0.6667);
+        pr_crown_sky = exp(-PR_CROWN_KL * (1.0 - f));
+        s.ao = s.ao * pr_crown_sky;
+    }
+// sf:end
 // sf:FOLIAGE+
     // (`--foliage-light`) a leaf card, or a palm's frond (the palm's one
     // material: its green parts; with `--palm-detail` its leaflets by the atlas).

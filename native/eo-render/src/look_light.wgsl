@@ -185,6 +185,12 @@ fn lk_cascade_sun(c: i32, world: vec3<f32>, ng: vec3<f32>, bounded: bool) -> f32
 // `--far-shadows` the far map (far_shadow.wgsl) takes over in the fade and
 // past it. LK_SHADOW_* (look.rs `ShadowLevels`) say which parts a pipeline
 // compiles.
+// sf:PROP_FAR+
+// (`--prop-far-shadow`) the far map's sun visibility where a pipeline compiles
+// no far map of its own: the props set it from their vertex shader's lookup
+// (props_draw.wgsl `pr_far_sun`); 1 everywhere else, as before.
+var<private> lk_far_vertex: f32 = 1.0;
+// sf:end
 fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
     let probe = frame.copy_step.z > 0.5;
@@ -198,7 +204,12 @@ fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     let far = LK_SHADOW_FAR && lk_far_on();
     if (vd >= split.z || !LK_SHADOW_CASCADES) {
         if (!far) {
+// sf:PROP_FAR-
             return 1.0;
+// sf:end
+// sf:PROP_FAR+
+            return mix(1.0, lk_far_vertex, look.key_dir.w);
+// sf:end
         }
         return mix(1.0, lk_far_shadow(world, ng), look.key_dir.w);
     }
@@ -238,7 +249,12 @@ fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     if (far && fade > 0.0) {
         return mix(1.0, mix(vis, lk_far_shadow(world, ng), fade), look.key_dir.w);
     }
+// sf:PROP_FAR-
     return mix(1.0, mix(vis, 1.0, fade), look.key_dir.w);
+// sf:end
+// sf:PROP_FAR+
+    return mix(1.0, mix(vis, lk_far_vertex, fade), look.key_dir.w);
+// sf:end
 }
 
 fn lk_ggx(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
@@ -278,6 +294,14 @@ var<private> rm_emit: vec3<f32>;
 var<private> lk_key_vis: f32;
 var<private> lk_fog_out: f32;
 var<private> lk_vis_wrap: f32;
+// sf:CROWN+
+// (`--crown-light`) the share of the key `look_light` lays on the surface's own
+// normal: 0 for a far crown, whose sun the far trees add as a volume's
+// (hlod_trees.wgsl `ft_crown`, reading `lk_key_vis` and `lk_fog_out` as the
+// people do, with `lk_vis_wrap` set so the visibility is always looked up); 1
+// everywhere else, as before.
+var<private> lk_leaf_sun: f32 = 1.0;
+// sf:end
 
 // (`--car-materials`) a car paint's reflection class (agents_draw.wgsl; 0 elsewhere: the surface's own).
 var<private> sky_coat_env: f32;
@@ -331,6 +355,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         let kv = vec3<f32>(lk_shadow(world, ng), sky_cloud_transmittance(world), sky_contact_shadow(world, ng));
         key = look.key.xyz * max(nl, 0.0) * kv.x * kv.y * kv.z; // cloud and contact shadows
         lk_key_vis = kv.x * kv.y * kv.z; // (`--people-shading`)
+// sf:CROWN+
+        key = key * lk_leaf_sun; // (`--crown-light`)
+// sf:end
         if (SF_STREET_PBR) {
             key = key * sp_sun_vis; // (`--street-pbr`, street_pbr.wgsl) the paving's own relief over the key
         }

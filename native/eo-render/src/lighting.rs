@@ -268,9 +268,18 @@ mod tests {
             look::NATURE_COVER | look::NATURE_BARE,
             look::NATURE_PALM | look::NATURE_PALM_VARIETY,
             look::NATURE_FOLIAGE | look::NATURE_PALM | look::NATURE_PALM_VARIETY,
+            look::NATURE_CROWN,
+            look::NATURE_FAR_PALMS,
+            look::NATURE_PROP_FAR,
+            look::NATURE_CROWN | look::NATURE_FAR_PALMS,
+            look::NATURE_FOLIAGE | look::NATURE_CROWN,
+            look::NATURE_FOLIAGE | look::NATURE_FAR_PALMS,
+            look::NATURE_LOD_FADE | look::NATURE_CROWN,
+            look::NATURE_LOD_FADE | look::NATURE_FAR_PALMS,
+            look::NATURE_FOLIAGE | look::NATURE_PROP_FAR,
             look::NATURE_ALL,
         ] {
-            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`, `--palm-variety`)
+            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`, `--palm-variety`, `--crown-light`, `--far-palms`, `--prop-far-shadow`)
         }
         sets.push(("all + nature".into(), look::ShaderFeatures { nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL }));
         sets
@@ -323,6 +332,27 @@ mod tests {
                 assert!(!city.contains("// sf:"), "{name}: no marker is left in the city shader");
                 let far_trees = format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{}", look::city_shader_source_far(), crate::cove_canopy::VIEWS, crate::cove_canopy::LAYERS, look::sf_select(crate::hlod_trees::WGSL));
                 parse(&format!("{name}: far trees"), &far_trees);
+                // (`--crown-light`, `--far-palms`) the far trees' new shading and its hooks follow the bits
+                let crown = f.nature & look::NATURE_CROWN != 0;
+                let far_palms = f.nature & look::NATURE_FAR_PALMS != 0;
+                assert_eq!(far_trees.contains("fn ft_crown("), crown, "{name}: the crown's volume follows its bit");
+                assert_eq!(far_trees.contains("fn ft_palm("), far_palms, "{name}: the far palm follows its bit");
+                assert_eq!(far_trees.contains("return ft_shade2(in);"), crown || far_palms, "{name}: the new shading is the entry's with either bit");
+                assert_eq!(far_trees.contains("key = key * lk_leaf_sun;"), crown, "{name}: look_light's hook follows the crown's bit");
+                assert_eq!(props.contains("pr_crown_sky = exp(-PR_CROWN_KL * (1.0 - f));"), crown, "{name}: the street trees' crown light follows the crown's bit");
+                assert_eq!(props.contains("ao = ao * pr_crown_sky;"), crown && foliage, "{name}: the light through the leaves takes it with both bits");
+                assert_eq!(far_trees.contains("hlod_dither(floor(in.clip.xy) + shift)"), crown || far_palms, "{name}");
+                assert!(!far_trees.contains("// sf:"), "{name}: no marker is left in the far trees");
+                if far_palms {
+                    assert!(far_trees.contains(&format!("const FT_PALM: u32 = {}u;", crate::hlod_trees::FAR_PALM)), "FT_PALM is hlod_trees::FAR_PALM");
+                }
+                // (`--prop-far-shadow`) the props' vertex lookup and look_light's reading of it
+                let prop_far = f.nature & look::NATURE_PROP_FAR != 0;
+                assert_eq!(props.contains("out.far_sun = pr_far_sun(world);"), prop_far, "{name}: the props' far lookup follows its bit");
+                assert_eq!(props.contains("lk_far_vertex = in.far_sun;"), prop_far, "{name}");
+                assert_eq!(props.contains("return mix(1.0, lk_far_vertex, look.key_dir.w);"), prop_far, "{name}: lk_shadow reads it with the bit only");
+                let stages = if prop_far { wgpu::ShaderStages::VERTEX_FRAGMENT } else { wgpu::ShaderStages::FRAGMENT };
+                assert_eq!(look::far_map_stages(), stages, "{name}: the far map reaches the vertex stage with the bit only");
                 let agents = format!(
                     "{}\n{}\n{}\n{}\n{}\n{}",
                     look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, look::ShadowLevels::Full, false),

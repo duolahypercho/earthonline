@@ -412,6 +412,52 @@ fn fs_cover(p: vec2<f32>, n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, fp: f32, woo
 }
 
 // sf:end
+// sf:HILL_RELIEF+
+// ---- the hills' relief under the height field's lattice (`--hill-relief`; in the shader only with it) ----
+// The far land's heights are a 40 m lattice (eo-farshore's cook of the 1 arc-second
+// DEM, about 30 m), and its normal is taken over two texels, so a Coast Range
+// hillside shades as a smooth plane: the gullies that run down every face (a
+// drainage density of 5 to 10 km per square km, so a channel every 100 to 200 m,
+// rills between them every few tens of metres) and the spurs between them, which
+// are what a low sun and the haze pick out on a real hill, are gone. They are put
+// back as a height field below the lattice's reach: V-shaped channels down the
+// fall line with rounded spurs between (value noise folded about its median,
+// stretched 5:1 down the slope), three scales 160, 56 and 20 m across, 10, 4
+// and 1.5 m deep (side slopes of about 0.25 to 0.3, 14 to 17 degrees: a
+// ravine's walls run 20 to 35), deeper on the steeper faces and none on the
+// flats, each faded to nothing where a pixel spans it.
+// Its slope (central differences a pixel's footprint apart) bends the lattice's
+// normal, which the light, the mosaic's north faces and the crowns' model take.
+fn fs_relief_h(p: vec2<f32>, fall: vec2<f32>, fp: f32) -> f32 {
+    let q = vec2<f32>(dot(p, fall), dot(p, vec2<f32>(-fall.y, fall.x)));
+    var h = 0.0;
+    var w = 160.0;
+    var a = 10.0;
+    for (var k = 0; k < 3; k = k + 1) {
+        let fade = 1.0 - smoothstep(0.3 * w, 0.9 * w, fp);
+        let nz = fs_noise(vec2<f32>(q.x / (5.0 * w), q.y / w) + vec2<f32>(f32(k) * 5.3 + 11.0, f32(k) * 1.7 + 3.0));
+        h = h + fade * a * (abs(2.0 * nz - 1.0) - 0.5);
+        w = w * 0.35;
+        a = a * 0.4;
+    }
+    return h;
+}
+
+// The lattice's normal `n0` (slope `slope`) bent by the relief at p (`fp` m a pixel).
+fn fs_relief(p: vec2<f32>, n0: vec3<f32>, fp: f32, slope: f32) -> vec3<f32> {
+    let amp = smoothstep(0.04, 0.2, slope) * (0.6 + 0.8 * smoothstep(0.15, 0.6, slope));
+    if (amp <= 0.0 || fp > 150.0) {
+        return n0;
+    }
+    let fall = n0.xz / max(length(n0.xz), 1e-4);
+    let d = max(fp, 3.0);
+    let gx = (fs_relief_h(p + vec2<f32>(d, 0.0), fall, fp) - fs_relief_h(p - vec2<f32>(d, 0.0), fall, fp)) / (2.0 * d);
+    let gz = (fs_relief_h(p + vec2<f32>(0.0, d), fall, fp) - fs_relief_h(p - vec2<f32>(0.0, d), fall, fp)) / (2.0 * d);
+    let ny = max(n0.y, 0.05);
+    return normalize(vec3<f32>(n0.x / ny - amp * gx, 1.0, n0.z / ny - amp * gz));
+}
+
+// sf:end
 @fragment
 fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
     let h = i.hr.x;
@@ -432,8 +478,14 @@ fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
     let e = fu.lod.x * exp2(floor(mip));
     let hx = fs_h(p + vec2<f32>(e, 0.0), mip) - fs_h(p - vec2<f32>(e, 0.0), mip);
     let hz = fs_h(p + vec2<f32>(0.0, e), mip) - fs_h(p - vec2<f32>(0.0, e), mip);
+// sf:HILL_RELIEF-
     let n = normalize(vec3<f32>(-hx / (2.0 * e), 1.0, -hz / (2.0 * e)));
     let slope = length(vec2<f32>(hx, hz)) / (2.0 * e);
+// sf:end
+// sf:HILL_RELIEF+
+    let slope = length(vec2<f32>(hx, hz)) / (2.0 * e);
+    let n = fs_relief(p, normalize(vec3<f32>(-hx / (2.0 * e), 1.0, -hz / (2.0 * e))), fp, slope); // (`--hill-relief`)
+// sf:end
     let c = textureSampleLevel(fs_class, fs_samp, fs_uv(p), max(mip - 1.0, 0.0));
     let urban = c.r;
     let lake = c.g;
