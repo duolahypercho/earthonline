@@ -289,3 +289,43 @@ fn the_harbour_docks_float_and_offer_berths() {
         std::fs::write(p, serde_json::to_string(&serde_json::json!({"berths": v, "docks": d})).unwrap()).unwrap();
     }
 }
+
+/// (`--quay-fill`) The promenade is carried on from the quay apron to a walk
+/// standing beyond a sunken strip: a ramp (out on the apron where the walk is
+/// much higher), a terrace with a step face where no ramp fits; nothing where the ground is
+/// not sunken, where a building stands in the way, or where no walk is near.
+#[test]
+fn the_quay_fill_paves_only_a_sunken_strip_up_to_the_walk() {
+    use std::sync::Arc;
+    let edge = wf::ShoreEdge { a: [0.0, 0.0], b: [40.0, 0.0], land: [0.0, 1.0], pier: None };
+    let set_with = || {
+        let mut s = eo_landmarks::LandmarkSet::default();
+        s.press = Some(Arc::new(wf::ShorePress::new(0.0, &[edge.clone()], &[])));
+        s
+    };
+    let js = LandmarksJs::get();
+    let crest = 1.0 + js.shore.road_lift + js.shore.crest_above_road_m;
+    let height = |_: f64, _: f64| Some(1.0);
+    let w0 = wf::CAP_W_M + wf::COPING_LAND_M;
+    let walk_from = w0 + 5.0;
+    let names = |s: &eo_landmarks::LandmarkSet| s.structures.iter().map(|x| x.name.clone()).collect::<Vec<_>>();
+    // a walk 5 m past the apron, its edge level with the crest: a ramp, no step
+    let mut s = set_with();
+    let (filled, tried) = s.add_quay_fill(&height, &|_, z| (z >= walk_from).then_some(crest + 0.2), &|_, _| false, &|_, _| crest - 1.0, 0.083);
+    assert!(filled > 0 && filled == tried, "{filled} of {tried}");
+    assert_eq!(names(&s), vec!["waterfront:quay-fill".to_string()]);
+    // the walk 0.7 m over the crest: the ramp starts out on the apron, still no step
+    let mut s = set_with();
+    s.add_quay_fill(&height, &|_, z| (z >= walk_from).then_some(crest + 0.7), &|_, _| false, &|_, _| crest - 1.0, 0.083);
+    assert_eq!(names(&s), vec!["waterfront:quay-fill".to_string()]);
+    // the walk 0.9 m over the crest a metre past the apron: no ramp fits, a terrace at the walk and a step face down to the apron
+    let mut s = set_with();
+    s.add_quay_fill(&height, &|_, z| (z >= w0 + 1.0).then_some(crest + 0.9), &|_, _| false, &|_, _| crest - 1.0, 0.083);
+    assert_eq!(names(&s), vec!["waterfront:quay-fill".to_string(), "waterfront:quay-fill-steps".to_string()]);
+    // the ground between at the paving's level, a building in the way, or no walk: nothing
+    for (walk, blocked, ground) in [(true, false, crest + 0.1), (true, true, crest - 1.0), (false, false, crest - 1.0)] {
+        let mut s = set_with();
+        let (filled, _) = s.add_quay_fill(&height, &|_, z| (walk && z >= walk_from).then_some(crest), &|_, z| blocked && z > w0 + 2.0, &|_, _| ground, 0.083);
+        assert_eq!((filled, s.structures.len()), (0, 0));
+    }
+}
