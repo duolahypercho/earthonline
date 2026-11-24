@@ -199,6 +199,16 @@ pub fn irradiance_with(f: &Fill, t: f64, vs: f64, vg: f64, m: Rgb, env: Rgb) -> 
     [0, 1, 2].map(|i| f.hemi_sky[i] * vs + g[i] * lower + m[i] * (t - vs) + (f.ambient[i] + env[i]) * (vs + lower * vg))
 }
 
+/// What the cars and people take for the blocked sky's light while the
+/// occluder light runs (eo-render agents.rs `agents_city_source`: their
+/// opaque pipeline with the cars' materials does not compile on Apple's GPU
+/// with the per-pixel model): the rig's stand-in (`AMB_OCCLUDER`, the ground
+/// lobe) scaled by the shaded walls' exitance over that lobe in a street that
+/// sees a quarter to two fifths of the sky, 0.26-0.38 at noon and at 18.5 h
+/// (test), so a walker or a bus in a canyon or under a deck darkens with the
+/// walls round it instead of keeping the sunlit street's light.
+pub const AGENTS_OCCLUDER: f64 = 0.3;
+
 /// The same with the rig's stand-in (`AMB_OCCLUDER` = 1: the blocked sky at the ground lobe), as before.
 pub fn irradiance_stand_in(f: &Fill, t: f64, vs: f64, env: Rgb) -> Rgb {
     let vs = vs.min(t);
@@ -363,6 +373,18 @@ mod tests {
         let rig = irradiance_stand_in(&f, 1.0, 1.0, [0.0; 3]);
         for c in 0..3 {
             assert!((open[c] - rig[c]).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn the_agents_share_is_the_walls_over_the_lobe() {
+        for h in [12.0, 18.5] {
+            let f = fill(h);
+            for vg in [0.25, 0.3, 0.4] {
+                let r = shaded_exitance(&f, vg)[1] / f.hemi_ground[1];
+                println!("{h} h, street sky {vg}: walls / lobe {r:.3}");
+                assert!((AGENTS_OCCLUDER - r).abs() < 0.08, "{h} {vg}: {r}");
+            }
         }
     }
 
