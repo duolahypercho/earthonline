@@ -1010,14 +1010,15 @@ fn occluder_wgsl() -> String {
     use eo_look::occluder as o;
     let f = |v: f64| format!("{v:.8}");
     format!(
-        "const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({}, {}, {});\nconst OL_GROUND_SKY_H_M: f32 = {};\nconst OL_SIDE_OPEN: f32 = {};\nconst OL_MIN_STREET_SKY: f32 = {};\nconst OL_MAX_STREET_SKY: f32 = {};\n",
+        "const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({}, {}, {});\nconst OL_GROUND_SKY_H_M: f32 = {};\nconst OL_SIDE_OPEN: f32 = {};\nconst OL_MIN_STREET_SKY: f32 = {};\nconst OL_MAX_STREET_SKY: f32 = {};\nconst OL_SKIP_SHARE: f32 = {};\n",
         f(o::WALL_ALBEDO[0]),
         f(o::WALL_ALBEDO[1]),
         f(o::WALL_ALBEDO[2]),
         f(o::GROUND_SKY_H_M),
         f(o::SIDE_OPEN),
         f(o::MIN_STREET_SKY),
-        f(o::MAX_STREET_SKY)
+        f(o::MAX_STREET_SKY),
+        f(o::SKIP_SHARE)
     )
 }
 

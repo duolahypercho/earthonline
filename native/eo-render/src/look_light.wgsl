@@ -377,7 +377,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     var av = AMB_OPEN;
     if (amb) {
         if (amb_ol_on()) {
-            av = amb_sample_ground(world, ng); // (`--occluder-light`) and the street's own sky under the point
+            av = amb_sample_ground(world, ng, n); // (`--occluder-light`) and the street's own sky under the point
         } else {
             av = amb_sample(world, ng);
         }
@@ -387,8 +387,10 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             // hidden as the rest of the sky is: by the volume's visible share along it
             // against the open sky's (eo-look `occluder::rim_hidden`).
             let rk = amb_rim_hidden(av, rl);
-            direct_d = direct_d - rim * diffuse / LK_PI * rk;
-            direct_s = direct_s - rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM) * rk;
+            if (rk > OL_SKIP_SHARE) {
+                direct_d = direct_d - rim * diffuse / LK_PI * rk;
+                direct_s = direct_s - rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM) * rk;
+            }
         }
         // the ground bounce (`--ground-bounce`, ambient.wgsl): light from the
         // sunlit open ground below (look.lx[0].yzw, zero while off or at night).

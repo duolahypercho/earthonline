@@ -215,8 +215,11 @@ fn amb_ol_on() -> bool {
 // facing up (0..1) under the shaded point: the plane and the levels
 // OL_GROUND_SKY_H_M over the ground where the point reads (AMB_NORMAL_OFFSET_M
 // along the geometric normal: the street at a wall's foot, the ground under a
-// soffit), from the same plane texel and level rectangles.
-fn amb_sample_ground(world: vec3<f32>, ng: vec3<f32>) -> vec4<f32> {
+// soffit), from the same plane texel and level rectangles. Only where it
+// counts (shading normal `n`): with no lower hemisphere and no blocked sky
+// past OL_SKIP_SHARE (an open roof or square seen from above) the street's
+// sky is not read and counts as open.
+fn amb_sample_ground(world: vec3<f32>, ng: vec3<f32>, n: vec3<f32>) -> vec4<f32> {
     let p = world + ng * AMB_NORMAL_OFFSET_M;
     let pl = amb_plane(p.xz);
     let h = p.y - pl.z;
@@ -225,19 +228,24 @@ fn amb_sample_ground(world: vec3<f32>, ng: vec3<f32>) -> vec4<f32> {
     let open_pl = vec4<f32>(pl.x, 0.0, pl.y, 0.0);
     var v = mix(open_pl, AMB_OPEN, lk_smooth(0.0, reach, h));
     var g = mix(open_pl, AMB_OPEN, lk_smooth(0.0, reach, hg));
-    if (AMB_SHADER_LEVELS > 0u) {
-        let wf = amb_edge(amb_rect(look.lx[10].x, look.lx[10].y), p.xz);
-        if (wf > 0.0) {
-            v = mix(v, amb_level(p.xz, h, 0u, AMB_FAR_CELL_M, reach), wf);
-            g = mix(g, amb_level(p.xz, hg, 0u, AMB_FAR_CELL_M, reach), wf);
-        }
+    let wf = amb_edge(amb_rect(look.lx[10].x, look.lx[10].y), p.xz);
+    let wn = amb_edge(amb_rect(look.lx[10].z, look.lx[10].w), p.xz);
+    if (AMB_SHADER_LEVELS > 0u && wf > 0.0) {
+        v = mix(v, amb_level(p.xz, h, 0u, AMB_FAR_CELL_M, reach), wf);
     }
-    if (AMB_SHADER_LEVELS > 1u) {
-        let wn = amb_edge(amb_rect(look.lx[10].z, look.lx[10].w), p.xz);
-        if (wn > 0.0) {
-            v = mix(v, amb_level(p.xz, h, 1u, AMB_NEAR_CELL_M, reach), wn);
-            g = mix(g, amb_level(p.xz, hg, 1u, AMB_NEAR_CELL_M, reach), wn);
-        }
+    if (AMB_SHADER_LEVELS > 1u && wn > 0.0) {
+        v = mix(v, amb_level(p.xz, h, 1u, AMB_NEAR_CELL_M, reach), wn);
+    }
+    let t = n.y * 0.5 + 0.5;
+    if (1.0 - t <= OL_SKIP_SHARE && t - min(amb_vis(v, n), t) <= OL_SKIP_SHARE) {
+        amb_vg = 1.0;
+        return v;
+    }
+    if (AMB_SHADER_LEVELS > 0u && wf > 0.0) {
+        g = mix(g, amb_level(p.xz, hg, 0u, AMB_FAR_CELL_M, reach), wf);
+    }
+    if (AMB_SHADER_LEVELS > 1u && wn > 0.0) {
+        g = mix(g, amb_level(p.xz, hg, 1u, AMB_NEAR_CELL_M, reach), wn);
     }
     amb_vg = clamp(g.x + g.z, 0.0, 1.0);
     return v;
