@@ -334,6 +334,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         if (SF_STREET_PBR) {
             key = key * sp_sun_vis; // (`--street-pbr`, street_pbr.wgsl) the paving's own relief over the key
         }
+        if (SF_FAR_RELIEF) {
+            key = key * fr_sun_vis; // (`--far-relief`, hlod_draw.wgsl) the far layer's relief over the key
+        }
     }
     var direct_d = key * diffuse / LK_PI;
     var direct_s = key * lk_ggx(n, v, l, f0, rough);

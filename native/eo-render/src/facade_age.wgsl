@@ -57,6 +57,12 @@ fn ff_on() -> bool {
     return SF_FAR_FACADES && (fa_run() & 2097152u) != 0u;
 }
 
+// (`--far-relief`, hlod_draw.wgsl) the key light's visibility over what the
+// far layer's relief shades (a parapet's shade on its roof, a cornice's or a
+// belt course's on its wall), set by the far shader before `look_light`; 1
+// everywhere else. Read only behind `SF_FAR_RELIEF` (look_light.wgsl).
+var<private> fr_sun_vis: f32 = 1.0;
+
 // (`--canyon-glass`, facade.rs `RUN_CANYON_GLASS`, bit 23) the street canyon in the kit glass (rooms.wgsl `cg_canyon`).
 fn cg_on() -> bool {
     return SF_CANYON_GLASS && (fa_run() & 8388608u) != 0u;

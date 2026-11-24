@@ -507,6 +507,25 @@ pub fn canyon_from_args() -> bool {
     last_switch(&args, "--canyon-glass", "--no-canyon-glass")
 }
 
+/// `--far-relief` (`--no-far-relief`; off by default): the far layer's
+/// construction depth. A district's flat roof sits under its parapet: the
+/// parapet's cap and its inner faces where the eye sees them, and the shade
+/// it casts down the roof from the key light (the district mesh's roof ring
+/// carries its place in the footprint's oriented box, hlod_district.rs
+/// `roof_frame_words`, cooked into its own district files); the plain
+/// prism's stone front (with `--far-facades`) casts the sun's shadow from its
+/// cornice, belt courses, sills and pilasters, its arcade is deep, its bays
+/// grouped under pavilions (hlod_draw.wgsl behind `SF_FAR_RELIEF`). Compiled
+/// in only with the switch (no runtime gate); off, the code is compiled out,
+/// the district files and the frame are as before.
+pub fn far_relief_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--far-relief", "--no-far-relief")
+    })
+}
+
 /// The facades track's runtime bits in the frame switches (`fa_run()`), high
 /// enough to stay clear of the others: with a feature's code compiled in
 /// (`ShaderFeatures`) it draws only with its bit set, so a renderer with every
