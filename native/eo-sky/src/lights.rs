@@ -331,6 +331,7 @@ pub fn rear_lamp_reach_m(candela: f64) -> f64 {
 // | Green | 475 cd | x 0.17 y 0.70 | the same table; ITE green (the blue-green of the LED lenses) |
 // | Beam | from the axis to none past 25 deg | the VTCSH distribution's points (about 0.8 of the axis value at 7.5 deg, half at 12.5, a quarter at 17.5, a few per cent past 25 deg) as a spot's smoothstep in cos | |
 // | Reach | where it gives `SIGNAL_REACH_LUX` | INFERRED: a quarter of a lux |
+// | Clear | nothing lit within `SIGNAL_CLEAR_M` of the lens | CA MUTCD 4D.12's clear view of the face along its approach; INFERRED: the distance |
 
 /// A lit lens's intensity on its axis (cd): red, yellow, green (ITE VTCSH, 12-inch LED).
 pub const SIGNAL_CD: [f64; 3] = [365.0, 910.0, 475.0];
@@ -341,8 +342,13 @@ pub const SIGNAL_INNER_DEG: f64 = 0.0;
 pub const SIGNAL_OUTER_DEG: f64 = 25.0;
 /// A lens's light is drawn out to where it gives this illuminance (lux).
 pub const SIGNAL_REACH_LUX: f64 = 0.25;
-/// The 300 mm lens's area (m^2): the light's size for its reflections.
-pub const SIGNAL_LENS_AREA_M2: f64 = std::f64::consts::PI * 0.15 * 0.15;
+/// The beam lights nothing nearer the lens than this (m; from three quarters of
+/// it, fully past it): a working head's face is in clear view of its approach
+/// for the stopping sight distance (CA MUTCD 4D.12: 250 ft at 35 mph), and near
+/// the head the drivers' sight lines fill the beam, so a surface that close in
+/// the data (a palm's crown beside a pole carrying back-to-back heads) is a
+/// placement's, not the head's, and takes none. INFERRED (the distance).
+pub const SIGNAL_CLEAR_M: f64 = 6.0;
 
 /// A chromaticity (x, y) in linear sRGB at unit luminance (out of gamut clipped).
 pub fn xy_unit_color(x: f64, y: f64) -> [f64; 3] {
