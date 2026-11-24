@@ -1002,10 +1002,12 @@ fn nt_bare(s: ptr<function, Surface>, wt: vec3<f32>, world: vec3<f32>, n: vec3<f
     let ew = clamp(fw / 8.0, 0.01, 0.3);
     let w = smoothstep(0.5 - ew, 0.5 + ew, wv);
     let margin = 1.0 - smoothstep(0.55, 1.0, wv);
-    // the sun's share of the light here (its shadow taken), for the shadows the clumps and stones cast
+    // the sun's share of the light here (its shadow taken), for the shadows the clumps and
+    // stones cast: only where a pixel resolves them (past that the sun's and the sky's albedos
+    // are one, and the shadow lookup is saved)
     let l = look.key_dir.xyz;
     var key = dot(look.key.xyz, NB_LUMA) * max(dot(n, l), 0.0);
-    if (key > 0.0) {
+    if (key > 0.0 && fw < 0.52) {
         key = key * lk_shadow(world, n) * sky_cloud_transmittance(world);
     }
     let amb = dot(look.hemi_sky.xyz + look.ambient.xyz, NB_LUMA);
@@ -1025,7 +1027,10 @@ fn nt_bare(s: ptr<function, Surface>, wt: vec3<f32>, world: vec3<f32>, n: vec3<f
     if (rock >= 0.5) {
         // ---- a revetment ----
         let kr = 1.0 - smoothstep(0.12, 0.45, fw / NB_ROCK_CELL); // its stones resolved
-        let rk = nb_rock(p);
+        var rk = vec4<f32>(1.0, 0.5, 1.0, 0.0); // (where they are not: a stone's top, its mean)
+        if (kr > 0.0) {
+            rk = nb_rock(p);
+        }
         let edge = rk.x;
         let seed = rk.y;
         // each stone: a block tilted its own way, its shoulders rounded over 35 cm down
