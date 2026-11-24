@@ -115,6 +115,79 @@ fn irradiance_sh(model: &sky::SkyModel) -> [Rgb; 9] {
     c
 }
 
+/// (`--dome-env`, eo-render look.rs) the environment's colour from the sky the
+/// frame paints. The diffuse environment and the rough reflections (the
+/// shaders' `lk_sh`: the cosine-convolved SH9 of the environment) take the
+/// analytic dome (`SkyModel::sample`), while the sky pass paints it graded
+/// (`SkyModel::dome`: San Francisco's haze desaturating and lifting the low
+/// sky, the horizon's haze band). Noon's horizon is painted b/r 1.1 and
+/// integrated b/r 2.5 (the analytic dome's 9 at the zenith): a rough street
+/// at a grazing view reflected a deep blue sky the frame never shows. Here
+/// each direction of the upper hemisphere keeps the analytic dome's luminance
+/// (the energy the rig's yield is solved against) and takes the painted
+/// dome's chromaticity; the lower hemisphere (the street field) is as it was.
+/// Returns (the analytic SH, this SH) on the same `DOME_ENV_RINGS` x
+/// `DOME_ENV_SECTORS` grid of the sphere, cosine-convolved, so a caller scales
+/// the second by its own yield over the first.
+pub const DOME_ENV_RINGS: usize = 16;
+pub const DOME_ENV_SECTORS: usize = 32;
+
+pub fn dome_env_sh(model: &sky::SkyModel) -> ([Rgb; 9], [Rgb; 9]) {
+    let (rings, sectors) = (DOME_ENV_RINGS, DOME_ENV_SECTORS);
+    let mut a = [[0.0; 3]; 9];
+    let mut c = [[0.0; 3]; 9];
+    let mut wsum = 0.0;
+    for i in 0..rings {
+        let theta = (i as f64 + 0.5) / rings as f64 * std::f64::consts::PI;
+        let (st, ct) = theta.sin_cos();
+        for j in 0..sectors {
+            let phi = (j as f64 + 0.5) / sectors as f64 * TAU;
+            let d = [st * phi.cos(), ct, st * phi.sin()];
+            let l = model.sample(d);
+            let m = if d[1] >= 0.0 {
+                let p = model.dome(d);
+                let (lp, ll) = (luminance(p), luminance(l));
+                if lp > 1e-12 { scale3(p, ll / lp) } else { l }
+            } else {
+                l
+            };
+            let y = sh_basis(d);
+            for k in 0..9 {
+                for ch in 0..3 {
+                    a[k][ch] += l[ch] * y[k] * st;
+                    c[k][ch] += m[ch] * y[k] * st;
+                }
+            }
+            wsum += st;
+        }
+    }
+    let norm = 4.0 * std::f64::consts::PI / wsum;
+    let band = [std::f64::consts::PI, 2.0 * std::f64::consts::PI / 3.0, std::f64::consts::PI / 4.0];
+    for k in 0..9 {
+        let w = band[if k == 0 { 0 } else if k < 4 { 1 } else { 2 }] * norm;
+        for ch in 0..3 {
+            a[k][ch] *= w;
+            c[k][ch] *= w;
+        }
+    }
+    (a, c)
+}
+
+/// (`--dome-env`) a frame's environment SH `env` (the analytic dome at the
+/// frame's yield and weather) with the painted dome's colour: `dome_env_sh`'s
+/// second SH, scaled by the frame's own SH over the analytic one facing up
+/// (luminance; the frame's yield). Unchanged where the analytic dome is dark.
+pub fn env_sh_with_dome_colour(model: &sky::SkyModel, env: &[Rgb; 9]) -> [Rgb; 9] {
+    let (a, c) = dome_env_sh(model);
+    let up = [0.0, 1.0, 0.0];
+    let la = luminance(sh_eval(&a, up));
+    if la <= 1e-12 {
+        return *env;
+    }
+    let k = luminance(sh_eval(env, up)) / la;
+    c.map(|v| scale3(v, k))
+}
+
 /// Evaluate a cosine-convolved SH9 (CPU reference of the shader).
 pub fn sh_eval(c: &[Rgb; 9], n: [f64; 3]) -> Rgb {
     let y = sh_basis(n);
@@ -262,5 +335,38 @@ impl LookFrame {
 
     pub fn fog_color(&self, forward_x: f64, forward_z: f64) -> Rgb {
         aerial::fog_color(&self.model, forward_x, forward_z)
+    }
+}
+
+#[cfg(test)]
+mod dome_env_tests {
+    use super::*;
+
+    #[test]
+    fn the_dome_env_keeps_the_light_and_takes_the_painted_colour() {
+        for h in [9.0, 12.0, 15.0, 18.5] {
+            let lf = LookFrame::new(h);
+            let (a, c) = dome_env_sh(&lf.model);
+            // the same energy every way (each direction keeps its luminance): within 2 %.
+            for n in [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, -1.0, 0.0], [0.6, 0.3, 0.74]] {
+                let (ea, ec) = (luminance(sh_eval(&a, n)), luminance(sh_eval(&c, n)));
+                assert!((ec / ea - 1.0).abs() < 0.02, "{h} {n:?}: {ea} {ec}");
+            }
+            // the frame's yield carried over.
+            let e = env_sh_with_dome_colour(&lf.model, &lf.env_sh);
+            let up = [0.0, 1.0, 0.0];
+            assert!((luminance(sh_eval(&e, up)) / luminance(sh_eval(&lf.env_sh, up)) - 1.0).abs() < 0.02, "{h}");
+        }
+        // noon: the low sky as painted (hazy, near grey) instead of the analytic deep blue.
+        let lf = LookFrame::new(12.0);
+        let (a, c) = dome_env_sh(&lf.model);
+        let low = [0.0, 0.15, 0.988];
+        let (ea, ec) = (sh_eval(&a, low), sh_eval(&c, low));
+        println!("noon low sky b/r: analytic {:.2}, painted colour {:.2}", ea[2] / ea[0], ec[2] / ec[0]);
+        assert!(ec[2] / ec[0] < 0.7 * (ea[2] / ea[0]));
+        // the street below is as it was.
+        let down = [0.0, -1.0, 0.0];
+        let (da, dc) = (sh_eval(&a, down), sh_eval(&c, down));
+        assert!((dc[2] / dc[0]) / (da[2] / da[0]) > 0.9);
     }
 }
