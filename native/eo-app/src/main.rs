@@ -443,6 +443,14 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-bare-ground" => a.look.nature &= !eo_render::look::NATURE_BARE,
             "--palm-variety" => a.look.nature |= eo_render::look::NATURE_PALM_VARIETY,
             "--no-palm-variety" => a.look.nature &= !eo_render::look::NATURE_PALM_VARIETY,
+            "--crown-light" => a.look.nature |= eo_render::look::NATURE_CROWN,
+            "--no-crown-light" => a.look.nature &= !eo_render::look::NATURE_CROWN,
+            "--far-palms" => a.look.nature |= eo_render::look::NATURE_FAR_PALMS,
+            "--no-far-palms" => a.look.nature &= !eo_render::look::NATURE_FAR_PALMS,
+            "--prop-far-shadow" => a.look.nature |= eo_render::look::NATURE_PROP_FAR,
+            "--no-prop-far-shadow" => a.look.nature &= !eo_render::look::NATURE_PROP_FAR,
+            "--hill-relief" => a.look.nature |= eo_render::look::NATURE_HILL_RELIEF,
+            "--no-hill-relief" => a.look.nature &= !eo_render::look::NATURE_HILL_RELIEF,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
@@ -995,12 +1003,13 @@ pub fn load_world(args: &Args) -> Result<World> {
             let (sw, cover, g) = (sw.clone(), cover.clone(), (elevation.meta.origin_x, elevation.meta.origin_z, elevation.max_x(), elevation.max_z()));
             let (tx, rx) = std::sync::mpsc::channel();
             let cove_detail = args.cove_detail;
+            let far_palms = args.look.nature & eo_render::look::NATURE_FAR_PALMS != 0; // (`--far-palms`)
             let canopy_root = (cove_detail && args.look.cove_canopy).then(|| paths.repo_root.clone());
             std::thread::spawn(move || {
                 let t = Instant::now();
                 let Ok(js) = eo_props::JsProps::load() else { return };
                 let lift = sw.o.footway_lift;
-                let mut trees = eo_render::hlod_trees::street_trees(&js, &|x, z| sw.ground(x, z) + lift);
+                let mut trees = eo_render::hlod_trees::street_trees_with(&js, &|x, z| sw.ground(x, z) + lift, far_palms);
                 let street_n = trees.len();
                 if let Some(cover) = &cover {
                     let sea = eo_water::SEA_LEVEL_Y;
