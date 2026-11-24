@@ -87,25 +87,50 @@ pub const SLAB_STAINED_SHARE: f64 = 0.05;
 // Pavements": overband ("band-aid") configurations 75-125 mm wide over the
 // crack; SF's are narrower, worn down by the traffic).
 
-/// One chance of a transverse crack per this length of road (m), and that
-/// chance (a shading choice: SF's mild climate cracks a road every 5-20 m).
-pub const WEAR_TRANSVERSE_CELL_M: f64 = 9.0;
-pub const WEAR_TRANSVERSE_SHARE: f64 = 0.7;
-/// The share of a lane joint's or wheel path's length cracked along it.
-pub const WEAR_LONGITUDINAL_SHARE: f64 = 0.55;
+/// The crack web's cell (m): one crack line per few metres of road either
+/// way, as SF's mild climate cracks a road every 5-20 m across it (a shading
+/// choice), and the shares of its edges that crack: running across the road
+/// (thermal cracks), along it (block cracking, where the road is older), at
+/// a junction pad either way (the turning traffic's and the utility cuts'
+/// stresses: denser).
+pub const WEAR_WEB_CELL_M: f64 = 3.4;
+pub const WEAR_WEB_ACROSS_SHARE: f64 = 0.8;
+pub const WEAR_WEB_ALONG_SHARE: f64 = 0.4;
+pub const WEAR_WEB_PAD_SHARE: f64 = 0.9;
+/// An open crack's half-width (m): a hairline (most: under 3 mm across, LTPP's
+/// low severity), a few millimetres (some) and up to a couple of centimetres
+/// (a few: LTPP's moderate severity, 6-19 mm, with spalled lips), and those
+/// shares; how dark the crack's floor and its broken-out lips read.
+pub const WEAR_HAIR_HALF_M: f64 = 0.0011;
+pub const WEAR_OPEN_HALF_M: f64 = 0.004;
+pub const WEAR_WIDE_HALF_M: f64 = 0.009;
+pub const WEAR_OPEN_SHARE: f64 = 0.25;
+pub const WEAR_WIDE_SHARE: f64 = 0.08;
+pub const WEAR_CRACK_DARK: f64 = 0.8;
+pub const WEAR_SPALL_DARK: f64 = 0.35;
+/// The dirty margin along an open crack (m, half-width: grit and water held
+/// at its lips over a centimetre or two) and how much it darkens the road.
+pub const WEAR_MARGIN_M: f64 = 0.012;
+pub const WEAR_MARGIN_DARK: f64 = 0.34;
 /// Fatigue cracking's pieces (m; LTPP: "many-sided, sharp-angled pieces,
 /// usually less than 0.3 m on the longest side") and the share of a wheel
 /// path's length it covers (a shading choice: an old street's worst stretches).
 pub const WEAR_FATIGUE_CELL_M: f64 = 0.2;
 pub const WEAR_FATIGUE_SHARE: f64 = 0.22;
-/// The share of the cracks sealed (SF seals most), and the overband's
-/// half-width (m: 50-80 mm across, the narrow end of FHWA-RD-99-147's band,
-/// worn down by the traffic).
-pub const WEAR_SEALED_SHARE: f64 = 0.6;
+/// The share of the cracks sealed (SF seals the wider and older ones; the
+/// hairlines of the web are left), and the overband's half-width (m: 50-80
+/// mm across, the narrow end of FHWA-RD-99-147's band, worn down by the traffic).
+pub const WEAR_SEALED_SHARE: f64 = 0.3;
 /// How far the cracks are drawn (m): their lines are under a pixel past it
 /// on the cards' views (a cost choice; the weathering's web went to 170 m).
 pub const WEAR_CRACK_FAR_M: f64 = 110.0;
 pub const WEAR_SEAL_HALF_M: f64 = 0.032;
+/// The sealant's finish with the web (perceptual roughness): fresh, a cast
+/// film (as SEAL_ROUGH); oxidised, its surface crazed and holding the
+/// street's grit, nearly as matte as the road (a shading choice: the street
+/// pass's aged 0.56 drew old bands as bright ribbons toward a low sun).
+pub const WEAR_SEAL_ROUGH: f64 = 0.34;
+pub const WEAR_SEAL_ROUGH_AGED: f64 = 0.7;
 /// Oil drips down a lane's middle: one chance of a drip's pool per cell of
 /// this size across (m; 1.6 x it along), and how much a fresh pool darkens
 /// the road (a shading choice: drips 3-9 cm across, black when fresh).
@@ -144,6 +169,207 @@ pub const GLARE_AGGREGATE_M: f64 = 0.009;
 /// and their roughness; the setts' own relief spread is SP_PAVE_SLOPE.
 pub const GLARE_SETT_POLISH: f64 = 0.55;
 pub const GLARE_SETT_ROUGH: f64 = 0.5;
+
+// ---- `--street-aggregate` (look::STREET_AGGREGATE; street_pbr.wgsl `sa_*`) --------------
+//
+// A dense-graded hot mix seen from a few metres: the coarse aggregate's stones
+// set in the mastic (binder, fines and the street's dust), each stone its own
+// rock, its top worn out of the binder film by the traffic (most in the wheel
+// paths) and polished, its fractured faces tilted each its own way, its
+// arris rounded down into the mastic. SF's streets are paved with Caltrans
+// Type A hot mix at 1/2 in (12.5 mm) maximum aggregate (Caltrans Standard
+// Specifications section 39; SF Public Works' standard asphalt section): the
+// stones that show at the surface are the 4.75-12.5 mm fraction, 6-12 mm
+// across, set at about one per 9.5 mm (the 3/8 in sieve). The layer is drawn
+// where a stone spans a few pixels and goes to its mean (every term divided
+// by the layout's measured mean, `aggregate_means`) as it shrinks, so the
+// road's calibrated tone and finish hold at every distance.
+
+/// The stones' pitch (m): a Voronoi cell per coarse stone.
+pub const AGG_STONE_M: f64 = 0.0095;
+/// The share of cells holding a coarse stone at the surface (the rest a
+/// pocket of mastic and fines; a dense-graded mix shows about four in five).
+pub const AGG_STONE_SHARE: f64 = 0.8;
+/// The mastic between two stones (half of it on each side), as a share of
+/// the pitch: from stones nearly touching to a few millimetres of fines.
+pub const AGG_GAP_MIN: f64 = 0.02;
+pub const AGG_GAP_MAX: f64 = 0.1;
+/// The rounded arris's width (share of the pitch).
+pub const AGG_EDGE: f64 = 0.08;
+/// The share of a stone's top worn out of its binder film, between the wheel
+/// paths and in them (a shading choice: an SF street ten to twenty years
+/// down, the film worn off half the tops and nearly all in the tracks).
+pub const AGG_EXPOSED: f64 = 0.45;
+pub const AGG_EXPOSED_WHEEL: f64 = 0.85;
+/// Reflectances: the binder film on a stone (LBNL Cool Pavements: fresh
+/// asphalt 0.04-0.06, its binder), the mastic (binder, fines, dust: an aged
+/// surface's low end) and the rocks the Bay Area quarries crush (shading
+/// values inside the published bands of the USGS spectral library's rock
+/// samples: greywacke and sandstone 0.2-0.3, basalt and greenstone about
+/// 0.1, pale chert and quartzite 0.3-0.4, red chert about 0.2).
+pub const AGG_FILM_ALBEDO: f64 = 0.055;
+pub const AGG_MASTIC_ALBEDO: f64 = 0.09;
+pub const AGG_GREY: f64 = 0.23;
+pub const AGG_DARK: f64 = 0.11;
+pub const AGG_PALE: f64 = 0.33;
+pub const AGG_RED: f64 = 0.19;
+/// The lithologies' shares (the rest greywacke).
+pub const AGG_DARK_SHARE: f64 = 0.22;
+pub const AGG_PALE_SHARE: f64 = 0.13;
+pub const AGG_RED_SHARE: f64 = 0.1;
+/// Each lithology's tint (linear RGB over its luminance-ish tone).
+pub const AGG_GREY_TINT: [f64; 3] = [1.0, 0.98, 0.94];
+pub const AGG_DARK_TINT: [f64; 3] = [0.95, 1.0, 1.01];
+pub const AGG_PALE_TINT: [f64; 3] = [1.0, 0.99, 0.96];
+pub const AGG_RED_TINT: [f64; 3] = [1.17, 0.93, 0.8];
+/// Finishes (perceptual roughness): a polished top, between the tracks and
+/// in them (the "polished aggregate" of skid-resistance studies), the film
+/// on an unworn top, and the open mastic.
+pub const AGG_TOP_ROUGH: f64 = 0.5;
+pub const AGG_TOP_ROUGH_WHEEL: f64 = 0.36;
+pub const AGG_FILM_ROUGH: f64 = 0.62;
+pub const AGG_MASTIC_ROUGH: f64 = 0.92;
+/// The relief (slopes of the normal's lean): a fractured face's tilt (about
+/// 9 degrees either way), the top's crown, and the arris falling into the
+/// mastic (the mean texture depth of 0.5-1 mm over a stone's edge).
+pub const AGG_FACET: f64 = 0.16;
+pub const AGG_CROWN: f64 = 0.3;
+pub const AGG_ARRIS_SLOPE: f64 = 0.8;
+/// The mastic's sky occlusion under the tops (a shading choice: a millimetre down between stones).
+pub const AGG_MASTIC_AO: f64 = 0.85;
+/// How much of the asphalt scans' relief the aggregate takes the place of
+/// (their blotchy 5-10 cm normal field: what the scans are at the road's
+/// scale is the mean of the aggregate, which this layer now draws).
+pub const AGG_SCAN_RELIEF_OUT: f64 = 0.65;
+
+// ---- `--plaza-setts` (look::PLAZA_SETTS; street_pbr.wgsl `ss_*`) ------------------------
+//
+// The grey-stone plazas re-laid sett by sett in place of the cobble scan's
+// tiling: granite setts in courses (BS 7533-7: setts 100 mm, 9-16 mm
+// joints; the courses' joints broken by at least a quarter of a sett), each
+// sett its own length, outline (split faces, rounded and worn corners),
+// crown, settlement tilt and stone (granite's lots grey, warm and blue-grey,
+// its crystals), its top cleaned and polished by feet, soil held round its
+// edges; the joints sand and grit a few millimetres down, moss where they
+// stay damp. The relief is analytic, so it shades (the crown's normal, the
+// arris falling into the joint), occludes (the joint's sky), shadows (the
+// neighbour's crown toward a low sun) and masks (toward grazing the joints
+// hide behind the crowns, so the far field is the tops' tone) without a
+// texture; past a few pixels a sett is its mean.
+
+/// The course pitch (m: large setts, 150-210 mm wide with their joint, graded
+/// course by course) and the setts' mean pitch along a course (m: 170-310 mm
+/// lengths; BS 7533-7's large setts run to 300 mm).
+pub const SETT_COURSE_M: f64 = 0.19;
+pub const SETT_PITCH_M: f64 = 0.24;
+/// A joint's half-width (m) at its narrowest and its widest (8-18 mm joints:
+/// split setts' joints run a little wider than BS 7533's sawn 9-16 mm).
+pub const SETT_JOINT_MIN_M: f64 = 0.004;
+pub const SETT_JOINT_MAX_M: f64 = 0.009;
+/// A sett's crown over its arrises (m), the worn arris's radius and drop (m),
+/// the joint's sand under the arrises (m: BS 7533 fills joints to within a
+/// few millimetres; traffic and sweeping take more), and the settlement tilt
+/// (slope, either way).
+pub const SETT_CROWN_M: f64 = 0.006;
+pub const SETT_ARRIS_M: f64 = 0.012;
+pub const SETT_ARRIS_DROP_M: f64 = 0.005;
+pub const SETT_JOINT_DEPTH_M: f64 = 0.009;
+pub const SETT_TILT: f64 = 0.02;
+/// The joint's sand, grit and soil over the setts' mean tone (dark grey-brown
+/// against a grey granite, in the joint's shade), and the share of joints holding moss.
+pub const SETT_JOINT_TONE: f64 = 0.42;
+pub const SETT_MOSS_SHARE: f64 = 0.18;
+
+/// The shader's hash (draw.wgsl `st_hash`), for measuring the layout here.
+fn st_hash(p: [f32; 2]) -> f32 {
+    let fr = |v: f32| v - v.floor();
+    let q = [fr(p[0] * 0.1031), fr(p[1] * 0.1030)];
+    let d = q[0] * (q[1] + 33.33) + q[1] * (q[0] + 33.33);
+    let r = [q[0] + d, q[1] + d];
+    fr((r[0] + r[1]) * r[0])
+}
+
+/// One sample of the aggregate layout (street_pbr.wgsl `sa_aggregate`, its
+/// near terms without the pixel's widening): (stone cover, exposed-top
+/// cover, the stone's tone as linear RGB) at `p` in pitches.
+fn aggregate_sample(p: [f32; 2], expo_mean: f32) -> (f32, f32, [f32; 3]) {
+    let b = [p[0].floor(), p[1].floor()];
+    let (mut f1, mut f2) = (1e9f32, 1e9f32);
+    let (mut c1, mut c2, mut k1) = ([0f32; 2], [0f32; 2], [0f32; 2]);
+    for j in -1..=1 {
+        for i in -1..=1 {
+            let c = [b[0] + i as f32, b[1] + j as f32];
+            let pt = [c[0] + 0.1 + 0.8 * st_hash([c[0] + 2.3, c[1] + 8.1]), c[1] + 0.1 + 0.8 * st_hash([c[0] + 6.7, c[1] + 3.9])];
+            let d = [p[0] - pt[0], p[1] - pt[1]];
+            let dd = d[0] * d[0] + d[1] * d[1];
+            if dd < f1 {
+                f2 = f1;
+                c2 = c1;
+                f1 = dd;
+                c1 = pt;
+                k1 = c;
+            } else if dd < f2 {
+                f2 = dd;
+                c2 = pt;
+            }
+        }
+    }
+    let _ = f2;
+    let mut e = [c2[0] - c1[0] + 1e-6, c2[1] - c1[1]];
+    let el = (e[0] * e[0] + e[1] * e[1]).sqrt();
+    e = [e[0] / el, e[1] / el];
+    let mid = [0.5 * (c1[0] + c2[0]), 0.5 * (c1[1] + c2[1])];
+    let inner = (mid[0] - p[0]) * e[0] + (mid[1] - p[1]) * e[1];
+    let h = |o: [f32; 2]| st_hash([k1[0] + o[0], k1[1] + o[1]]);
+    let (h0, h1, h2, h3) = (h([4.1, 1.7]), h([9.3, 5.2]), h([1.1, 7.7]), h([5.9, 2.6]));
+    let ss = |a: f32, b: f32, x: f32| {
+        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let gap = AGG_GAP_MIN as f32 + (AGG_GAP_MAX - AGG_GAP_MIN) as f32 * h1;
+    let m = if h0 < AGG_STONE_SHARE as f32 { ss(gap, gap + AGG_EDGE as f32, inner) } else { 0.0 };
+    let (tone, tint) = if h2 < AGG_DARK_SHARE as f32 {
+        (AGG_DARK, AGG_DARK_TINT)
+    } else if h2 < (AGG_DARK_SHARE + AGG_PALE_SHARE) as f32 {
+        (AGG_PALE, AGG_PALE_TINT)
+    } else if h2 < (AGG_DARK_SHARE + AGG_PALE_SHARE + AGG_RED_SHARE) as f32 {
+        (AGG_RED, AGG_RED_TINT)
+    } else {
+        (AGG_GREY, AGG_GREY_TINT)
+    };
+    let t = tone as f32 * (0.85 + 0.3 * h3);
+    let inner_n = ((inner - gap) / (0.5 - gap)).clamp(0.0, 1.0);
+    let expo = (expo_mean + (h3 - 0.5) * 0.5).clamp(0.0, 1.0);
+    let ex = m * ss(1.0 - expo.sqrt() - 0.08, 1.0 - expo.sqrt() + 0.08, inner_n);
+    (m, ex, [t * tint[0] as f32, t * tint[1] as f32, t * tint[2] as f32])
+}
+
+/// The layout's means at the binder film's worn share `expo_mean` (measured
+/// over 96 x 96 pitches): (albedo RGB, roughness at the tracks' polish
+/// `wheel`, the mastic's occlusion, the exposed tops' cover).
+pub fn aggregate_means(expo_mean: f64, wheel: f64) -> ([f64; 3], f64, f64, f64) {
+    let n = 96;
+    let s = 6;
+    let (mut alb, mut rough, mut ao, mut tops) = ([0f64; 3], 0f64, 0f64, 0f64);
+    let top_rough = AGG_TOP_ROUGH + (AGG_TOP_ROUGH_WHEEL - AGG_TOP_ROUGH) * wheel;
+    for y in 0..n * s {
+        for x in 0..n * s {
+            let p = [(x as f32 + 0.5) / s as f32, (y as f32 + 0.5) / s as f32];
+            let (m, ex, t) = aggregate_sample(p, expo_mean as f32);
+            let (m, ex) = (m as f64, ex as f64);
+            for c in 0..3 {
+                let stone = AGG_FILM_ALBEDO + (t[c] as f64 - AGG_FILM_ALBEDO) * (ex / m.max(1e-6)).min(1.0);
+                alb[c] += AGG_MASTIC_ALBEDO + (stone - AGG_MASTIC_ALBEDO) * m;
+            }
+            let stone_r = AGG_FILM_ROUGH + (top_rough - AGG_FILM_ROUGH) * (ex / m.max(1e-6)).min(1.0);
+            rough += AGG_MASTIC_ROUGH + (stone_r - AGG_MASTIC_ROUGH) * m;
+            ao += AGG_MASTIC_AO + (1.0 - AGG_MASTIC_AO) * m;
+            tops += ex;
+        }
+    }
+    let k = 1.0 / (n * s * n * s) as f64;
+    ([alb[0] * k, alb[1] * k, alb[2] * k], rough * k, ao * k, tops * k)
+}
 
 /// (`--street-glare`) The share of what the eye sees that is the macrotexture's
 /// tops at the view's cosine `mu` to the surface (street_pbr.wgsl `sg_top_share`):
@@ -348,14 +574,26 @@ pub fn wgsl() -> String {
         ("SP_SETT_ALBEDO", SETT_ALBEDO),
         ("SP_BRICK_PAVER_ALBEDO", BRICK_PAVER_ALBEDO),
         ("SP_CONCRETE_PAVER_ALBEDO", CONCRETE_PAVER_ALBEDO),
-        ("SW_TRANSVERSE_CELL_M", WEAR_TRANSVERSE_CELL_M),
-        ("SW_TRANSVERSE_SHARE", WEAR_TRANSVERSE_SHARE),
-        ("SW_LONGITUDINAL_SHARE", WEAR_LONGITUDINAL_SHARE),
+        ("SW_WEB_CELL_M", WEAR_WEB_CELL_M),
+        ("SW_WEB_ACROSS_SHARE", WEAR_WEB_ACROSS_SHARE),
+        ("SW_WEB_ALONG_SHARE", WEAR_WEB_ALONG_SHARE),
+        ("SW_WEB_PAD_SHARE", WEAR_WEB_PAD_SHARE),
+        ("SW_HAIR_HALF_M", WEAR_HAIR_HALF_M),
+        ("SW_OPEN_HALF_M", WEAR_OPEN_HALF_M),
+        ("SW_WIDE_HALF_M", WEAR_WIDE_HALF_M),
+        ("SW_OPEN_SHARE", WEAR_OPEN_SHARE),
+        ("SW_WIDE_SHARE", WEAR_WIDE_SHARE),
+        ("SW_CRACK_DARK", WEAR_CRACK_DARK),
+        ("SW_SPALL_DARK", WEAR_SPALL_DARK),
+        ("SW_MARGIN_M", WEAR_MARGIN_M),
+        ("SW_MARGIN_DARK", WEAR_MARGIN_DARK),
         ("SW_FATIGUE_CELL_M", WEAR_FATIGUE_CELL_M),
         ("SW_FATIGUE_SHARE", WEAR_FATIGUE_SHARE),
         ("SW_SEALED_SHARE", WEAR_SEALED_SHARE),
         ("SW_CRACK_FAR_M", WEAR_CRACK_FAR_M),
         ("SW_SEAL_HALF_M", WEAR_SEAL_HALF_M),
+        ("SW_SEAL_ROUGH", WEAR_SEAL_ROUGH),
+        ("SW_SEAL_ROUGH_AGED", WEAR_SEAL_ROUGH_AGED),
         ("SW_DRIP_CELL_M", WEAR_DRIP_CELL_M),
         ("SW_DRIP_DARK", WEAR_DRIP_DARK),
         ("SG_MACRO_SLOPE", GLARE_MACRO_SLOPE),
@@ -368,8 +606,57 @@ pub fn wgsl() -> String {
         ("SG_AGGREGATE_M", GLARE_AGGREGATE_M),
         ("SG_SETT_POLISH", GLARE_SETT_POLISH),
         ("SG_SETT_ROUGH", GLARE_SETT_ROUGH),
+        ("SA_STONE_M", AGG_STONE_M),
+        ("SA_STONE_SHARE", AGG_STONE_SHARE),
+        ("SA_GAP_MIN", AGG_GAP_MIN),
+        ("SA_GAP_MAX", AGG_GAP_MAX),
+        ("SA_EDGE", AGG_EDGE),
+        ("SA_EXPOSED", AGG_EXPOSED),
+        ("SA_EXPOSED_WHEEL", AGG_EXPOSED_WHEEL),
+        ("SA_FILM_ALBEDO", AGG_FILM_ALBEDO),
+        ("SA_MASTIC_ALBEDO", AGG_MASTIC_ALBEDO),
+        ("SA_GREY", AGG_GREY),
+        ("SA_DARK", AGG_DARK),
+        ("SA_PALE", AGG_PALE),
+        ("SA_RED", AGG_RED),
+        ("SA_DARK_SHARE", AGG_DARK_SHARE),
+        ("SA_PALE_SHARE", AGG_PALE_SHARE),
+        ("SA_RED_SHARE", AGG_RED_SHARE),
+        ("SA_TOP_ROUGH", AGG_TOP_ROUGH),
+        ("SA_TOP_ROUGH_WHEEL", AGG_TOP_ROUGH_WHEEL),
+        ("SA_FILM_ROUGH", AGG_FILM_ROUGH),
+        ("SA_MASTIC_ROUGH", AGG_MASTIC_ROUGH),
+        ("SA_FACET", AGG_FACET),
+        ("SA_CROWN", AGG_CROWN),
+        ("SA_ARRIS_SLOPE", AGG_ARRIS_SLOPE),
+        ("SA_MASTIC_AO", AGG_MASTIC_AO),
+        ("SA_SCAN_RELIEF_OUT", AGG_SCAN_RELIEF_OUT),
+        ("SS_COURSE_M", SETT_COURSE_M),
+        ("SS_PITCH_M", SETT_PITCH_M),
+        ("SS_JOINT_MIN_M", SETT_JOINT_MIN_M),
+        ("SS_JOINT_MAX_M", SETT_JOINT_MAX_M),
+        ("SS_CROWN_M", SETT_CROWN_M),
+        ("SS_ARRIS_M", SETT_ARRIS_M),
+        ("SS_ARRIS_DROP_M", SETT_ARRIS_DROP_M),
+        ("SS_JOINT_DEPTH_M", SETT_JOINT_DEPTH_M),
+        ("SS_TILT", SETT_TILT),
+        ("SS_JOINT_TONE", SETT_JOINT_TONE),
+        ("SS_MOSS_SHARE", SETT_MOSS_SHARE),
     ] {
         s.push_str(&format!("const {k}: f32 = {};\n", f(v)));
+    }
+    let v3 = |v: [f64; 3]| format!("vec3<f32>({}, {}, {})", f(v[0]), f(v[1]), f(v[2]));
+    for (k, v) in [("SA_GREY_TINT", AGG_GREY_TINT), ("SA_DARK_TINT", AGG_DARK_TINT), ("SA_PALE_TINT", AGG_PALE_TINT), ("SA_RED_TINT", AGG_RED_TINT)] {
+        s.push_str(&format!("const {k}: vec3<f32> = {};\n", v3(v)));
+    }
+    // the layout's measured means between the tracks (0) and in them (1): every term over its mean
+    static MEANS: std::sync::OnceLock<[([f64; 3], f64, f64, f64); 2]> = std::sync::OnceLock::new();
+    let m = MEANS.get_or_init(|| [aggregate_means(AGG_EXPOSED, 0.0), aggregate_means(AGG_EXPOSED_WHEEL, 1.0)]);
+    for (i, (alb, rough, ao, tops)) in m.iter().enumerate() {
+        s.push_str(&format!("const SA_MEAN_ALB{i}: vec3<f32> = {};\n", v3(*alb)));
+        s.push_str(&format!("const SA_MEAN_ROUGH{i}: f32 = {};\n", f(*rough)));
+        s.push_str(&format!("const SA_MEAN_AO{i}: f32 = {};\n", f(*ao)));
+        s.push_str(&format!("const SA_MEAN_TOPS{i}: f32 = {};\n", f(*tops)));
     }
     s
 }
@@ -420,15 +707,21 @@ mod tests {
 
     /// (`--street-wear`, `--street-glare`) The distress and the polished tops
     /// inside their sources' bands: an overband 50-80 mm across, fatigue's pieces
-    /// under LTPP's 0.3 m, more sealed than open; the tops' layer smoother than
+    /// under LTPP's 0.3 m, under half the web sealed, the open cracks from a
+    /// hairline to LTPP's moderate severity; the tops' layer smoother than
     /// the road and its wheel paths no rougher than the street pass's polish,
     /// its share the plan's at normal view and growing toward grazing.
     #[test]
     fn wear_and_glare_stay_in_their_bands() {
         assert!((0.025..=0.04).contains(&WEAR_SEAL_HALF_M), "{WEAR_SEAL_HALF_M}");
         assert!(WEAR_FATIGUE_CELL_M < 0.3 && WEAR_FATIGUE_SHARE < 0.5);
-        assert!(WEAR_SEALED_SHARE > 0.5 && WEAR_SEALED_SHARE < 1.0);
-        assert!(WEAR_TRANSVERSE_SHARE <= 1.0 && WEAR_LONGITUDINAL_SHARE <= 1.0 && WEAR_DRIP_DARK < 0.6);
+        assert!(WEAR_SEALED_SHARE > 0.2 && WEAR_SEALED_SHARE < 0.5);
+        assert!(WEAR_SEAL_ROUGH < WEAR_SEAL_ROUGH_AGED && WEAR_SEAL_ROUGH_AGED < ASPHALT_ROUGH);
+        assert!(WEAR_MARGIN_M > WEAR_WIDE_HALF_M && WEAR_MARGIN_M < 0.025 && WEAR_MARGIN_DARK < 0.5);
+        assert!(WEAR_WEB_ALONG_SHARE < WEAR_WEB_ACROSS_SHARE && WEAR_WEB_ACROSS_SHARE <= 1.0 && WEAR_WEB_PAD_SHARE <= 1.0 && WEAR_DRIP_DARK < 0.6);
+        assert!(2.0 * WEAR_HAIR_HALF_M * 1.4 <= 0.0032, "a hairline stays under 3 mm across (LTPP low severity)");
+        assert!(WEAR_HAIR_HALF_M < WEAR_OPEN_HALF_M && WEAR_OPEN_HALF_M < WEAR_WIDE_HALF_M && 2.0 * WEAR_WIDE_HALF_M <= 0.019, "LTPP moderate: 6-19 mm");
+        assert!(WEAR_OPEN_SHARE + WEAR_WIDE_SHARE < 0.5, "most of the web hairlines");
         assert!(GLARE_COAT_ROUGH_WHEEL <= GLARE_COAT_ROUGH && GLARE_COAT_ROUGH < ASPHALT_ROUGH && GLARE_COAT_ROUGH_WHEEL <= ASPHALT_ROUGH_POLISHED);
         assert!(GLARE_TOPS < GLARE_TOPS_WHEEL && GLARE_POLISH < GLARE_POLISH_WHEEL && GLARE_POLISH_WHEEL <= 1.0);
         let normal = glare_top_share(1.0, GLARE_MACRO_SLOPE, GLARE_TOPS);
@@ -440,8 +733,32 @@ mod tests {
             last = t;
         }
         let w = wgsl();
-        for k in ["SW_TRANSVERSE_CELL_M", "SW_SEAL_HALF_M", "SW_DRIP_DARK", "SG_MACRO_SLOPE", "SG_COAT_ROUGH", "SG_SETT_ROUGH"] {
+        for k in ["SW_WEB_CELL_M", "SW_HAIR_HALF_M", "SW_SEAL_HALF_M", "SW_DRIP_DARK", "SG_MACRO_SLOPE", "SG_COAT_ROUGH", "SG_SETT_ROUGH"] {
             assert!(w.contains(&format!("const {k}: f32 = ")), "{k}");
+        }
+    }
+
+    /// (`--street-aggregate`) The layout's means: the stones, the binder film and
+    /// the mastic average to a weathered asphalt's tone (LBNL: 0.10-0.18), the
+    /// tracks' worn tops lighter and smoother than between them, the mastic's
+    /// occlusion mild; a sample's stones cover what a dense mix shows.
+    #[test]
+    fn the_aggregate_averages_to_weathered_asphalt() {
+        let (a0, r0, ao0, t0) = aggregate_means(AGG_EXPOSED, 0.0);
+        let (a1, r1, ao1, t1) = aggregate_means(AGG_EXPOSED_WHEEL, 1.0);
+        let l = |a: [f64; 3]| 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+        assert!((0.08..=0.18).contains(&l(a0)), "{a0:?}");
+        assert!(l(a1) > l(a0) && l(a1) < 0.2, "{a1:?}");
+        assert!(r1 < r0 && r0 < AGG_MASTIC_ROUGH && r1 > AGG_TOP_ROUGH_WHEEL, "{r0} {r1}");
+        assert!(ao0 > 0.85 && ao0 < 1.0 && (ao0 - ao1).abs() < 1e-9);
+        assert!(t1 > t0 && t0 > 0.1 && t1 < 0.8, "{t0} {t1}");
+        // the stones' cover (the mastic's occlusion is its complement)
+        let cover = (ao0 - AGG_MASTIC_AO) / (1.0 - AGG_MASTIC_AO);
+        assert!((0.4..=0.8).contains(&cover), "{cover}");
+        assert!(AGG_TOP_ROUGH_WHEEL < AGG_TOP_ROUGH && AGG_TOP_ROUGH < AGG_FILM_ROUGH && AGG_FILM_ROUGH < AGG_MASTIC_ROUGH);
+        let w = wgsl();
+        for k in ["SA_STONE_M", "SA_MEAN_ALB0", "SA_MEAN_ROUGH1", "SA_MEAN_TOPS0", "SA_GREY_TINT"] {
+            assert!(w.contains(&format!("const {k}: ")), "{k}");
         }
     }
 

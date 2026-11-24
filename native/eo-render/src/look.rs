@@ -272,6 +272,17 @@ pub const STREET_WEAR: u32 = 1;
 /// toward grazing as the texture's valleys are masked (the low-sun glare down
 /// a road, the wheel paths brightest); the kerb arris and the setts' crowns too.
 pub const STREET_GLARE: u32 = 2;
+/// `--street-aggregate` (street_pbr.wgsl `sa_*`): the hot mix's coarse stones
+/// near the eye, each its rock, its top worn out of the binder film and
+/// polished (most in the wheel paths), its faces tilted and its arris falling
+/// into the mastic, every term over the layout's mean; the asphalt scans'
+/// blotchy relief gives way to it.
+pub const STREET_AGGREGATE: u32 = 4;
+/// `--plaza-setts` (street_pbr.wgsl `ss_*`): the grey-stone plazas re-laid
+/// sett by sett in place of the cobble scan's tiling (courses of granite
+/// setts, each its own length, outline, crown, tilt and stone; sand and moss
+/// joints), shaded, occluded, self-shadowed and masked from its analytic relief.
+pub const PLAZA_SETTS: u32 = 8;
 /// Every natural-detail bit.
 pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER;
 
@@ -757,7 +768,8 @@ pub struct ShaderFeatures {
     /// options do not carry it, and `ALL` leaves it out), and then always on.
     pub street_pbr: bool,
     /// The street track's round-2 passes (`STREET_*` bits: `--street-wear`,
-    /// `--street-glare`; `SF_STREET_WEAR`, `SF_STREET_GLARE`): as `street_pbr`,
+    /// `--street-glare`, `--street-aggregate`, `--plaza-setts`; `SF_STREET_WEAR`,
+    /// `SF_STREET_GLARE`, `SF_STREET_AGGREGATE`, `SF_PLAZA_SETTS`): as `street_pbr`,
     /// compiled in only with their switches (eo-app sets them; `ALL` leaves them out).
     pub street: u32,
     /// The sun bounce (`--sun-bounce`; `SF_SUN_BOUNCE`): the occlusion pass's
@@ -961,6 +973,8 @@ impl ShaderFeatures {
                 ("SF_STREET_PBR", self.street_pbr),
                 ("SF_STREET_WEAR", self.street & STREET_WEAR != 0),
                 ("SF_STREET_GLARE", self.street & STREET_GLARE != 0),
+                ("SF_STREET_AGGREGATE", self.street & STREET_AGGREGATE != 0),
+                ("SF_PLAZA_SETTS", self.street & PLAZA_SETTS != 0),
                 // the light track
                 ("SF_SUN_BOUNCE", self.sun_bounce),
                 ("SF_AO_ALBEDO", self.ao_albedo),

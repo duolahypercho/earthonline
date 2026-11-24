@@ -239,6 +239,8 @@ mod tests {
         // (`--street-wear`, `--street-glare`) the street track's round-2 passes, alone, with the street pass and the cinematic look's coat
         sets.push(("street wear and glare".into(), look::ShaderFeatures { street: look::STREET_WEAR | look::STREET_GLARE, ..none }));
         sets.push(("street wear and glare over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE, cinematic: true, lx_bits: u32::MAX, ..none }));
+        sets.push(("street aggregate and plaza setts".into(), look::ShaderFeatures { street: look::STREET_AGGREGATE | look::PLAZA_SETTS, ..none }));
+        sets.push(("street aggregate, setts, wear and glare over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS, cinematic: true, lx_bits: u32::MAX, ..none }));
         sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
         sets.push(("ao albedo".into(), look::ShaderFeatures { ao_albedo: true, ..none })); // (`--ao-albedo`)
         sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)

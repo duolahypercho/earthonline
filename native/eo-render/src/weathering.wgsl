@@ -169,7 +169,9 @@ fn wx_walk(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
         let clus = 0.2 + 0.8 * smoothstep(0.3, 0.75, st_noise(q / 1.7 + 3.3));
         let dens = clamp(WX_GUM_BASE + WX_GUM_GAIN * act, 0.0, 1.0) * clus * (1.0 - 0.75 * clean);
         var gum = wx_gum(q, fw, dens);
-        if (lvl >= 2u) {
+        if (SF_STREET_WEAR) {
+            gum = sw_gum(q, fw, kd, act, clean); // (`--street-wear`, street_pbr.wgsl) where people stand, flattened discs of every size
+        } else if (lvl >= 2u) {
             let g2 = wx_gum(q * 1.37 + vec2<f32>(5.1, 2.3), fw * 1.37, dens * 0.6);
             gum = select(gum, g2, g2.x > gum.x);
         }
