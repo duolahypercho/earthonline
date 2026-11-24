@@ -27,6 +27,18 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
                            uw_height(xz + vec2<f32>(0.0, spacing), spacing)) - y) / spacing;
     var out: UwView;
     out.clip = vec4<f32>(f32(i32(vi & 1u) * 4 - 1), f32(i32(vi >> 1u) * 4 - 1), 0.0, 1.0);
+    // Across the near plane depth below the tangent wave is affine in screen XY.
+    // If all four corners and the eye are in air, every fragment would discard.
+    if (wu.cam.y >= y) {
+        var wet_corner = false;
+        for (var k = 0u; k < 4u; k++) {
+            let corner = vec2f(f32(k & 1u), f32(k >> 1u)) * 2.0 - 1.0;
+            let h = wu.inv_view_proj * vec4f(corner, 1.0, 1.0);
+            let delta = h.xyz / h.w - wu.cam.xyz;
+            wet_corner = wet_corner || y - wu.cam.y - delta.y + dot(slope, delta.xz) > -0.001;
+        }
+        if (!wet_corner) {out.clip = vec4f(0., 0., 0., 1.);}
+    }
     out.level = y;
     out.tilt = slope;
     out.atmo_gain = w_atmo_gain();
