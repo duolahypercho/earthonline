@@ -24,6 +24,9 @@ fn lt_streak_q(l: SkyLight) -> f32 {
     if (v.z < -10.0 || l.intensity <= 0.0) {
         return 0.0;
     }
+    if (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) {
+        return 0.0; // (`--lamp-bounce`) a pool's bounce stands under the street: no streak
+    }
     let lum = dot(l.color, vec3<f32>(0.2126, 0.7152, 0.0722));
     let r = l.pos - skyu.eye.xyz;
     return lum * l.intensity / max(dot(r, r), 1.0);

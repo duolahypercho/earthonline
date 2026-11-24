@@ -308,6 +308,53 @@ fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool) {
     }
 }
 
+// ---- (`--lamp-bounce`; eo-sky `lamp_bounce`, sky.rs `lamp_bounce_wgsl`) ----
+// A street lamp's pool lights what stands round it: the street returns
+// `GROUND_REFLECTANCE` of the lamp's flux as an upward Lambertian emitter
+// (one bounce of instant radiosity), standing LT_BOUNCE_DEPTH_MH mounting
+// heights under the pool's centre so the pool reads as a disc at its own
+// level and a point far off. Shaded as a light of a hemisphere's cone
+// (sky_light.wgsl kinds from 3: smoothstep(0, 1, cos), ~ the cosine) with
+// its lobe widened by `size` (the pool's diameter squared: a broad source,
+// no glint); no shadow map (light_shadow.wgsl `ls_pads`: -1, the surface's
+// occlusion only), no sprite, no lit fog, no streak. Near the eye only
+// (faded out from LT_BOUNCE_NEAR_M to LT_BOUNCE_FAR_M, where the rig's
+// unlit fill stands for the street's inter-reflection), so the clusters'
+// cap never drops it in a far cluster and keeps it in the next.
+
+fn lt_bounce_on() -> bool {
+    return LT_LAMP_BOUNCE && (skyu.flags.x & LT_LAMP_BOUNCE_BIT) != 0u;
+}
+
+/// The pool of a street luminaire at `head`, `h` m over the street, of nadir
+/// intensity `i_nadir` (irradiance units at 1 m) and colour `color`.
+fn lt_bounce(head: vec3<f32>, h: f32, i_nadir: f32, color: vec3<f32>) {
+    if (!lt_bounce_on() || h <= 0.0 || i_nadir <= 0.0) {
+        return;
+    }
+    let pool = head - vec3<f32>(0.0, h, 0.0);
+    let fade = smoothstep(LT_BOUNCE_FAR_M, LT_BOUNCE_NEAR_M, distance(pool, skyu.eye.xyz));
+    if (fade <= 0.0) {
+        return;
+    }
+    let d = LT_BOUNCE_DEPTH_MH * h;
+    let reach = LT_BOUNCE_RANGE_MH * h;
+    var b: SkyLight;
+    b.pos = pool - vec3<f32>(0.0, d, 0.0);
+    b.intensity = LT_BOUNCE_I_OVER_NADIR * i_nadir * fade;
+    b.color = color;
+    b.range = sqrt(reach * reach + d * d);
+    b.dir = vec3<f32>(0.0, 1.0, 0.0);
+    b.cos_outer = 0.0;
+    b.cos_inner = 1.0;
+    b.kind = LT_BOUNCE_KIND;
+    b.size = 4.0 * d * d;
+    b.pad = 0.0;
+    if (lt_visible(b.pos, b.range)) {
+        lt_push(b);
+    }
+}
+
 @compute @workgroup_size(64)
 fn lights_lamps(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
@@ -327,6 +374,9 @@ fn lights_lamps(@builtin(global_invocation_id) gid: vec3<u32>) {
         l.color = lt_led(l.color);
     }
     lt_emit(l, l.pos, l.kind == 0u);
+    if (LT_LAMP_BOUNCE && l.kind == 0u) {
+        lt_bounce(l.pos, l.size, l.intensity, l.color); // (`--lamp-bounce`) its pool (`size`: the head's height)
+    }
 }
 
 /// `lampPracticals.sourceLiftMH`: the JS lamp practical's virtual source
@@ -379,6 +429,11 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
         lt_cine_lamp(&l, p.pos, h, select(4u, 3u, warm), p.kind == LT_MODEL_HISTORIC);
     }
     lt_emit(l, p.pos, !tunnel && p.kind != LT_LANDMARK && p.kind != LT_MODEL_HISTORIC && p.kind != LT_MODEL_BANNER);
+    if (LT_LAMP_BOUNCE && !tunnel && p.kind != LT_LANDMARK && p.source_lift > 0.0) {
+        // (`--lamp-bounce`) its pool: the nadir at the RP-8 peak from its head's height.
+        let hb = p.source_lift / LT_JS_SOURCE_LIFT_MH;
+        lt_bounce(p.pos, hb, lt.props.z * hb * hb, l.color);
+    }
 }
 
 @compute @workgroup_size(64)
@@ -495,11 +550,12 @@ fn lights_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocati
     let total = g.x * g.y * g.z;
     // (`--shop-light`) the street lamps and vehicle lamps first, then the shop
     // windows' lights in what room is left (none without them: one pass).
-    let phases = select(1u, 2u, lt.shops.x > 0.0);
+    let phases = select(1u, 2u, lt.shops.x > 0.0 || lt_bounce_on());
     for (var phase = 0u; phase < phases; phase = phase + 1u) {
         for (var i = lid; i < n; i = i + 64u) {
             let l = lt_frame[i];
-            if (phases == 2u && (l.kind == SHOP_KIND) != (phase == 1u)) {
+            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND); // (`--lamp-bounce`: the pools with the shops, last)
+            if (phases == 2u && late != (phase == 1u)) {
                 continue;
             }
             let v = lt_view(l.pos);
