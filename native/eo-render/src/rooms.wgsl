@@ -1120,12 +1120,53 @@ fn cg_facade(k: f32) -> vec3<f32> {
 // the light on a surface with normal n at p (in front of it, in the air):
 // the sun by the shadow maps and the clouds, the sky and the street by the
 // ambient volume there; `env_w` its environment class.
+// the sun on what a pane reflects: the cascades' tent (or the far map past them) as `lk_shadow` takes
+// it, without the penumbra's search and filter (`--soft-shadows`) or the cascades' blend: a reflection
+// blurred over the panes' waviness has no use for a penumbra, and the search was most of the canyon's cost.
+fn cg_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
+    if (!(SF_SOFT_SHADOWS && LK_SHADOW_SOFT)) {
+        return lk_shadow(world, ng); // no penumbra compiled in: the lookup as before
+    }
+    let probe = frame.copy_step.z > 0.5;
+    var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
+    if (probe) {
+        vd = distance(world, look.cam_pos.xyz);
+    }
+    let split = look.cascade_split;
+    if (look.key_dir.w <= 0.0) {
+        return 1.0;
+    }
+    let far = LK_SHADOW_FAR && lk_far_on();
+    if (vd >= split.z || !LK_SHADOW_CASCADES) {
+        if (!far) {
+            return 1.0;
+        }
+        return mix(1.0, lk_far_shadow(world, ng), look.key_dir.w);
+    }
+    var c = 0;
+    if (vd > split.x) {
+        c = 1;
+    }
+    if (vd > split.y) {
+        c = 2;
+    }
+    let vis = lk_cascade(c, world, ng, probe);
+    if (vis < 0.0) {
+        return 1.0;
+    }
+    let fade = lk_smooth(split.w, split.z, vd);
+    if (far && fade > 0.0) {
+        return mix(1.0, mix(vis, lk_far_shadow(world, ng), fade), look.key_dir.w);
+    }
+    return mix(1.0, mix(vis, 1.0, fade), look.key_dir.w);
+}
+
 fn cg_light(p: vec3<f32>, n: vec3<f32>, env_w: f32) -> vec3<f32> {
     let l = look.key_dir.xyz;
     var sun = vec3<f32>(0.0);
     let nl = dot(n, l);
     if (nl > 0.0) {
-        sun = look.key.xyz * nl * lk_shadow(p, n) * sky_cloud_transmittance(p);
+        sun = look.key.xyz * nl * cg_shadow(p, n) * sky_cloud_transmittance(p);
     }
     return sun + amb_irradiance(amb_sample(p, n), n, lk_sh(n) * env_w);
 }
