@@ -186,8 +186,15 @@ pub fn facade_constants_wgsl() -> String {
     let row2 = |v: &Value| format!("vec2<f32>({}, {})", f(v["ao"].as_f64().unwrap_or(0.0)), if v["replaceNormal"].as_bool().unwrap_or(false) { "1.0" } else { "0.0" });
     s.push_str(&format!("const FD_SPEC: array<vec4<f32>, {n}> = array<vec4<f32>, {n}>({});\n", fins.iter().map(|(_, v)| row(v)).collect::<Vec<_>>().join(", ")));
     s.push_str(&format!("const FD_SPEC2: array<vec2<f32>, {n}> = array<vec2<f32>, {n}>({});\n", fins.iter().map(|(_, v)| row2(v)).collect::<Vec<_>>().join(", ")));
+    // (`--facade-patina`) the finishes cast in units (precast and civic concrete, cast stone): bit (index + 1) of the detail finish
+    let panels = fins.iter().enumerate().filter(|(_, (k, _))| PANEL_FINISHES.contains(&k.as_str())).fold(0u32, |m, (i, _)| m | (1 << (i + 1)));
+    s.push_str(&format!("const FP_PANEL_FINISHES: u32 = {panels}u;\n"));
     s
 }
+
+/// (`--facade-patina`) The kit finishes cast as units apart (a precast panel, a cast-stone block),
+/// each its own mix and cure, so a facade of them is a little patchy unit by unit (facade_age.wgsl `fw_apply`).
+pub const PANEL_FINISHES: [&str; 3] = ["concrete-precast", "civic-concrete", "cast-stone"];
 
 /// JS `Math.round`.
 fn js_round(v: f64) -> f64 {

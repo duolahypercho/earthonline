@@ -758,6 +758,11 @@ const FP_PLUME_SHARE: vec2<f32> = vec2<f32>(0.3, 0.7);
 const FP_PLUME_WIDTH_M: vec2<f32> = vec2<f32>(0.5, 1.5);
 const FP_PLUME_REACH: vec2<f32> = vec2<f32>(0.2, 0.65);
 const FP_PLUME: f32 = 0.45;
+// a porous masonry face's run-off streak over a paint film's: (width, length, darkening)
+const FP_POROUS_STREAK: vec3<f32> = vec3<f32>(2.6, 1.35, 1.3);
+// a cast unit's tone (its value, full range) and its warm/cool cast (red against blue, full range)
+const FP_PANEL_TONE: f32 = 0.14;
+const FP_PANEL_HUE: f32 = 0.05;
 
 fn fw_on() -> bool {
     return SF_FACADE_WEATHER && (fa_run() & 4194304u) != 0u;
@@ -791,12 +796,13 @@ fn fw_n1(x: f32, k: vec3<i32>, salt: u32) -> f32 {
 
 // one streak's soiling at `x` across the window and `depth` under its sill,
 // centred at `xc`; `scale` shrinks a front-edge drip; `fw` the pixel's footprint.
-fn fw_streak(x: f32, depth: f32, xc: f32, key: vec3<i32>, salt: u32, wear: f32, fw: f32, scale: f32) -> f32 {
-    let len = mix(FW_LEN.x, FW_LEN.y, fw_h(key, salt + 1u)) * mix(0.6, 1.4, wear) * scale;
+// `wide`: (`--facade-patina`) the streak's width and length over a paint film's (1, 1 without it).
+fn fw_streak(x: f32, depth: f32, xc: f32, key: vec3<i32>, salt: u32, wear: f32, fw: f32, scale: f32, wide: vec2<f32>) -> f32 {
+    let len = mix(FW_LEN.x, FW_LEN.y, fw_h(key, salt + 1u)) * mix(0.6, 1.4, wear) * scale * wide.y;
     if (depth > len * 4.0) {
         return 0.0;
     }
-    let w = (mix(FW_W0.x, FW_W0.y, fw_h(key, salt + 2u)) + depth * mix(FW_SPREAD.x, FW_SPREAD.y, fw_h(key, salt + 3u))) * mix(1.0, scale, 0.6);
+    let w = (mix(FW_W0.x, FW_W0.y, fw_h(key, salt + 2u)) + depth * mix(FW_SPREAD.x, FW_SPREAD.y, fw_h(key, salt + 3u))) * mix(1.0, scale, 0.6) * wide.x;
     // under a pixel the streak widens to the footprint and pales by as much (its share of the pixel)
     let wf = sqrt(w * w + 0.3 * fw * fw);
     let keep = 1.0 - smoothstep(0.015, 0.05, fw);
@@ -852,14 +858,25 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
             let kr = vec3<i32>(vec2<i32>(floor(right.xz * 4.0 + 0.5)), ky);
             let k = mix(0.55, 1.05, wear);
             let share = mix(FW_END_SHARE.x, FW_END_SHARE.y, wear);
+            // (`--facade-patina`) a porous masonry face (concrete, stone, brick) drinks the dirty water as
+            // it runs, so its streaks spread wider and run longer than down a paint film, and read darker
+            let porous = select(vec3<f32>(1.0), FP_POROUS_STREAK, SF_FACADE_PATINA && cls == FA_AGE_MASONRY);
+            if (SF_FACADE_PATINA && (FP_PANEL_FINISHES & (1u << ((m.flags >> 11u) & 31u))) != 0u) {
+                // (`--facade-patina`) a face cast in units (precast panels, cast stone): the spandrel under
+                // a window (the pieces marked with it, from the head below to its sill) one unit, its mix
+                // and cure its own, a little lighter or darker, warmer or cooler than the next
+                let hu = fw_h(kl, 51u) - 0.5;
+                let hc = fw_h(kl, 52u) - 0.5;
+                (*s).albedo = (*s).albedo * (1.0 + hu * FP_PANEL_TONE) * (vec3<f32>(1.0) + vec3<f32>(hc, 0.0, -hc) * FP_PANEL_HUE);
+            }
             // the sill's two ends
             for (var e = 0; e < 2; e = e + 1) {
                 let key = select(kl, kr, e == 1);
                 if (fw_h(key, 1u) < share) {
                     let inset = min(mix(FW_END_IN.x, FW_END_IN.y, fw_h(key, 2u)), 0.3 * width);
                     let xc = select(inset, width - inset, e == 1);
-                    let st = fw_streak(x, depth, xc, key, 10u, wear, fw, 1.0);
-                    dirt = dirt + st * k * mix(0.65, 1.0, fw_h(key, 9u));
+                    let st = fw_streak(x, depth, xc, key, 10u, wear, fw, 1.0, porous.xy);
+                    dirt = dirt + st * k * mix(0.65, 1.0, fw_h(key, 9u)) * porous.z;
                     run = max(run, st);
                 }
             }
@@ -873,8 +890,8 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
                     if (fw_h(kd, 4u) < dshare) {
                         let xc = (ci + 0.5 + (fw_h(kd, 5u) - 0.5) * 0.7) * FW_DRIP_PITCH;
                         if (xc > 0.15 && xc < width - 0.15) {
-                            let st = fw_streak(x, depth, xc, kd, 20u, wear, fw, 0.45);
-                            dirt = dirt + st * k * 0.6;
+                            let st = fw_streak(x, depth, xc, kd, 20u, wear, fw, 0.45, porous.xy);
+                            dirt = dirt + st * k * 0.6 * porous.z;
                             run = max(run, st * 0.8);
                         }
                     }
