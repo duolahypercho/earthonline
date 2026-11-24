@@ -1804,6 +1804,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     out["facade_clutter"] = crate::quality::facade_clutter_json(args); // fire escapes, awnings, signs (`--facade-clutter`)
     out["shop_light"] = crate::quality::shop_light_json(args, eo_render::shop_lights::census().as_ref()); // lit shop windows (`--shop-light`)
     out["look_profile"] = crate::quality::look_profile_json(args); // the look profile (`--look cinematic`)
+    out["cine_camera"] = json!({ "on": args.look.sky.cine_camera && args.look.look.is_cinematic() }); // the camera model (`--cine-camera`)
     if renderer.far_shadow.attached() {
         // the far sun shadow maps (`--far-shadows`): rings, bytes, what they drew over the run.
         let s = renderer.far_shadow.stats();

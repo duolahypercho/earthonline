@@ -719,6 +719,9 @@ pub struct ShaderFeatures {
     pub wet_surfaces: bool,
     /// The screen-space reflection's second generation (`--screen-reflect`; sky_light.wgsl `sky_sr_on`, `SF_SCREEN_REFLECT`).
     pub screen_reflect: bool,
+    /// The camera model under the cinematic look (`--cine-camera`; `SF_CAMERA`; cine_post.rs):
+    /// its passes are made only with it, and its lines in the post and bloom shaders sit behind it.
+    pub camera: bool,
 }
 
 impl ShaderFeatures {
@@ -731,6 +734,7 @@ impl ShaderFeatures {
         street_pbr: false, // the street track
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
         wet_surfaces: true, screen_reflect: true, // the reflect track
+        camera: true, // the camera track
     };
     /// No feature compiled in (the default frame's pipelines).
     pub const NONE: Self = Self {
@@ -739,6 +743,7 @@ impl ShaderFeatures {
         street_pbr: false, // the street track
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
         wet_surfaces: false, screen_reflect: false, // the reflect track
+        camera: false, // the camera track
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -765,6 +770,7 @@ impl ShaderFeatures {
             screen_gi: o.screen_gi,
             wet_surfaces: o.sky.wet_surfaces,
             screen_reflect: o.sky.screen_reflect,
+            camera: o.look.is_cinematic() && o.sky.cine_camera,
         }
     }
 
@@ -825,6 +831,7 @@ impl ShaderFeatures {
         if !self.screen_reflect {
             l.sky.screen_reflect = false;
         }
+        l.sky.cine_camera &= self.camera;
         l
     }
 
@@ -856,6 +863,8 @@ impl ShaderFeatures {
                 // the reflect track
                 ("SF_WET_SURFACES", self.wet_surfaces),
                 ("SF_SCREEN_REFLECT", self.screen_reflect),
+                // the camera track
+                ("SF_CAMERA", self.camera),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
@@ -2342,7 +2351,7 @@ impl LookGpu {
             let (lamps, dome) = terms.map(|t| (t.lamps_on, t.weather.profile.brightness)).unwrap_or((0.0, 1.0));
             let photo = (self.options.photo_finish > 0).then(|| crate::photo::params(self.options.photo_finish, frame_index, out_size, cam, m.sun.altitude_deg, lamps, dome));
             let overcast = terms.map(|t| t.weather.profile.overcast).unwrap_or(0.0);
-            c.write(queue, photo.as_ref(), m.sun.altitude_deg, f.hour, overcast);
+            c.write(queue, photo.as_ref(), m.sun.altitude_deg, f.hour, overcast, crate::sky::camera_on(&self.sky.options())); // (`--cine-camera`)
         }
         let mut planes = [[0f32; 4]; 18];
         for (c, cas) in cascades.iter().enumerate() {
@@ -2540,6 +2549,10 @@ impl LookGpu {
     ) {
         let p = self.post.lock().unwrap();
         let t = p.as_ref().expect("hdr_target before encode_post");
+        // (`--cine-camera`) the camera model's meter over the post's source, before the pass reads it.
+        if let (Some(c), true) = (&self.cine, self.options.look.is_cinematic()) {
+            c.encode_camera(enc, self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize);
+        }
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
         let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("post"),

@@ -7,6 +7,11 @@
 // neighbourhood, luminance-weighted blend. The result is the frame post
 // tone-maps, the next frame's history, and the previous frame the wet
 // ground's reflection reads.
+//
+// (`--cine-camera`, `SF_CAMERA` compiled in) its alpha carries the pixel's
+// distance from the eye for the camera's depth of field: 2 + metres (the sky
+// 65504; an alpha under 2 is a frame without it). Nothing else reads the
+// alpha; compiled out it stays 1.
 
 @group(0) @binding(0) var<uniform> look: Look;
 @group(0) @binding(1) var<uniform> skyu: Sky;
@@ -165,6 +170,14 @@ fn rs_history(uv: vec2<f32>) -> vec3<f32> {
     return max(r / wsum, vec3<f32>(0.0));
 }
 
+/// The resolved pixel and (`SF_CAMERA`) its distance for the camera's depth of field.
+fn rs_out(c: vec3<f32>, dist: f32) -> vec4<f32> {
+    if (SF_CAMERA) {
+        return vec4<f32>(c, select(65504.0, min(2.0 + dist, 65000.0), dist >= 0.0));
+    }
+    return vec4<f32>(c, 1.0);
+}
+
 @fragment
 fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let dims = vec2<i32>(textureDimensions(rs_hdr));
@@ -265,7 +278,7 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         c = vec3<f32>(0.0);
     }
     if (skyu.taa.x < 0.5 || skyu.taa.y < 0.5) {
-        return vec4<f32>(c, 1.0);
+        return rs_out(c, dist);
     }
     // Where this pixel was last frame.
     let v = textureLoad(rs_vel, p, 0).xy;
@@ -279,7 +292,7 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         moving = 1.0;
     }
     if (any(prev_uv < vec2<f32>(0.0)) || any(prev_uv > vec2<f32>(1.0))) {
-        return vec4<f32>(c, 1.0);
+        return rs_out(c, dist);
     }
     // Neighbourhood moments (YCoCg, range-compressed).
     var m1 = vec3<f32>(0.0);
@@ -321,5 +334,5 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let speed = length((uv - prev_uv) * vec2<f32>(dims));
     let a = mix(skyu.taa.z, 0.35, clamp(speed / 40.0, 0.0, 1.0) * 0.5 + moving * 0.15);
     let outc = rs_itm(rs_rgb(mix(h, cur, a)));
-    return vec4<f32>(max(outc, vec3<f32>(0.0)), 1.0);
+    return rs_out(max(outc, vec3<f32>(0.0)), dist);
 }

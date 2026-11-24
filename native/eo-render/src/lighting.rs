@@ -307,8 +307,8 @@ mod tests {
         // (the look profile is its own, below; the facades track's switches are read from the
         // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options;
         // the sun bounce, the albedo's multi-bounce, the penumbra and the screen-space indirect light,
-        // and the reflect track's switches are their own, below)
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, wet_surfaces: false, screen_reflect: false, ..look::ShaderFeatures::ALL });
+        // the reflect track's switches and the camera model are their own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, wet_surfaces: false, screen_reflect: false, camera: false, ..look::ShaderFeatures::ALL });
         assert!(!f.street_pbr && !look::ShaderFeatures::ALL.street_pbr, "the street pass comes in with its switch only (eo-app)");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");

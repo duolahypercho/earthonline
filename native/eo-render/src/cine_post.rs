@@ -25,6 +25,51 @@
 //! (`--water-optics`) keeps the old display transform. Cost: one full-screen
 //! pass in place of the old one, one 3D texture read and a few dozen ALU
 //! operations more a pixel; a 256 KiB upload when the grade moves.
+//!
+//! ## The camera model (`--cine-camera`, camera track)
+//!
+//! Under the look, `--cine-camera` (`SF_CAMERA`, `SkyOptions::cine_camera`)
+//! replaces steps 1-4 with a camera that meters the frame it is shown:
+//!
+//! 1. (compute, before the pass; cine_camera.wgsl) a histogram of the resolved
+//!    frame's log luminance (4 x 4 pixel blocks, weighted toward the lower
+//!    centre of the frame), a plain one beside it (every block alike) and a
+//!    bilateral grid of it (cells of `CAM_CELL_PX` pixels, `CAM_GRID_Z`
+//!    luminance slices; Chen, Paris and Durand 2007); the meter's log-average
+//!    over a percentile window (`cam1`), its correction of the hour's exposure
+//!    (clamped, `cam0.z` up, `cam1.w` down, snapped on a cut, else converging at
+//!    `CAM_ADAPT_RATE`); the visible sun's energy over its disc; the lens's
+//!    focus (the mean dioptre of the frame's middle, from the distances the
+//!    resolve leaves in its alpha, pulled at `CAM_FOCUS_RATE`); the grid blurred
+//!    and written to a 3D texture;
+//! 2. the lens: the depth of field (a gathered blur circle from the lens's
+//!    focal length, f-number and focus, `cam_coc`), lateral colour, the bloom
+//!    threshold-free and energy kept (the pixel gives up `cam_bloom_part`, the
+//!    `CAM_BLOOM_LEVELS` levels give it back with a power-law tail), the
+//!    optical fall-off (`CAM_VIGNETTE` of cos^4);
+//! 3. the exposure (the hour's x the meter's) and the local exposure: the
+//!    grid's base luminance compressed under middle grey and over the
+//!    highlights' knee only as far as the frame's own range needs (the meter
+//!    measures where its darkest and brightest few percent sit and compresses
+//!    each side just enough to bring them inside the display's room, `cam3.xy`,
+//!    never past `cam0.xy`), and the detail against the grid's edge-aware base
+//!    raised by `cam3.z` (a print's local contrast); at night, when the frame's
+//!    brightest sources fall short, a pixel's own highlights pushed toward
+//!    white (`cam_push`); the sun's veiling glare, soft starburst and ghosts
+//!    scaled by its measured energy (no lamp starbursts: sky.rs skips the
+//!    sprite glare);
+//! 4. the camera's response: a long toe under a mid-tone contrast
+//!    (`CAM_TOE`, `tone_log`) into a hue-preserving filmic curve (an AgX-style
+//!    log sigmoid in an inset gamut, so a bright colour runs to white without
+//!    per-channel clipping), sRGB, the hour's grade (`CAM_GRADE_KEYS` through
+//!    `cam_grade`: its S-curve over the mid-tones only, its warm highlights kept
+//!    off a blue sky), a fine grain in the shadows and mid-tones (more at
+//!    night; none in a bright sky) and the dither.
+//!
+//! The sharpen is a robust contrast-adaptive one (after AMD's RCAS: its
+//! lobe limited so nothing clips or rings, halved on noise, gated off in
+//! flat gradients so a clear sky is not roughened, and off where the focus
+//! blurs), and the lens's lateral colour is the model's own (`CAM_LATERAL_CA`).
 
 use bytemuck::{Pod, Zeroable};
 use eo_look::cinematic::grade;
@@ -38,14 +83,370 @@ pub struct CineUniform {
     pub bloom: [f32; 4],
     /// x the display vignette, y the table's coordinate scale, z its offset; w unused.
     pub grade: [f32; 4],
+    /// (`--cine-camera`) x the local exposure's strongest compression in the
+    /// shadows, y in the highlights (1: none), z the meter's largest lift (EV),
+    /// w the model on (1/0).
+    pub cam0: [f32; 4],
+    /// x, y the meter's window (shares of the metered weight), z the exposure
+    /// compensation (EV against middle grey), w the meter's largest cut (EV).
+    pub cam1: [f32; 4],
+    /// x the grain's amount (display, at its peak), y the sun glare's gain, z the
+    /// debug bars (1/0), w the lateral colour (px, red to blue, at the corner).
+    pub cam2: [f32; 4],
+    /// x, y the display's room below and above middle grey (EV) before the local
+    /// exposure compresses, z the detail's gain (1: none), w the highlights' knee (EV
+    /// over middle grey: the local exposure moves only what lies above it).
+    pub cam3: [f32; 4],
+    /// x the local exposure's largest expansion of the highlights (1: none), y where the
+    /// frame's brightest sources are placed (EV over middle grey: `CAM_TOP_SHARE` of the
+    /// frame), z the glare's veil (exposed, at its core), w the lens's f-number (0: no
+    /// depth of field).
+    pub cam4: [f32; 4],
 }
 
 impl CineUniform {
     pub fn new() -> Self {
         let n = grade::LUT_SIZE as f32;
-        Self { bloom: [grade::CINE_BLOOM_SHARE as f32, 0.0, 0.0, 0.0], grade: [grade::CINE_VIGNETTE as f32, (n - 1.0) / n, 0.5 / n, 0.0] }
+        Self { bloom: [grade::CINE_BLOOM_SHARE as f32, 0.0, 0.0, 0.0], grade: [grade::CINE_VIGNETTE as f32, (n - 1.0) / n, 0.5 / n, 0.0], cam0: [0.0; 4], cam1: [0.0; 4], cam2: [0.0; 4], cam3: [0.0; 4], cam4: [0.0; 4] }
+    }
+
+    /// (`--cine-camera`) the uniform with the camera model's terms for the sun's altitude.
+    pub fn with_camera(sun_alt_deg: f64) -> Self {
+        let mut u = Self::new();
+        let p = camera_params(sun_alt_deg);
+        u.cam0 = [p.shadow_contrast as f32, p.highlight_contrast as f32, p.max_lift_ev as f32, 1.0];
+        u.cam1 = [p.window[0] as f32, p.window[1] as f32, p.compensation_ev as f32, p.max_cut_ev as f32];
+        // (`EO_CAM_DEBUG=1`: the meter's state drawn as bars along the frame's top, for tuning.)
+        // (`EO_CAM_DEBUG=2`: the frame's exposed log luminance written in place of the picture.)
+        static DEBUG: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+        let debug = *DEBUG.get_or_init(|| match std::env::var("EO_CAM_DEBUG").as_deref() {
+            Ok("1") => 1.0,
+            Ok("2") => 2.0,
+            _ => 0.0,
+        });
+        u.cam2 = [p.grain as f32, CAM_FLARE_GAIN as f32, debug, CAM_LATERAL_CA as f32];
+        u.cam3 = [p.shadow_room_ev as f32, p.highlight_room_ev as f32, p.detail as f32, p.knee_ev as f32];
+        u.cam4 = [p.highlight_expand as f32, p.top_ev as f32, CAM_GLARE_VEIL as f32, p.f_number as f32];
+        u
     }
 }
+
+// ---------------------------------------------------------------------------
+// (`--cine-camera`) the camera model's constants.
+
+/// The histogram's bins over `CAM_HIST_EV` (log2 of the luminance exposed by
+/// the hour's exposure: middle grey is log2 0.18 = -2.47).
+pub const CAM_HIST_BINS: u32 = 128;
+pub const CAM_HIST_EV: [f64; 2] = [-16.0, 10.0];
+/// The bilateral grid: a cell is `CAM_CELL_PX` pixels square (8 x 8 threads of
+/// 4 x 4 pixel blocks: one workgroup a column), `CAM_GRID_Z` slices over `CAM_GRID_EV`
+/// (0.81 EV a slice).
+pub const CAM_CELL_PX: u32 = 32;
+pub const CAM_GRID_Z: u32 = 32;
+pub const CAM_GRID_EV: [f64; 2] = [-16.0, 10.0];
+/// The grid's own (edge-aware) base against the 5 x 5 cell blur of the whole
+/// column: the blend keeps large shapes smooth without halos at strong edges.
+pub const CAM_BILATERAL_SHARE: f64 = 0.65;
+/// How fast the meter's correction converges (1/s, exponential), after a cut snaps it.
+pub const CAM_ADAPT_RATE: f64 = 3.0;
+/// The optical fall-off: this share of cos^4 of the field angle (a 26 deg half
+/// field down, 16:9: the corners about 0.7 EV under the centre, a cine prime's
+/// natural fall-off near wide open; the full cos^4 law would be 2 EV).
+pub const CAM_VIGNETTE: f64 = 0.5;
+/// Film grain: the standard deviation in display values at its peak (the
+/// shadows and low mid-tones, display 0.12 .. 0.35), a little over a pixel
+/// across (the photo finish's `ph_grain`: neighbours correlate as a demosaiced
+/// sensor's do), none over display 0.65 (a clear sky stays a clean gradient); at
+/// night and by day (a camera pushed to a higher ISO shows more), `camera_params`
+/// blends them.
+pub const CAM_GRAIN: [f64; 2] = [0.0065, 0.0042];
+/// The lens's lateral colour: red against blue at the frame's corner (px of a
+/// 1080-line frame), growing as the square of the radius (faint, at the edges only).
+pub const CAM_LATERAL_CA: f64 = 2.0;
+/// The shares of the frame at each end of its range the local exposure fits
+/// into the display's room: the dark end of the meter's weight (the street, not
+/// the sky's corners), the bright end of the whole frame unweighted (a sky gap
+/// counts where it is, even at the top of the frame); the darkest and brightest
+/// few percent may sit outside it (a doorway's black, a glint).
+pub const CAM_RANGE_SHARE: [f64; 2] = [0.03, 0.99];
+/// The share of the whole frame under its brightest sources: at night the
+/// local exposure may expand the highlights (up to `highlight_expand`) until
+/// this point sits at `top_ev` (a lamp's core burns to white instead of a
+/// dim cream; the street under it keeps its level).
+pub const CAM_TOP_SHARE: f64 = 0.999;
+/// The camera's response under the sigmoid, in log2 about middle grey: the
+/// contrast `CAM_CONTRAST` from the mid-tones down to about 3 EV under grey,
+/// easing to `CAM_TOE[0]` in the deep shadows (centre `CAM_TOE[1]` EV, width
+/// `CAM_TOE[2]` EV): a cine camera's long toe (a scene 4 EV under grey shows at
+/// sRGB 17, 5 EV under at 10, 6 EV under at 6) instead of a crush at 4.5 EV
+/// under, while the mid-shadows keep their depth (2 and 3 EV under at 54 and 30,
+/// as before): night streets and canyon shade keep their texture, not a lift.
+pub const CAM_TOE: [f64; 3] = [0.45, -3.1, 0.5];
+/// How hard the detail's gain rolls off (EV): detail this far from its base
+/// gets half the gain's lift, so an edge's step is not doubled.
+pub const CAM_DETAIL_SPAN: f64 = 1.5;
+/// The depth of field: a lens on a full-frame sensor (`CAM_SENSOR_MM` high; the
+/// frame's vertical field gives the focal length: 24.6 mm at the cards' 52 deg)
+/// at `CAM_F_NUMBER` (night, day), focused by the meter on the frame's middle
+/// (the mean dioptre of its centre: the focus that blurs the subject least),
+/// pulled at `CAM_FOCUS_RATE`; the blur circle (Gaussian lens: (f^2 / N) |1/S -
+/// 1/D| on the sensor) gathered over `CAM_DOF_TAPS` taps where it is over 0.6 px,
+/// at most `CAM_DOF_MAX_PX` across (px of a 1080-line frame). At f/4 a street
+/// 3 m off with the focus far away blurs by about 2.5 px; past 10 m nothing does.
+pub const CAM_SENSOR_MM: f64 = 24.0;
+pub const CAM_F_NUMBER: [f64; 2] = [2.8, 4.0];
+pub const CAM_FOCUS_RATE: f64 = 4.0;
+pub const CAM_DOF_TAPS: u32 = 16;
+pub const CAM_DOF_MAX_PX: f64 = 8.0;
+
+/// The sun's glare (starburst and ghosts) at full strength, exposed units.
+pub const CAM_FLARE_GAIN: f64 = 1.0;
+/// The sun's veiling glare (the lens's scatter round the source: a core and a
+/// long 1/r^2 skirt over the frame), exposed units at its core with the sun
+/// fully visible.
+pub const CAM_GLARE_VEIL: f64 = 2.5;
+/// The sun's measured energy (mean exposed luminance over its disc) where its
+/// glare starts and where it is full: log2.
+pub const CAM_FLARE_EV: [f64; 2] = [2.5, 6.0];
+
+/// The bloom: the share of every pixel the lens spreads (veiling glare: a
+/// coated prime's 1-2 %; at 3 % the shadows took a milky lift), the
+/// added share of a bright one (the highlights' halation through a light
+/// diffusion), from `CAM_BLOOM_MIST_EV[0]` to `[1]` (log2, exposed: +1.5 and
+/// +4 EV over middle grey); above `CAM_BLOOM_CAP` (exposed) a source's energy
+/// grows only logarithmically (the sun's disc, a glint).
+pub const CAM_BLOOM_VEIL: f64 = 0.012;
+pub const CAM_BLOOM_MIST: f64 = 0.10;
+pub const CAM_BLOOM_MIST_EV: [f64; 2] = [-1.0, 1.5];
+pub const CAM_BLOOM_CAP: f64 = 64.0;
+/// The levels' weights (half resolution to 1/128), summing to 1: about equal
+/// energy an octave of radius, a 1/r^2 tail.
+pub const CAM_BLOOM_WEIGHTS: [f64; crate::sky::CAM_BLOOM_LEVELS] = [0.20, 0.17, 0.15, 0.14, 0.13, 0.11, 0.10];
+
+/// The level weights for sky.rs (`--cine-camera`).
+pub fn bloom_level_weights() -> [f32; crate::sky::CAM_BLOOM_LEVELS] {
+    let s: f64 = CAM_BLOOM_WEIGHTS.iter().sum();
+    CAM_BLOOM_WEIGHTS.map(|v| (v / s) as f32)
+}
+
+/// The bloom's WGSL constants and its prefilter's switch (sky.rs composes it before sky_bloom.wgsl).
+pub fn bloom_wgsl(camera: bool) -> String {
+    let f = |v: f64| format!("{:?}", v as f32);
+    format!(
+        "\n// generated by cine_post.rs bloom_wgsl (`--cine-camera`)\nconst SF_CAMERA: bool = {camera};\nconst CAM_BLOOM_VEIL: f32 = {};\nconst CAM_BLOOM_MIST: f32 = {};\nconst CAM_BLOOM_MIST_EV: vec2<f32> = vec2<f32>({}, {});\nconst CAM_BLOOM_CAP: f32 = {};\n{}",
+        f(CAM_BLOOM_VEIL),
+        f(CAM_BLOOM_MIST),
+        f(CAM_BLOOM_MIST_EV[0]),
+        f(CAM_BLOOM_MIST_EV[1]),
+        f(CAM_BLOOM_CAP),
+        CAM_BLOOM_PART_WGSL,
+    )
+}
+
+/// The share of a pixel (scene values `c`, the hour's exposure `e`) the lens
+/// spreads, in scene values: the bloom's prefilter takes it from every tap and
+/// the post pass takes it off the pixel, so the bloom moves light, it adds none.
+const CAM_BLOOM_PART_WGSL: &str = "
+fn cam_bloom_part(c: vec3<f32>, e: f32) -> vec3<f32> {
+    let x = max(c, vec3<f32>(0.0)) * e;
+    let l = dot(x, vec3<f32>(0.2126, 0.7152, 0.0722));
+    if (!(l > 1e-12) || !(e > 0.0)) {
+        return vec3<f32>(0.0);
+    }
+    let lc = select(l, CAM_BLOOM_CAP * (1.0 + log(l / CAM_BLOOM_CAP)), l > CAM_BLOOM_CAP);
+    let share = CAM_BLOOM_VEIL + CAM_BLOOM_MIST * smoothstep(CAM_BLOOM_MIST_EV.x, CAM_BLOOM_MIST_EV.y, log2(lc));
+    return x * (lc / l) * share / e;
+}
+";
+
+/// The meter and the local exposure by the hour (`camera_params`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraParams {
+    /// The local exposure's strongest compression about middle grey: below it,
+    /// above it (1: none). It compresses only as far as the frame's range needs.
+    pub shadow_contrast: f64,
+    pub highlight_contrast: f64,
+    /// The display's room below and above middle grey (EV, after the meter):
+    /// the frame's darkest and brightest few percent (`CAM_RANGE_SHARE`) are
+    /// brought inside it by the local exposure, which does nothing to a frame
+    /// that fits (the curve holds about -4 .. +4 EV: 7 and 244 of 255).
+    pub shadow_room_ev: f64,
+    pub highlight_room_ev: f64,
+    /// The detail's gain against the grid's edge-aware base (1: none).
+    pub detail: f64,
+    /// The meter's window: the shares of the metered weight it averages between.
+    pub window: [f64; 2],
+    /// Where the window's log-average lands, EV against middle grey.
+    pub compensation_ev: f64,
+    /// The meter's largest correction of the hour's exposure, up and down (EV).
+    pub max_lift_ev: f64,
+    pub max_cut_ev: f64,
+    /// The highlights' knee (EV over middle grey): the local exposure compresses
+    /// or expands only what lies above it (by day a sunlit wall keeps its level
+    /// while a sky gap comes down).
+    pub knee_ev: f64,
+    /// The local exposure's largest expansion of the highlights (1: none) and
+    /// where it places the frame's brightest sources (`CAM_TOP_SHARE`), EV over grey.
+    pub highlight_expand: f64,
+    pub top_ev: f64,
+    /// The grain's standard deviation at its peak (display values).
+    pub grain: f64,
+    /// The lens's f-number (the depth of field: wider open at night).
+    pub f_number: f64,
+}
+
+/// By day (and through the golden hour) the meter averages the middle of the
+/// frame's tones and may lift a shaded street by 1.3 EV over the hour's
+/// exposure (the camera's long toe holds the rest) but never darkens a sunlit
+/// frame under it; the local exposure fits a deep shade into the display's room
+/// and brings a bright sky gap down above a knee 1.6 EV over grey (a sunlit wall
+/// keeps its level) and raises the detail by
+/// a fifth; at night it meters the lit part (the upper tones), keeps a darker
+/// key and most of the shadows' depth (a lamp's pool against the unlit gap; the
+/// camera's long toe holds the gap's texture), and expands the highlights by
+/// up to half again until the frame's brightest sources sit 4 EV over grey (a
+/// pushed night stock: the lamps burn, the street keeps its level), with more
+/// grain. Blended over the sun at -9 .. +2 deg (the blue hour, the sun 4-8 deg
+/// down, takes about a quarter of the day's; its exposure stays nearer the night's).
+pub fn camera_params(sun_alt_deg: f64) -> CameraParams {
+    let a = if sun_alt_deg.is_nan() { 90.0 } else { sun_alt_deg };
+    let t = ((a + 9.0) / 11.0).clamp(0.0, 1.0);
+    let day = t * t * (3.0 - 2.0 * t);
+    let mix = |n: f64, d: f64| n + (d - n) * day;
+    CameraParams {
+        shadow_contrast: mix(0.88, 0.70),
+        highlight_contrast: mix(0.75, 0.55),
+        shadow_room_ev: mix(5.0, 3.5),
+        highlight_room_ev: mix(3.5, 2.8),
+        detail: mix(1.12, 1.22),
+        window: [mix(0.75, 0.35), mix(0.99, 0.90)],
+        // (the blue hour keeps nearer the night's darker key: the sky's glow over a dim street)
+        compensation_ev: -1.4 + 0.9 * day * day,
+        max_lift_ev: mix(0.75, 1.3),
+        // by day the hour's exposure is a sunlit scene's (the meter rescues a shaded
+        // street); a sunlit aerial or plaza is not pulled down (a golden aerial keeps its glow).
+        max_cut_ev: mix(2.0, 0.0),
+        knee_ev: mix(0.0, 1.6),
+        highlight_expand: mix(1.5, 1.0),
+        top_ev: 4.0,
+        grain: mix(CAM_GRAIN[0], CAM_GRAIN[1]),
+        f_number: mix(CAM_F_NUMBER[0], CAM_F_NUMBER[1]),
+    }
+}
+
+/// The grade's keyframes under the camera model (`GRADE_KEYS` order, so
+/// `grade::key_weights` blends them; `cam_grade` applies them): the curve's
+/// flatter mid-tones take more contrast over the pivot; by day a sky-cool shade
+/// against a slightly warm sun (daylight balanced for the sun and the sky
+/// together, as a camera's daylight preset: the shade the sky lights reads cool
+/// but near neutral, not navy), the golden hour a warm key against cool
+/// shadows, the blue hour a cool ambient with warm lights, the night coloured
+/// blacks. The balances stay within about 12 % a channel; the shadows' within 7
+/// % by day (the long toe shows them).
+pub const CAM_GRADE_KEYS: [grade::GradeKey; grade::KEY_COUNT] = [
+    grade::GradeKey { name: "cam-night", contrast: 1.20, pivot: 0.30, sat_shadow: 0.90, sat_highlight: 1.25, shadow_balance: [0.93, 0.99, 1.10], highlight_balance: [1.06, 1.0, 0.92], split: 0.30, gain: [1.0, 1.0, 1.0] },
+    grade::GradeKey { name: "cam-blue-hour", contrast: 1.16, pivot: 0.38, sat_shadow: 1.04, sat_highlight: 1.18, shadow_balance: [0.92, 0.98, 1.11], highlight_balance: [1.07, 1.0, 0.91], split: 0.36, gain: [0.97, 1.0, 1.05] },
+    grade::GradeKey { name: "cam-golden-am", contrast: 1.14, pivot: 0.42, sat_shadow: 1.0, sat_highlight: 1.15, shadow_balance: [0.95, 0.985, 1.06], highlight_balance: [1.08, 1.0, 0.90], split: 0.38, gain: [1.01, 1.0, 0.97] },
+    grade::GradeKey { name: "cam-golden-pm", contrast: 1.16, pivot: 0.42, sat_shadow: 1.0, sat_highlight: 1.20, shadow_balance: [0.95, 0.98, 1.065], highlight_balance: [1.12, 1.0, 0.84], split: 0.36, gain: [1.03, 1.0, 0.94] },
+    grade::GradeKey { name: "cam-day", contrast: 1.12, pivot: 0.45, sat_shadow: 1.0, sat_highlight: 1.12, shadow_balance: [0.97, 0.995, 1.045], highlight_balance: [1.05, 1.0, 0.93], split: 0.40, gain: [1.015, 1.0, 0.975] },
+    grade::GradeKey { name: "cam-overcast", contrast: 1.10, pivot: 0.45, sat_shadow: 0.97, sat_highlight: 1.04, shadow_balance: [0.97, 1.0, 1.035], highlight_balance: [1.02, 1.0, 0.98], split: 0.40, gain: [0.995, 1.0, 1.005] },
+];
+
+/// The grade's S-curve on a luma (0..1), eo-look's: power curves either side of the pivot.
+fn s_curve(y: f64, pivot: f64, k: f64) -> f64 {
+    let y = y.clamp(0.0, 1.0);
+    if y < pivot { pivot * (y / pivot).powf(k) } else { 1.0 - (1.0 - pivot) * ((1.0 - y) / (1.0 - pivot)).powf(k) }
+}
+
+/// How much of a display colour is a blue sky's (its blue over its red and
+/// green, in the brighter half): the share `cam_grade` keeps the highlights'
+/// warm balance off.
+pub fn sky_share(s: [f64; 3]) -> f64 {
+    use eo_look::math::smoothstep;
+    let y = 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+    smoothstep(0.01, 0.07, s[2] - 0.5 * (s[0] + s[1])) * smoothstep(0.2, 0.45, y)
+}
+
+/// The camera's grade on a display colour (sRGB-encoded, 0..1): a key's S-curve
+/// only from just under its pivot up (eased in over the 0.3 below it: the camera's
+/// own toe stays; the key's power curve under the pivot crushed a night street's
+/// shadows to black), then eo-look's grade for the key's colour (saturation,
+/// the balances, the gain), its highlights' warm balance kept off a blue sky (a
+/// colourist's secondary: the warm key on the lit surfaces, the sky's own blue
+/// protected instead of bleached to cream).
+pub fn cam_grade(s: [f64; 3], k: &grade::GradeKey) -> [f64; 3] {
+    use eo_look::math::{mix, smoothstep};
+    let s = s.map(|v| v.clamp(0.0, 1.0));
+    let y = 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+    let yc = mix(y, s_curve(y, k.pivot, k.contrast), smoothstep(k.pivot - 0.2, k.pivot + 0.1, y));
+    // as eo-look's grade: darker by a gain (black stays black), lighter by a gain on the way to white.
+    let s = if yc <= y {
+        let g = if y > 1e-9 { yc / y } else { 1.0 };
+        s.map(|v| v * g)
+    } else {
+        let g = if y < 1.0 - 1e-9 { (1.0 - yc) / (1.0 - y) } else { 1.0 };
+        s.map(|v| 1.0 - (1.0 - v) * g)
+    };
+    let flat = grade::GradeKey { contrast: 1.0, ..*k };
+    let g = grade::grade(s, &flat);
+    let w = sky_share(s);
+    if w <= 0.0 {
+        return g;
+    }
+    let sky = grade::grade(s, &grade::GradeKey { highlight_balance: [1.0, 1.0, 1.0], ..flat });
+    [0, 1, 2].map(|i| mix(g[i], sky[i], w))
+}
+
+/// A camera key's table (`cam_grade`), as `grade::bake_lut` lays one out.
+pub fn cam_bake_lut(k: &grade::GradeKey) -> Vec<[f32; 3]> {
+    let n = grade::LUT_SIZE;
+    let step = 1.0 / (n - 1) as f64;
+    let mut out = Vec::with_capacity(n * n * n);
+    for b in 0..n {
+        for g in 0..n {
+            for r in 0..n {
+                out.push(cam_grade([r as f64 * step, g as f64 * step, b as f64 * step], k).map(|v| v as f32));
+            }
+        }
+    }
+    out
+}
+
+/// The filmic curve's constants: an AgX-style log sigmoid (Sobotka's formulation
+/// and its inset and outset matrices, as published with Blender's AgX view; the
+/// sixth-order fit of its sigmoid) over -10 .. +6.5 EV about middle grey.
+pub const CAM_AGX_EV: [f64; 2] = [-12.47393, 4.026069];
+/// The sharpen's strength in stops under RCAS's limit (0: the strongest, a
+/// lobe of 3/16; 0.5: 0.13), on the range-compressed luminance after the
+/// temporal resolve.
+pub const CAM_SHARPEN_STOPS: f64 = 0.5;
+/// The sharpen is off where the neighbourhood's range is under the first share
+/// of its brightest and full over the second: a flat gradient (a clear sky, a
+/// painted wall) is left smooth instead of having its noise raised.
+pub const CAM_SHARPEN_GATE: [f64; 2] = [0.012, 0.05];
+/// The scene's contrast about middle grey before the sigmoid (log over log):
+/// the sigmoid alone is a flat film (about 0.8-1.1 at grey); 1.25 puts -3 EV at
+/// sRGB 31, grey at 127, +2 EV at 201 and white near +5 EV.
+pub const CAM_CONTRAST: f64 = 1.25;
+
+/// The toe's constant: its curve passes through middle grey (`cam_tone_log`).
+pub fn toe_offset() -> f64 {
+    let sp = |x: f64| x.max(0.0) + (-x.abs()).exp().ln_1p();
+    let [lo, u0, w] = CAM_TOE;
+    (CAM_CONTRAST - lo) * w * sp(-u0 / w)
+}
+
+/// The camera's response in log2 about middle grey (`CAM_TOE`; CPU reference of
+/// look_cine_camera.wgsl `cam_tone_log`).
+pub fn tone_log(u: f64) -> f64 {
+    let sp = |x: f64| x.max(0.0) + (-x.abs()).exp().ln_1p();
+    let [lo, u0, w] = CAM_TOE;
+    lo * u + (CAM_CONTRAST - lo) * w * sp((u - u0) / w) - toe_offset()
+}
+/// The look's saturation on the curve's encoded values (the sigmoid's inset
+/// desaturates the mid-tones; a print stock's dyes give them back: sunlit
+/// paint, foliage and brick read as colours, not tints).
+pub const CAM_SATURATION: f64 = 1.18;
 
 /// eo-look's curve as WGSL constants (`CN_*`).
 pub fn wgsl() -> String {
@@ -67,11 +468,115 @@ pub fn wgsl() -> String {
     )
 }
 
+/// The pass's uniform struct (look_cine.wgsl and cine_camera.wgsl).
+pub const CINE_STRUCT_WGSL: &str = "
+struct Cine {
+    // x the bloom's share of the bright part (eo-look `CINE_BLOOM_SHARE`); yzw unused
+    bloom: vec4<f32>,
+    // x the display vignette, y the table's scale, z its offset (a texel centre); w unused
+    grade: vec4<f32>,
+    // (`--cine-camera`) x local contrast in the shadows, y in the highlights, z the meter's largest lift (EV), w on
+    cam0: vec4<f32>,
+    // x, y the meter's window, z the compensation (EV), w the meter's largest cut (EV)
+    cam1: vec4<f32>,
+    // x grain, y the sun glare's gain, z debug bars, w lateral colour (px at the corner)
+    cam2: vec4<f32>,
+    // x, y the display's room below and above middle grey (EV), z the detail's gain, w the highlights' knee (EV)
+    cam3: vec4<f32>,
+    // x the highlights' largest expansion, y the brightest sources' place (EV), z the sun's veil, w the f-number
+    cam4: vec4<f32>,
+};
+
+// (`--cine-camera`) the meter's state (cine_camera.wgsl `cam_adapt` writes it, the post pass reads it).
+struct CamState {
+    // log2 of the exposure in use (the hour's x the meter's), smoothed
+    ev: f32,
+    // the meter's gain over the hour's exposure (the post's multiplier)
+    gain: f32,
+    // the metered log-average (log2, exposed by the hour's exposure)
+    mean: f32,
+    // the visible sun's mean exposed luminance over its disc (0: hidden or off the frame)
+    sun_e: f32,
+    // 1 once a frame has been metered
+    init: f32,
+    // the local exposure's compression in the shadows and the highlights (1: none), smoothed
+    k_shadow: f32,
+    k_high: f32,
+    // the frame's range (EV about middle grey after the meter): its dark end (the bright end is
+    // not kept; `EO_CAM_DEBUG` draws this one)
+    lo: f32,
+    // the lens's focus (dioptres: 1 / metres, 0 at infinity), pulled toward the centre's
+    // subject (the mean dioptre of the frame's middle: the focus that blurs it least)
+    focus: f32,
+    // 1 once the frame has carried its distances (the resolve's alpha) and the focus is set
+    focus_ok: f32,
+    pad0: f32,
+    pad1: f32,
+};
+";
+
+/// (`--cine-camera`) the camera model's WGSL constants.
+pub fn camera_wgsl() -> String {
+    let f = |v: f64| format!("{:?}", v as f32);
+    format!(
+        "\n// generated by cine_post.rs camera_wgsl (`--cine-camera`)\nconst CAM_HIST_BINS: u32 = {}u;\nconst CAM_HIST_LO: f32 = {};\nconst CAM_HIST_HI: f32 = {};\nconst CAM_CELL_PX: u32 = {}u;\nconst CAM_GRID_Z: u32 = {}u;\nconst CAM_GRID_LO: f32 = {};\nconst CAM_GRID_HI: f32 = {};\nconst CAM_BILATERAL_SHARE: f32 = {};\nconst CAM_ADAPT_RATE: f32 = {};\nconst CAM_VIGNETTE: f32 = {};\nconst CAM_FLARE_EV: vec2<f32> = vec2<f32>({}, {});\nconst CAM_AGX_LO: f32 = {};\nconst CAM_AGX_HI: f32 = {};\nconst CAM_CONTRAST: f32 = {};\nconst CAM_SATURATION: f32 = {};\nconst CAM_SHARPEN: f32 = {};\nconst CAM_SHARPEN_GATE: vec2<f32> = vec2<f32>({}, {});\nconst CAM_RANGE_SHARE: vec2<f32> = vec2<f32>({}, {});\nconst CAM_DETAIL_SPAN: f32 = {};\nconst CAM_TOP_SHARE: f32 = {};\nconst CAM_TOE: vec3<f32> = vec3<f32>({}, {}, {});\nconst CAM_TOE_K: f32 = {};\nconst CAM_SENSOR_MM: f32 = {};\nconst CAM_FOCUS_RATE: f32 = {};\nconst CAM_DOF_TAPS: i32 = {};\nconst CAM_DOF_MAX_PX: f32 = {};\n",
+        CAM_HIST_BINS,
+        f(CAM_HIST_EV[0]),
+        f(CAM_HIST_EV[1]),
+        CAM_CELL_PX,
+        CAM_GRID_Z,
+        f(CAM_GRID_EV[0]),
+        f(CAM_GRID_EV[1]),
+        f(CAM_BILATERAL_SHARE),
+        f(CAM_ADAPT_RATE),
+        f(CAM_VIGNETTE),
+        f(CAM_FLARE_EV[0]),
+        f(CAM_FLARE_EV[1]),
+        f(CAM_AGX_EV[0]),
+        f(CAM_AGX_EV[1]),
+        f(CAM_CONTRAST),
+        f(CAM_SATURATION),
+        f(2f64.powf(-CAM_SHARPEN_STOPS)),
+        f(CAM_SHARPEN_GATE[0]),
+        f(CAM_SHARPEN_GATE[1]),
+        f(CAM_RANGE_SHARE[0]),
+        f(CAM_RANGE_SHARE[1]),
+        f(CAM_DETAIL_SPAN),
+        f(CAM_TOP_SHARE),
+        f(CAM_TOE[0]),
+        f(CAM_TOE[1]),
+        f(CAM_TOE[2]),
+        f(toe_offset()),
+        f(CAM_SENSOR_MM),
+        f(CAM_FOCUS_RATE),
+        CAM_DOF_TAPS,
+        f(CAM_DOF_MAX_PX),
+    )
+}
+
 /// The pass's whole shader: photo.rs's (the look's common source, the old
 /// display transform's helpers, the photo finish's lens and noise), the
-/// constants, and look_cine.wgsl.
+/// constants, and look_cine.wgsl; (`--cine-camera`, `SF_CAMERA`) with the
+/// camera model's bindings and constants and the bloom's share.
 pub fn shader_source() -> String {
-    format!("{}\n{}\n{}", crate::photo::shader_source(), wgsl(), include_str!("look_cine.wgsl"))
+    // (`--cine-camera`) the model's bindings, constants and fragment path only when it is
+    // compiled in; else a stub the pass's dead `SF_CAMERA` branch names.
+    let cam = if crate::look::shader_features().camera {
+        format!(
+            "{}{}\n@group(0) @binding(9) var<storage, read> cam_state: CamState;\n@group(0) @binding(10) var cam_grid: texture_3d<f32>;\n{}",
+            camera_wgsl(),
+            bloom_wgsl(true).replace("const SF_CAMERA: bool = true;\n", ""),
+            include_str!("look_cine_camera.wgsl")
+        )
+    } else {
+        "\nfn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {\n    return vec4<f32>(0.0);\n}\n".to_string()
+    };
+    format!("{}\n{}\n{}\n{}\n{}", crate::photo::shader_source(), wgsl(), CINE_STRUCT_WGSL, include_str!("look_cine.wgsl"), cam)
+}
+
+/// (`--cine-camera`) the meter's, the grid's and the sun's compute passes.
+pub fn camera_compute_source() -> String {
+    format!("{}\n{}{}\n{}", crate::look::look_common_source(), CINE_STRUCT_WGSL, camera_wgsl(), include_str!("cine_camera.wgsl"))
 }
 
 /// The table's texels as RGBA f16 (alpha 1).
@@ -98,10 +603,140 @@ pub struct CineGpu {
     sampler: wgpu::Sampler,
     /// each key's table (`grade::GRADE_KEYS` order), baked once.
     keys: Vec<Vec<[f32; 3]>>,
+    /// (`--cine-camera`) the camera's keys' tables (`CAM_GRADE_KEYS`), when its code is compiled in.
+    cam_keys: Vec<Vec<[f32; 3]>>,
     /// the weights the table in use was baked for.
     last: Mutex<Option<[f64; grade::KEY_COUNT]>>,
     /// how many times the table was baked and uploaded.
     uploads: std::sync::atomic::AtomicU64,
+    /// (`--cine-camera`) the camera model's meter, made only when its code is compiled in.
+    camera: Option<CameraGpu>,
+}
+
+/// (`--cine-camera`) the meter's passes and their buffers; the grid's are sized with the frame.
+struct CameraGpu {
+    bgl: wgpu::BindGroupLayout,
+    build: wgpu::ComputePipeline,
+    adapt: wgpu::ComputePipeline,
+    blur: wgpu::ComputePipeline,
+    hist: wgpu::Buffer,
+    state: wgpu::Buffer,
+    /// the frame's size the grid was made for, its buffers, texture and the passes' bind groups per post source.
+    sized: Mutex<Option<CameraSized>>,
+    /// the model on this frame (`CineGpu::write`).
+    on: std::sync::atomic::AtomicBool,
+}
+
+struct CameraSized {
+    size: (u32, u32),
+    columns: (u32, u32),
+    binds: [wgpu::BindGroup; 3],
+    bytes: u64,
+}
+
+impl CameraGpu {
+    fn new(device: &wgpu::Device) -> Self {
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("cine_camera.wgsl"), source: wgpu::ShaderSource::Wgsl(camera_compute_source().into()) });
+        let cs = wgpu::ShaderStages::COMPUTE;
+        let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: cs, ty, count: None };
+        let ubuf = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None };
+        let sbuf = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None };
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("cine-camera-bgl"),
+            // the look, the sky, the frame, a linear sampler, the histogram, the state, the cells,
+            // the columns, the grid texture, the pass's uniform.
+            entries: &[
+                e(0, ubuf),
+                e(1, ubuf),
+                e(2, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                e(3, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                e(4, sbuf),
+                e(5, sbuf),
+                e(6, sbuf),
+                e(7, sbuf),
+                e(8, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba16Float, view_dimension: wgpu::TextureViewDimension::D3 }),
+                e(9, ubuf),
+            ],
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("cine-camera-layout"), bind_group_layouts: &[Some(&bgl)], immediate_size: 0 });
+        let pipe = |entry: &str| {
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(entry), layout: Some(&layout), module: &module, entry_point: Some(entry), compilation_options: Default::default(), cache: None })
+        };
+        let buffer = |label, size| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
+        Self {
+            build: pipe("cam_build"),
+            adapt: pipe("cam_adapt"),
+            blur: pipe("cam_blur"),
+            bgl,
+            // the meter's histogram and the frame's plain one.
+            hist: buffer("cine-camera-hist", 2 * CAM_HIST_BINS as u64 * 4),
+            state: buffer("cine-camera-state", 48),
+            sized: Mutex::new(None),
+            on: Default::default(),
+        }
+    }
+
+    /// The grid for a frame of `size` and the passes' bind groups over the post's sources.
+    #[allow(clippy::too_many_arguments)]
+    fn ensure(&self, device: &wgpu::Device, size: (u32, u32), look: &wgpu::Buffer, srcs: [&wgpu::TextureView; 3], sky: &wgpu::Buffer, sampler: &wgpu::Sampler, cine: &wgpu::Buffer) -> wgpu::TextureView {
+        let mut g = self.sized.lock().unwrap();
+        let columns = (size.0.div_ceil(CAM_CELL_PX).max(1), size.1.div_ceil(CAM_CELL_PX).max(1));
+        let n = columns.0 as u64 * columns.1 as u64;
+        let buffer = |label, size| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: wgpu::BufferUsages::STORAGE, mapped_at_creation: false });
+        let cells = buffer("cine-camera-cells", n * CAM_GRID_Z as u64 * 8);
+        let cols = buffer("cine-camera-columns", n * 8);
+        let grid = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("cine-camera-grid"),
+            size: wgpu::Extent3d { width: columns.0, height: columns.1, depth_or_array_layers: CAM_GRID_Z },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let grid_view = grid.create_view(&Default::default());
+        let binds = srcs.map(|src| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("cine-camera-bg"),
+                layout: &self.bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: look.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: sky.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(src) },
+                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(sampler) },
+                    wgpu::BindGroupEntry { binding: 4, resource: self.hist.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 5, resource: self.state.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 6, resource: cells.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 7, resource: cols.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::TextureView(&grid_view) },
+                    wgpu::BindGroupEntry { binding: 9, resource: cine.as_entire_binding() },
+                ],
+            })
+        });
+        let bytes = n * CAM_GRID_Z as u64 * (8 + 8) + n * 8 + 2 * CAM_HIST_BINS as u64 * 4 + 48;
+        *g = Some(CameraSized { size, columns, binds, bytes });
+        grid_view
+    }
+
+    /// The meter's passes over post source `src` (before the post pass reads the meter).
+    fn encode(&self, enc: &mut wgpu::CommandEncoder, src: usize) {
+        if !self.on.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        let g = self.sized.lock().unwrap();
+        let Some(t) = g.as_ref() else { return };
+        enc.clear_buffer(&self.hist, 0, None);
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("cine-camera"), timestamp_writes: None });
+        pass.set_bind_group(0, &t.binds[src.min(2)], &[]);
+        pass.set_pipeline(&self.build);
+        pass.dispatch_workgroups(t.columns.0, t.columns.1, 1);
+        pass.set_pipeline(&self.adapt);
+        pass.dispatch_workgroups(1, 1, 1);
+        pass.set_pipeline(&self.blur);
+        pass.dispatch_workgroups(t.columns.0.div_ceil(4), t.columns.1.div_ceil(4), CAM_GRID_Z.div_ceil(4));
+        let _ = t.size;
+    }
 }
 
 impl CineGpu {
@@ -113,11 +748,18 @@ impl CineGpu {
         let samp = wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering);
         let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: fs, ty, count: None };
         let d2 = wgpu::TextureViewDimension::D2;
+        let camera_in = crate::look::shader_features().camera;
+        let mut entries = vec![e(0, ubuf), e(1, tex(d2)), e(2, ubuf), e(3, tex(d2)), e(4, samp), e(5, ubuf), e(6, tex(wgpu::TextureViewDimension::D3)), e(7, samp), e(8, ubuf)];
+        if camera_in {
+            // (`--cine-camera`) the meter's state and the local exposure's grid.
+            entries.push(e(9, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }));
+            entries.push(e(10, tex(wgpu::TextureViewDimension::D3)));
+        }
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("cine-bgl"),
             // as the photo pass's (the look, the frame, the sky, the bloom, a linear
             // sampler, the photo uniform), then the table, its sampler, the pass's uniform.
-            entries: &[e(0, ubuf), e(1, tex(d2)), e(2, ubuf), e(3, tex(d2)), e(4, samp), e(5, ubuf), e(6, tex(wgpu::TextureViewDimension::D3)), e(7, samp), e(8, ubuf)],
+            entries: &entries,
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("cine-layout"), bind_group_layouts: &[Some(&bgl)], immediate_size: 0 });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -158,17 +800,22 @@ impl CineGpu {
             ..Default::default()
         });
         let keys = grade::GRADE_KEYS.iter().map(grade::bake_lut).collect();
-        Self { pipeline, bgl, uniform, photo, lut, lut_view, sampler, keys, last: Mutex::new(None), uploads: Default::default() }
+        // (`--cine-camera`) the camera's keys for its curve.
+        let cam_keys = if camera_in { CAM_GRADE_KEYS.iter().map(cam_bake_lut).collect() } else { Vec::new() };
+        let camera = camera_in.then(|| CameraGpu::new(device));
+        Self { pipeline, bgl, uniform, photo, lut, lut_view, sampler, keys, cam_keys, last: Mutex::new(None), uploads: Default::default(), camera }
     }
 
     /// One bind group per post source (the HDR scene, the resolved history 0, 1).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn bind_groups(&self, device: &wgpu::Device, look: &wgpu::Buffer, srcs: [&wgpu::TextureView; 3], sky: &wgpu::Buffer, bloom: &wgpu::TextureView, sampler: &wgpu::Sampler) -> [wgpu::BindGroup; 3] {
+        // (`--cine-camera`) the meter's grid for this frame size and its passes' bind groups.
+        let grid = self.camera.as_ref().map(|c| {
+            let t = srcs[0].texture();
+            c.ensure(device, (t.width(), t.height()), look, srcs, sky, sampler, &self.uniform)
+        });
         srcs.map(|src| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("cine-bg"),
-                layout: &self.bgl,
-                entries: &[
+            let mut entries = vec![
                     wgpu::BindGroupEntry { binding: 0, resource: look.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(src) },
                     wgpu::BindGroupEntry { binding: 2, resource: sky.as_entire_binding() },
@@ -178,9 +825,24 @@ impl CineGpu {
                     wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&self.lut_view) },
                     wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::Sampler(&self.sampler) },
                     wgpu::BindGroupEntry { binding: 8, resource: self.uniform.as_entire_binding() },
-                ],
+            ];
+            if let (Some(c), Some(grid)) = (&self.camera, &grid) {
+                entries.push(wgpu::BindGroupEntry { binding: 9, resource: c.state.as_entire_binding() });
+                entries.push(wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(grid) });
+            }
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("cine-bg"),
+                layout: &self.bgl,
+                entries: &entries,
             })
         })
+    }
+
+    /// (`--cine-camera`) the meter's passes over post source `src`, before the post pass.
+    pub(crate) fn encode_camera(&self, enc: &mut wgpu::CommandEncoder, src: usize) {
+        if let Some(c) = &self.camera {
+            c.encode(enc, src);
+        }
     }
 
     /// The frame's uniforms (the photo finish's when it is on, else none) and
@@ -188,15 +850,25 @@ impl CineGpu {
     /// the table is baked and uploaded only when the keys' weights have moved
     /// by more than `grade::LUT_STEP` since it was last (always the first time).
     /// Returns whether it was.
-    pub(crate) fn write(&self, queue: &wgpu::Queue, photo: Option<&crate::photo::PhotoUniform>, sun_alt_deg: f64, hour: f64, overcast: f64) -> bool {
-        queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&CineUniform::new()));
+    /// `camera`: the camera model draws this frame (`--cine-camera`; sky.rs `camera_on`):
+    /// its uniform terms, its meter's passes and its grade's keys.
+    pub(crate) fn write(&self, queue: &wgpu::Queue, photo: Option<&crate::photo::PhotoUniform>, sun_alt_deg: f64, hour: f64, overcast: f64, camera: bool) -> bool {
+        let camera = camera && self.camera.is_some();
+        let u = if camera { CineUniform::with_camera(sun_alt_deg) } else { CineUniform::new() };
+        queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
         queue.write_buffer(&self.photo, 0, bytemuck::bytes_of(&photo.copied().unwrap_or_default()));
+        if let Some(c) = &self.camera {
+            // a change of model bakes the table again (its keys are the model's).
+            if c.on.swap(camera, std::sync::atomic::Ordering::Relaxed) != camera {
+                *self.last.lock().unwrap() = None;
+            }
+        }
         let w = grade::key_weights(sun_alt_deg, hour, overcast);
         let mut last = self.last.lock().unwrap();
         if !grade::lut_needs_update(last.as_ref(), &w) {
             return false;
         }
-        let lut = grade::blend_luts(&self.keys, &w);
+        let lut = grade::blend_luts(if camera { &self.cam_keys } else { &self.keys }, &w);
         let n = grade::LUT_SIZE as u32;
         queue.write_texture(
             wgpu::TexelCopyTextureInfo { texture: &self.lut, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
@@ -219,10 +891,11 @@ impl CineGpu {
         self.uploads.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Bytes of its table and uniforms.
+    /// Bytes of its table and uniforms (and the camera model's meter and grid).
     pub fn bytes(&self) -> u64 {
         let n = grade::LUT_SIZE as u64;
-        n * n * n * 8 + self.uniform.size() + self.photo.size()
+        let cam = self.camera.as_ref().and_then(|c| c.sized.lock().unwrap().as_ref().map(|t| t.bytes)).unwrap_or(0);
+        n * n * n * 8 + self.uniform.size() + self.photo.size() + cam
     }
 }
 
@@ -261,6 +934,128 @@ mod tests {
         let g = crate::sky::glare_params(1080);
         assert!(g[3] < 0.0 && (g[1] as f64 - grade::CINE_GLARE_LENGTH_PX).abs() < 1e-4);
         assert!((crate::sky::glare_params(540)[1] - g[1] * 0.5).abs() < 1e-4);
+    }
+
+    /// (`--cine-camera`) the post pass with the model compiled in, the meter's
+    /// passes and the bloom with and without it validate; the uniform and the
+    /// state match their WGSL structs.
+    #[test]
+    fn the_camera_models_shaders_validate() {
+        let validate = |name: &str, src: &str| {
+            let module = naga::front::wgsl::parse_str(src).unwrap_or_else(|e| panic!("{name}: {}", e.emit_to_string(src)));
+            naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            module
+        };
+        let on = crate::look::ShaderFeatures { cinematic: true, camera: true, ..crate::look::ShaderFeatures::NONE };
+        crate::look::with_shader_features(on, || {
+            let m = validate("look_cine.wgsl + camera", &shader_source());
+            let (_, ty) = m.types.iter().find(|(_, t)| t.name.as_deref() == Some("Cine")).expect("Cine struct");
+            let naga::TypeInner::Struct { span, .. } = &ty.inner else { panic!("Cine is a struct") };
+            assert_eq!(*span as usize, std::mem::size_of::<CineUniform>());
+            let (_, ty) = m.types.iter().find(|(_, t)| t.name.as_deref() == Some("CamState")).expect("CamState struct");
+            let naga::TypeInner::Struct { span, .. } = &ty.inner else { panic!("CamState is a struct") };
+            assert_eq!(*span, 48, "the state buffer's size");
+            let c = validate("cine_camera.wgsl", &camera_compute_source());
+            for entry in ["cam_build", "cam_adapt", "cam_blur"] {
+                assert!(c.entry_points.iter().any(|e| e.name == entry), "{entry}");
+            }
+            // the resolve leaves the distances in its alpha for the depth of field.
+            let r = format!("{}\n{}", crate::look::look_common_source(), include_str!("sky_resolve.wgsl"));
+            assert!(r.contains("const SF_CAMERA: bool = true;"));
+            validate("sky_resolve.wgsl + camera", &r);
+        });
+        for camera in [false, true] {
+            let src = format!("{}\n{}\n{}", include_str!("sky_common.wgsl"), bloom_wgsl(camera), include_str!("sky_bloom.wgsl"));
+            validate("sky_bloom.wgsl", &src);
+        }
+        // compiled out: the stub, and none of the model's bindings.
+        crate::look::with_shader_features(crate::look::ShaderFeatures { cinematic: true, ..crate::look::ShaderFeatures::NONE }, || {
+            let src = shader_source();
+            assert!(!src.contains("cam_state") && !src.contains("cam_grid"));
+            validate("look_cine.wgsl", &src);
+        });
+    }
+
+    /// (`--cine-camera`) the bloom's levels sum to 1 and lean to the inner levels; the
+    /// parameters move from the night's to the day's over the sun's altitude.
+    #[test]
+    fn the_camera_models_terms_hold() {
+        let w = bloom_level_weights();
+        assert!((w.iter().sum::<f32>() - 1.0).abs() < 1e-5);
+        assert!(w.windows(2).all(|p| p[0] >= p[1]));
+        let (n, d) = (camera_params(-20.0), camera_params(30.0));
+        assert!(n.shadow_contrast > d.shadow_contrast && n.max_lift_ev < d.max_lift_ev && n.window[0] > d.window[0]);
+        assert!(n.compensation_ev < d.compensation_ev);
+        // the night keeps more of its shadows' depth, gives its lamps more room and raises less detail.
+        assert!(n.shadow_room_ev > d.shadow_room_ev && n.highlight_room_ev > d.highlight_room_ev && n.detail < d.detail);
+        for p in [n, d] {
+            assert!(p.shadow_contrast > 0.5 && p.shadow_contrast <= 1.0 && p.highlight_contrast > 0.5 && p.highlight_contrast <= 1.0);
+            assert!(p.detail >= 1.0 && p.detail < 1.5);
+        }
+        assert_eq!(camera_params(f64::NAN), d);
+        let u = CineUniform::with_camera(30.0);
+        assert_eq!(u.cam0[3], 1.0);
+        assert_eq!(u.cam3[2], d.detail as f32);
+        assert_eq!(u.cam2[3], CAM_LATERAL_CA as f32);
+        assert!(CAM_RANGE_SHARE[0] < 0.1 && CAM_RANGE_SHARE[1] > 0.9 && CAM_TOP_SHARE > CAM_RANGE_SHARE[1]);
+        assert_eq!(CineUniform::new().cam0[3], 0.0);
+        // the night pushes its highlights and shows more grain; the day only compresses
+        // them over a knee, and cuts a sunlit frame little.
+        assert!(n.highlight_expand > 1.0 && d.highlight_expand == 1.0);
+        assert!(d.knee_ev > n.knee_ev && d.knee_ev < d.highlight_room_ev && n.top_ev > n.highlight_room_ev);
+        assert!(n.grain > d.grain && n.max_cut_ev > d.max_cut_ev);
+        // the lens opens up at night (a shallower focus), stops down by day.
+        assert!(n.f_number < d.f_number && n.f_number >= 1.4 && d.f_number <= 8.0);
+        assert_eq!(u.cam4[3], d.f_number as f32);
+        assert_eq!(u.cam3[3], d.knee_ev as f32);
+        assert_eq!(u.cam4[2], CAM_GLARE_VEIL as f32);
+    }
+
+    /// (`--cine-camera`) the camera's response passes through middle grey with the
+    /// mid-tones' contrast, rises everywhere, and rolls the shadows off slowly
+    /// (a long toe, not a crush): 6 EV under grey lands about where 4.1 EV under
+    /// would at the mid-tones' contrast (sRGB 6, not 0).
+    #[test]
+    fn the_camera_models_toe_is_long() {
+        assert!(tone_log(0.0).abs() < 1e-9);
+        let slope = |u: f64| (tone_log(u + 1e-4) - tone_log(u - 1e-4)) / 2e-4;
+        assert!((slope(0.0) - CAM_CONTRAST).abs() < 0.01, "{}", slope(0.0));
+        assert!((slope(-2.0) - CAM_CONTRAST).abs() < 0.1, "{}", slope(-2.0));
+        assert!((slope(4.0) - CAM_CONTRAST).abs() < 0.01);
+        assert!((slope(-9.0) - CAM_TOE[0]).abs() < 0.02);
+        let mut last = f64::NEG_INFINITY;
+        for i in -120..80 {
+            let v = tone_log(i as f64 * 0.1);
+            assert!(v > last);
+            last = v;
+        }
+        assert!(tone_log(-6.0) > -6.0 && tone_log(-6.0) < -4.0, "{}", tone_log(-6.0));
+        assert!(tone_log(-1.0) < -1.0);
+    }
+
+    /// (`--cine-camera`) the camera's grade leaves the toe to the curve (a dark
+    /// grey is not crushed by the key's S-curve), keeps black and white, and keeps
+    /// the golden hour's warm highlight balance off a blue sky but not off a sunlit wall.
+    #[test]
+    fn the_camera_grade_spares_the_toe_and_the_sky() {
+        let night = &CAM_GRADE_KEYS[0];
+        let dark = [0.05, 0.05, 0.05];
+        let g = cam_grade(dark, night);
+        let y = 0.2126 * g[0] + 0.7152 * g[1] + 0.0722 * g[2];
+        assert!(y > 0.044, "{g:?}");
+        let crushed = grade::grade(dark, night);
+        assert!(y > 0.2126 * crushed[0] + 0.7152 * crushed[1] + 0.0722 * crushed[2]);
+        for k in &CAM_GRADE_KEYS {
+            assert!(cam_grade([0.0; 3], k).iter().all(|v| v.abs() < 1e-9));
+        }
+        let pm = &CAM_GRADE_KEYS[3];
+        let sky = [0.62, 0.72, 0.86];
+        let wall = [0.80, 0.70, 0.58];
+        assert!(sky_share(sky) > 0.9 && sky_share(wall) == 0.0);
+        let gs = cam_grade(sky, pm);
+        let warm = grade::grade(sky, &grade::GradeKey { contrast: 1.0, ..*pm });
+        assert!(gs[2] - gs[0] > warm[2] - warm[0], "{gs:?} {warm:?}");
+        assert_eq!(cam_bake_lut(pm).len(), grade::LUT_SIZE.pow(3));
     }
 
     #[test]
