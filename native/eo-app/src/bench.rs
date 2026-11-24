@@ -2090,6 +2090,11 @@ fn clear_path_frame(seg: &Segment, i: usize, total: usize) -> (usize, Option<Str
     }
 }
 
+/// The frame phase every capture's frames start at (`capture`): a multiple of
+/// the jitter's 8 phases and the grain's 64, far from 0 (the lit fog's history
+/// check sees no false continuity with the frame before the reset).
+const CAPTURE_FRAME_PHASE: u32 = 1 << 20;
+
 fn capture(
     ctx: &GpuContext,
     renderer: &Renderer,
@@ -2133,6 +2138,12 @@ fn capture(
         renderer.encode(&mut enc, attach, resolve, depth, None);
         eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
     }
+    // The frames below start at one fixed frame phase (TAA jitter, the
+    // frame-seeded jitter of the reflections, lit fog and volume, the grain):
+    // the settle before them renders as many frames as its wall-clock bound
+    // allowed, and a phase carried from it made two runs of one card differ
+    // by a sub-pixel shift and their noise (the night cards' run-to-run floor).
+    renderer.look.reset_frame_phase(CAPTURE_FRAME_PHASE);
     for _ in 0..20 {
         renderer.update(&ctx.queue, cam);
         let mut enc = ctx.device.create_command_encoder(&Default::default());
