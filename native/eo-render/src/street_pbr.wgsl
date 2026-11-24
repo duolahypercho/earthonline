@@ -1275,11 +1275,13 @@ var<private> sw_wheel_lean: vec2<f32> = vec2<f32>(0.0);
 fn sw_note_wheel(w: f32, along: f32, across: f32, hw: f32, seed: f32, px: vec2<f32>) {
     sw_wheel = max(sw_wheel, w);
     // the floor a few millimetres down where the base gave way, in reaches of a few metres
-    // with sound road between (so the wet road holds water in pools along the path, not a
-    // continuous strip); its sides lean in
+    // with sound road between; its sides lean in
     let u = clamp(across / max(hw, 1e-3), -1.0, 1.0);
     let depth = SP_RUT_M * (0.2 + 1.5 * smoothstep(0.3, 0.75, st_noise(vec2<f32>(along / 5.5, seed * 5.0 + 2.3))));
-    sw_wheel_dip = max(sw_wheel_dip, depth * (1.0 - u * u) * w);
+    // the water it holds: the deepest hollows of the rut's floor only (birdbaths a metre or
+    // two long), so a wet path holds pools along it, not one dark strip of mirror
+    let hollow = smoothstep(0.5, 0.8, st_noise(vec2<f32>(along / 1.9, seed * 3.0 + 7.7)));
+    sw_wheel_dip = max(sw_wheel_dip, depth * (1.0 - u * u) * w * hollow);
     // h = -depth (1 - u^2): dh/dacross = 2 depth u / hw, the normal leans against it
     sw_wheel_lean = sw_wheel_lean - px * (2.0 * depth * u / max(hw, 1e-3) * w);
 }
