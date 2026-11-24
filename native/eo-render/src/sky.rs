@@ -57,6 +57,20 @@ pub const SKY_DAMP_BIT: u32 = 1 << 18;
 pub const CLUSTER_FAR_M: f32 = 300.0;
 pub const CLUSTER_NEAR_M: f32 = 0.5;
 pub const BLOOM_LEVELS: usize = 5;
+/// (`--cine-camera`) the bloom's levels under the camera model: two more, down
+/// to 1/128 of the frame, for the lens's long tail.
+pub const CAM_BLOOM_LEVELS: usize = 7;
+
+/// Whether the camera model draws with these options (its code compiled in, the look on).
+pub(crate) fn camera_on(o: &SkyOptions) -> bool {
+    o.cine_camera && o.cinematic && crate::look::shader_features().camera
+}
+
+/// The bloom's level count: the camera model's when its code is compiled in
+/// (chosen at start, as the pipelines are), else `BLOOM_LEVELS`.
+fn bloom_level_count() -> usize {
+    if crate::look::shader_features().camera { CAM_BLOOM_LEVELS } else { BLOOM_LEVELS }
+}
 pub const NOISE_RES: u32 = 64;
 pub const NOISE_MIPS: u32 = 4;
 const SHEET_RES: u32 = eo_sky::clouds::SHEET_RES as u32;
@@ -119,6 +133,14 @@ pub struct SkyOptions {
     /// Set with `LookOptions::look` (eo-app quality.rs); its shader code sits
     /// behind `SF_CINEMATIC`.
     pub cinematic: bool,
+    /// (`--cine-camera`, camera track; cine_post.rs, cine_camera.wgsl) under the
+    /// cinematic look, the camera model: the frame metered from its own
+    /// histogram with local exposure, a hue-preserving filmic curve, a
+    /// threshold-free long-tailed bloom (`CAM_BLOOM_LEVELS` levels) with no lamp
+    /// starbursts, the sun's glare and ghosts, film grain and the optical fall-off.
+    /// False (the default) is the frame as before; its shader code sits behind
+    /// `SF_CAMERA`.
+    pub cine_camera: bool,
 }
 
 impl Default for SkyOptions {
@@ -150,6 +172,7 @@ impl Default for SkyOptions {
             moon_day: eo_sky::moon::DEFAULT_MOON_DAY,
             shop_light: 0,
             cinematic: false,
+            cine_camera: false,
         }
     }
 }
@@ -915,10 +938,11 @@ impl SkyGpu {
             label: Some("sky-bloom-bgl"),
             entries: &[entry(0, cs, ubuf), entry(1, cs, t2(true)), entry(2, cs, t2(true)), entry(3, cs, samp), entry(4, cs, store(wgpu::TextureFormat::Rgba16Float)), entry(5, cs, ubuf)],
         });
-        let bm = module("sky_bloom.wgsl", format!("{sky_only}\n{}", include_str!("sky_bloom.wgsl")));
+        // (`--cine-camera`) the camera model's prefilter compiled in or out (`SF_CAMERA`) and its constants.
+        let bm = module("sky_bloom.wgsl", format!("{sky_only}\n{}\n{}", crate::cine_post::bloom_wgsl(crate::look::shader_features().camera), include_str!("sky_bloom.wgsl")));
         let bl = layout("sky-bloom-layout", &bloom_bgl);
         let bloom_pipes = [compute("bloom_prefilter", &bl, &bm, "bloom_prefilter"), compute("bloom_down", &bl, &bm, "bloom_down"), compute("bloom_up", &bl, &bm, "bloom_up")];
-        let bloom_levels = (0..BLOOM_LEVELS).map(|_| buffer("sky-bloom-level", 16, uni)).collect();
+        let bloom_levels = (0..bloom_level_count()).map(|_| buffer("sky-bloom-level", 16, uni)).collect();
 
         // FX: luminaires and rain.
         let fx_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -1752,7 +1776,19 @@ impl SkyGpu {
             shops: [shop_n as f32, shop_k as f32, f.hour.rem_euclid(24.0) as f32, crate::shop_lights::reach_m(o.shop_light) as f32],
         };
         queue.write_buffer(&self.lt_params, 0, bytemuck::bytes_of(&p));
-        let bw: [[f32; 4]; BLOOM_LEVELS] = [[mw[0], 1.0, 0.0, 0.0], [mw[1], 1.0, 0.0, 0.0], [mw[2], 1.0, 0.0, 0.0], [mw[3], mw[4], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]];
+        let bw: Vec<[f32; 4]> = if bloom_level_count() == CAM_BLOOM_LEVELS && camera_on(&o) {
+            // (`--cine-camera`) the camera's levels (cine_post.rs `bloom_level_weights`, summing to 1:
+            // the prefilter takes the shares), and the exposure the prefilter meters by (level 0's z).
+            let w = crate::cine_post::bloom_level_weights();
+            let n = CAM_BLOOM_LEVELS;
+            (0..n).map(|i| if i + 1 == n { [0.0; 4] } else { [w[i], if i + 2 == n { w[i + 1] } else { 1.0 }, if i == 0 { exposure as f32 } else { 0.0 }, 0.0] }).collect()
+        } else if bloom_level_count() == CAM_BLOOM_LEVELS {
+            // the camera's levels made but the model off: the five levels' weights, the two
+            // widest levels empty (the old prefilter: level 0's z is 0).
+            vec![[mw[0], 1.0, 0.0, 0.0], [mw[1], 1.0, 0.0, 0.0], [mw[2], 1.0, 0.0, 0.0], [mw[3], 1.0, 0.0, 0.0], [mw[4], 1.0, 0.0, 0.0], [0.0; 4], [0.0; 4]]
+        } else {
+            vec![[mw[0], 1.0, 0.0, 0.0], [mw[1], 1.0, 0.0, 0.0], [mw[2], 1.0, 0.0, 0.0], [mw[3], mw[4], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]]
+        };
         for (b, w) in self.bloom_levels.iter().zip(bw.iter()) {
             queue.write_buffer(b, 0, bytemuck::cast_slice(w));
         }
@@ -1899,11 +1935,13 @@ impl SkyGpu {
         let mut mips = vec![];
         let mut ups = vec![];
         let mut bytes = half.0 as u64 * half.1 as u64 * (8 + 4) * 2 + size.0 as u64 * size.1 as u64 * (8 * 2 + 4) + size.0 as u64 * size.1 as u64 * (8 + 4) * 2;
-        for i in 0..BLOOM_LEVELS {
+        // (`--cine-camera`: `CAM_BLOOM_LEVELS`, else `BLOOM_LEVELS`)
+        let levels = bloom_level_count();
+        for i in 0..levels {
             let s = ((size.0 >> (i + 1)).max(1), (size.1 >> (i + 1)).max(1));
             mips.push(tex(d, "sky-bloom-down", s, wgpu::TextureFormat::Rgba16Float, su));
             bytes += s.0 as u64 * s.1 as u64 * 8;
-            if i + 1 < BLOOM_LEVELS {
+            if i + 1 < levels {
                 ups.push(tex(d, "sky-bloom-up", s, wgpu::TextureFormat::Rgba16Float, su));
                 bytes += s.0 as u64 * s.1 as u64 * 8;
             }
@@ -1926,12 +1964,12 @@ impl SkyGpu {
         let mut bloom_bgs: [Vec<wgpu::BindGroup>; 2] = [vec![], vec![]];
         for (p, list) in bloom_bgs.iter_mut().enumerate() {
             list.push(bg(&hist[p], &hist[p], &mips[0], 0));
-            for i in 1..BLOOM_LEVELS {
+            for i in 1..levels {
                 list.push(bg(&mips[i - 1], &mips[i - 1], &mips[i], i));
             }
             // up_3 = m3 w3 + tent(m4) w4; up_i = m_i w_i + tent(up_(i+1)).
-            for i in (0..BLOOM_LEVELS - 1).rev() {
-                let src = if i == BLOOM_LEVELS - 2 { &mips[i + 1] } else { &ups[i + 1] };
+            for i in (0..levels - 1).rev() {
+                let src = if i == levels - 2 { &mips[i + 1] } else { &ups[i + 1] };
                 list.push(bg(src, &mips[i], &ups[i], i));
             }
         }
@@ -2028,7 +2066,8 @@ impl SkyGpu {
                 pass.set_pipeline(&self.glitter_pipe);
                 pass.draw_indirect(&self.counter, 16);
                 // (`--look cinematic`) the brightest lights' glare (the same list; 6 of the 12 vertices).
-                if let (Some(p), true) = (&self.glare_pipe, o.cinematic && o.bloom) {
+                // (`--cine-camera`: none; the camera's bloom and the sun's glare stand in for it)
+                if let (Some(p), true) = (&self.glare_pipe, o.cinematic && o.bloom && !camera_on(&o)) {
                     pass.set_pipeline(p);
                     pass.draw_indirect(&self.counter, 16);
                 }
@@ -2218,18 +2257,19 @@ impl SkyGpu {
             });
             if o.bloom {
                 let bgs = &t.bloom_bgs[parity];
-                let sizes: Vec<(u32, u32)> = (0..BLOOM_LEVELS).map(|i| ((t.size.0 >> (i + 1)).max(1), (t.size.1 >> (i + 1)).max(1))).collect();
+                let levels = t._mips.len(); // (`--cine-camera`: `CAM_BLOOM_LEVELS`)
+                let sizes: Vec<(u32, u32)> = (0..levels).map(|i| ((t.size.0 >> (i + 1)).max(1), (t.size.1 >> (i + 1)).max(1))).collect();
                 pass.set_pipeline(&self.bloom_pipes[0]);
                 pass.set_bind_group(0, &bgs[0], &[]);
                 pass.dispatch_workgroups(sizes[0].0.div_ceil(8), sizes[0].1.div_ceil(8), 1);
                 pass.set_pipeline(&self.bloom_pipes[1]);
-                for i in 1..BLOOM_LEVELS {
+                for i in 1..levels {
                     pass.set_bind_group(0, &bgs[i], &[]);
                     pass.dispatch_workgroups(sizes[i].0.div_ceil(8), sizes[i].1.div_ceil(8), 1);
                 }
                 pass.set_pipeline(&self.bloom_pipes[2]);
-                for (k, i) in (0..BLOOM_LEVELS - 1).rev().enumerate() {
-                    pass.set_bind_group(0, &bgs[BLOOM_LEVELS + k], &[]);
+                for (k, i) in (0..levels - 1).rev().enumerate() {
+                    pass.set_bind_group(0, &bgs[levels + k], &[]);
                     pass.dispatch_workgroups(sizes[i].0.div_ceil(8), sizes[i].1.div_ceil(8), 1);
                 }
             }
