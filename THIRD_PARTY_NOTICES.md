@@ -342,8 +342,9 @@ Source SHA-256 values:
 
 The two rock outcrops, sponges, branching colony, kelp-column arrangement and
 baitfish use mesh generators by Maksymilian Dendura, copyright 2026, licensed
-under MIT. Earth Online bakes these forms into a mesh library and supplies the blade
-surface, colors, animation and habitat placement. The shipped model includes
+under MIT. The source leaf shader supplies the kelp's taper, curl, width, twist,
+edge ruffling and pigment. Earth Online bakes the geometry, adds a midrib and
+adapts the animation and placement to the coastal habitat. The shipped model includes
 [the original license](public/assets/ocean/reef-forms.LICENSE.txt) and a
 [provenance record](public/assets/ocean/reef-forms.provenance.json).
 [Upstream source at the pinned revision](https://github.com/Noniv/abyssal-garden/tree/a596354eff400d458bc2aeb9bdf5e0a9734b2bcf).
