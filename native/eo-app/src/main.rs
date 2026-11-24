@@ -355,8 +355,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-probe" => a.look.facade &= !eo_render::facade::RUN_PROBE, // facade
             "--no-rooms" => a.look.facade &= !eo_render::facade::RUN_ROOMS, // no room behind kit glazing
             "--no-room-frames" | "--no-room-dim" => {} // read by eo_render::rooms::wgsl_constants
-            // the facades track: read by eo_render::facade::{glass_from_args, far_from_args, weather_from_args, canyon_from_args, far_relief_from_args, patina_from_args} (models.rs: the shader features; kit.rs: the weather marks; hlod_district.rs: the roof frames)
-            "--facade-glass" | "--no-facade-glass" | "--far-facades" | "--no-far-facades" | "--facade-weather" | "--no-facade-weather" | "--canyon-glass" | "--no-canyon-glass" | "--far-relief" | "--no-far-relief" | "--facade-patina" | "--no-facade-patina" => {}
+            // the facades track: read by eo_render::facade::{glass_from_args, far_from_args, weather_from_args, canyon_from_args, far_relief_from_args, patina_from_args, window_depth_from_args} (models.rs: the shader features; kit.rs: the weather marks and the panes' depths; hlod_district.rs: the roof frames)
+            "--facade-glass" | "--no-facade-glass" | "--far-facades" | "--no-far-facades" | "--facade-weather" | "--no-facade-weather" | "--canyon-glass" | "--no-canyon-glass" | "--far-relief" | "--no-far-relief" | "--facade-patina" | "--no-facade-patina" | "--window-depth" | "--no-window-depth" => {}
             // near kit buildings as their envelope box ("box"), or the box with the shader-only facade ("shader").
             "--facade-test" => match val()?.as_str() {
                 "box" => eo_render::kit::FACADE_TEST.store(1, std::sync::atomic::Ordering::Relaxed),
