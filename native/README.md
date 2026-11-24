@@ -514,8 +514,8 @@ Run `./target/release/eo-app --play --ocean-reef --dive-detail --dive-site kelp`
 Pacific kelp habitat. The additional rock outcrops, colonies and schooling fish
 use the licensed procedural mesh generators credited in the third-party notices.
 The kelp grows on the modeled hard bottom within the lit coastal depth range.
-These are habitat reconstructions. To rebuild the seven shared meshes from their
-pinned sources, run `node scripts/blender-ocean/cook-reef.mjs` at the repository root.
+These are habitat reconstructions. To rebuild the seven source forms and the
+additional detailed kelp mesh from the pinned sources, run `node scripts/blender-ocean/cook-reef.mjs` at the repository root.
 
 The marine library comes from the original Blender habitat study. Restore the
 locked source with `npm run assets:pull -- ocean/sf-habitats` at the repository
