@@ -413,6 +413,12 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // the cars' reflections of the street's brightest lights at any distance (agents_draw.wgsl `ag_car_far_lights`; off by default).
             "--car-reflections" => a.look.car_reflections = 1,
             "--no-car-reflections" => a.look.car_reflections = 0,
+            // the cars' lamps as a driver works them, their rear lamps lights of the street (agents_draw.wgsl `ag_lamp`, agents_lamps.wgsl; off by default).
+            "--car-lamps" => a.look.car_lamps = 1,
+            "--no-car-lamps" => a.look.car_lamps = 0,
+            // the cars in the wet: the wet street's mirror of the lights behind them cut by their bodies (agents_contact.wgsl `ag_ct_wet`; off by default).
+            "--car-wet" => a.look.car_wet = 1,
+            "--no-car-wet" => a.look.car_wet = 0,
             // the capture cards' streets with their simulated traffic (agents.rs `warm_traffic`; off by default).
             "--car-traffic" => crate::agents::set_warm_traffic(true),
             "--no-car-traffic" => crate::agents::set_warm_traffic(false),
