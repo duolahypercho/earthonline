@@ -3,6 +3,11 @@
   "note": "Binary pipeline sources stored off-repo. Run `npm run assets:pull` to fetch. See Docs/ASSET-STORE.md.",
   "files": [
     {
+      "path": "artifacts/ocean/sf-habitats.blend",
+      "sha256": "5feb77971c0e59a47aa645fb8ec8f4bb3d9863ca5f736f51655275afa6996822",
+      "bytes": 125032999
+    },
+    {
       "path": "artifacts/tripo/street-furniture-v1/bench-lo1k/tripo-out/decimate-14-da649a62/model.glb",
       "sha256": "629889474ddd9de233fab29dc5e6865ce8c73c357a10632d6d33b14dd1d10a80",
       "bytes": 8286092
