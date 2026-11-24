@@ -43,9 +43,11 @@
 // The frame there is multiplied by 1 - (light lost) / (light that reached it),
 // both as the ground's diffuse irradiance: the ambient (sky, hemisphere,
 // environment), the sun's or moon's key at its shadow and clouds, and each
-// lamp at its map's visibility (the maps read at the quad's own point, its
-// lift over the feet: at the feet's height a paving a centimetre or two
-// higher would read as the point's own shadow); under the fog it found.
+// lamp at its map's visibility (the maps read at the ground point lifted as
+// the quad is: at the feet's height a paving a centimetre or two higher would
+// read as the point's own shadow); under the fog it found. Each fragment's
+// ground point is where the view ray through it meets the ground's plane, not
+// the quad's own point over it (`pk_factor`).
 const PK_PARTS: u32 = 13u;
 // the joint posing each capsule (eo-agents people `CAPSULE_JOINTS`): the left
 // and right shoes on the feet, the calves, the thighs, the pelvis, Spine1 (the
@@ -277,9 +279,22 @@ fn pk_lamp(li: SkyLight, g: vec3<f32>, cine: bool) -> PkLamp {
 }
 
 fn pk_factor(in: PkOut) -> f32 {
-    let g = vec3<f32>(in.world.x, in.world.w, in.world.z);
+    // The ground point the fragment shows: the view ray through the quad's
+    // point met with the ground's plane under the person. The quad stands
+    // `PK_LIFT_M` over that plane (to pass the depth test), so its own point
+    // lies nearer the eye than the ground seen through it by the lift times
+    // the distance over the eye's height (18 cm at 10 m for an eye 1.7 m up):
+    // taken there, the line at the soles was drawn that far behind them.
     let up = vec3<f32>(0.0, 1.0, 0.0);
-    let off = in.world.xz - in.body.xz;
+    let eye = frame.cam_pos.xyz;
+    var g = vec3<f32>(in.world.x, in.world.w, in.world.z);
+    let drop = eye.y - in.world.y;
+    if (drop > 1e-3 && eye.y > in.world.w) {
+        g = eye + (in.world.xyz - eye) * ((eye.y - in.world.w) / drop);
+    }
+    // the maps (lamps, the key) read at that point lifted as the quad is
+    let lifted = g + up * PK_LIFT_M;
+    let off = g.xz - in.body.xz;
     let reach = max(abs(off.x), abs(off.y));
     pk_decode(in);
     // the sky's share
@@ -324,7 +339,7 @@ fn pk_factor(in: PkOut) -> f32 {
                         }
                         if (vis < 0.999) {
                             if (mapped) {
-                                e = e * ls_light_visibility(u32(li.pad) - 1u, in.world.xyz, up);
+                                e = e * ls_light_visibility(u32(li.pad) - 1u, lifted, up);
                             }
                             lost = lost + e * (1.0 - vis) * fade;
                         }
@@ -339,7 +354,7 @@ fn pk_factor(in: PkOut) -> f32 {
     }
     var e_key = 0.0;
     if (look.key_dir.y > 0.0) {
-        e_key = lk_luma(look.key.xyz) * look.key_dir.y * lk_shadow(in.world.xyz, up) * sky_cloud_transmittance(g);
+        e_key = lk_luma(look.key.xyz) * look.key_dir.y * lk_shadow(lifted, up) * sky_cloud_transmittance(g);
     }
     let vd = dot(g - look.cam_pos.xyz, look.cam_fwd.xyz);
     let fog = lk_smooth(look.fog.x, look.fog.y, vd);
