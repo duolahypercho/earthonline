@@ -393,6 +393,9 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // the cars' materials and lamps (eo-render agents_draw.wgsl `ag_car_*`; off by default).
             "--car-materials" => a.look.car_materials = 1,
             "--no-car-materials" => a.look.car_materials = 0,
+            // the cars' occlusion of the street round them (eo-render agents_contact.wgsl; off by default).
+            "--car-contact" => a.look.car_contact = 1,
+            "--no-car-contact" => a.look.car_contact = 0,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
