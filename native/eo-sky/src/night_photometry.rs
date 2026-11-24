@@ -12,29 +12,39 @@
 //! unlit ground, and the night solve exposes that unlit ground at a fixed
 //! display level: the city's natural light carries the frame (a frame drawn
 //! with every practical off is nearly as bright as one with them on) and the
-//! lamps throw faint pools. Unlit ground in a lit city at night gets a few
-//! tenths of a lux (`NIGHT_UNLIT_PHYSICAL_LUX`), so the practicals are
+//! lamps throw faint pools. Unlit ground in a lit city at night gets under
+//! a lux (`NIGHT_UNLIT_PHYSICAL_LUX`), so the practicals are
 //! `practical_gain` x brighter against the rig's natural light than drawn.
 //! A light meter on the lit street (ISO 2720 incident metering at the RP-8
-//! street average) then sets the exposure, so the lamp pools, the shop
-//! windows and the signs carry the frame and the unlit city falls toward
-//! black by its own illuminance, not by a display target.
+//! street average) then sets the exposure at the key an eye adapted to that
+//! street sees it at (`adapted_key`), so the lamp pools, the shop windows
+//! and the signs carry the frame and the unlit city falls darker by its own
+//! illuminance, not by a display target.
+//!
+//! The lenses of signals and pedestrian heads are solved in display terms
+//! (eo-render props.rs: x 1 / exposure) and take no gain (r1i1 gave them
+//! one, and every aspect of a signal head read lit).
 
 use crate::frame::{NIGHT_GROUND_FILL, SkyTerms};
 use crate::night;
 use crate::photometry::NIGHT_UNLIT_GROUND_LUX;
 use eo_look::LookFrame;
 
-/// Horizontal illuminance of unlit city ground at full night (lux): the
-/// glow of a Bortle 8-9 city sky (zenith ~17-18 mag/arcsec^2, 0.007-0.017
-/// cd/m^2, ~0.03-0.05 lux on the horizontal: Kyba et al. 2015, Sci. Rep.
-/// 5:8409, worldwide urban sky brightness), the moon when it is up (at most
-/// ~0.27 lux full at the zenith: Kyba et al. 2017, Sci. Rep. 7:2321) and the
-/// spill of the windows, signs and far lamps the renderer does not model,
-/// held under the minimum between the lamps of a lit local road (ANSI/IES
-/// RP-8-18: 4 lux average at 6:1 average to minimum, 0.67 lux). The rig's
-/// unlit fill stands for this at full night under `--night-photometry`.
-pub const NIGHT_UNLIT_PHYSICAL_LUX: f64 = 0.4;
+/// Horizontal illuminance of unlit city ground at full night (lux): what
+/// the renderer does not model lights it. The glow of a Bortle 8-9 city
+/// sky (zenith ~17-18 mag/arcsec^2, 0.007-0.017 cd/m^2, ~0.03-0.05 lux on
+/// the horizontal: Kyba et al. 2015, Sci. Rep. 5:8409), the moon when it is
+/// up (at most ~0.27 lux full at the zenith: Kyba et al. 2017, Sci. Rep.
+/// 7:2321), the spill of the windows, porch lights, signs and far lamps the
+/// clusters do not carry, and the street canyon's inter-reflection of the
+/// lamps' light: the minimum between the poles of a lit street (ANSI/IES
+/// RP-8-18: a local road's 4 lux average at 6:1 average to minimum, 0.67
+/// lux; a collector's 6 lux at 4:1, 1.5 lux), taken at 0.8 lux (r1i1 took
+/// the local road's floor alone, 0.4 lux, and the unlit half of the frame
+/// fell into the display's toe: 50-62 % of the pixels under 16/255 on the
+/// night cards). The rig's unlit fill stands for this at full night under
+/// `--night-photometry`.
+pub const NIGHT_UNLIT_PHYSICAL_LUX: f64 = 0.8;
 
 /// The illuminance the night exposure meters (lux): the average maintained
 /// illuminance of a major road at medium pedestrian conflict (ANSI/IES
@@ -42,16 +52,40 @@ pub const NIGHT_UNLIT_PHYSICAL_LUX: f64 = 0.4;
 /// street a camera is pointed along.
 pub const NIGHT_METER_LUX: f64 = 9.0;
 
-/// The display (sRGB, 0-255) an 18 % card under `NIGHT_METER_LUX` is
-/// exposed to: photographic middle grey (ISO 12232 / ISO 2720: an 18 % card
-/// at L* 50, sRGB 118; `photometry::GREY_CARD_MIDDLE`). An incident meter
-/// on the lit street: what the lamps light reads as lit, and what they do
-/// not light falls by its illuminance ratio to the street.
-pub const NIGHT_METER_DISPLAY_255: f64 = 118.0;
+/// Photographic middle grey: an 18 % card at L* 50, sRGB 118 (ISO 12232,
+/// ISO 2720; `photometry::GREY_CARD_MIDDLE`).
+pub const MIDDLE_GREY: f64 = 0.18;
+pub const MIDDLE_GREY_DISPLAY_255: f64 = 118.0;
+
+/// The key a scene adapted to a log-average luminance `l_cd` (cd/m^2) is
+/// shown at: Krawczyk, Myszkowski and Seidel 2005 ("Lightness perception in
+/// tone reproduction for high dynamic range images", Eurographics; the
+/// automatic key of Reinhard's operator), a = 1.03 - 2 / (2 + log10(L + 1)):
+/// 0.18 near 1.25 cd/m^2, lower as the eye adapts to darker scenes (a lit
+/// street at night reads darker than middle grey, as it is seen), higher in
+/// daylight. Held in [0.05, 0.18] here (a night key never brightens past the
+/// card's middle grey).
+pub fn adapted_key(l_cd: f64) -> f64 {
+    (1.03 - 2.0 / (2.0 + (l_cd.max(0.0) + 1.0).log10())).clamp(0.05, MIDDLE_GREY)
+}
+
+/// The luminance (cd/m^2) of an 18 % card under `NIGHT_METER_LUX` (a
+/// Lambertian card: L = rho E / pi): the lit street the eye adapts to.
+pub fn meter_card_cd() -> f64 {
+    MIDDLE_GREY * NIGHT_METER_LUX / std::f64::consts::PI
+}
+
+/// The exposure scale the meter's key puts on the card against middle grey:
+/// `adapted_key(meter_card_cd())` / 0.18 (0.63: the lit street 0.67 EV under
+/// middle grey; r1i1 exposed it at middle grey and the pools near the
+/// camera flooded the foreground and blew the shop spill to white).
+pub fn meter_key_scale() -> f64 {
+    adapted_key(meter_card_cd()) / MIDDLE_GREY
+}
 
 /// The practicals' gain at full night: the rig's unlit fill in the lamps'
 /// lux (`NIGHT_UNLIT_GROUND_LUX` x `NIGHT_GROUND_FILL`, 1.6 lux) over the
-/// physical unlit ground's (`NIGHT_UNLIT_PHYSICAL_LUX`): 4.
+/// physical unlit ground's (`NIGHT_UNLIT_PHYSICAL_LUX`): 2.
 pub fn full_night_gain() -> f64 {
     NIGHT_UNLIT_GROUND_LUX * NIGHT_GROUND_FILL / NIGHT_UNLIT_PHYSICAL_LUX
 }
@@ -86,14 +120,16 @@ pub fn lamp_units_per_lux(sun_alt_deg: f64) -> f64 {
 }
 
 /// The night exposure from the meter: the exposure in [0.01, 8] that shows
-/// an 18 % card under `NIGHT_METER_LUX` of the lamps at
-/// `NIGHT_METER_DISPLAY_255` through the delivered display (`cinematic`: the
+/// an 18 % card under `NIGHT_METER_LUX` of the lamps at the adapted key
+/// (`meter_key_scale` x middle grey) through the delivered display (`cinematic`: the
 /// cinematic look's display at full night, `night::cinematic_display_grey`;
 /// else the default's, `night::display_grey`), with `units_per_lux` the
 /// lamps' scale.
 pub fn meter_exposure(units_per_lux: f64, cinematic: bool) -> f64 {
-    let radiance = 0.18 * NIGHT_METER_LUX * units_per_lux / std::f64::consts::PI;
-    let target = NIGHT_METER_DISPLAY_255 / 255.0;
+    // the card shown at the adapted key: the exposure that shows the card's radiance over the key's
+    // scale at middle grey shows the card itself at key / 0.18 of middle grey's scene value.
+    let radiance = MIDDLE_GREY * NIGHT_METER_LUX * units_per_lux / std::f64::consts::PI / meter_key_scale();
+    let target = MIDDLE_GREY_DISPLAY_255 / 255.0;
     let (mut lo, mut hi) = (0.01f64, 8.0f64);
     for _ in 0..48 {
         let mid = (lo * hi).sqrt();
@@ -170,11 +206,11 @@ mod tests {
     }
 
     #[test]
-    fn the_gain_is_four_at_night_and_one_by_day() {
-        assert!((full_night_gain() - 4.0).abs() < 1e-12);
+    fn the_gain_is_two_at_night_and_one_by_day() {
+        assert!((full_night_gain() - 2.0).abs() < 1e-12);
         assert_eq!(practical_gain(30.0), 1.0);
         assert_eq!(practical_gain(2.0), 1.0);
-        assert!((practical_gain(-6.0) - 4.0).abs() < 1e-12 && (practical_gain(-40.0) - 4.0).abs() < 1e-12);
+        assert!((practical_gain(-6.0) - 2.0).abs() < 1e-12 && (practical_gain(-40.0) - 2.0).abs() < 1e-12);
         // monotone through dusk
         let mut last = 1.0;
         for i in 0..=80 {
@@ -201,22 +237,28 @@ mod tests {
     }
 
     #[test]
-    fn at_night_the_meter_exposes_the_lit_street_at_middle_grey() {
+    fn at_night_the_meter_exposes_the_lit_street_at_the_adapted_key() {
+        // Krawczyk et al. 2005's key for the card's 0.52 cd/m^2: 0.113, 0.67 EV under middle grey.
+        assert!((meter_card_cd() - 0.5157).abs() < 1e-3);
+        assert!((adapted_key(meter_card_cd()) - 0.1128).abs() < 1e-3, "{}", adapted_key(meter_card_cd()));
+        assert!((adapted_key(1.25) - 0.18).abs() < 2e-3, "middle grey near 1.25 cd/m^2");
+        assert!(adapted_key(0.05) < adapted_key(0.5) && adapted_key(1e4) == MIDDLE_GREY);
         for o in [FrameOptions::default(), CINE] {
             for kind in [crate::Kind::Clear, crate::Kind::Overcast, crate::Kind::Damp] {
                 let (mut f, mut t) = frame_at(22.0, kind, o);
                 let g = apply(&mut f, &mut t, o.cinematic);
-                assert!((g - 4.0).abs() < 1e-9);
+                assert!((g - full_night_gain()).abs() < 1e-9);
                 let u = t.lamp_units_per_lux;
-                let card = 0.18 * NIGHT_METER_LUX * u / std::f64::consts::PI;
+                // the card over the key's scale shows at middle grey (the card itself at the key)
+                let card = 0.18 * NIGHT_METER_LUX * u / std::f64::consts::PI / meter_key_scale();
                 let d = if o.cinematic { night::cinematic_display_grey(card, t.exposure_target) } else { night::display_grey(card, t.exposure_target) } * 255.0;
-                assert!((d - NIGHT_METER_DISPLAY_255).abs() < 0.5, "{kind:?} {}: {d}", o.cinematic);
+                assert!((d - MIDDLE_GREY_DISPLAY_255).abs() < 0.5, "{kind:?} {}: {d}", o.cinematic);
                 // the unlit ground stands for the physical lux against the lamps
                 let unlit = night::ground_fill(&f, night::SIDEWALK_ENV) / u;
-                assert!(unlit < 0.65 && unlit > 0.3, "{kind:?}: unlit {unlit} lux");
-                // a pool's peak is ~75-100 x the unlit ground
+                assert!(unlit < 1.3 && unlit > 0.6, "{kind:?}: unlit {unlit} lux");
+                // a pool's peak is ~25-50 x the unlit ground
                 let ratio = crate::photometry::LAMP_POOL_PEAK_LUX / unlit;
-                assert!(ratio > 45.0 && ratio < 100.0, "{kind:?}: pool / unlit {ratio}");
+                assert!(ratio > 22.0 && ratio < 50.0, "{kind:?}: pool / unlit {ratio}");
             }
         }
     }
@@ -230,8 +272,8 @@ mod tests {
         apply(&mut f, &mut t, true);
         let natural = t.exposure_target / t0.exposure_target;
         let lamps = natural * t.lamp_units_per_lux / t0.lamp_units_per_lux;
-        assert!(natural > 0.45 && natural < 0.75, "natural x{natural}");
-        assert!(lamps > 2.0 && lamps < 3.2, "lamps x{lamps}");
+        assert!(natural > 0.6 && natural < 0.85, "natural x{natural}");
+        assert!(lamps > 1.25 && lamps < 1.7, "lamps x{lamps}");
     }
 
     #[test]
