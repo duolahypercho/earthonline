@@ -167,6 +167,8 @@ pub struct AgentsGpu {
     pipes: AgentPipes,
     /// the velocity pipeline (single-sample renderers) and the model table the light gather reads.
     velocity: Option<wgpu::RenderPipeline>,
+    /// (`--car-contact`) the cars' occlusion of the street round them (agents_contact.rs); None without the switch.
+    contact: Option<crate::agents_contact::Contact>,
     models_buf: wgpu::Buffer,
     shadow: wgpu::RenderPipeline,
     timing: Mutex<Option<(wgpu::QuerySet, u32)>>,
@@ -481,14 +483,17 @@ impl AgentsGpu {
                 wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },                   // facade
             ],
         });
+        // (`--car-contact`) the cars' occlusion of the street, appended only with the switch on.
+        let contact_on = look.options.car_contact > 0;
         let draw_src = format!(
-            "{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}{}",
             // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
             crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
             include_str!("agents_draw.wgsl"),
-            include_str!("sky_velocity.wgsl") // sky
+            include_str!("sky_velocity.wgsl"), // sky
+            if contact_on { concat!("\n", include_str!("agents_contact.wgsl")) } else { "" }
         );
         let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -497,6 +502,7 @@ impl AgentsGpu {
             immediate_size: 0,
         });
         let pipes = AgentPipes { device: d.clone(), module: draw_module.clone(), layout: draw_layout.clone(), sample_count, debug_ids };
+        let contact = contact_on.then(|| crate::agents_contact::Contact::new(d, &draw_module, [&draw_bgl, look.main_bind_group_layout(), &data_bgl]));
         let attrs = AgentPipes::ATTRS;
         let stride = std::mem::size_of::<AgentVertex>() as u64;
         let make = |label: &str, blend: bool| pipes.make(label, if debug_ids { "agent_fs_ids" } else { "agent_fs" }, blend);
@@ -615,6 +621,7 @@ impl AgentsGpu {
             bore_live: AtomicBool::new(false),
             pipes,
             velocity,                // sky
+            contact,
             models_buf: models.clone(), // sky
             shadow,
             timing: Mutex::new(None),
@@ -707,11 +714,12 @@ impl AgentsGpu {
             lamp_misc: [night, self.lamps.2, seconds.rem_euclid(3600.0) as f32, 0.0],
             // before the shadows the cascades, and the camera only
             // without an occlusion pass this frame.
-            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, 0, 0, 0],
+            // y: (`--car-materials`) the cars' materials' level (agents_draw.wgsl `ag_car_on`; 0 as before).
+            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, look.options.car_materials as u32, 0, 0],
             view_proj: vp.to_cols_array_2d(),
         };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
-        let pc = AgParams { misc: [0b0001, 0, 0, 0], ..p }; // after the pyramid, the camera
+        let pc = AgParams { misc: [0b0001, p.misc[1], 0, 0], ..p }; // after the pyramid, the camera
         queue.write_buffer(&self.params_c, 0, bytemuck::bytes_of(&pc));
         let f = AgFrame {
             view_proj: vp.to_cols_array_2d(),
@@ -835,6 +843,22 @@ impl AgentsGpu {
         }
     }
 
+    /// (`--car-contact`) Whether the cars' occlusion of the street will read this depth after the city pass.
+    pub fn contact_reads(&self, depth: &wgpu::TextureView) -> bool {
+        self.contact.is_some() && crate::agents_contact::Contact::reads(depth)
+    }
+
+    /// (`--car-contact`) After the city pass: the street round each car near
+    /// the eye multiplied by what its body leaves of the light (agents_contact.wgsl).
+    /// Nothing without the switch or without agents this frame.
+    pub fn encode_contact(&self, enc: &mut wgpu::CommandEncoder, look: &LookGpu, hdr: &wgpu::TextureView, depth: &wgpu::TextureView) {
+        let Some(c) = &self.contact else { return };
+        if !self.active.load(Ordering::Relaxed) {
+            return;
+        }
+        c.encode(&self.pipes.device, enc, &self.draw_bg, &self.data_bg, look, hdr, depth, self.count());
+    }
+
     /// the agent instances, the model table and how many agents are live (the lights' gather reads them).
     pub fn sky_buffers(&self) -> (&wgpu::Buffer, &wgpu::Buffer, u32) {
         let n = if self.active.load(Ordering::Relaxed) { self.count.load(Ordering::Relaxed) } else { 0 };
@@ -910,5 +934,32 @@ mod tests {
         assert!(src.contains(&format!("const AG_BORE_DEPTH_SHIFT: u32 = {}u;", eo_agents::BORE_DEPTH_SHIFT)), "AG_BORE_DEPTH_SHIFT");
         assert!(src.contains(&format!("const AG_BORE_DEPTH_QUANT: f32 = {:.1};", eo_agents::BORE_DEPTH_QUANT)), "AG_BORE_DEPTH_QUANT");
         assert_eq!(eo_agents::AGENT_IN_BORE & (eo_agents::AGENT_PLAYER | eo_agents::AGENT_BLINK_ON | 0xffff), 0, "a bit of its own");
+    }
+
+    /// (`--car-materials`) agents_draw.wgsl's material roles are eo-agents' (`vehicles::M_ROLE_SHIFT`, `ROLE_*`).
+    #[test]
+    fn the_shaders_car_roles_are_the_cooks() {
+        use eo_agents::vehicles as v;
+        let src = include_str!("agents_draw.wgsl");
+        assert!(src.contains(&format!("const AG_ROLE_SHIFT: u32 = {}u;", v::M_ROLE_SHIFT)), "AG_ROLE_SHIFT");
+        for (name, role) in [
+            ("GLASS", v::ROLE_GLASS),
+            ("GLASS_TINT", v::ROLE_GLASS_TINT),
+            ("TYRE", v::ROLE_TYRE),
+            ("PLATE", v::ROLE_PLATE),
+            ("CHROME", v::ROLE_CHROME),
+            ("LENS", v::ROLE_LENS),
+            ("INTERIOR", v::ROLE_INTERIOR),
+            ("WHEEL", v::ROLE_WHEEL),
+            ("TRIM", v::ROLE_TRIM),
+            ("REFLECTOR", v::ROLE_REFLECTOR),
+            ("EMERGENCY", v::ROLE_EMERGENCY),
+            ("BRAKE", v::ROLE_BRAKE),
+            ("LIVERY", v::ROLE_LIVERY),
+        ] {
+            assert!(src.contains(&format!("const AG_ROLE_{name}: u32 = {role}u;")), "AG_ROLE_{name}");
+        }
+        // the role field sits above every agent and draw.wgsl flag the shaders read.
+        assert_eq!(v::M_ROLE_MASK & (eo_agents::M_RIM | (eo_agents::M_RIM - 1)), 0, "a field of its own");
     }
 }

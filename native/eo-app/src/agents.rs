@@ -28,6 +28,30 @@ const RESTREAM_M: f64 = 32.0;
 const WARMUP_STEPS: usize = 600;
 pub const SEED_INT: u32 = 1;
 
+/// (`--car-traffic`; off by default, the cards as before) The capture cards'
+/// streets as a player arriving there finds them (bench `--light-shots`):
+/// before each card is drawn the simulation is built again round its eye
+/// (`AgentRuntime::warm_traffic`, the game's own start: the network round
+/// the focus, its cars and walkers placed and run `WARMUP_STEPS` fixed
+/// steps), instead of the one built round the first view at start, which
+/// never moves while the cards are drawn and leaves their streets empty.
+static WARM_TRAFFIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// While a warmed card is drawn, simulated agents whose body comes within
+/// this of its eye are not drawn (no bus or walker filling the foreground:
+/// the card's subject stays in view, as a crew holds traffic out of a shot).
+pub const WARM_CLEAR_M: f32 = 8.0;
+/// How long a card waits for its simulation and the feed's first build.
+const WARM_WAIT_S: f64 = 120.0;
+
+/// `--car-traffic` / `--no-car-traffic`.
+pub fn set_warm_traffic(on: bool) {
+    WARM_TRAFFIC.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn warm_traffic_on() -> bool {
+    WARM_TRAFFIC.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct AgentOpts {
     pub on: bool,
@@ -150,7 +174,10 @@ impl AgentRuntime {
         // the Rocketbox people unless `--no-rocketbox` (or no copy at EO_PEOPLE_ROOT): then none.
         let people = if args.rocketbox { eo_agents::library::PeopleSource::from_env() } else { eo_agents::library::PeopleSource::Off };
         // (`--car-detail`) each body's far slot its own simplified body instead of three boxes.
-        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0 };
+        // (`--car-materials`) each vehicle material's role and the plates' own coordinates;
+        // (`--car-contact`) the bodies' occluder boxes, cooked with them (nothing of the
+        // roles draws without `--car-materials`'s shader code).
+        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0, car_materials: args.look.car_materials > 0 || args.look.car_contact > 0 };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-load".into())
@@ -408,6 +435,32 @@ impl AgentRuntime {
         for a in &mut self.extras {
             eo_agents::feed::mark_in_bore(a, self.structures.as_deref());
         }
+    }
+
+    /// (`--car-traffic`, captures) The simulation built again round `eye`
+    /// looking along `forward` (`restart_sim`: deterministic, the same
+    /// population every run) and waited on until the feed has drawn it; the
+    /// simulated agents within `WARM_CLEAR_M` of the eye hidden until
+    /// `hide_near` is cleared. Returns the vehicles and people it drew, or
+    /// None (nothing warmed: no simulation here, or not in time).
+    pub fn warm_traffic(&mut self, ctx: &GpuContext, renderer: &Renderer, world: &World, eye: Vec3, forward: Vec3) -> Option<(usize, usize)> {
+        if self.remote_mode || !self.opts.on {
+            return None;
+        }
+        let focus = Self::focus_of(eye, forward);
+        self.restart_sim(world, focus, self.opts.density);
+        self.hide_near = vec![(eye.to_array(), WARM_CLEAR_M)];
+        let t = Instant::now();
+        while t.elapsed().as_secs_f64() < WARM_WAIT_S {
+            self.pump(ctx, renderer, focus, 0.0);
+            if let (Some(_), Some(last), Some(lib)) = (&self.sim, &self.last, &self.lib) {
+                let people = last.iter().filter(|a| lib.models.get(a.model as usize).is_some_and(|m| m.class == eo_agents::CLASS_PERSON)).count();
+                return Some((last.len() - people, people));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        eprintln!("agents: the warmed traffic did not come in {WARM_WAIT_S:.0} s");
+        None
     }
 
     /// The camera as the simulation's focus: (x, z, view yaw atan2(dx, dz)).

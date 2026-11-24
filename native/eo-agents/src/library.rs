@@ -12,7 +12,7 @@ use crate::catalog::{AgentsJs, read_verified};
 use crate::motion::MotionRoots;
 use crate::people::{Atlas, CookedTier};
 use crate::rocketbox;
-use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, cook_body, far_body};
+use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, contact_shape, contact_words, cook_body_with, far_body};
 use crate::{AgentMaterial, AgentVertex, CLASS_PERSON, CLASS_VEHICLE, CLIPS, GpuMesh, GpuModel, LODS, M_ATLAS, NO_MESH};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -91,6 +91,12 @@ pub struct CookOptions {
     /// three-box stand-in. Off: the box, and the library and its cache key
     /// are as before.
     pub far_body: bool,
+    /// `--car-materials`: each vehicle material's role in its flags, the
+    /// licence plates' own coordinates and the normals' refinement
+    /// (eo-agents `vehicles::cook_body_with`), and each body's occluder boxes
+    /// (`vehicles::contact_shape`, read by `--car-contact`) in its model's
+    /// spare words. Off: the library and its cache key are as before.
+    pub car_materials: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -186,6 +192,11 @@ fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &M
         h.update(FAR_BODY_VERSION.to_le_bytes());
         h.update(FAR_BODY_ERROR_M.to_le_bytes());
         h.update((FAR_BODY_TRIANGLES as u64).to_le_bytes());
+    }
+    // (`--car-materials`) the roles and the plates' coordinates; nothing added without them.
+    if opts.car_materials {
+        h.update(b"car-materials");
+        h.update(crate::vehicles::CAR_MATERIALS_VERSION.to_le_bytes());
     }
     // Which vehicle files this checkout holds (a body left out of it is not drawn).
     for b in js.vehicles.values() {
@@ -311,7 +322,7 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
                 let lamps = &lamps;
                 s.spawn(move || {
                     c.iter()
-                        .map(|(id, k, l)| (id.clone(), *k, read_verified(repo_root, &l.asset()).and_then(|b| cook_body(&b, lamps)).with_context(|| l.url.clone())))
+                        .map(|(id, k, l)| (id.clone(), *k, read_verified(repo_root, &l.asset()).and_then(|b| cook_body_with(&b, lamps, opts.car_materials)).with_context(|| l.url.clone())))
                         .collect::<Vec<_>>()
                 })
             })
@@ -369,10 +380,20 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
             let p = p.unwrap_or([0.0; 3]);
             wheel[w] = [p[0], p[1], p[2], 0.0];
         }
+        // (`--car-materials`) the body's occluder boxes for the ground round it (`--car-contact`), in the spare words.
+        let mut pad = [0u32; 4];
+        if opts.car_materials {
+            if let Some(src) = lods.iter().flatten().next() {
+                let (words, extra) = contact_words(&contact_shape(src));
+                pad = words;
+                wheel[0][3] = extra[0];
+                wheel[1][3] = extra[1];
+            }
+        }
         let c = [(min[0] + max[0]) / 2.0, (min[1] + max[1]) / 2.0, (min[2] + max[2]) / 2.0];
         let r = ((max[0] - min[0]).powi(2) + (max[1] - min[1]).powi(2) + (max[2] - min[2]).powi(2)).sqrt() / 2.0;
         let m = b.lib.models.len() as u32;
-        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, pad: [0; 4] });
+        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, pad });
         b.lib.meta.model_names.push(id.clone());
         b.lib.meta.vehicle_models.insert(id.clone(), m);
     }

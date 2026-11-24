@@ -439,9 +439,15 @@ pub fn run(
             renderer.look.set_sky_options(if legacy { SkyOptions::off() } else { SkyOptions { weather: WeatherMode::Preset(weather), ..base } });
         }
         settle_p(ctx, renderer, world, models, Some(&mut *props), &cam, 600.0)?;
+        // (`--car-traffic`) the card's street as a player arriving there finds it (nothing without it).
+        let warm = crate::agents::warm_traffic_on();
+        let traffic = if warm { agents.warm_traffic(ctx, renderer, world, cam.eye, cam.forward()) } else { None };
         crate::props::sync_parked(ctx, renderer, props, agents, &cam);
         let p = dir.join(format!("capture-light-{label}-{name}.png"));
         capture(ctx, renderer, color, attach, resolve, &targets.depth, &cam, &p)?;
+        if warm {
+            agents.hide_near.clear();
+        }
         let weather_name = match hero {
             _ if legacy => "none (--no-sky)".to_string(),
             Some(h) if !h.rain_falling => format!("{} (wet ground, no rain falling)", h.weather.name()),
@@ -458,6 +464,9 @@ pub fn run(
         }
         if args.look.sky.shop_light > 0 {
             card["shop_lights"] = shop_census_json(ctx, renderer); // (`--shop-light`) only with the option
+        }
+        if warm {
+            card["traffic"] = serde_json::json!(traffic.map(|(v, p)| serde_json::json!({ "vehicles": v, "people": p }))); // (`--car-traffic`) only with the option
         }
         if args.look.lighting.light_shadows > 0 || args.look.lighting.headlight_shadows > 0 {
             card["light_shadows"] = light_shadows_json(ctx, renderer); // (lighting) only with the options

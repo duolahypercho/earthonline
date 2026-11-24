@@ -222,11 +222,27 @@ pub struct LookOptions {
     /// rig's. Needs `ao`. Off: the frame as before (the gather, the history
     /// and the filter are compiled out, `ShaderFeatures::screen_gi`).
     pub screen_gi: bool,
+    /// The cars' materials and lamps (`--car-materials`; agents_draw.wgsl
+    /// `ag_car_*`, eo-agents `CookOptions::car_materials`): 0 off (the frame
+    /// as before), 1 on. Its shader code sits behind `SF_CAR_MATERIALS`
+    /// (`ShaderFeatures::car_materials`); the agents read the level from
+    /// their parameters (agents.rs `AgParams::misc.y`).
+    pub car_materials: u8,
+    /// The cars' occlusion of the street round them (`--car-contact`;
+    /// eo-render agents_contact.rs and .wgsl, a pass of its own after the city
+    /// pass, made only when on): 0 off (no pass, the agents' module as
+    /// before), 1 on.
+    pub car_contact: u8,
+    /// The cars' reflections of the street's brightest lights at any distance
+    /// (`--car-reflections`; agents_draw.wgsl `ag_car_far_lights`, with
+    /// `--car-materials` only): 0 off (the frame as before), 1 on. Its shader
+    /// code sits behind `SF_CAR_REFLECTIONS` (`ShaderFeatures::car_reflections`).
+    pub car_reflections: u8,
 }
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, car_materials: 0, car_contact: 0, car_reflections: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -722,6 +738,12 @@ pub struct ShaderFeatures {
     /// The camera model under the cinematic look (`--cine-camera`; `SF_CAMERA`; cine_post.rs):
     /// its passes are made only with it, and its lines in the post and bloom shaders sit behind it.
     pub camera: bool,
+    /// The cars' materials and lamps (`--car-materials`; `SF_CAR_MATERIALS`,
+    /// agents_draw.wgsl `ag_car_*`): compiled into the agents' pipelines only.
+    pub car_materials: bool,
+    /// The cars' reflections of the street's brightest lights (`--car-reflections`;
+    /// `SF_CAR_REFLECTIONS`, agents_draw.wgsl `ag_car_far_lights`): the agents' pipelines only.
+    pub car_reflections: bool,
 }
 
 impl ShaderFeatures {
@@ -735,6 +757,7 @@ impl ShaderFeatures {
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
         wet_surfaces: true, screen_reflect: true, // the reflect track
         camera: true, // the camera track
+        car_materials: true, car_reflections: true, // the vehicles track
     };
     /// No feature compiled in (the default frame's pipelines).
     pub const NONE: Self = Self {
@@ -744,6 +767,7 @@ impl ShaderFeatures {
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
         wet_surfaces: false, screen_reflect: false, // the reflect track
         camera: false, // the camera track
+        car_materials: false, car_reflections: false, // the vehicles track
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -771,6 +795,8 @@ impl ShaderFeatures {
             wet_surfaces: o.sky.wet_surfaces,
             screen_reflect: o.sky.screen_reflect,
             camera: o.look.is_cinematic() && o.sky.cine_camera,
+            car_materials: o.car_materials > 0,
+            car_reflections: o.car_materials > 0 && o.car_reflections > 0,
         }
     }
 
@@ -832,6 +858,12 @@ impl ShaderFeatures {
             l.sky.screen_reflect = false;
         }
         l.sky.cine_camera &= self.camera;
+        if !self.car_materials {
+            l.car_materials = 0;
+        }
+        if !self.car_reflections {
+            l.car_reflections = 0;
+        }
         l
     }
 
@@ -865,6 +897,9 @@ impl ShaderFeatures {
                 ("SF_SCREEN_REFLECT", self.screen_reflect),
                 // the camera track
                 ("SF_CAMERA", self.camera),
+                // the vehicles track
+                ("SF_CAR_MATERIALS", self.car_materials),
+                ("SF_CAR_REFLECTIONS", self.car_reflections),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
