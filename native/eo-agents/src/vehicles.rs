@@ -418,6 +418,47 @@ pub fn contact_words(s: &ContactShape) -> ([u32; 4], [f32; 2]) {
     ([mm(s.lower_half_w, s.clearance), mm(s.z0, s.z1), mm(s.belt, s.upper_half_w), mm(s.uz0, s.uz1)], [s.top, s.tyre_half_w])
 }
 
+/// (`--car-lamps`) Where a body's rear lamps are: the mean of the vertices of
+/// its tail and brake lamp materials (`M_TAIL`, `M_BRAKE`) behind `mid_z`,
+/// x as the distance from the centre line (the left lamp; the right one
+/// mirrors it), y up, z along, metres in the body frame. `parts` yields each
+/// vertex of the body's full level with its material's flags (a vertex once
+/// per triangle it is in, so a lamp's larger faces weigh more). None for a
+/// body without rear lamps.
+pub fn rear_lamp<'a>(parts: impl Iterator<Item = (&'a AgentVertex, u32)>, mid_z: f32) -> Option<[f32; 3]> {
+    let (mut s, mut n) = ([0f64; 3], 0u32);
+    for (v, flags) in parts {
+        if flags & (M_TAIL | M_BRAKE) != 0 && v.pos[2] < mid_z {
+            s[0] += v.pos[0].abs() as f64;
+            s[1] += v.pos[1] as f64;
+            s[2] += v.pos[2] as f64;
+            n += 1;
+        }
+    }
+    (n > 0).then(|| s.map(|c| (c / n as f64) as f32))
+}
+
+/// The packing of `rear_lamp` in a model's spare words (eo-render
+/// agents_lamps.wgsl `lt_rear_lamp_at`): the lamp's z in wheel 2's w, its x
+/// and y in centimetres as `x * REAR_LAMP_PACK + y` in wheel 3's w (an exact
+/// integer in an f32; 0 there means no lamp).
+pub const REAR_LAMP_PACK: f32 = 512.0;
+
+pub fn rear_lamp_words(p: [f32; 3]) -> [f32; 2] {
+    let x = (p[0] * 100.0).round().clamp(0.0, 511.0);
+    let y = (p[1] * 100.0).round().clamp(1.0, REAR_LAMP_PACK - 1.0);
+    [p[2], x * REAR_LAMP_PACK + y]
+}
+
+/// `rear_lamp_words` read back (as the shader reads them; None for 0).
+pub fn rear_lamp_from_words(w: [f32; 2]) -> Option<[f32; 3]> {
+    if w[1] <= 0.0 {
+        return None;
+    }
+    let xi = (w[1] / REAR_LAMP_PACK).floor();
+    Some([xi / 100.0, (w[1] - xi * REAR_LAMP_PACK) / 100.0, w[0]])
+}
+
 /// A painted box over a body's bounds: the last distance level, and the
 /// stand-in for a body whose GLBs are missing from the checkout.
 pub fn box_body(min: [f32; 3], max: [f32; 3]) -> CookedBody {

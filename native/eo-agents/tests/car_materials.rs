@@ -103,3 +103,41 @@ fn refined_normals_read_back_ten_times_closer() {
         assert!(back.dot(n8) > 0.99999, "{n}: {back} vs {n8}");
     }
 }
+
+/// (`--car-lamps`) Every shipped body with rear lamps has them found on its flank, behind its
+/// rear axle, inside its bounds, at a tail lamp's height; the packing reads back to a centimetre;
+/// a body without them (the cooked box) has none.
+#[test]
+fn rear_lamps_sit_at_the_tail() {
+    let paths = eo_data::DataPaths::discover().expect("repository root");
+    let js = AgentsJs::load().expect("agents JS export");
+    let lamps = LampColours::from_js(&js);
+    let mut found = 0;
+    for (id, b) in &js.vehicles {
+        let Some(l) = b.lods.first() else { continue };
+        let Ok(bytes) = read_verified(&paths.repo_root, &l.asset()) else { continue };
+        let body = cook_body_with(&bytes, &lamps, true).expect("cook");
+        let mid = (body.min[2] + body.max[2]) * 0.5;
+        let idx = body.opaque.iter().chain(body.glass.iter());
+        let parts = idx.map(|&i| {
+            let v = &body.vertices[i as usize];
+            (v, body.materials[(v.tag & 0xffff) as usize].flags)
+        });
+        let Some(p) = v::rear_lamp(parts, mid) else { continue };
+        found += 1;
+        let rear_axle = body.pivots[2].map(|q| q[2]).unwrap_or(mid);
+        assert!(p[0] > 0.2 && p[0] <= body.max[0].abs().max(body.min[0].abs()) + 1e-3, "{id}: across {p:?}");
+        assert!(p[1] > 0.3 && p[1] < body.max[1], "{id}: height {p:?}");
+        assert!(p[2] < rear_axle && p[2] >= body.min[2] - 1e-3, "{id}: along {p:?} (rear axle {rear_axle})");
+        let back = v::rear_lamp_from_words(v::rear_lamp_words(p)).expect("a lamp");
+        assert!((0..3).all(|k| (back[k] - p[k]).abs() <= 0.006), "{id}: {p:?} read back {back:?}");
+    }
+    assert!(found > 0 || js.vehicles.is_empty(), "no shipped body in this checkout has rear lamps");
+    let boxed = v::box_body([-0.9, 0.0, -2.2], [0.9, 1.5, 2.2]);
+    let parts = boxed.opaque.iter().map(|&i| {
+        let v = &boxed.vertices[i as usize];
+        (v, boxed.materials[(v.tag & 0xffff) as usize].flags)
+    });
+    assert_eq!(v::rear_lamp(parts, 0.0), None, "the box has no lamps");
+    assert_eq!(v::rear_lamp_from_words([0.0, 0.0]), None);
+}

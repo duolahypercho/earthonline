@@ -304,6 +304,30 @@ impl Library {
     pub fn triangles(&self, mesh: u32) -> u32 {
         self.meta.mesh_triangles.get(mesh as usize).copied().unwrap_or(0)
     }
+
+    /// (`--car-lamps`) The models with each vehicle's rear lamps
+    /// (`vehicles::rear_lamp` over its full level, opaque and transparent
+    /// parts) in its spare words (`vehicles::rear_lamp_words`: wheel 2's and
+    /// 3's w); every other model, and a body without rear lamps, as loaded.
+    /// Made at load (the library and its cache are unchanged).
+    pub fn models_with_rear_lamps(&self) -> Vec<GpuModel> {
+        let mut out = self.models.clone();
+        for m in out.iter_mut().filter(|m| m.class == crate::CLASS_VEHICLE) {
+            let Some(mesh) = self.meshes.get(m.meshes[0] as usize) else { continue };
+            let range = |first: u32, count: u32| (first as usize..(first + count) as usize).filter_map(|k| self.indices.get(k));
+            let parts = range(mesh.first_index, mesh.index_count).chain(range(mesh.glass_first, mesh.glass_count)).filter_map(|&i| {
+                let v = self.vertices.get((mesh.base_vertex + i as i32) as usize)?;
+                let flags = self.materials.get((v.tag & 0xffff) as usize)?.flags;
+                Some((v, flags))
+            });
+            if let Some(p) = crate::vehicles::rear_lamp(parts, m.center[2]) {
+                let w = crate::vehicles::rear_lamp_words(p);
+                m.wheel[2][3] = w[0];
+                m.wheel[3][3] = w[1];
+            }
+        }
+        out
+    }
 }
 
 /// Cook everything from the verified GLBs (no people).
