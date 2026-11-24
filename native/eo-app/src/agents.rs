@@ -91,6 +91,18 @@ pub static PEOPLE_NEAR: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 /// frame (a body 1.8 m tall is the whole height of a 30 degree frame at 3.4 m).
 pub const PEOPLE_NEAR_CLEAR_M: f32 = 4.0;
 
+/// `--people-windows` (with `--crowd`; main.rs sets it): a window-shopping
+/// stop only in front of a shop's window (eo-sim `RegionConfig::windows`).
+pub static PEOPLE_WINDOWS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `--people-stagger` (with `--crowd` and `--people-groups`; main.rs sets it):
+/// a walking group's line turned from square by its own angle (eo-sim
+/// `RegionConfig::stagger`).
+pub static PEOPLE_STAGGER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `--people-evening` (with `--crowd`; main.rs sets it): the walk-in shops'
+/// walkers by a neighbourhood commercial street's day, which holds into the
+/// evening (eo-sim `shop_footfall`, `CrowdDensity::evening`).
+pub static PEOPLE_EVENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn people_groups() -> bool {
     PEOPLE_GROUPS.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -382,8 +394,10 @@ fn region_config(density: u32, crowd: Option<f64>) -> RegionConfig {
     }
     if let Some(hour) = crowd {
         cfg.hour = hour.rem_euclid(24.0);
-        cfg.crowd = Some(eo_sim::consts::CrowdDensity::standard(n as f64));
+        cfg.crowd = Some(eo_sim::consts::CrowdDensity { evening: PEOPLE_EVENING.load(std::sync::atomic::Ordering::Relaxed), ..eo_sim::consts::CrowdDensity::standard(n as f64) }); // (`--people-evening`)
         cfg.groups = people_groups(); // (`--people-groups`) the groups keep together
+        cfg.windows = PEOPLE_WINDOWS.load(std::sync::atomic::Ordering::Relaxed); // (`--people-windows`) browsing at shop windows only
+        cfg.stagger = PEOPLE_STAGGER.load(std::sync::atomic::Ordering::Relaxed); // (`--people-stagger`) the groups' lines turned
     }
     cfg
 }

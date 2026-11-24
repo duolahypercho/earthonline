@@ -539,6 +539,12 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-people-groups" => agents::PEOPLE_GROUPS.store(false, std::sync::atomic::Ordering::Relaxed),
             "--people-crosswalks" => agents::PEOPLE_CROSSWALKS.store(true, std::sync::atomic::Ordering::Relaxed), // with --crowd: crossings on the drawn zebras (eo-sim `NativeSource::with_zebras`)
             "--no-people-crosswalks" => agents::PEOPLE_CROSSWALKS.store(false, std::sync::atomic::Ordering::Relaxed),
+            "--people-windows" => agents::PEOPLE_WINDOWS.store(true, std::sync::atomic::Ordering::Relaxed), // with --crowd: window-shopping only in front of a shop's window (eo-sim `RegionConfig::windows`)
+            "--no-people-windows" => agents::PEOPLE_WINDOWS.store(false, std::sync::atomic::Ordering::Relaxed),
+            "--people-stagger" => agents::PEOPLE_STAGGER.store(true, std::sync::atomic::Ordering::Relaxed), // with --people-groups: a walking group's line turned by its own angle (eo-sim `RegionConfig::stagger`)
+            "--no-people-stagger" => agents::PEOPLE_STAGGER.store(false, std::sync::atomic::Ordering::Relaxed),
+            "--people-evening" => agents::PEOPLE_EVENING.store(true, std::sync::atomic::Ordering::Relaxed), // with --crowd: the shops' walkers by a commercial street's day, held into the evening (eo-sim `shop_footfall`)
+            "--no-people-evening" => agents::PEOPLE_EVENING.store(false, std::sync::atomic::Ordering::Relaxed),
             "--people-near" => agents::PEOPLE_NEAR.store(true, std::sync::atomic::Ordering::Relaxed), // captures: people hidden only round the lens, not the warmed card's 8 m
             "--no-people-near" => agents::PEOPLE_NEAR.store(false, std::sync::atomic::Ordering::Relaxed),
             "--people-motion" => eo_agents::motion::set_steady_heads(true), // the people's heads held steady, phones at the ear (eo-agents rocketbox.rs `steady_head`)
