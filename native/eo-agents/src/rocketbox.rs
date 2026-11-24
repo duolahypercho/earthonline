@@ -48,6 +48,17 @@ pub const COOK_VERSION: u32 = 1;
 pub const ATLAS_RES: u32 = 1024;
 /// Mip levels kept (1024 .. 4 px: the BC blocks stop there).
 pub const ATLAS_LEVELS: u32 = 9;
+/// The roughness the cook writes per material class (the ORM atlas's green):
+/// the head's skin, the body's skin texels, hair and eyelashes, cloth (and
+/// the body's other texels), gear, glasses. eo-render's people shading
+/// (`--people-shading`, agents_draw.wgsl `pp_class`) reads the class back
+/// from these, so a change here is a change there (its test holds them).
+pub const ROUGH_HEAD: f32 = 0.5;
+pub const ROUGH_SKIN: f32 = 0.55;
+pub const ROUGH_HAIR: f32 = 0.45;
+pub const ROUGH_CLOTH: f32 = 0.85;
+pub const ROUGH_GEAR: f32 = 0.6;
+pub const ROUGH_GLASS: f32 = 0.15;
 /// The credit line the licence asks to travel with the avatars.
 pub const CREDIT: &str = "Microsoft Rocketbox Avatar Library (https://github.com/microsoft/Microsoft-Rocketbox), Copyright (c) 2020 Microsoft, MIT License.";
 
@@ -1141,16 +1152,16 @@ fn build_planes(g: &Glb, regions: &HashMap<String, Region>) -> Result<Planes> {
                 // cloth 0.85, glasses 0.15, gear 0.6; metalness 0 throughout.
                 let srgb = [to_srgb8(c[0]) as f32 / 255.0, to_srgb8(c[1]) as f32 / 255.0, to_srgb8(c[2]) as f32 / 255.0];
                 let rough = match r.class {
-                    Class::Head => 0.5,
-                    Class::Hair => 0.45,
-                    Class::Glass => 0.15,
-                    Class::Gear => 0.6,
-                    Class::Cloth => 0.85,
+                    Class::Head => ROUGH_HEAD,
+                    Class::Hair => ROUGH_HAIR,
+                    Class::Glass => ROUGH_GLASS,
+                    Class::Gear => ROUGH_GEAR,
+                    Class::Cloth => ROUGH_CLOTH,
                     Class::Body => {
                         if skin_like(srgb[0], srgb[1], srgb[2]) {
-                            0.55
+                            ROUGH_SKIN
                         } else {
-                            0.85
+                            ROUGH_CLOTH
                         }
                     }
                 };

@@ -419,6 +419,9 @@ struct FeedMail {
     build_ms: f64,
     moved: usize,
     shutdown: bool,
+    /// frames posted, and the post number of the frame the newest output was built from.
+    posted: u64,
+    built: u64,
 }
 
 impl FeedThread {
@@ -430,7 +433,7 @@ impl FeedThread {
             .spawn(move || {
                 let mut buf: Vec<GpuAgent> = vec![];
                 loop {
-                    let frame = {
+                    let (frame, seq) = {
                         let mut m = s.0.lock().unwrap();
                         while m.input.is_none() && !m.shutdown {
                             m = s.1.wait(m).unwrap();
@@ -438,7 +441,7 @@ impl FeedThread {
                         if m.shutdown {
                             return;
                         }
-                        m.input.take().unwrap()
+                        (m.input.take().unwrap(), m.posted)
                     };
                     buf.clear();
                     feeder.build(&frame, &mut buf);
@@ -446,22 +449,33 @@ impl FeedThread {
                     m.output = Some(Arc::new(buf.clone()));
                     m.build_ms = feeder.last_ms;
                     m.moved = feeder.moved_to_footway;
+                    m.built = seq;
                 }
             })
             .expect("spawn agent feed thread");
         Self { shared, thread: Some(thread) }
     }
 
-    pub fn post(&self, frame: Frame) {
+    /// Hand over a frame; returns its post number (`take_seq`).
+    pub fn post(&self, frame: Frame) -> u64 {
         let mut m = self.shared.0.lock().unwrap();
         m.input = Some(frame);
+        m.posted += 1;
         self.shared.1.notify_one();
+        m.posted
     }
 
     /// The newest instances, if any arrived since the last take; and the feed's last build time.
     pub fn take(&self) -> (Option<Arc<Vec<GpuAgent>>>, f64) {
+        let (o, ms) = self.take_seq();
+        (o.map(|(o, _)| o), ms)
+    }
+
+    /// `take`, with the post number of the frame the instances were built from.
+    pub fn take_seq(&self) -> (Option<(Arc<Vec<GpuAgent>>, u64)>, f64) {
         let mut m = self.shared.0.lock().unwrap();
-        (m.output.take(), m.build_ms)
+        let built = m.built;
+        (m.output.take().map(|o| (o, built)), m.build_ms)
     }
 
     /// Walkers the last build moved off a drawn carriageway onto its footway.
