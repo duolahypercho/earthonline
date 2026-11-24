@@ -707,11 +707,12 @@ impl AgentsGpu {
             lamp_misc: [night, self.lamps.2, seconds.rem_euclid(3600.0) as f32, 0.0],
             // before the shadows the cascades, and the camera only
             // without an occlusion pass this frame.
-            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, 0, 0, 0],
+            // y: (`--car-materials`) the cars' materials' level (agents_draw.wgsl `ag_car_on`; 0 as before).
+            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, look.options.car_materials as u32, 0, 0],
             view_proj: vp.to_cols_array_2d(),
         };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
-        let pc = AgParams { misc: [0b0001, 0, 0, 0], ..p }; // after the pyramid, the camera
+        let pc = AgParams { misc: [0b0001, p.misc[1], 0, 0], ..p }; // after the pyramid, the camera
         queue.write_buffer(&self.params_c, 0, bytemuck::bytes_of(&pc));
         let f = AgFrame {
             view_proj: vp.to_cols_array_2d(),
@@ -910,5 +911,32 @@ mod tests {
         assert!(src.contains(&format!("const AG_BORE_DEPTH_SHIFT: u32 = {}u;", eo_agents::BORE_DEPTH_SHIFT)), "AG_BORE_DEPTH_SHIFT");
         assert!(src.contains(&format!("const AG_BORE_DEPTH_QUANT: f32 = {:.1};", eo_agents::BORE_DEPTH_QUANT)), "AG_BORE_DEPTH_QUANT");
         assert_eq!(eo_agents::AGENT_IN_BORE & (eo_agents::AGENT_PLAYER | eo_agents::AGENT_BLINK_ON | 0xffff), 0, "a bit of its own");
+    }
+
+    /// (`--car-materials`) agents_draw.wgsl's material roles are eo-agents' (`vehicles::M_ROLE_SHIFT`, `ROLE_*`).
+    #[test]
+    fn the_shaders_car_roles_are_the_cooks() {
+        use eo_agents::vehicles as v;
+        let src = include_str!("agents_draw.wgsl");
+        assert!(src.contains(&format!("const AG_ROLE_SHIFT: u32 = {}u;", v::M_ROLE_SHIFT)), "AG_ROLE_SHIFT");
+        for (name, role) in [
+            ("GLASS", v::ROLE_GLASS),
+            ("GLASS_TINT", v::ROLE_GLASS_TINT),
+            ("TYRE", v::ROLE_TYRE),
+            ("PLATE", v::ROLE_PLATE),
+            ("CHROME", v::ROLE_CHROME),
+            ("LENS", v::ROLE_LENS),
+            ("INTERIOR", v::ROLE_INTERIOR),
+            ("WHEEL", v::ROLE_WHEEL),
+            ("TRIM", v::ROLE_TRIM),
+            ("REFLECTOR", v::ROLE_REFLECTOR),
+            ("EMERGENCY", v::ROLE_EMERGENCY),
+            ("BRAKE", v::ROLE_BRAKE),
+            ("LIVERY", v::ROLE_LIVERY),
+        ] {
+            assert!(src.contains(&format!("const AG_ROLE_{name}: u32 = {role}u;")), "AG_ROLE_{name}");
+        }
+        // the role field sits above every agent and draw.wgsl flag the shaders read.
+        assert_eq!(v::M_ROLE_MASK & (eo_agents::M_RIM | (eo_agents::M_RIM - 1)), 0, "a field of its own");
     }
 }

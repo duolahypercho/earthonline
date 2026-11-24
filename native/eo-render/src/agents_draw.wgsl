@@ -190,8 +190,8 @@ fn ag_surface(in: AgOut, bore: bool) -> AgSurf {
         }
     }
     let lamp = m.flags & (AG_M_TAIL | AG_M_BRAKE | AG_M_INDICATOR | AG_M_HEAD | AG_M_DRL | AG_M_REVERSE);
-    if (lamp == 0u && wx_level() != 0u) {
-        ag_weather(&s, in.local, a, wx_fw(dpx, dpy)); // weathering (`--grime`): a vehicle's body, wheels and trim
+    if (lamp == 0u && wx_level() != 0u && !ag_car_on()) {
+        ag_weather(&s, in.local, a, wx_fw(dpx, dpy)); // weathering (`--grime`): a vehicle's body, wheels and trim (`--car-materials`: ag_car_grime)
     }
     if (lamp != 0u) {
         m.emissive = vec4<f32>(m.emissive.rgb * ag_lamp(a.flags, m.flags, in.local.x), 0.0);
@@ -210,13 +210,532 @@ const AG_CINE_COAT_GRIME_ROUGH: f32 = 0.35;
 
 // Every agent but those in a tunnel's bore: the city's light rig (look_light.wgsl).
 fn ag_shade(in: AgOut) -> vec4<f32> {
-    let g = ag_surface(in, false);
+    let cd = ag_car_derivs(in); // (`--car-materials`) in uniform control flow; nothing without it
+    var g = ag_surface(in, false);
     if (SF_CINEMATIC && (g.m.flags & AG_M_PAINT) != 0u && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
         let grime = clamp((g.s.rough - materials[in.material].params.x) / 0.4, 0.0, 1.0);
         sky_coat = 1.0;
         sky_coat_rough = mix(AG_CINE_COAT_ROUGH, AG_CINE_COAT_GRIME_ROUGH, grime);
     }
-    return look_light(g.s, g.m, g.v, in.world, g.n, 0u);
+    // (`--car-materials`) the cars' own materials and lamps: the surface and
+    // its coat set before the one look_light, the glass's reflection after.
+    var car = AgCar(0u, false, vec3<f32>(0.0));
+    let car_on = ag_car_on();
+    if (car_on) {
+        car = ag_car_prepare(&g, in, cd);
+    }
+    let c = look_light(g.s, g.m, g.v, in.world, g.n, 0u);
+    if (car_on) {
+        return ag_car_finish(c, car, in.world, g.m);
+    }
+    return c;
+}
+
+// ---- (`--car-materials`; SF_CAR_MATERIALS, look.rs `ShaderFeatures`: compiled
+// out without it, so the agents' pipelines are as before) The cars' own
+// materials: a two-layer paint (the base, metallic where the body's paint is,
+// under a clear lacquer: F0 0.04, GGX ~0.04 when new, rougher with age and
+// grime) reflecting the environment at its physical strength (the painted
+// metal class, ~1 x the environment, where a facade's paint takes 0.45);
+// thin tinted glass (a dielectric's Fresnel reflection of the probes, the
+// screen-space reflection and the street's lamps over the cabin seen through
+// it, instead of a lit beige panel); a cabin in its own shade; lamps in
+// saturated LED colours (red, amber) behind a clear or tinted cover, with
+// the LED or reflector structure where a pixel resolves it, a lamp's
+// reflector bowl lit with it and the rear plate under its lamp; a light bar
+// lit only on a moving unit that is answering a call (never on a parked one);
+// road grime in the spray band up the lower body (highest behind each wheel,
+// in run-off streaks), round the arches and as a dust film on the roof;
+// California plates (white sheeting, the red script, seven embossed navy
+// characters, the frame, bolts, the year sticker and dirt); weathered tyres
+// (rubber, road dust, raised sidewall lettering) and brake-dusted wheels;
+// sun-faded black trim on older cars; the wheel arches and the underside in
+// the body's own shade; and every glossy part's roughness widened by its
+// normal's change across the pixel (specular anti-aliasing: no sparkle on a
+// curved panel or a rim's edge). Roles from eo-agents `vehicles::role_of`. ----
+
+// eo-agents vehicles.rs `M_ROLE_SHIFT` and the roles (agents.rs tests them).
+const AG_ROLE_SHIFT: u32 = 20u;
+const AG_ROLE_GLASS: u32 = 1u;
+const AG_ROLE_GLASS_TINT: u32 = 2u;
+const AG_ROLE_TYRE: u32 = 3u;
+const AG_ROLE_PLATE: u32 = 4u;
+const AG_ROLE_CHROME: u32 = 5u;
+const AG_ROLE_LENS: u32 = 6u;
+const AG_ROLE_INTERIOR: u32 = 7u;
+const AG_ROLE_WHEEL: u32 = 8u;
+const AG_ROLE_TRIM: u32 = 9u;
+const AG_ROLE_REFLECTOR: u32 = 10u;
+const AG_ROLE_EMERGENCY: u32 = 11u;
+const AG_ROLE_BRAKE: u32 = 12u;
+const AG_ROLE_LIVERY: u32 = 13u;
+
+// Specular anti-aliasing (Tokuyoshi and Kaplanyan 2019, as Filament filters
+// a normal): the GGX alpha^2 widened by 2 x variance x the normal's squared
+// change across the pixel, at most the clamp.
+const AG_CAR_AA_VARIANCE: f32 = 0.15;
+const AG_CAR_AA_CLAMP: f32 = 0.2;
+// The lacquer's GGX roughness: a new car's (automotive clearcoat 0.03-0.05)
+// and an old one's (swirls, wash marring, oxidation: ~0.12); grime takes it
+// toward a dull film as the cinematic coat's grime does.
+const AG_CAR_COAT_NEW: f32 = 0.04;
+const AG_CAR_COAT_OLD: f32 = 0.12;
+// A metallic base coat is flake in a binder, not bare metal: its metalness.
+// Which cars are metallic goes by the paint (the instance colour; the
+// body's own paint material says nothing of it): silvers and greys always,
+// whites never (solid or pearl), dark and coloured paints half of them.
+const AG_CAR_FLAKE_METAL: f32 = 0.55;
+// A red or amber lamp's luminance (the brightest lamp, the brake at night)
+// held under this many times the exposure's white: past it the camera's
+// crosstalk (eo-look `tone::SENSOR_CROSSTALK`) whitens the core, as a real
+// sensor does; held under it the core keeps its red and the bloom its hue.
+const AG_CAR_LAMP_WHITE: f32 = 4.0;
+// Glass: the key light's lobe as wide as the sun's disc gives (0.27 deg:
+// GGX ~0.06), the lacquer-like lobe that takes the screen-space reflection
+// and the lamps' glints sharp; absorption of a clear laminated screen (about
+// 75 % visible transmission) and of privacy glass (the material's own alpha).
+const AG_CAR_GLASS_ROUGH: f32 = 0.06;
+const AG_CAR_GLASS_COAT_ROUGH: f32 = 0.02;
+const AG_CAR_GLASS_CLEAR: f32 = 0.25;
+// A lamp cover: polycarbonate (F0 ~0.05 as glass), nearly clear; a red or
+// amber cover passes about half (the emitter behind it is that colour).
+const AG_CAR_LENS_CLEAR: f32 = 0.08;
+const AG_CAR_LENS_TINTED: f32 = 0.5;
+// The cabin's share of the sky and the ambient light (roof, pillars, the
+// body round it: a car interior sees about a third of the open sky).
+const AG_CAR_CABIN_AO: f32 = 0.3;
+// Saturated LED emission (red ~625 nm, amber ~590 nm in linear sRGB, clipped
+// to the gamut): a lamp's core keeps its hue through the tone curve instead
+// of whitening on the green the display colours carry.
+const AG_CAR_LED_RED: vec3<f32> = vec3<f32>(1.0, 0.012, 0.004);
+const AG_CAR_LED_AMBER: vec3<f32> = vec3<f32>(1.0, 0.32, 0.0);
+// LEDs and reflector facets on a 12 mm pitch.
+const AG_CAR_LED_PITCH: f32 = 0.012;
+// Carbon-black rubber (albedo ~0.03), road dust on it, raised lettering faded grey.
+const AG_CAR_RUBBER: vec3<f32> = vec3<f32>(0.028, 0.028, 0.03);
+const AG_CAR_ROAD_DUST: vec3<f32> = vec3<f32>(0.11, 0.095, 0.08);
+const AG_CAR_LETTERING: vec3<f32> = vec3<f32>(0.075, 0.075, 0.075);
+const AG_CAR_BRAKE_DUST: vec3<f32> = vec3<f32>(0.05, 0.042, 0.034);
+// California plate: retroreflective white sheeting, the red script, navy characters.
+const AG_CAR_PLATE_WHITE: vec3<f32> = vec3<f32>(0.62, 0.62, 0.6);
+const AG_CAR_PLATE_RED: vec3<f32> = vec3<f32>(0.42, 0.02, 0.02);
+const AG_CAR_PLATE_NAVY: vec3<f32> = vec3<f32>(0.012, 0.02, 0.09);
+// The rear plate's lamp: the plate's luminance a share of the tail lamps' intensity.
+const AG_CAR_PLATE_LAMP: f32 = 0.025;
+
+struct AgCarD {
+    // the normal's squared change across the pixel (specular anti-aliasing)
+    dn: f32,
+    // the pixel's footprint on the surface, m
+    px: f32,
+    // the texture coordinates' change across the pixel (the plates)
+    duv: vec2<f32>,
+};
+
+// What `ag_car_finish` needs: the role, whether the surface is thin glass
+// (its reflection over its opacity), its own glow (a lit lamp cover).
+struct AgCar {
+    role: u32,
+    glass: bool,
+    emit: vec3<f32>,
+};
+
+// Whether the cars' materials draw (agents.rs `AgParams::misc.y`).
+fn ag_car_on() -> bool {
+    return SF_CAR_MATERIALS && ag.misc.y != 0u;
+}
+
+// The derivatives, taken in uniform control flow before any discard.
+fn ag_car_derivs(in: AgOut) -> AgCarD {
+    var d = AgCarD(0.0, 0.0, vec2<f32>(0.0));
+    if (!SF_CAR_MATERIALS) {
+        return d;
+    }
+    let nx = dpdx(in.normal);
+    let ny = dpdy(in.normal);
+    let wx = dpdx(in.world);
+    let wy = dpdy(in.world);
+    d.dn = dot(nx, nx) + dot(ny, ny);
+    d.px = sqrt(max(dot(wx, wx), dot(wy, wy)));
+    d.duv = abs(dpdx(in.uv)) + abs(dpdy(in.uv));
+    return d;
+}
+
+fn ag_car_aa(rough: f32, dn: f32) -> f32 {
+    let a = rough * rough;
+    let a2 = clamp(a * a + min(2.0 * AG_CAR_AA_VARIANCE * dn, AG_CAR_AA_CLAMP), 0.0, 1.0);
+    return sqrt(sqrt(a2));
+}
+
+// A parked car (eo-app props: stopped, speed 0, wheels never turned; as sky_lights.wgsl `lights_agents`).
+fn ag_car_parked(a: AgAgent) -> bool {
+    return a.flags == 2u && a.speed == 0.0 && a.anim == 0.0;
+}
+
+// LEDs (or a reflector's facets) on a pitch, their mean where the pixel is wider.
+fn ag_car_led(p: vec2<f32>, px: f32) -> f32 {
+    let c = fract(p / AG_CAR_LED_PITCH) - 0.5;
+    let led = 1.0 - smoothstep(0.2, 0.38, length(c));
+    let keep = 1.0 - smoothstep(0.3, 0.7, px / AG_CAR_LED_PITCH);
+    return mix(1.0, 0.25 + 2.4 * led, keep);
+}
+
+// A seven-segment code (bits a..g) for a plate character: digits, then letters.
+fn ag_car_glyph(k: u32) -> u32 {
+    switch k {
+        case 0u: { return 63u; }
+        case 1u: { return 6u; }
+        case 2u: { return 91u; }
+        case 3u: { return 79u; }
+        case 4u: { return 102u; }
+        case 5u: { return 109u; }
+        case 6u: { return 125u; }
+        case 7u: { return 7u; }
+        case 8u: { return 127u; }
+        case 9u: { return 111u; }
+        case 10u: { return 119u; }
+        case 11u: { return 124u; }
+        case 12u: { return 57u; }
+        case 13u: { return 94u; }
+        case 14u: { return 121u; }
+        case 15u: { return 113u; }
+        case 16u: { return 118u; }
+        case 17u: { return 30u; }
+        case 18u: { return 56u; }
+        case 19u: { return 115u; }
+        default: { return 62u; }
+    }
+}
+
+// The cover of a box (centre c, half size h) at p, filtered over `f`.
+fn ag_car_box(p: vec2<f32>, c: vec2<f32>, h: vec2<f32>, f: vec2<f32>) -> f32 {
+    let q = (h - abs(p - c)) / max(f, vec2<f32>(1e-5));
+    return clamp(min(q.x, q.y) + 0.5, 0.0, 1.0);
+}
+
+// A California plate at its own coordinates `uv` (0..1 across as read, 0..1
+// up): rgb albedo, a its roughness. `h` the car's hash, `dirt` its grime.
+fn ag_car_plate(uv: vec2<f32>, duv: vec2<f32>, h: f32, dirt: f32, rear: bool) -> vec4<f32> {
+    var c = AG_CAR_PLATE_WHITE;
+    var r = 0.45;
+    // The characters: seven in a row (a digit, three letters, three digits), embossed.
+    let x0 = 0.085;
+    let cw = (1.0 - 2.0 * x0) / 7.0;
+    let k = floor((uv.x - x0) / cw);
+    var ink = 0.0;
+    if (k >= 0.0 && k < 7.0 && uv.y > 0.2 && uv.y < 0.7) {
+        let gp = vec2<f32>((fract((uv.x - x0) / cw) - 0.12) / 0.76, (uv.y - 0.22) / 0.44);
+        let f = vec2<f32>(duv.x / (cw * 0.76), duv.y / 0.44);
+        let hk = st_hash(vec2<f32>(h * 97.0 + k * 13.1, k + 5.3));
+        let letter = k >= 1.0 && k <= 3.0;
+        let code = ag_car_glyph(select(u32(hk * 9.99), 10u + u32(hk * 10.99), letter));
+        let w = 0.085;
+        if ((code & 1u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, 1.0 - w), vec2<f32>(0.42, w), f)); }
+        if ((code & 2u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(1.0 - w, 0.74), vec2<f32>(w, 0.24), f)); }
+        if ((code & 4u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(1.0 - w, 0.26), vec2<f32>(w, 0.24), f)); }
+        if ((code & 8u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, w), vec2<f32>(0.42, w), f)); }
+        if ((code & 16u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(w, 0.26), vec2<f32>(w, 0.24), f)); }
+        if ((code & 32u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(w, 0.74), vec2<f32>(w, 0.24), f)); }
+        if ((code & 64u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, 0.5), vec2<f32>(0.42, w), f)); }
+        // under a few pixels a character: its mean ink (no shimmer, the same tone).
+        let keep = 1.0 - smoothstep(0.12, 0.35, max(f.x, f.y) * 0.5);
+        ink = mix(0.3, ink, keep);
+    }
+    c = mix(c, AG_CAR_PLATE_NAVY, ink);
+    // "California" in red script across the top (strokes, no letters).
+    let sx = (uv.x - 0.3) / 0.4;
+    if (sx > 0.0 && sx < 1.0 && uv.y > 0.76 && uv.y < 0.9) {
+        let wave = 0.5 + 0.5 * sin(sx * 70.0 + 3.0 * sin(sx * 23.0 + h * 6.0));
+        let keep = 1.0 - smoothstep(0.004, 0.012, duv.x);
+        c = mix(c, AG_CAR_PLATE_RED, mix(0.45, smoothstep(0.45, 0.7, wave), keep) * smoothstep(0.76, 0.79, uv.y) * (1.0 - smoothstep(0.87, 0.9, uv.y)));
+    }
+    // The registration sticker on the rear plate's top right corner (the year's colour).
+    if (rear && uv.x > 0.8 && uv.x < 0.93 && uv.y > 0.74 && uv.y < 0.92) {
+        let yc = floor(h * 5.0);
+        c = select(select(select(vec3<f32>(0.6, 0.25, 0.02), vec3<f32>(0.02, 0.18, 0.5), yc < 1.0), vec3<f32>(0.5, 0.42, 0.02), yc > 3.0), vec3<f32>(0.03, 0.3, 0.06), yc == 2.0);
+        r = 0.35;
+    }
+    // Bolts near the top corners.
+    let bl = length((vec2<f32>(abs(uv.x - 0.5), uv.y) - vec2<f32>(0.33, 0.86)) * vec2<f32>(2.0, 1.0));
+    if (bl < 0.035) {
+        c = vec3<f32>(0.22, 0.22, 0.21);
+        r = 0.4;
+    }
+    // A frame round it (a dealer's plastic surround, deeper at the foot).
+    if (uv.x < 0.035 || uv.x > 0.965 || uv.y < 0.1 || uv.y > 0.95) {
+        c = vec3<f32>(0.02, 0.02, 0.022);
+        r = 0.5;
+    }
+    // Road dirt from the foot and the edges, spotted.
+    let edge = min(min(uv.x, 1.0 - uv.x) * 2.0, uv.y);
+    let spots = st_noise(uv * vec2<f32>(40.0, 20.0) + h * 31.0);
+    let film = clamp(dirt * (0.35 + 0.65 * (1.0 - smoothstep(0.0, 0.6, edge))) * (0.6 + 0.8 * spots), 0.0, 0.85);
+    c = mix(c, AG_CAR_ROAD_DUST * 0.8, film);
+    r = mix(r, 0.75, film);
+    return vec4<f32>(c, r);
+}
+
+// The surface and material of a car's fragment by its role, and the lacquer
+// (sky_coat) for look_light; what `ag_car_finish` needs after it.
+fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
+    var k = AgCar(0u, false, vec3<f32>(0.0));
+    let a = ag_agents[in.agent];
+    let md = ag_models[a.model];
+    if (md.model_class == AG_PERSON) {
+        return k;
+    }
+    let base = materials[in.material];
+    let role = (base.flags >> AG_ROLE_SHIFT) & 15u;
+    k.role = role;
+    let local = in.local;
+    let parked = ag_car_parked(a);
+    // the car's own numbers (as ag_weather keys them): age, grime.
+    let hs = vec2<f32>(f32(a.color & 0xfffu), f32(a.model) + f32((a.color >> 12u) & 0xfffu) * 0.37);
+    let h = st_hash(hs + vec2<f32>(11.7, 4.3));
+    let age = smoothstep(0.25, 1.0, st_hash(hs + vec2<f32>(7.7, 2.1)));
+    let hd = st_hash(hs + vec2<f32>(3.3, 1.7));
+    let dirt = select(0.2, select(select(WX_CAR_SOME, WX_CAR_FILTHY, hd > 1.0 - WX_CAR_FILTHY_SHARE), WX_CAR_CLEAN, hd < WX_CAR_CLEAN_SHARE), wx_level() != 0u);
+    // the normal in the body's frame.
+    let nb = ag_rotate(vec4<f32>(-a.rot.xyz, a.rot.w), (*g).n);
+    let lamp = base.flags & (AG_M_TAIL | AG_M_BRAKE | AG_M_INDICATOR | AG_M_HEAD | AG_M_DRL | AG_M_REVERSE);
+    let wet = select(0.0, skyu.wet.x, sky_on(skyu.flags.x, SKY_WET));
+    // The body's own shade: the wheel arches (inside the arch round each
+    // wheel, inboard of the tyre's face) and the underside (facing down, over
+    // the shaded road under the car).
+    var piv = md.wheel[0].xyz;
+    var wi = 0u;
+    for (var i = 1u; i < 4u; i = i + 1u) {
+        if (distance(local, md.wheel[i].xyz) < distance(local, piv)) {
+            piv = md.wheel[i].xyz;
+            wi = i;
+        }
+    }
+    let r = max(md.wheel_radius, 0.2);
+    let arch = length(local.yz - piv.yz) / r;
+    var occ = 1.0;
+    if (role != AG_ROLE_TYRE && role != AG_ROLE_WHEEL && role != AG_ROLE_BRAKE) {
+        occ = mix(0.35, 1.0, smoothstep(1.0, 1.45, arch) + smoothstep(0.0, 0.12, abs(local.x) - abs(piv.x) + 0.1));
+    }
+    occ = min(occ, mix(1.0, 0.35, smoothstep(0.1, 0.7, -nb.y)));
+    (*g).s.ao = (*g).s.ao * clamp(occ, 0.0, 1.0);
+    if (lamp != 0u) {
+        // Lamps (lit as ag_lamp lights them): LED colours, the LEDs' structure.
+        let i = max(max((*g).m.emissive.r, (*g).m.emissive.g), (*g).m.emissive.b);
+        var col = base.emissive.rgb / max(max(max(base.emissive.r, base.emissive.g), base.emissive.b), 1e-4);
+        if ((base.flags & (AG_M_TAIL | AG_M_BRAKE)) != 0u) {
+            col = AG_CAR_LED_RED;
+        } else if ((base.flags & AG_M_INDICATOR) != 0u) {
+            col = AG_CAR_LED_AMBER;
+        }
+        var hold = 1.0;
+        if ((base.flags & (AG_M_TAIL | AG_M_BRAKE | AG_M_INDICATOR)) != 0u) {
+            hold = min(1.0, AG_CAR_LAMP_WHITE / max(ag.lamp_tail.w * look.key.w, 1e-4));
+        }
+        let face = select(local.zy, local.xy, abs(nb.z) > 0.5);
+        (*g).m.emissive = vec4<f32>(col * i * hold * ag_car_led(face, d.px), 0.0);
+        return k;
+    }
+    // Road grime (`--grime`) on the body, its trim and liveries.
+    let paint = (base.flags & AG_M_PAINT) != 0u || role == AG_ROLE_LIVERY;
+    if (wx_level() != 0u && (paint || role == 0u || role == AG_ROLE_TRIM)) {
+        ag_car_grime(&(*g).s, local, nb, piv, r, arch, dirt, d.px);
+    }
+    if (paint) {
+        // The base coat (flake in a binder) under the lacquer, at the environment's physical strength.
+        if (wet > 0.02) {
+            sky_wet_generic(&(*g).s, (*g).n);
+        }
+        let grime = clamp(((*g).s.rough - base.params.x) / 0.4, 0.0, 1.0);
+        let pc = ag_unpack_srgb(a.color);
+        let pl = dot(pc, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let grey = max(max(pc.r, pc.g), pc.b) - min(min(pc.r, pc.g), pc.b) < 0.25 * max(max(pc.r, pc.g), pc.b);
+        var flake = select(0.0, 1.0, h < 0.5);
+        if (grey && pl > 0.08 && pl < 0.6) {
+            flake = 1.0;
+        } else if (pl >= 0.6) {
+            flake = 0.0;
+        }
+        if (role != AG_ROLE_LIVERY) {
+            (*g).s.metal = AG_CAR_FLAKE_METAL * flake;
+        }
+        (*g).s.rough = ag_car_aa(max((*g).s.rough, 0.3), d.dn);
+        (*g).s.env = ENV_PAINTED_METAL;
+        sky_coat = 1.0;
+        let coat = mix(mix(AG_CAR_COAT_NEW, AG_CAR_COAT_OLD, age), AG_CINE_COAT_GRIME_ROUGH, grime);
+        sky_coat_rough = ag_car_aa(mix(coat, AG_CAR_GLASS_COAT_ROUGH, wet * smoothstep(0.3, 0.8, nb.y)), d.dn);
+        return k;
+    }
+    switch role {
+        case 1u, 2u, 6u: {
+            // Thin glass: a dielectric's reflection over what is behind it.
+            var absorb = max(base.base.a, AG_CAR_GLASS_CLEAR);
+            if (role == AG_ROLE_LENS) {
+                let hi = max(max(base.base.r, base.base.g), base.base.b);
+                let tinted = hi - min(min(base.base.r, base.base.g), base.base.b) > 0.5 * hi;
+                absorb = select(AG_CAR_LENS_CLEAR, AG_CAR_LENS_TINTED, tinted);
+            }
+            (*g).s.albedo = vec3<f32>(0.0);
+            (*g).s.metal = 0.0;
+            (*g).s.rough = ag_car_aa(AG_CAR_GLASS_ROUGH + 0.05 * dirt * age, d.dn);
+            (*g).m.flags = (*g).m.flags | F_GLASS | F_THIN_GLASS;
+            (*g).m.thin_absorption = absorb;
+            sky_coat = 1.0;
+            sky_coat_rough = ag_car_aa(AG_CAR_GLASS_COAT_ROUGH + 0.04 * dirt * age, d.dn);
+            k.glass = true;
+        }
+        case 3u: {
+            // Rubber: the sidewall's raised lettering on the outer face, road
+            // dust on the tread and the lower sidewall. The wheel's own frame:
+            // the steer and the spin undone.
+            var q = local - piv;
+            if (wi < 2u) {
+                let cs = cos(a.steer);
+                let sn = sin(a.steer);
+                q = vec3<f32>(q.x * cs - q.z * sn, q.y, q.x * sn + q.z * cs);
+            }
+            let rr = length(q.yz) / r;
+            let tw = atan2(q.z, q.y) - a.anim;
+            let th = tw - floor(tw / 6.2831853) * 6.2831853;
+            let outer = q.x * sign(piv.x) > 0.0;
+            let side = abs(nb.x) > 0.55;
+            var c = AG_CAR_RUBBER;
+            var ro = 0.72;
+            if (side && outer && rr > 0.76 && rr < 0.9) {
+                let cells = max(round(6.2831853 * r / 0.035), 8.0);
+                let t = th / 6.2831853 * cells;
+                let ci = floor(t);
+                let blk = fract(ci / 46.0);
+                let gp = vec2<f32>(fract(t), (rr - 0.78) / 0.1);
+                let code = ag_car_glyph(u32(st_hash(vec2<f32>(ci, 3.1)) * 20.99));
+                let f = vec2<f32>(d.px / (0.035), d.px / (0.1 * r));
+                var ink = 0.0;
+                if (blk < 0.32 || (blk > 0.5 && blk < 0.62)) {
+                    let w = 0.12;
+                    if ((code & 1u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, 1.0 - w), vec2<f32>(0.32, w), f)); }
+                    if ((code & 6u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.8, 0.5), vec2<f32>(w, 0.42), f)); }
+                    if ((code & 8u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, w), vec2<f32>(0.32, w), f)); }
+                    if ((code & 48u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.2, 0.5), vec2<f32>(w, 0.42), f)); }
+                    if ((code & 64u) != 0u) { ink = max(ink, ag_car_box(gp, vec2<f32>(0.5, 0.5), vec2<f32>(0.32, w), f)); }
+                    ink = mix(0.25, ink, 1.0 - smoothstep(0.15, 0.4, max(f.x, f.y)));
+                }
+                c = mix(c, AG_CAR_LETTERING, ink * (0.5 + 0.5 * age));
+                ro = mix(ro, 0.85, ink);
+            }
+            let low = 1.0 - smoothstep(-0.2, 0.6, q.y / r);
+            let dust = clamp(select(0.25 + 0.55 * low, 0.65, !side) * (0.4 + 0.6 * dirt), 0.0, 1.0);
+            (*g).s.albedo = mix(c, AG_CAR_ROAD_DUST, dust * 0.55);
+            (*g).s.rough = mix(ro, 0.9, dust);
+            (*g).s.metal = 0.0;
+            (*g).s.ao = (*g).s.ao * mix(0.55, 1.0, smoothstep(0.55, 0.95, rr));
+        }
+        case 4u: {
+            let rear = local.z < md.center.z;
+            let p = ag_car_plate(in.uv, d.duv, h, dirt, rear);
+            (*g).s.albedo = p.rgb;
+            (*g).s.rough = p.a;
+            (*g).s.metal = 0.0;
+            if (rear && !parked) {
+                // the plate lamp, lit with the tail lamps.
+                let tail = mix(ag.lamp_tail.x, ag.lamp_tail.y, ag.lamp_misc.x);
+                (*g).m.emissive = vec4<f32>(p.rgb * tail * AG_CAR_PLATE_LAMP, 0.0);
+            }
+        }
+        case 5u, 10u: {
+            // Chrome and the lamps' reflector bowls: mirrors at the
+            // environment's strength; a bowl glows with its lit lamp.
+            (*g).s.env = ENV_PAINTED_METAL;
+            (*g).s.rough = ag_car_aa((*g).s.rough, d.dn);
+            if (role == AG_ROLE_REFLECTOR && !parked) {
+                let front = local.z > md.center.z;
+                let i = ag_lamp(a.flags, select(AG_M_TAIL, AG_M_HEAD | AG_M_DRL, front), local.x);
+                let col = select(AG_CAR_LED_RED, vec3<f32>(1.0, 0.97, 0.92), front);
+                let ring = 0.6 + 0.4 * sin(length(local.xy - vec2<f32>(sign(local.x) * abs(piv.x) * 0.75, piv.y + 0.28)) / AG_CAR_LED_PITCH * 3.14159);
+                (*g).m.emissive = vec4<f32>(col * i * 0.3 * mix(1.0, ring, 1.0 - smoothstep(0.004, 0.012, d.px)), 0.0);
+            }
+        }
+        case 7u: {
+            // The cabin in its own shade; the screen dark in a parked car.
+            (*g).s.ao = (*g).s.ao * AG_CAR_CABIN_AO;
+            (*g).m.emissive = (*g).m.emissive * select(0.35, 0.0, parked);
+        }
+        case 8u: {
+            // Wheels: brake dust (dielectric, brown-black) toward the rim and on the front axle.
+            let rr = length(local.yz - piv.yz) / r;
+            let bd = clamp((0.2 + 0.5 * dirt + select(0.0, 0.2, wi < 2u)) * (0.5 + 0.5 * smoothstep(0.3, 0.75, rr)), 0.0, 0.9);
+            (*g).s.albedo = mix((*g).s.albedo, AG_CAR_BRAKE_DUST, bd);
+            (*g).s.metal = mix((*g).s.metal, 0.15, bd * 0.8);
+            (*g).s.rough = ag_car_aa(mix((*g).s.rough, 0.6, bd), d.dn);
+            (*g).s.env = ENV_PAINTED_METAL;
+        }
+        case 9u: {
+            // Black plastics, sun-faded to a chalky grey on older cars.
+            (*g).s.albedo = mix((*g).s.albedo, vec3<f32>(0.055, 0.055, 0.058), age * 0.8);
+            (*g).s.rough = ag_car_aa(mix((*g).s.rough, 0.7, age), d.dn);
+        }
+        case 11u: {
+            // A light bar lit only on a moving unit answering a call (a third of
+            // them), its halves alternating; dark and clear-red or blue otherwise.
+            let answering = !parked && a.speed > 0.5 && h < 0.33;
+            let on = answering && ((fract(ag.lamp_misc.z * 1.5) < 0.5) == (local.x > 0.0));
+            (*g).s.albedo = (*g).s.albedo * 0.4;
+            (*g).m.emissive = vec4<f32>(select(vec3<f32>(0.0), base.emissive.rgb * 6.0, on), 0.0);
+        }
+        case 12u: {
+            // Discs and calipers: rust on an old or parked car's discs.
+            let rust = age * select(0.3, 0.7, parked);
+            (*g).s.albedo = mix((*g).s.albedo, vec3<f32>(0.1, 0.045, 0.02), rust);
+            (*g).s.rough = ag_car_aa(mix((*g).s.rough, 0.85, rust), d.dn);
+            (*g).s.metal = (*g).s.metal * (1.0 - rust);
+        }
+        default: {
+            (*g).s.rough = ag_car_aa((*g).s.rough, d.dn);
+        }
+    }
+    return k;
+}
+
+// After look_light: thin glass's reflection (with the lamps' glints the
+// coat's gather found, which the thin-glass path leaves out) over its
+// opacity, so the blend gives the reflection plus the cabin seen through it
+// (look_light's alpha is 1 - the transmittance, (1 - F)(1 - absorption)).
+// look_light's range fog (f toward F) stays where it was: what the blend
+// adds behind the glass is already fogged, so out = (c - f F + (1 - f) x the
+// glints) / alpha + f F gives mix(reflection + T x behind, F, f).
+fn ag_car_finish(c: vec4<f32>, k: AgCar, world: vec3<f32>, m: Material) -> vec4<f32> {
+    if (k.glass) {
+        let a = max(c.a, 0.02);
+        var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
+        if (skyu.flags.x != 0u) {
+            let u = max(abs(world.y - look.cam_pos.y) - 20.0, 0.0) / 400.0;
+            if (u > 1e-2) {
+                vd = vd * (1.0 - exp(-u)) / u;
+            }
+        }
+        let f = lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd));
+        let ff = look.fog_color.xyz * f;
+        return vec4<f32>((c.rgb - ff + (1.0 - f) * (sky_coat_lights + k.emit)) / a + ff, a);
+    }
+    return c;
+}
+
+// Road grime on a car (`--grime`; in ag_weather's place under the cars'
+// materials, at its per-car levels and colours): the spray band up the lower
+// body to about the wheels' tops, highest just behind each wheel, its top in
+// vertical run-off streaks (8 cm across, kept where a pixel resolves them);
+// the grime round each arch; on a dusty car a fine film on the roof, bonnet
+// and boot. No blotches: the only noise runs up the body.
+fn ag_car_grime(s: ptr<function, Surface>, local: vec3<f32>, nb: vec3<f32>, piv: vec3<f32>, r: f32, arch: f32, dirt: f32, px: f32) {
+    let y = local.y - (piv.y - r);
+    let along = local.z + local.x * 0.37;
+    let streak = mix(0.5, st_noise(vec2<f32>(along / 0.08, y / 1.2) + dirt * 17.0), wx_keep(0.08, px));
+    let spray = 1.0 - smoothstep(0.0, r * 2.2, abs(local.z - (piv.z - r * 1.3)));
+    let top = r * (1.5 + 0.9 * (streak - 0.5) + 0.7 * spray);
+    let band = (1.0 - smoothstep(top * 0.5, top, y)) * dirt;
+    let ring = (1.0 - smoothstep(1.02, 1.5, arch)) * (0.35 + 0.65 * dirt);
+    let film = dirt * 0.35 * smoothstep(0.55, 0.9, nb.y);
+    (*s).albedo = mix((*s).albedo, WX_CAR_DUST, clamp(band * WX_CAR_DUST_COVER + film * 0.45, 0.0, 1.0));
+    (*s).albedo = mix((*s).albedo, WX_CAR_GRIME, clamp(ring * WX_CAR_GRIME_COVER, 0.0, 1.0));
+    (*s).rough = clamp(mix((*s).rough, 0.85, max(band, ring) * 0.8 + film * 0.5), 0.03, 1.0);
 }
 
 // A car (or the player) in a tunnel's bore (`--tunnels`; the feed's
