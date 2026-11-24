@@ -102,6 +102,9 @@ pub const WEAR_FATIGUE_SHARE: f64 = 0.22;
 /// half-width (m: 50-80 mm across, the narrow end of FHWA-RD-99-147's band,
 /// worn down by the traffic).
 pub const WEAR_SEALED_SHARE: f64 = 0.6;
+/// How far the cracks are drawn (m): their lines are under a pixel past it
+/// on the cards' views (a cost choice; the weathering's web went to 170 m).
+pub const WEAR_CRACK_FAR_M: f64 = 110.0;
 pub const WEAR_SEAL_HALF_M: f64 = 0.032;
 /// Oil drips down a lane's middle: one chance of a drip's pool per cell of
 /// this size across (m; 1.6 x it along), and how much a fresh pool darkens
@@ -351,6 +354,7 @@ pub fn wgsl() -> String {
         ("SW_FATIGUE_CELL_M", WEAR_FATIGUE_CELL_M),
         ("SW_FATIGUE_SHARE", WEAR_FATIGUE_SHARE),
         ("SW_SEALED_SHARE", WEAR_SEALED_SHARE),
+        ("SW_CRACK_FAR_M", WEAR_CRACK_FAR_M),
         ("SW_SEAL_HALF_M", WEAR_SEAL_HALF_M),
         ("SW_DRIP_CELL_M", WEAR_DRIP_CELL_M),
         ("SW_DRIP_DARK", WEAR_DRIP_DARK),

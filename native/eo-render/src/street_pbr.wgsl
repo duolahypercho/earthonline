@@ -1156,7 +1156,10 @@ fn sw_fatigue(a: f32, kd: f32, fw: f32) -> f32 {
 // each sealed under a meandering overband or left open; fatigue in the wheel
 // paths. The sealant and the open cracks are noted for `sp_crack_materials`.
 fn sw_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, kd: f32, fw: f32, dist: f32) {
-    let far = 1.0 - smoothstep(WX_SNAKE_FAR * 0.6, WX_SNAKE_FAR, dist);
+    // (a crack's lines are under a pixel past ~100 m: they end there, as the sealant's tone does)
+    let far = 1.0 - smoothstep(SW_CRACK_FAR_M * 0.7, SW_CRACK_FAR_M, dist);
+    // an open crack's walls hide the sky from its floor, but in the wet the film fills it
+    let open_k = 1.0 - sw_wet();
     // cracked stretches of pavement and sound ones (its age, its base)
     let present = smoothstep(0.1, 0.3, st_noise(world.xz / 47.0 + 17.0));
     if (far * present <= 0.0) {
@@ -1208,11 +1211,11 @@ fn sw_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, kd: f32,
             let ravel = wx_band(l.d, hw * WX_CRACK_RAVEL, fw) * on * (0.5 + st_noise(world.xz / 0.25 + 6.6));
             (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * k) * (1.0 - WX_CRACK_RAVEL_DARK * clamp(ravel, 0.0, 1.0));
             (*s).rough = min(1.0, (*s).rough + 0.1 * k);
-            sp_note_crack(k + 0.4 * ravel);
+            sp_note_crack((k + 0.4 * ravel) * open_k);
         }
     }
     if (framed && kd >= 0.0 && dist < 45.0) {
-        let fk = sw_fatigue(a, kd, fw) * present * (1.0 - smoothstep(30.0, 45.0, dist));
+        let fk = sw_fatigue(a, kd, fw) * present * (1.0 - smoothstep(30.0, 45.0, dist)) * open_k;
         if (fk > 0.0) {
             (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * fk);
             sp_note_crack(fk);
