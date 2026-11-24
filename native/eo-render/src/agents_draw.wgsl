@@ -61,10 +61,37 @@ fn ag_unpack_srgb(c: u32) -> vec3<f32> {
     return select(pow((s + 0.055) / 1.055, vec3<f32>(2.4)), s / 12.92, s <= vec3<f32>(0.04045));
 }
 
+// (`--car-lamps`; SF_CAR_LAMPS compiles it out) The fragment's car is parked
+// (`ag_car_parked`): every lamp of it is off (set by `ag_surface`).
+var<private> ag_lamps_off: bool;
+
+// Whether the cars' lamps are worked as a driver works them (`--car-lamps`,
+// agents.rs `AgParams::misc.z` bit 0).
+fn ag_car_lamps_on() -> bool {
+    return SF_CAR_LAMPS && SF_CAR_MATERIALS && (ag.misc.z & 1u) != 0u;
+}
+
+// Where the lamps stand between their day and night values. (`--car-lamps`)
+// A lamp is lit or not: its luminance is the same at dusk as at midnight (the
+// camera's exposure makes the difference), so the lamps are at their night
+// values whenever the vehicle lamps are on (eo-sky `night::vehicle_lamps`:
+// from dusk, and in rain or fog; the sky's `night.w`), at the day's otherwise;
+// without it the sun's altitude fades them (night below -6 deg, day above 6).
+fn ag_lamp_night() -> f32 {
+    if (ag_car_lamps_on()) {
+        return select(0.0, 1.0, skyu.night.w > 0.0);
+    }
+    return ag.lamp_misc.x;
+}
+
 // The lamp channels (`heroLampState` with `HERO_LAMP`): intensity for the
-// agent's state between the day and night values.
+// agent's state between the day and night values (`--car-lamps`: none on a
+// parked car).
 fn ag_lamp(flags: u32, mflags: u32, local_x: f32) -> f32 {
-    let night = ag.lamp_misc.x;
+    if (SF_CAR_LAMPS && ag_lamps_off) {
+        return 0.0;
+    }
+    let night = ag_lamp_night();
     let tail = mix(ag.lamp_tail.x, ag.lamp_tail.y, night);
     let brake = mix(ag.lamp_tail.z, ag.lamp_tail.w, night);
     let head = mix(ag.lamp_head.x, ag.lamp_head.y, night);
@@ -195,6 +222,9 @@ fn ag_surface(in: AgOut, bore: bool) -> AgSurf {
         }
     }
     let lamp = m.flags & (AG_M_TAIL | AG_M_BRAKE | AG_M_INDICATOR | AG_M_HEAD | AG_M_DRL | AG_M_REVERSE);
+    if (SF_CAR_LAMPS) {
+        ag_lamps_off = ag_car_lamps_on() && ag_car_parked(a); // (`--car-lamps`) a parked car's lamps are dark
+    }
     if (lamp == 0u && wx_level() != 0u && !ag_car_on()) {
         ag_weather(&s, in.local, a, wx_fw(dpx, dpy)); // weathering (`--grime`): a vehicle's body, wheels and trim (`--car-materials`: ag_car_grime)
     }
@@ -992,7 +1022,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             (*g).s.metal = 0.0;
             if (rear && !parked) {
                 // the plate lamp, lit with the tail lamps.
-                let tail = mix(ag.lamp_tail.x, ag.lamp_tail.y, ag.lamp_misc.x);
+                let tail = mix(ag.lamp_tail.x, ag.lamp_tail.y, ag_lamp_night());
                 (*g).m.emissive = vec4<f32>(p.rgb * tail * AG_CAR_PLATE_LAMP, 0.0);
             }
         }

@@ -719,6 +719,7 @@ pub fn cine_lamps_wgsl(on: bool) -> String {
         eo_props::Model::LampBanner as u32,
         crate::landmarks::LIGHT_KIND_LANDMARK,
     );
+    src += &crate::agents::car_lamps_wgsl(); // (`--car-lamps`) the cars' rear lamps, compiled out without it
     if on {
         // (stage L3) the streak lights' pick (sky.rs `streaks_pipe`)
         src += &format!("const LT_STREAK_CAP: u32 = {STREAK_CAP}u;\n");

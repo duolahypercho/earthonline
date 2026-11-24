@@ -485,6 +485,7 @@ fn lights_agents(@builtin(global_invocation_id) gid: vec3<u32>) {
             lt_push(l);
         }
     }
+    lt_rear_lamps(a, m); // (`--car-lamps`, agents_lamps.wgsl; nothing without it)
 }
 
 /// (`--shop-light`, stage N1) The shop windows' lights near the eye: lit

@@ -29,7 +29,8 @@ fn lt_streak_q(l: SkyLight) -> f32 {
     }
     let lum = dot(l.color, vec3<f32>(0.2126, 0.7152, 0.0722));
     let r = l.pos - skyu.eye.xyz;
-    return lum * l.intensity / max(dot(r, r), 1.0);
+    // (`--car-lamps`, agents_lamps.wgsl) a vehicle lamp by what it sends toward the eye (1 without it)
+    return lum * l.intensity / max(dot(r, r), 1.0) * lt_car_toward_eye(l, -r);
 }
 
 fn lt_streak_bin(q: f32, qmax: f32) -> u32 {
