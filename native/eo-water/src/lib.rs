@@ -23,6 +23,7 @@ pub mod field;
 pub mod grid;
 pub mod obstacles; // rocks and piers in the surf, for foam (nobody registers any yet)
 pub mod optics;
+pub mod sea; // the drawn sea's surface for the physics (floating bodies)
 pub mod shoreline;
 pub mod spectrum;
 pub mod surface;

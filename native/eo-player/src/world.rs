@@ -86,6 +86,8 @@ pub mod layer {
     pub const STREET: Group = Group::GROUP_2;
     pub const VEHICLE: Group = Group::GROUP_3;
     pub const CHARACTER: Group = Group::GROUP_4;
+    /// Moored boats (harbour.rs): met by vehicles, characters and each other.
+    pub const BOAT: Group = Group::GROUP_5;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -720,6 +722,8 @@ pub struct CollisionWorld {
     graveyard: Option<Sender<(Vec<Collider>, Arc<TileHeights>, Arc<Vec<Prism>>)>>,
     /// The ground has walkable surfaces over others (`GroundProvider::multi_level`).
     multi_level: bool,
+    /// The moored boats this world floats (harbour.rs; None: no boats).
+    pub harbour: Option<crate::harbour::Harbour>,
 }
 
 /// A freestanding box whose pose can change without recooking its city tile.
@@ -811,19 +815,39 @@ impl CollisionWorld {
             })
             .expect("spawn tile graveyard");
         let multi_level = ground.multi_level();
-        Self { physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: Some(graveyard), multi_level }
+        Self { physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: Some(graveyard), multi_level, harbour: None }
     }
 
     /// a world whose tiles come from a shared feed (no threads of its own).
     pub fn fed(ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, feed: Arc<dyn TileFeed>) -> Self {
         let multi_level = ground.multi_level();
-        Self { physics: new_physics(&buildings.decks), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None, multi_level }
+        Self { physics: new_physics(&buildings.decks), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None, multi_level, harbour: None }
     }
 
     /// The ground has walkable surfaces over others (decks, `--structures`):
     /// the level queries pick the surface nearest below a body.
     pub fn multi_level(&self) -> bool {
         self.multi_level
+    }
+
+    /// One physics step: the boats' buoyancy and mooring first (harbour.rs), then Rapier's.
+    pub fn step_physics(&mut self) {
+        if let Some(h) = self.harbour.as_mut() {
+            h.apply_forces(&mut self.physics, crate::tuning::FIXED_STEP_S);
+        }
+        self.physics.step();
+    }
+
+    /// Float the boats of `fleet` near the streaming centre on `sea`, the sea's clock at `time` (s).
+    pub fn set_harbour(&mut self, fleet: std::sync::Arc<crate::harbour::Fleet>, sea: std::sync::Arc<crate::harbour::Sea>, time: f64) {
+        self.harbour = Some(crate::harbour::Harbour::new(fleet, sea, time));
+    }
+
+    /// Bodies for the boats near `center` (called with the tile streaming).
+    pub fn stream_harbour(&mut self, center: DVec3) {
+        if let Some(h) = self.harbour.as_mut() {
+            h.stream(&mut self.physics, center);
+        }
     }
 
     fn wanted(x: f64, z: f64, radius: f64) -> Vec<TileKey> {
@@ -1163,7 +1187,7 @@ impl CollisionWorld {
                 }
             }
             self.stats.tiles_resident = self.resident.len();
-            self.physics.step();
+            self.step_physics();
             return;
         }
         // Every tile cooked first, then inserted in `want`'s fixed order: the
@@ -1217,7 +1241,7 @@ impl CollisionWorld {
         }
         self.stats.tiles_resident = self.resident.len();
         // Let the broad phase see the new colliders.
-        self.physics.step();
+        self.step_physics();
     }
 
     pub fn is_resident(&self, x: f64, z: f64) -> bool {

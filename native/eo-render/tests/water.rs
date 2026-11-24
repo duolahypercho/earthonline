@@ -343,6 +343,43 @@ fn the_obstacle_layer_matches_eo_water() {
     assert!(water.contains(&format!("let flow = vec2<f32>({fx}, {fz}) * sign(cur);")), "the shader's flood heading is not ({fx}, {fz})");
 }
 
+// The physics' sea (eo-water sea.rs `Places`, `shore_gain`) mirrors how the
+// drawn sea sets each place's waves: the shore's ramp, the exposure's swell
+// share, wind ratio and fetch factor, the measured bed's share over them, the
+// plan's table between its nodes and the blend to the Pacific's. A change to
+// one of these lines changes the drawn sea under the boats: the twin follows.
+#[test]
+fn the_physics_sea_mirrors_the_drawn_place_shares() {
+    let water = include_str!("../src/water.wgsl");
+    let common = include_str!("../src/water_common.wgsl");
+    let rust = include_str!("../src/water.rs");
+    for line in [
+        "return wg_smooth(50.0, 220.0, f.x) * (1.0 - 0.6 * f.y) + 0.25 * f.y * wg_smooth(0.0, 60.0, f.x);",
+        "let w = wg_band(spacing) * wg_cascade_amp(base.x);",
+        "let on_e = wu.wv_gg2.z > 0.5 && wg_gg2(1u);",
+        "wg_ex = vec4<f32>(e.x, e.y * 2.0, e.z, 1.0);",
+        "wg_ex.x = mix(wg_ex.x, clamp(wb.kr, 0.0, 1.0), wb.on);",
+    ] {
+        assert!(water.contains(line), "water.wgsl no longer has `{line}`: update eo-water sea.rs");
+    }
+    for line in [
+        "return mix(wg_bay_amp(), wu.wv_pac, wg_ocean(x));",
+        "return wg_ex.x;",
+        "return wg_smooth(WO_GATE_X.x, WO_GATE_X.y - 2200.0, x);",
+        "let g = wg_node(wg_ex.y, wu.wv_gn[0], wu.wv_gn[1]);",
+        "let b = wg_node(wg_ex.z, wu.wv_xn[0], wu.wv_xn[1]);",
+        "let lo = mix(wu.wv_xa[i], wu.wv_xa[i + 1u], b.y);",
+        "let hi = mix(wu.wv_xa[i + 8u], wu.wv_xa[i + 9u], b.y);",
+        "return vec2<f32>(f32(i), clamp((x - n[i]) / max(n[i + 1u] - n[i], 1e-6), 0.0, 1.0));",
+        "wb = WbAt(wg_smooth(0.0, 200.0, edge), e.x, e.y, e.z, e.w);",
+    ] {
+        assert!(common.contains(line), "water_common.wgsl no longer has `{line}`: update eo-water sea.rs");
+    }
+    assert!(rust.contains("xa: std::array::from_fn(|i| f4(plan.expo_amp[i / 8][i % 8])),"), "the bay's table is uploaded as eo-water sea.rs reads it");
+    assert!(rust.contains("let gg2 = eo_water::switches::on() & !look.options.water_parts_off;"));
+    assert_eq!(eo_water::switches::EXPOSURE, 1, "the exposure's bit is wg_gg2(1u)");
+}
+
 /// Read the irradiance calculated by the same WGSL function used by the
 /// surface and submerged passes. A wave can focus only the collimated share.
 #[test]

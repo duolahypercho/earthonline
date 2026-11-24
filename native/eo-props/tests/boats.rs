@@ -72,3 +72,22 @@ fn the_berths_take_boats_that_fit() {
     assert!(count(Kind::Motor, &t) > 0, "a 13.3 m motor yacht side-ties in a 12 m berth and its gap");
     assert!(t.iter().all(|m| b[m.body].loa <= 12.0 + eo_landmarks::floating_docks::SIDE_TIE_GAP_M - 1.0));
 }
+
+#[test]
+fn the_motion_word_packs_roll_and_pitch() {
+    let decode = |w: u32| {
+        let (r, p) = ((w & 0xffff) as i32, ((w >> 16) & 0x7fff) as i32);
+        let r = if r >= 32768 { r - 65536 } else { r };
+        let p = if p >= 16384 { p - 32768 } else { p };
+        (r as f64 * boats::AFLOAT_STEP_RAD, p as f64 * boats::AFLOAT_STEP_RAD)
+    };
+    for (roll, pitch) in [(0.0, 0.0), (0.0523, -0.0175), (-0.31, 0.12), (1.2, -1.5)] {
+        let w = boats::afloat_word(roll, pitch);
+        assert_eq!(w & boats::AFLOAT_BIT, boats::AFLOAT_BIT);
+        let (r, p) = decode(w);
+        assert!((r - roll).abs() <= boats::AFLOAT_STEP_RAD / 2.0 + 1e-12 && (p - pitch).abs() <= boats::AFLOAT_STEP_RAD / 2.0 + 1e-12, "{roll} {pitch} -> {r} {p}");
+    }
+    // clamped at the word's reach
+    let (r, p) = decode(boats::afloat_word(9.0, -9.0));
+    assert!((r - 3.2767).abs() < 1e-9 && (p + 1.6384).abs() < 1e-9);
+}

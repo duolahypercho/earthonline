@@ -1,9 +1,16 @@
 [workspace]
 resolver = "2"
 members = ["eo-data", "eo-assets", "eo-kit", "eo-street", "eo-render", "eo-app", "eo-sim", "eo-player", "eo-ui", "eo-look", "eo-agents", "eo-props", "eo-net", "eo-server", "eo-water", "eo-sky", "eo-landmarks", "eo-audio", "eo-farshore", "eo-structures"]
+exclude = ["vendor"]
 
 [workspace.package]
 license = "FSL-1.1-ALv2"
+
+# wgpu-hal with one change to the Metal backend: a shader module labelled
+# "[relaxed-math]" is compiled in Metal's relaxed math mode instead of fast
+# math (the agents' draw shader; see vendor/wgpu-hal/EARTH-ONLINE.md).
+[patch.crates-io]
+wgpu-hal = { path = "vendor/wgpu-hal" }
 
 [profile.release]
 debug = 1

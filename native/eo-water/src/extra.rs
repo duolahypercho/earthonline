@@ -202,6 +202,12 @@ fn smooth(e0: f64, e1: f64, x: f64) -> f64 {
 /// How far under the sea an obstacle's top may lie and still break the waves (m, INFERRED).
 pub const OBSTACLE_AWASH_M: f64 = 0.5;
 
+/// The installed field as installed, without the obstacles `field()` draws into it
+/// (its layer 0's R, G and B are the water's: the obstacles change only its A and layer 1).
+pub fn installed() -> Option<&'static ExtraField> {
+    INSTALLED.get()
+}
+
 /// Install the field (the first one stays).
 pub fn install(f: ExtraField) -> &'static ExtraField {
     INSTALLED.get_or_init(|| f)

@@ -759,6 +759,7 @@ dependencies = [
  "eo-landmarks",
  "eo-street",
  "eo-structures",
+ "eo-water",
  "glam 0.34.3",
  "rapier3d",
  "serde",
@@ -888,6 +889,7 @@ dependencies = [
  "eo-data",
  "eo-farshore",
  "flate2",
+ "libm",
  "serde",
  "serde_json",
  "sha2",
@@ -3230,8 +3232,6 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a57452fe453658e141aafdb09de1028afa498805fab518238ddf372a518813ff"
 dependencies = [
  "android_system_properties",
  "arrayvec",

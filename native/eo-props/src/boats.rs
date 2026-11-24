@@ -52,6 +52,8 @@ pub struct Body {
     /// Highest point above the waterline.
     pub height: f64,
     pub draft: f64,
+    /// Displacement (kg): what floats it (eo-player `harbour::Hull`).
+    pub mass_kg: f64,
 }
 
 /// The bodies in [`BODIES`] order, from the provenance (the files are not read here).
@@ -78,7 +80,8 @@ pub fn load_bodies(repo: &Path) -> Result<Vec<Body>> {
             };
             let d = &b["dimensionsM"];
             let num = |k: &str| d[k].as_f64().ok_or_else(|| anyhow!("{PROVENANCE}: {name} has no dimensionsM.{k}"));
-            Ok(Body { name, kind: Kind::of(name), lods: [lod(0)?, lod(1)?, lod(2)?], loa: num("loaOverall")?, beam: num("beamHull")?, height: num("heightAboveWaterline")?, draft: num("draft")? })
+            let mass_kg = b["canoeBodyDisplacementKg"].as_f64().ok_or_else(|| anyhow!("{PROVENANCE}: {name} has no canoeBodyDisplacementKg"))?;
+            Ok(Body { name, kind: Kind::of(name), lods: [lod(0)?, lod(1)?, lod(2)?], loa: num("loaOverall")?, beam: num("beamHull")?, height: num("heightAboveWaterline")?, draft: num("draft")?, mass_kg })
         })
         .collect()
 }
@@ -101,6 +104,20 @@ fn mix(fishing: bool) -> [(Kind, f64); 4] {
     } else {
         [(Kind::Sail, 0.50), (Kind::Motor, 0.36), (Kind::Fishing, 0.06), (Kind::Jet, 0.08)]
     }
+}
+
+/// The instance word a boat afloat carries for the props shader (eo-render
+/// props_types.wgsl `pr_afloat`): the afloat bit and its hull's roll (about
+/// its bow axis) and pitch (about its beam) in 1e-4 rad, roll in bits 0..15
+/// (signed), pitch in bits 16..30 (signed). Its heave is the instance's
+/// height, its yaw the instance's; the pose is eo-player's (`harbour`).
+pub const AFLOAT_BIT: u32 = 1 << 31;
+/// The word's angle step (rad).
+pub const AFLOAT_STEP_RAD: f64 = 1e-4;
+pub fn afloat_word(roll_rad: f64, pitch_rad: f64) -> u32 {
+    let r = (roll_rad / AFLOAT_STEP_RAD).round().clamp(-32768.0, 32767.0) as i32;
+    let p = (pitch_rad / AFLOAT_STEP_RAD).round().clamp(-16384.0, 16383.0) as i32;
+    AFLOAT_BIT | (r as u32 & 0xffff) | ((p as u32 & 0x7fff) << 16)
 }
 
 /// A boat at its berth: the body (index into [`BODIES`]), the middle of its
