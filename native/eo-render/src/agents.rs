@@ -109,9 +109,13 @@ pub fn people_contact_wgsl() -> &'static str {
 /// round's switch set: not its size (fewer taps, no loads, no filter all
 /// failed); the same lookup hoisted out of that divergent branch builds, and a
 /// divergent test put back round it (the sub-pixel skip) failed again, so the
-/// agents' module keeps the penumbra's branch uniform. The occluder light (`--occluder-light`, `SF_OCCLUDER_LIGHT`) is
-/// still left out with the cars' materials (the same abort, r2i1): the cars
-/// and people keep the rig's stand-in; the street and the buildings take it.
+/// agents' module keeps the penumbra's branch uniform. The occluder light
+/// (`--occluder-light`, `SF_OCCLUDER_LIGHT`) is still left out with the cars'
+/// materials (the same abort, r2i1 and r2i2, its volume reads hoisted too):
+/// the cars and people keep the rig's stand-in for the blocked sky, scaled to
+/// the shaded walls' exitance over the ground lobe (eo-look
+/// `occluder::AGENTS_OCCLUDER`, a constant: no code added), so they darken
+/// with the street round them.
 fn agents_city_source() -> String {
     let mut src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
     let f = crate::look::shader_features();
@@ -119,7 +123,11 @@ fn agents_city_source() -> String {
         src = src.replacen("const LK_SUN_PRE: bool = false;", "const LK_SUN_PRE: bool = true;", 1);
     }
     if f.car_materials && f.occluder_light {
-        src = src.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+        src = src.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1).replacen(
+            &format!("const AMB_OCCLUDER: f32 = {:.6};", crate::ambient::OCCLUDER_OVER_GROUND),
+            &format!("const AMB_OCCLUDER: f32 = {:.6};", eo_look::occluder::AGENTS_OCCLUDER),
+            1,
+        );
     }
     src
 }
@@ -1170,6 +1178,10 @@ mod tests {
         assert!(soft(&s) && pre(&s) && ol(&s), "without the cars' materials: the penumbra first, the occluder light");
         let s = src(crate::look::ShaderFeatures { soft_shadows: true, occluder_light: true, car_materials: true, ..none });
         assert!(soft(&s) && pre(&s) && !ol(&s), "with them: the penumbra first and the stand-in");
+        let occ = |s: &str, v: f64| s.contains(&format!("const AMB_OCCLUDER: f32 = {v:.6};"));
+        assert!(occ(&s, eo_look::occluder::AGENTS_OCCLUDER), "the stand-in at the walls' share");
+        let s = src(crate::look::ShaderFeatures { soft_shadows: true, car_materials: true, ..none });
+        assert!(occ(&s, crate::ambient::OCCLUDER_OVER_GROUND), "without the occluder light, the stand-in as before");
         let s = src(crate::look::ShaderFeatures { car_materials: true, ..none });
         assert!(soft(&s) && !pre(&s), "(the constants are declared either way; the lookup in place without the penumbra)");
         // the city's own source looks the sun up in place.
