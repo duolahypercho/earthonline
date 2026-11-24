@@ -124,6 +124,10 @@ carries its sources under `meta.sources`.
   in Environmental Sciences (CIRES) at the University of Colorado, Boulder,
   2014, https://doi.org/10.25921/ds9v-ky35. Not for navigation; NOAA and
   NCEI give no warranty and do not endorse this product.
+- **NOAA NCEI ETOPO 2022**, 15 arc-second global relief. The regional shelf and
+  Bay subset supplies offshore soundings beyond the detailed city grid. US
+  Government public-domain data. [Dataset](https://doi.org/10.25921/fd45-gt74)
+  and [build record](public/data/sf/sf-shelf.NOTICE.txt).
 - **ESA WorldCover 10 m 2021 v200** (`sf-land-cover.bin.gz`): © ESA
   WorldCover project 2021 / Contains modified Copernicus Sentinel data
   (2021) processed by ESA WorldCover consortium. Zanaga, D. et al., 2022,

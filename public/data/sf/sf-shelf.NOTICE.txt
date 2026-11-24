@@ -1,0 +1,7 @@
+Regional sea floor outside the city's high-resolution ground grid.
+NOAA National Centers for Environmental Information, 2022. ETOPO 2022 15 Arc-Second Global Relief Model. https://doi.org/10.25921/fd45-gt74
+U.S. Government public-domain data. Source heights relative to the EGM2008 geoid, used as approximate mean sea level on the outer shelf. Not for navigation.
+Source: https://coastwatch.pfeg.noaa.gov/erddap/griddap/ETOPO_2022_v1_15s.csv?z%5B%2836.80%29%3A1%3A%2838.70%29%5D%5B%28-123.62%29%3A1%3A%28-121.32%29%5D
+Retrieved source CSV SHA-256: 69c49fda99e4806895e741c05ab300e2ea6ec66dbbd499a832146904b23fe4c3
+Produced by scripts/world-data/build-sf-shelf.py. Quarter-metre signed heights, south-to-north, disconnected inland terrain excluded.
+Output SHA-256: c256ee66f90d1d80524f0dbbb0942100842808a13694fd0c38f56bb45b2427e3

@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+pub mod shelf;
 pub mod detail_ground; // a finer drawn ground than the 8 m grid, when a provider is set (none yet)
 pub mod external; // where the optional open assets are read from (<repo>/external/<set>, or the set's variable)
 pub mod geo; // latitude, longitude and height above mean sea level to game coordinates
