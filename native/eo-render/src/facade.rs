@@ -526,6 +526,26 @@ pub fn far_relief_from_args() -> bool {
     })
 }
 
+/// `--facade-patina` (`--no-facade-patina`; off by default): the kit walls'
+/// ageing laid on the building rather than on a lattice of blocks. The
+/// ageing graph's soot, grime, overpaint ghosts and mottle are drawn on a
+/// slowly warped field turned off the wall's axes (one lattice thresholded
+/// reads as soft rectangles); the paint fades by its exposure (high on a
+/// south or west wall); the scanned stain columns under the sills give way
+/// to the run-off of each window (`--facade-weather`), which gains the
+/// sill's broad wash under the window and the parapet's run-off down from
+/// the roofline; metal rusts in its grooves, along its foot and in streaks
+/// from its fixings (facade_age.wgsl, cc0.wgsl behind `SF_FACADE_PATINA`).
+/// Compiled in only with the switch (no runtime gate); off, the code is
+/// compiled out and the frame is as before.
+pub fn patina_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--facade-patina", "--no-facade-patina")
+    })
+}
+
 /// The facades track's runtime bits in the frame switches (`fa_run()`), high
 /// enough to stay clear of the others: with a feature's code compiled in
 /// (`ShaderFeatures`) it draws only with its bit set, so a renderer with every

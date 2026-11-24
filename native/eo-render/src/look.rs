@@ -745,6 +745,10 @@ pub struct ShaderFeatures {
     /// hlod.rs `draw_wgsl`, hlod_district.rs roof frames; eo-render `facade::far_relief_from_args`):
     /// compiled in only with the switch (`ALL` leaves it out: no runtime gate), and then always on.
     pub far_relief: bool,
+    /// The kit walls' ageing laid on the building instead of tiled blocks (`--facade-patina`;
+    /// facade_age.wgsl, cc0.wgsl `SF_FACADE_PATINA`; eo-render `facade::patina_from_args`):
+    /// compiled in only with the switch (`ALL` leaves it out: no runtime gate), and then always on.
+    pub facade_patina: bool,
     /// The street's physically based surface pass (`--street-pbr`; street_pbr.wgsl,
     /// `SF_STREET_PBR`): compiled in only with the switch (eo-app sets it; the look's
     /// options do not carry it, and `ALL` leaves it out), and then always on.
@@ -796,7 +800,7 @@ impl ShaderFeatures {
     /// natural-detail bits (`nature`: new code with no runtime test).
     pub const ALL: Self = Self {
         lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true,
-        facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, far_relief: false, // the facades track
+        facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, far_relief: false, facade_patina: false, // the facades track
         street_pbr: false, // the street track
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
         wet_surfaces: true, screen_reflect: true, // the reflect track
@@ -808,7 +812,7 @@ impl ShaderFeatures {
     /// No feature compiled in (the default frame's pipelines).
     pub const NONE: Self = Self {
         lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false,
-        facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, far_relief: false, // the facades track
+        facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, far_relief: false, facade_patina: false, // the facades track
         street_pbr: false, // the street track
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
         wet_surfaces: false, screen_reflect: false, // the reflect track
@@ -836,6 +840,7 @@ impl ShaderFeatures {
             facade_weather: false,
             canyon_glass: false,
             far_relief: false,
+            facade_patina: false,
             street_pbr: false,
             sun_bounce: o.sun_bounce,
             ao_albedo: o.ao_albedo,
@@ -947,6 +952,7 @@ impl ShaderFeatures {
                 ("SF_FACADE_WEATHER", self.facade_weather),
                 ("SF_CANYON_GLASS", self.canyon_glass),
                 ("SF_FAR_RELIEF", self.far_relief),
+                ("SF_FACADE_PATINA", self.facade_patina),
                 // the street track
                 ("SF_STREET_PBR", self.street_pbr),
                 // the light track

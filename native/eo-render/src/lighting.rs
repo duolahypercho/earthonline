@@ -236,6 +236,8 @@ mod tests {
         sets.push(("canyon glass with the pane and every lighting part".into(), look::ShaderFeatures { canyon_glass: true, facade_glass: true, lx_bits: u32::MAX, cinematic: true, ..none }));
         sets.push(("far relief".into(), look::ShaderFeatures { far_relief: true, ..none })); // (`--far-relief`)
         sets.push(("far relief with the far facades and every lighting part".into(), look::ShaderFeatures { far_relief: true, far_facades: true, lx_bits: u32::MAX, cinematic: true, ..none }));
+        sets.push(("facade patina".into(), look::ShaderFeatures { facade_patina: true, ..none })); // (`--facade-patina`)
+        sets.push(("facade patina with the weather, glass, grime and every lighting part".into(), look::ShaderFeatures { facade_patina: true, facade_weather: true, facade_glass: true, grime: true, street_life: true, lx_bits: u32::MAX, cinematic: true, ..none }));
         sets.push(("street pbr".into(), look::ShaderFeatures { grime: true, street_pbr: true, ..none })); // (`--street-pbr`)
         sets.push(("street pbr alone".into(), look::ShaderFeatures { street_pbr: true, ..none }));
         sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
