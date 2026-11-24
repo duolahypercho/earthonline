@@ -365,6 +365,15 @@ pub fn wgsl_constants() -> String {
     s.push_str(&format!("const WO_BAY2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&BAY_TURBID_IOP))));
     s.push_str(&format!("const WO_COAST2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&COAST_IOP))));
     s.push_str(&format!("const WO_SILT2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&SILT_IOP))));
+    // Light incident on an immersed surface and light from that surface to
+    // the eye travel through the water itself. The remote-sensing spectrum
+    // used above weights light that has already scattered back out of it.
+    for (name, water) in [("BAY", &BAY_TURBID_IOP), ("COAST", &COAST_IOP)] {
+        let (a, bb) = iop(water);
+        let kd: [f64; 3] = std::array::from_fn(|i| kd_lee2005(a[i], bb[i]));
+        s.push_str(&format!("const WO_{name}_DIVE_A: vec3<f32> = {};\n", v3e(a)));
+        s.push_str(&format!("const WO_{name}_DIVE_KD: vec3<f32> = {};\n", v3e(kd)));
+    }
     // the column over the ground carpet pressed under open water (shoreline.rs SEA_LEVEL_Y - SEABED_Y)
     s.push_str(&format!("const WO_CARPET_DEPTH_M: f32 = {:.4};\n", crate::shoreline::SEA_LEVEL_Y - crate::shoreline::SEABED_Y));
     s

@@ -77,6 +77,7 @@ struct Look {
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
     // x is the inverse ground-plan scale for submerged cove sediment; zero when disabled.
+    // w selects immersed-subject absorption and diffuse attenuation.
     cove: vec4<f32>,
     // the filmic display transform (eo-look `tone::filmic_curve`): contrast a, shoulder d, b, c
     tone: vec4<f32>,

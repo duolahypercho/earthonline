@@ -7,6 +7,7 @@ struct UwView {
     @location(1) @interpolate(flat) tilt: vec2<f32>,
     @location(2) @interpolate(flat) atmo_gain: f32,
     @location(3) @interpolate(flat) exposure: vec3<f32>,
+    @location(4) to_near: vec3<f32>,
 };
 
 // Invert the horizontal choppiness for the point whose displaced position
@@ -15,6 +16,16 @@ fn uw_height(xz: vec2<f32>, spacing: f32) -> f32 {
     let disp = w_displacement(xz, spacing, w_field_at(xz));
     let base = xz - disp.xz;
     return wu.grid.z + w_displacement(base, spacing, w_field_at(base)).y;
+}
+
+// Reconstruct a direction at reversed-Z far depth. At the reef the camera
+// is kilometres from the origin but the near plane is centimetres away.
+// Subtracting two near-coincident world positions quantizes adjacent pixels.
+fn uw_relative_near(ndc: vec2f) -> vec3f {
+    let far_h = wu.inv_view_proj * vec4f(ndc, 0., 1.);
+    let direction = far_h.xyz - wu.cam.xyz * far_h.w;
+    let near_w = wu.inv_view_proj[2].w + far_h.w;
+    return direction / (dot(direction, wu.fwd.xyz) * near_w);
 }
 
 @vertex
@@ -27,6 +38,8 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
                            uw_height(xz + vec2<f32>(0.0, spacing), spacing)) - y) / spacing;
     var out: UwView;
     out.clip = vec4<f32>(f32(i32(vi & 1u) * 4 - 1), f32(i32(vi >> 1u) * 4 - 1), 0.0, 1.0);
+    out.to_near = vec3f(0.);
+    if UW_DIVE_DETAIL { out.to_near = uw_relative_near(out.clip.xy); }
     // Across the near plane depth below the tangent wave is affine in screen XY.
     // If all four corners and the eye are in air, every fragment would discard.
     if (wu.cam.y >= y) {
@@ -34,7 +47,8 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
         for (var k = 0u; k < 4u; k++) {
             let corner = vec2f(f32(k & 1u), f32(k >> 1u)) * 2.0 - 1.0;
             let h = wu.inv_view_proj * vec4f(corner, 1.0, 1.0);
-            let delta = h.xyz / h.w - wu.cam.xyz;
+            var delta = h.xyz / h.w - wu.cam.xyz;
+            if UW_DIVE_DETAIL { delta = uw_relative_near(corner); }
             wet_corner = wet_corner || y - wu.cam.y - delta.y + dot(slope, delta.xz) > -0.001;
         }
         if (!wet_corner) {out.clip = vec4f(0., 0., 0., 1.);}
@@ -139,7 +153,8 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let uv = i.clip.xy / dims;
     let ndc = vec2<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     let near_h = wu.inv_view_proj * vec4<f32>(ndc, 1.0, 1.0);
-    let to_near = near_h.xyz / near_h.w - wu.cam.xyz;
+    var to_near = near_h.xyz / near_h.w - wu.cam.xyz;
+    if UW_DIVE_DETAIL { to_near = i.to_near; }
     let ray = normalize(to_near);
     let pixel_cone = 0.5 * max(length(dpdx(ray)), length(dpdy(ray)));
     let d0 = i.level - wu.cam.y;
@@ -193,7 +208,16 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let scatter_t = min(0.5 * path, 1.0 / lk_luma(ext));
     let scatter_depth = mix(down0, down1, scatter_t / max(path, 1e-5));
     // Suspended sediment blurs wave focusing as the direct beam loses coherence.
-    let beam_fraction = select(exp(-cove * scatter_depth * 1.5), exp(-lk_luma(ext)*scatter_depth/max(sun_up.y,0.1)), look.cove.z>0.5);
+    var beam_fraction = select(exp(-cove * scatter_depth * 1.5), exp(-lk_luma(ext)*scatter_depth/max(sun_up.y,0.1)), look.cove.z>0.5);
+    if UW_DIVE_DETAIL {
+        // The camera integrates shafts through a stretch of water. Project
+        // that stretch onto the wave field along the refracted sun direction.
+        // Fine focusing survives on a short receiver or along the beam itself.
+        let projected_ray = ray.xz - sun_up.xz * (ray.y / max(sun_up.y, 0.1));
+        let footprint = length(projected_ray) * min(path, 2.0 / lk_luma(ext));
+        let aperture = 3.0 * wu.sizes.w / 256.0; // w_caustic's slope baseline
+        beam_fraction *= inverseSqrt(1.0 + footprint / aperture);
+    }
     let beam_focus = mix(1.0, w_caustic(origin + ray * scatter_t, scatter_depth, sun_up), beam_fraction);
     let vol = ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
         + direct * (scatter * wo_phase(dot(ray, sun_up)) * beam_focus + ext * multiple / WG_PI)
@@ -245,7 +269,7 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     } else if (hit - start < limit) {
         // Only the incident sunlight is focused. Keep ambient in open shade.
         let direct_share = lk_luma(direct) / max(lk_luma(direct + ambient), 1e-5);
-        let focus = mix(1.0, w_caustic(end, down1, sun_up), exp(-cove * down1 * 1.5));
+        let focus = mix(1.0, w_caustic(end, down1, sun_up), w_focus_coherence(end.x, down1, sun_up.y, cove));
         var incident = mix(exp(-ext * mix(1.0, 0.63, cove) * down1 / 0.75),
             exp(-ext * down1 / max(sun_up.y, 0.1)) * focus, direct_share);
         if (daylight > 0.0) {

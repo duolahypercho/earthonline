@@ -250,7 +250,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--blender-camera" => a.look.blender_camera = true,
             "--no-blender-camera" => a.look.blender_camera = false,
             "--dive-site" => o.dive = Some(val()?.to_string()),
-            "--ocean-life" | "--no-ocean-life" | "--ocean-reef" | "--no-ocean-reef" => {}
+            "--ocean-life" | "--no-ocean-life" | "--ocean-reef" | "--no-ocean-reef"
+            | "--dive-detail" | "--no-dive-detail" => {}
             "--water-optics" => a.look.water_optics = true,
             "--cove-detail" => a.cove_detail = true,
             "--cove-canopy" => { a.cove_detail = true; a.look.cove_canopy = true; }
