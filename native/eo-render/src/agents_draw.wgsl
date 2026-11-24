@@ -446,6 +446,9 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     if (LK_SUN_PRE) {
         ag_sun_pre(in); // (`--soft-shadows`) the penumbra first, where little else is live (look_light.wgsl `lk_sun_pre`)
     }
+    if (AMB_OL_PRE) {
+        amb_ol_pre(); // (`--occluder-light`) what hides the sky's light first too (ambient.wgsl)
+    }
     let cd = ag_car_derivs(in); // (`--car-materials`) in uniform control flow; nothing without it
     var g = ag_surface(in, false);
     if (SF_CINEMATIC && (g.m.flags & AG_M_PAINT) != 0u && sky_on(skyu.flags.x, SKY_CINEMATIC)) {

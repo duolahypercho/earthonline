@@ -105,6 +105,13 @@ fn amb_sample(world: vec3<f32>, ng: vec3<f32>) -> vec4<f32> {
             v = mix(v, amb_level(p.xz, h, 1u, AMB_NEAR_CELL_M, reach), wn);
         }
     }
+    // (`--occluder-light`) where the street's own sky (`amb_vg`) is not read
+    // apart (AMB_OL_STREET off: the agents' module), the volume at the point
+    // itself facing up: a car or a walker stands within a few metres of the
+    // street. No read more.
+    if (amb_ol_on()) {
+        amb_vg = clamp(v.x + v.z, 0.0, 1.0);
+    }
     return v;
 }
 
@@ -210,13 +217,17 @@ fn amb_bounce(a: AmbGround, n: vec3<f32>, cloud: f32) -> vec3<f32> {
 var<private> amb_vg: f32 = 1.0;
 var<private> amb_occ_m: vec3<f32> = vec3<f32>(0.0);
 
-// Only where the levels are read (AMB_SHADER_LEVELS > 0: the city, the
-// structures, the agents, the probe faces): the far layer's and the props'
-// pipelines read the plane alone and stand at the edge of what Apple's
-// compiler takes (`hlod-draw` failed with this in, r2i1); they keep the
-// stand-in, past the levels' reach and on small things.
+// Every pipeline that reads the volume's levels (the city, the structures, the
+// probe faces, and since r2i3 the agents: the cars under a deck kept the sunlit
+// street's light while the deck's shade round them darkened). The city reads
+// the street's own sky apart (AMB_OL_STREET, `amb_sample_ground`); the agents'
+// module takes it from what `amb_sample` reads anyway (its opaque pipeline
+// aborted Apple's compiler with the separate reads, r2i1-r2i2). The plane-only
+// pipelines (the far layer, the props) have it compiled out and keep the
+// stand-in (look.rs `city_shader_source_variant_probes`: neither builds on
+// Apple's GPU with it in every feature set, r2i1, r2i3).
 fn amb_ol_on() -> bool {
-    return SF_OCCLUDER_LIGHT && AMB_SHADER_LEVELS > 0u && (u32(look.ao_params.w + 0.5) & 4u) != 0u;
+    return SF_OCCLUDER_LIGHT && AMB_SHADER_ON && (u32(look.ao_params.w + 0.5) & 4u) != 0u;
 }
 
 // `amb_sample` that also sets `amb_vg`, the street's own sky visibility
@@ -315,6 +326,31 @@ fn amb_soffit_exitance(vg: f32) -> vec3<f32> {
     return OL_DECK_ALBEDO * (vg * (ls + sun) + (1.0 - vg) * vg * ls);
 }
 
+// (`--occluder-light`) what hides the sky's exitance over a point whose volume
+// visibility is `c`: the shaded walls', or under a lid the deck's underside (by
+// the lid's share), at the street's own sky `amb_vg`.
+fn amb_occluder_mix(c: vec4<f32>) -> vec3<f32> {
+    return mix(amb_occluder_exitance(amb_vg), amb_soffit_exitance(amb_vg), amb_lid_share(c));
+}
+
+// (`--occluder-light`, AMB_OL_PRE: the agents' module) what hides the sky is
+// lit by a stand-in set first thing in the fragment (agents_draw.wgsl
+// `ag_shade`): the ground lobe x OL_AGENTS_OCCLUDER (eo-look
+// `occluder::AGENTS_OCCLUDER`, the shaded walls' exitance over the lobe for a
+// street seeing a quarter to two fifths of the sky); the rest of the model
+// (the street's own sky from the agent's own sample, the lobe's sky part at
+// it, the ground's sun part whole, the rim hidden) as everywhere else. The
+// walls' or a deck's exitance worked out per pixel aborted Apple's compiler on
+// the agents' opaque pipeline with the cars' materials (r2i3, bisected with
+// the module built alone: in `amb_irradiance`, even as a constant; first thing
+// in the fragment, even the walls' formula at a fixed street sky or the
+// volume read again; only a constant set first builds).
+fn amb_ol_pre() {
+    if (amb_on() && amb_ol_on()) {
+        amb_occ_m = look.hemi_ground.xyz * OL_AGENTS_OCCLUDER;
+    }
+}
+
 // (`--occluder-light`) the share of the rig's rim light (a directional stand-in
 // for the sky opposite the sun, never shadowed) that what hides the sky
 // hides: 1 - the visible share along its direction over the open sky's.
@@ -347,11 +383,10 @@ fn amb_irradiance(c: vec4<f32>, n: vec3<f32>, env: vec3<f32>) -> vec3<f32> {
     let vs = min(amb_vis(c, n), t);
     if (amb_ol_on()) {
         let lower = 1.0 - t;
-        // what hides the sky: the shaded walls, or under a lid the deck's underside (by the lid's share).
-        amb_occ_m = amb_occluder_exitance(amb_vg);
-        let lid = amb_lid_share(c);
-        if (lid > 0.0) {
-            amb_occ_m = mix(amb_occ_m, amb_soffit_exitance(amb_vg), lid);
+        // what hides the sky: the shaded walls, or under a lid the deck's underside (by the lid's
+        // share); in the agents' module the stand-in set first (`amb_ol_pre`).
+        if (!AMB_OL_PRE) {
+            amb_occ_m = amb_occluder_mix(c);
         }
         let lit = look.hemi_sky.xyz * vs + (look.hemi_ground.xyz - amb_lobe_sky() * (1.0 - amb_vg)) * lower + amb_occ_m * (t - vs);
         // the rig's rim (a directional stand-in for the sky opposite the sun, never

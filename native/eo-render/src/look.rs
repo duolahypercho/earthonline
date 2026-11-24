@@ -1021,7 +1021,7 @@ fn occluder_wgsl() -> String {
     use eo_look::occluder as o;
     let f = |v: f64| format!("{v:.8}");
     format!(
-        "const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({}, {}, {});\nconst OL_GROUND_SKY_H_M: f32 = {};\nconst OL_SIDE_OPEN: f32 = {};\nconst OL_MIN_STREET_SKY: f32 = {};\nconst OL_MAX_STREET_SKY: f32 = {};\nconst OL_SKIP_SHARE: f32 = {};\nconst OL_DECK_ALBEDO: f32 = {};\nconst OL_LID_R0: f32 = {};\nconst OL_LID_R1: f32 = {};\n",
+        "const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({}, {}, {});\nconst OL_GROUND_SKY_H_M: f32 = {};\nconst OL_SIDE_OPEN: f32 = {};\nconst OL_MIN_STREET_SKY: f32 = {};\nconst OL_MAX_STREET_SKY: f32 = {};\nconst OL_SKIP_SHARE: f32 = {};\nconst OL_DECK_ALBEDO: f32 = {};\nconst OL_LID_R0: f32 = {};\nconst OL_LID_R1: f32 = {};\nconst OL_AGENTS_OCCLUDER: f32 = {};\n",
         f(o::WALL_ALBEDO[0]),
         f(o::WALL_ALBEDO[1]),
         f(o::WALL_ALBEDO[2]),
@@ -1032,7 +1032,8 @@ fn occluder_wgsl() -> String {
         f(o::SKIP_SHARE),
         f(o::DECK_ALBEDO),
         f(o::LID_R0),
-        f(o::LID_R1)
+        f(o::LID_R1),
+        f(o::AGENTS_OCCLUDER)
     )
 }
 
@@ -1138,7 +1139,17 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// at the edge of what Apple's compiler takes, have room for the probe grid
 /// (probe_grid.wgsl, compiled in everywhere but the far layer).
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
-    sf_select(&city_shader_parts(ambient, shadow, single_probe)) // the natural-detail blocks (`// sf:`) of the features compiled in
+    let s = sf_select(&city_shader_parts(ambient, shadow, single_probe)); // the natural-detail blocks (`// sf:`) of the features compiled in
+    if ambient == crate::ambient::ShaderLevels::Plane {
+        // (`--occluder-light`) the plane-only pipelines (the far layer, the props) keep the
+        // stand-in for the blocked sky: on Apple's GPU `hlod-draw` failed to build with the
+        // light of what hides the sky in it (r2i1; in r2i3 too, nothing read but the plane),
+        // and `prop-cutout` with the test suite's feature set (r2i3, tests/props.rs, in every
+        // shape tried, the agents' stand-in set first included), though it built with the
+        // round's: XPC_ERROR_CONNECTION_INTERRUPTED.
+        return s.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+    }
+    s
 }
 
 fn city_shader_parts(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {

@@ -399,7 +399,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let amb = amb_on();
     var av = AMB_OPEN;
     if (amb) {
-        if (amb_ol_on()) {
+        if (amb_ol_on() && AMB_OL_STREET) {
             av = amb_sample_ground(world, ng, n); // (`--occluder-light`) and the street's own sky under the point
         } else {
             av = amb_sample(world, ng);
