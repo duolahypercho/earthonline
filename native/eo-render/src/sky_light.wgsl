@@ -267,8 +267,15 @@ fn sky_leaf_t(p: vec3<f32>, lp: vec3<f32>) -> f32 {
     if (t1 <= t0) {
         return 1.0;
     }
-    let bl = max(sqrt(max(dot(oc, oc) - b * b, 0.0)), 0.1 * sky_leaf.w);
-    let tau = sky_leaf_k.x * (t1 - t0) + sky_leaf_k.y / bl * (atan((t1 + b) / bl) - atan((t0 + b) / bl));
+    var tau = sky_leaf_k.x * (t1 - t0);
+    if (sky_leaf_k.y > 0.0) {
+        // atan(u1) - atan(u0) in one atan (u1 > u0: the difference lies in (0, pi))
+        let bl = max(sqrt(max(dot(oc, oc) - b * b, 0.0)), 0.1 * sky_leaf.w);
+        let u1 = (t1 + b) / bl;
+        let u0 = (t0 + b) / bl;
+        let q = 1.0 + u1 * u0;
+        tau = tau + sky_leaf_k.y / bl * (atan((u1 - u0) / q) + select(0.0, 3.14159265, q < 0.0));
+    }
     return exp(-tau);
 }
 // sf:end
