@@ -356,7 +356,7 @@ impl Oracle {
         let mut tiles: Vec<TileKey> = n.lanes.iter().map(|l| TileKey::of(l.points[0], l.points[1])).collect();
         tiles.sort();
         tiles.dedup();
-        NetworkBuild { tiles, lanes, footways, foot_nodes, junctions, segments, merge_max_lateral_m }
+        NetworkBuild { tiles, lanes, footways, foot_nodes, junctions, segments, merge_max_lateral_m, footway_activity: vec![] }
     }
 }
 

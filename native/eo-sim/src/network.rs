@@ -146,6 +146,9 @@ pub struct NetworkBuild {
     /// Widest sideways step a through lane's one continuation may take as a merge
     /// (`THROUGH_MERGE_MAX_LATERAL_M` = caMetric('travel-lane-clearance-at-bulbout-auto-sf')).
     pub merge_max_lateral_m: f64,
+    /// What fronts each of `footways` (`--crowd`; `NativeSource::with_frontage`):
+    /// empty (every footway's activity zero, the network as before) without a survey.
+    pub footway_activity: Vec<crate::consts::FootActivity>,
 }
 
 // ---------------------------------------------------------------- runtime
@@ -226,6 +229,8 @@ pub struct Footway {
     pub cross: FootwayId,
     pub ends: [FootEnd; 2],
     pub routable: bool,
+    /// What fronts it (`--crowd`; zero without a frontage survey).
+    pub activity: crate::consts::FootActivity,
 }
 
 #[derive(Clone, Debug)]
@@ -460,7 +465,7 @@ impl Network {
             }
         }
         let mut foot_ids: Vec<FootwayId> = Vec::with_capacity(build.footways.len());
-        for fb in build.footways.iter() {
+        for (k, fb) in build.footways.iter().enumerate() {
             let cum = geom::cumulative(&fb.points);
             let length = *cum.last().unwrap_or(&0.0);
             let mid = fb.points[fb.points.len() / 2];
@@ -490,6 +495,7 @@ impl Network {
                 cross: NONE,
                 ends,
                 routable: fb.node_keys.is_some(),
+                activity: build.footway_activity.get(k).copied().unwrap_or_default(),
             };
             let id = if let Some(free) = self.free_footways.pop() {
                 self.footways[free as usize] = fw;

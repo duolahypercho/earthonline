@@ -69,6 +69,9 @@ pub struct RegionConfig {
     pub view_half_angle: f64,
     /// The drawn traffic window (`VEHICLE_QUALITY[level].trafficDistance`).
     pub draw_horizon: f64,
+    /// The crowd by place and hour (eo-app `--crowd`, `CrowdDensity`) in
+    /// place of `people`'s fixed resident disc; None (the default) as before.
+    pub crowd: Option<CrowdDensity>,
 }
 
 /// The game camera of the JS harnesses: 52 degrees vertical at 16:9.
@@ -89,6 +92,7 @@ impl RegionConfig {
             spawn_radius: Some(LOCAL_RECYCLE_RADIUS),
             view_half_angle: game_camera_half_angle(),
             draw_horizon: traffic_window(Level::High).1,
+            crowd: None,
         }
     }
 
@@ -105,8 +109,21 @@ impl RegionConfig {
             spawn_radius: None,
             view_half_angle: game_camera_half_angle(),
             draw_horizon: traffic_window(Level::High).1,
+            crowd: None,
         }
     }
+}
+
+/// What the crowd's disc holds (`Region::crowd_census`, `--crowd`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CrowdCensus {
+    pub footways: usize,
+    pub length_m: f64,
+    pub shops: f64,
+    pub night: f64,
+    pub storeys: f64,
+    pub class_weight: f64,
+    pub people: f64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -592,6 +609,151 @@ impl Region {
         self.cold_seed = false;
     }
 
+    /// What the disc holds (`--crowd`): footways and their length inside
+    /// it, their length-weighted mean activity and class weight, and the
+    /// people they hold at `hour` (every footway's density over its length
+    /// inside the disc, before the body budget).
+    pub fn crowd_census(&self, net: &Network, d: CrowdDensity, hour: f64) -> CrowdCensus {
+        let focus = [self.focus.x, self.focus.z];
+        let mut c = CrowdCensus::default();
+        let mut seen = std::collections::HashSet::new();
+        for t in net.tiles_near(focus[0], focus[1], d.radius_m) {
+            for &f in &t.footways {
+                let fw = &net.footways[f as usize];
+                if !fw.alive || fw.length < 4.0 || !seen.insert(f) {
+                    continue;
+                }
+                let inside = geom::length_in_disc(&fw.pts, focus, d.radius_m);
+                if inside <= 0.0 {
+                    continue;
+                }
+                c.footways += 1;
+                c.length_m += inside;
+                c.shops += fw.activity.shops as f64 * inside;
+                c.night += fw.activity.night as f64 * inside;
+                c.storeys += fw.activity.storeys as f64 * inside;
+                c.class_weight += fw.weight * inside;
+                c.people += footway_density(fw.weight, fw.activity, hour) * d.scale * inside;
+            }
+        }
+        if c.length_m > 0.0 {
+            for v in [&mut c.shops, &mut c.night, &mut c.storeys, &mut c.class_weight] {
+                *v /= c.length_m;
+            }
+        }
+        c
+    }
+
+    /// The resident disc by place and hour (`--crowd`; `bubble`'s rules with
+    /// the body count each footway's density gives in place of a fixed one):
+    /// a focus that jumps further than the disc is a cut and the street is
+    /// rebuilt from scratch (every footway in the disc filled, in shot too);
+    /// after that the disc is refilled on the materializer's scan, off shot
+    /// beyond the pop-in guard or in shot beyond the in-shot guard, each
+    /// footway in proportion to the people it holds inside the disc.
+    fn density_bubble(&mut self, net: &Network, dt: f64, d: CrowdDensity, hour: f64) {
+        let focus = [self.focus.x, self.focus.z];
+        if let Some(last) = self.last_focus {
+            if geom::hypot(focus[0] - last[0], focus[1] - last[1]) > d.radius_m {
+                while !self.crowd.walkers.is_empty() {
+                    self.crowd.remove(self.crowd.walkers.len() - 1);
+                }
+                self.cold_seed = true;
+                self.scan_timer = f64::INFINITY;
+                self.stats.focus_cuts += 1;
+            }
+        }
+        self.last_focus = Some(focus);
+        let keep2 = d.keep_radius_m * d.keep_radius_m;
+        let mut i = self.crowd.walkers.len();
+        while i > 0 {
+            i -= 1;
+            let (dx, dz) = (self.crowd.x[i] - focus[0], self.crowd.z[i] - focus[1]);
+            if dx * dx + dz * dz > keep2 {
+                self.crowd.remove(i);
+            }
+        }
+        self.scan_timer += dt;
+        if self.scan_timer < SCAN_INTERVAL_S {
+            return;
+        }
+        self.scan_timer = 0.0;
+        // Candidate footways inside the disc, each weighted by the people it holds there.
+        self.foot_scratch.clear();
+        let mut running = 0.0;
+        for t in net.tiles_near(focus[0], focus[1], d.radius_m) {
+            for &f in &t.footways {
+                let fw = &net.footways[f as usize];
+                if !fw.alive || fw.length < 4.0 {
+                    continue;
+                }
+                let inside = geom::length_in_disc(&fw.pts, focus, d.radius_m);
+                if inside <= 0.0 {
+                    continue;
+                }
+                let people = footway_density(fw.weight, fw.activity, hour) * d.scale * inside;
+                if people <= 0.0 {
+                    continue;
+                }
+                running += people;
+                self.foot_scratch.push((f, running));
+            }
+        }
+        let target = (crate::standards::js_round(running) as usize).min(d.max_bodies);
+        let deficit = target.saturating_sub(self.crowd.walkers.len());
+        if deficit == 0 || self.foot_scratch.is_empty() {
+            self.cold_seed = false;
+            return;
+        }
+        let cos_cone = IN_SHOT_HALF_ANGLE_RAD.cos();
+        let mut spawned = 0;
+        let mut attempts = 0;
+        while spawned < deficit && attempts < deficit * 8 {
+            attempts += 1;
+            let t = self.walker_rng.next_f64() * running;
+            let k = self.foot_scratch.partition_point(|e| e.1 < t).min(self.foot_scratch.len() - 1);
+            let f = self.foot_scratch[k].0;
+            let fw = &net.footways[f as usize];
+            let arc = self.walker_rng.next_f64() * fw.length;
+            let (x, z, _, _, _) = geom::at_arc(&fw.pts, &fw.cum, arc);
+            let (dx, dz) = (x - focus[0], z - focus[1]);
+            let dist = geom::hypot(dx, dz);
+            if dist > d.radius_m {
+                continue;
+            }
+            if !self.cold_seed {
+                if dist < d.pop_in_guard_m {
+                    continue;
+                }
+                if self.focus.yaw.is_finite() && dist < d.in_shot_guard_m && dist > 1e-3 {
+                    let c = (dx * self.focus.yaw.sin() + dz * self.focus.yaw.cos()) / dist;
+                    if c >= cos_cone {
+                        continue;
+                    }
+                }
+            }
+            let before = self.crowd.walkers.len();
+            spawned += self.spawn_group(net, f, Some(arc));
+            for w in before..self.crowd.walkers.len() {
+                let (x, z) = {
+                    let wk = &self.crowd.walkers[w];
+                    let fw = &net.footways[wk.footway as usize];
+                    let (x, z, _, _, _) = geom::at_arc(&fw.pts, &fw.cum, wk.s);
+                    (x, z)
+                };
+                self.crowd.x[w] = x;
+                self.crowd.z[w] = z;
+            }
+        }
+        while self.crowd.walkers.len() > target {
+            let last = self.crowd.walkers.len() - 1;
+            self.crowd.remove(last);
+            self.crowd.stats.spawned -= 1;
+            self.crowd.stats.retired -= 1;
+        }
+        self.cold_seed = false;
+    }
+
     /// seed the next refill with every pop-in guard on (a shared region
     /// opened beside a live one, whose viewers already see the street).
     pub fn warm(&mut self) {
@@ -924,7 +1086,9 @@ impl Region {
             }
         } else {
             self.local_life(net, dt, hour);
-            if let People::Bubble(b) = self.cfg.people {
+            if let Some(d) = self.cfg.crowd {
+                self.density_bubble(net, dt, d, hour); // `--crowd`
+            } else if let People::Bubble(b) = self.cfg.people {
                 self.bubble(net, dt, b);
             }
         }

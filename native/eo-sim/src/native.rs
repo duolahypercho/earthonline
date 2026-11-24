@@ -65,6 +65,123 @@ pub struct NativeSource {
     /// `StructureWorld::way_levels`). Empty (every lane at grade, the
     /// network exactly as without it) unless set (`with_levels`).
     levels: HashMap<String, i8>,
+    /// The building fronts the footways are measured against (`--crowd`;
+    /// `with_frontage`). None: every footway's activity zero, as before.
+    frontage: Option<std::sync::Arc<FrontageIndex>>,
+    /// The walks that are not a street's sidewalk (`--crowd`; `with_paths`):
+    /// a plaza's, a promenade's and a park's paths, by tile. Empty: none, as before.
+    paths: Vec<PathWay>,
+    path_tiles: HashMap<TileKey, Vec<u32>>,
+}
+
+/// A walk of its own (`NativeSource::with_paths`, eo-app `--crowd`): an OSM
+/// `pedestrian`, `footway` or `path` way that is not a street's sidewalk or
+/// crossing, at grade, on the plan the roads are on.
+#[derive(Clone, Debug)]
+pub struct PathWay {
+    pub id: String,
+    pub highway: String,
+    pub points: Vec<P2>,
+}
+
+/// One building edge on the street (`NativeSource::with_frontage`, eo-app
+/// `--crowd`): its ends (world metres, on the plan the roads are on), the
+/// building's storeys and its use at street level.
+#[derive(Clone, Copy, Debug)]
+pub struct FrontEdge {
+    pub a: P2,
+    pub b: P2,
+    pub storeys: f32,
+    /// A walk-in shop, cafe or service.
+    pub shops: bool,
+    /// A bar, pub, restaurant, club or theatre.
+    pub night: bool,
+}
+
+/// The fronts on a grid of `FRONT_CELL_M` cells.
+struct FrontageIndex {
+    edges: Vec<FrontEdge>,
+    cells: HashMap<(i32, i32), Vec<u32>>,
+}
+
+/// The frontage survey's grid cell, its sample spacing along a footway, its
+/// slack past the building line (OSM footprints against the class model's
+/// walk lines offset from the centreline) and how far on the carriageway's
+/// side of the walk line a front may stand (a footprint over the sidewalk),
+/// metres.
+const FRONT_CELL_M: f64 = 32.0;
+const FRONT_SAMPLE_M: f64 = 4.0;
+const FRONT_SLACK_M: f64 = 4.0;
+const FRONT_INWARD_M: f64 = 1.0;
+
+fn front_cell(x: f64, z: f64) -> (i32, i32) {
+    ((x / FRONT_CELL_M).floor() as i32, (z / FRONT_CELL_M).floor() as i32)
+}
+
+/// The distance from (x, z) to a segment and the segment's nearest point.
+fn seg_nearest(a: P2, b: P2, x: f64, z: f64) -> (f64, P2) {
+    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+    let len2 = (dx * dx + dz * dz).max(1e-9);
+    let t = (((x - a[0]) * dx + (z - a[1]) * dz) / len2).clamp(0.0, 1.0);
+    let q = [a[0] + dx * t, a[1] + dz * t];
+    (geom::hypot(q[0] - x, q[1] - z), q)
+}
+
+impl FrontageIndex {
+    fn new(edges: Vec<FrontEdge>) -> Self {
+        let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+        for (i, e) in edges.iter().enumerate() {
+            let lo = front_cell(e.a[0].min(e.b[0]), e.a[1].min(e.b[1]));
+            let hi = front_cell(e.a[0].max(e.b[0]), e.a[1].max(e.b[1]));
+            for cx in lo.0..=hi.0 {
+                for cz in lo.1..=hi.1 {
+                    cells.entry((cx, cz)).or_default().push(i as u32);
+                }
+            }
+        }
+        FrontageIndex { edges, cells }
+    }
+
+    /// The shares of a walking line fronted by shops and by the evening
+    /// economy, and the mean storeys of its fronts: at every sample along it,
+    /// the nearest building edge within `reach` on its outer side (`outward`:
+    /// away from the carriageway, so never a front across the street; none:
+    /// nothing fronts it there).
+    fn activity(&self, points: &[P2], outward: P2, reach: f64) -> crate::consts::FootActivity {
+        let cum = geom::cumulative(points);
+        let len = *cum.last().unwrap_or(&0.0);
+        if len <= 0.0 {
+            return Default::default();
+        }
+        let n = (len / FRONT_SAMPLE_M).ceil().max(1.0) as usize;
+        let (mut shops, mut night, mut storeys) = (0u32, 0u32, 0.0f64);
+        for i in 0..n {
+            let (x, z, _, _, _) = geom::at_arc(points, &cum, (i as f64 + 0.5) * len / n as f64);
+            let lo = front_cell(x - reach, z - reach);
+            let hi = front_cell(x + reach, z + reach);
+            let mut best: Option<(f64, u32)> = None;
+            for cx in lo.0..=hi.0 {
+                for cz in lo.1..=hi.1 {
+                    for &k in self.cells.get(&(cx, cz)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                        let e = &self.edges[k as usize];
+                        let (d, q) = seg_nearest(e.a, e.b, x, z);
+                        let out = (q[0] - x) * outward[0] + (q[1] - z) * outward[1];
+                        if d <= reach && out >= -FRONT_INWARD_M && best.is_none_or(|(bd, bk)| d < bd || (d == bd && k < bk)) {
+                            best = Some((d, k));
+                        }
+                    }
+                }
+            }
+            if let Some((_, k)) = best {
+                let e = &self.edges[k as usize];
+                shops += e.shops as u32;
+                night += e.night as u32;
+                storeys += e.storeys as f64;
+            }
+        }
+        let n = n as f64;
+        crate::consts::FootActivity { shops: (shops as f64 / n) as f32, night: (night as f64 / n) as f32, storeys: (storeys / n) as f32, place: 0.0 }
+    }
 }
 
 fn vehicle_way(h: &str) -> bool {
@@ -121,7 +238,36 @@ impl NativeSource {
         for (i, s) in source.signals.iter().enumerate() {
             signal_tiles.entry(TileKey::of(s[0], s[1])).or_default().push(i as u32);
         }
-        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new() }
+        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new(), frontage: None, paths: vec![], path_tiles: HashMap::new() }
+    }
+
+    /// The same source with walks of their own (`--crowd`): each becomes a
+    /// footway of its own along its line (routable through the ends it shares
+    /// with another), delivered with the tile of its middle vertex, its
+    /// activity's `place` by its kind. Without it there are none.
+    pub fn with_paths(mut self, paths: Vec<PathWay>) -> Self {
+        self.path_tiles.clear();
+        for (i, p) in paths.iter().enumerate() {
+            if p.points.len() >= 2 {
+                let mid = p.points[p.points.len() / 2];
+                self.path_tiles.entry(TileKey::of(mid[0], mid[1])).or_default().push(i as u32);
+            }
+        }
+        self.paths = paths;
+        self
+    }
+
+    /// The same source with the building fronts its footways are measured
+    /// against (`--crowd`: each footway's `activity`, what the crowd's density
+    /// by place reads). Without it every footway's activity is zero.
+    pub fn with_frontage(mut self, edges: Vec<FrontEdge>) -> Self {
+        self.frontage = (!edges.is_empty()).then(|| std::sync::Arc::new(FrontageIndex::new(edges)));
+        self
+    }
+
+    /// Whether a frontage survey is set (`with_frontage`).
+    pub fn has_frontage(&self) -> bool {
+        self.frontage.is_some()
     }
 
     /// The same source with lane levels (`levels`: OSM way id -> structure
@@ -506,9 +652,57 @@ impl NativeSource {
                 foot_nodes.entry(key.clone()).or_insert(FootNodeBuild { key, pos: p, signal });
             }
         }
+        // (`--crowd`) the walks of their own in these tiles, in tile then path order.
+        let first_path = build.footways.len();
+        let mut path_place: Vec<f32> = vec![];
+        let mut path_ids: Vec<u32> = tiles.iter().filter_map(|t| self.path_tiles.get(t)).flatten().copied().collect();
+        path_ids.sort_unstable();
+        path_ids.dedup();
+        for i in path_ids {
+            let p = &self.paths[i as usize];
+            let (a, b) = (p.points[0], p.points[p.points.len() - 1]);
+            let d = [b[0] - a[0], b[1] - a[1]];
+            let dl = geom::hypot(d[0], d[1]);
+            let len: f64 = p.points.windows(2).map(|w| geom::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+            if len < 4.0 || dl < 1e-6 {
+                continue;
+            }
+            let mid = p.points[p.points.len() / 2];
+            build.footways.push(FootwayBuild {
+                points: p.points.clone(),
+                highway: p.highway.clone(),
+                segment: format!("p{}", p.id),
+                road_side: 1,
+                node_keys: Some([node_text(a), node_text(b)]),
+                normal: [d[1] / dl, -d[0] / dl],
+                cross_index: None,
+                ends: [FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0 }, FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0 }],
+                tile: Some(TileKey::of(mid[0], mid[1])),
+            });
+            path_place.push(if p.highway == "pedestrian" { crate::consts::PLACE_PEDESTRIAN } else { crate::consts::PLACE_FOOTPATH });
+            for q in [a, b] {
+                let key = node_text(q);
+                foot_nodes.entry(key.clone()).or_insert(FootNodeBuild { key, pos: q, signal: None });
+            }
+        }
         let mut nodes: Vec<FootNodeBuild> = foot_nodes.into_values().collect();
         nodes.sort_by(|a, b| a.key.cmp(&b.key));
         build.foot_nodes = nodes;
+        if !path_place.is_empty() && build.footway_activity.is_empty() {
+            build.footway_activity = vec![Default::default(); build.footways.len()];
+        }
+        if let Some(fr) = &self.frontage {
+            // The class model's walk line stands half a throughway in from the
+            // frontage zone's edge, on a carriageway of travel lanes alone: the
+            // surveyed building line can be a parking lane and a commercial
+            // sidewalk further out (the model draws neither the parking lanes
+            // nor the surveyed widths), plus the slack.
+            let reach = self.dims.frontage_zone_m + self.dims.throughway_m + self.dims.city_lane_m + self.dims.sidewalk_commercial_m + FRONT_SLACK_M;
+            build.footway_activity = build.footways.iter().map(|f| fr.activity(&f.points, [f.normal[0] * f.road_side as f64, f.normal[1] * f.road_side as f64], reach)).collect();
+        }
+        for (k, place) in path_place.into_iter().enumerate() {
+            build.footway_activity[first_path + k].place = place;
+        }
         build
     }
 }
