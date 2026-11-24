@@ -515,7 +515,7 @@ Pacific kelp habitat. The additional rock outcrops, colonies and schooling fish
 use the licensed procedural mesh generators credited in the third-party notices.
 The kelp grows on the modeled hard bottom within the lit coastal depth range.
 These are habitat reconstructions. To rebuild the seven source forms and the
-additional detailed kelp mesh from the pinned sources, run `node scripts/blender-ocean/cook-reef.mjs` at the repository root.
+detailed coastal variants using the pinned sources and original plant models, run `node scripts/blender-ocean/cook-reef.mjs` at the repository root.
 
 The marine library comes from the original Blender habitat study. Restore the
 locked source with `npm run assets:pull -- ocean/sf-habitats` at the repository
@@ -534,6 +534,7 @@ selection:
 | Area | Switches |
 | --- | --- |
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
+| Coastal plant communities | `--coastal-habitat` includes the reef and dive optics, with bull-kelp crowns at exposed rocks, eelgrass shoots on sheltered sediment, and broken whitecaps seen from below. Add `--no-coastal-habitat` to an `--ocean-reef --dive-detail` run for the former plants. |
 | Underwater close detail | Add `--dive-detail` for camera-relative water rays, regional underwater light absorption, depth-filtered sunlight and moving reef blades. `--no-dive-detail` restores the previous dive. Use with `--ocean-reef` for the kelp and schooling fish. |
 | Pacific kelp and reef forms | `--ocean-reef` includes the mapped marine habitats. Add `--no-ocean-reef` to an `--ocean-life` run for the original Blender habitats alone. |
 | Mapped marine habitats and swimming | `--ocean-life` enables the surveyed seafloor, regional light transport, fish, plants and seabed animals. `--no-ocean-life` restores the previous water. |

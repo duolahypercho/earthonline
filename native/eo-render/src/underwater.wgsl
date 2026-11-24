@@ -227,10 +227,12 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
         var slope = i.tilt;
         let amp = wg_cascade_amp(end.x);
         var foam = 0.0;
+        var fine = 0.0;
         for (var c = 1u; c < 4u; c++) {
             let d = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(end.xz, c), c, 0.0);
             slope += d.xy * amp[c];
             foam = max(foam, mix(d.w, d.z, ocean));
+            if UW_COASTAL_HABITAT && c >= 2u { fine += (d.x+d.y)*amp[c]; }
         }
         // The same moving capillary chop bends both views of the interface.
         let rough = wv_ripple(end.x);
@@ -265,7 +267,22 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
             boundary = mix(uw_air_light(end, air) * (WO_IOR * WO_IOR), boundary, f);
         }
         // Whitecap bubbles diffuse incident light on the underside.
-        boundary = mix(boundary, (ambient + direct * max(sun.y, 0.0)) / WG_PI, smoothstep(0.08, 0.65, foam));
+        var cover = smoothstep(0.08, 0.65, foam);
+        var transmission = 1.;
+        if UW_COASTAL_HABITAT {
+            // A compressing crest is a candidate for breaking. Only part of
+            // its length spills. Use the same patch coverage as the surface.
+            cover = 0.;
+            if foam > 0.02 {
+                w_fp_lat = max(0.001, 2.*pixel_cone*path);
+                let far = smoothstep(0.15,0.6,w_fp_lat/max(abs(dot(n,ray)),0.08));
+                cover = w_whitecap(foam, fine, end.xz, wu.cam.w, 1., far);
+            }
+            // The top returns 0.40–0.58 of incident light. The underside
+            // can diffuse at most the remaining flux toward the swimmer.
+            transmission = 1.-mix(0.4,0.58,smoothstep(0.3,0.9,cover));
+        }
+        boundary = mix(boundary, transmission * (ambient + direct * max(sun.y, 0.0)) / WG_PI, cover);
     } else if (hit - start < limit) {
         // Only the incident sunlight is focused. Keep ambient in open shade.
         let direct_share = lk_luma(direct) / max(lk_luma(direct + ambient), 1e-5);

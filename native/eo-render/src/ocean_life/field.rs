@@ -410,6 +410,68 @@ pub fn reef(x: i32, z: i32, sample: &Sampler, out: &mut [Vec<Instance>; KINDS.le
     }
 }
 
+/// Follow established eelgrass patches out along the sediment. Sample every
+/// new shoot location so the roots stay on the bed as the bottom slopes.
+pub fn coastal_grass(x: i32, z: i32, sample: &Sampler, shoots: &mut Vec<Instance>) {
+    let mut rng = Rng(hash(x, z) ^ 0xb5ea_6a51);
+    let founders = shoots.len();
+    for i in 0..founders {
+        let parent = shoots[i];
+        let axis = Vec2::new(parent.at[3].cos(), parent.at[3].sin());
+        let across = Vec2::new(-axis.y, axis.x);
+        for _ in 0..3 {
+            let p = Vec2::new(parent.at[0], parent.at[2])
+                + axis * rng.between(-0.95, 0.95)
+                + across * rng.between(-0.31, 0.31);
+            let Some(site) = sample(p) else {
+                continue;
+            };
+            let depth = SEA - site.floor;
+            if site.shore < 0.35
+                || site.pacific > 0.48
+                || !(0.46..4.2).contains(&depth)
+                || (site.floor - parent.at[1]).abs() > 0.23
+            {
+                continue;
+            }
+            let h = (parent.shape[1] * rng.between(0.47, 1.18)).min(depth * 0.72);
+            let angle = parent.at[3] + rng.between(-0.52, 0.52);
+            let phase = rng.between(0., std::f32::consts::TAU);
+            let mut shoot = parent;
+            shoot.at = [p.x, site.floor - 0.009, p.y, angle];
+            shoot.shape = [h, h, h, phase];
+            shoots.push(shoot);
+        }
+    }
+}
+
+/// Mature bull kelp holds its crown near the surface. Some holdfast sites
+/// also retain a shorter, blade-bearing understory in the shelter below.
+pub fn coastal_canopy(groups: &mut [Vec<Instance>; KINDS.len()]) {
+    let (core, reef) = groups.split_at_mut(19);
+    reef[0].retain_mut(|plant| {
+        let column = SEA - plant.at[1];
+        let seed = plant.shape[3];
+        let variation = 0.5 + 0.5 * seed.sin();
+        let gap = 0.46 + 0.44 * variation;
+        let h = (column - gap).max(plant.shape[1]) / 1.035;
+        let mut crown = *plant;
+        crown.traits[0] = 11.;
+        let spread = h * (0.78 + 0.22 * variation);
+        crown.shape = [spread, h, spread, seed];
+        core[11].push(crown);
+        if variation < 0.37 {
+            return false;
+        }
+        plant.shape[1] *= 0.67 + 0.19 * variation;
+        plant.shape[0] *= 0.74;
+        plant.shape[2] *= 0.74;
+        plant.at[0] += 0.075 * plant.at[3].cos();
+        plant.at[2] += 0.075 * plant.at[3].sin();
+        true
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,6 +492,36 @@ mod tests {
         let mut life = Default::default();
         populate(x, z, sample, &mut life);
         life
+    }
+
+    #[test]
+    fn crowns_remain_submerged_and_rhizome_shoots_follow_the_sediment() {
+        let mut root = Instance {
+            at: [0., SEA - 2.2, 0., 0.4],
+            shape: [0.5, 0.5, 0.5, 1.],
+            traits: [3., 0., 0., 1.],
+        };
+        let sample: Sampler = Arc::new(|p| Some(Site {
+            floor: SEA - 2.2 + 0.08*p.x, shore: if p.y < 0. { 0. } else { 50. },
+            beach: 0.8, pacific: 0.1, offshore: false,
+        }));
+        let mut shoots = vec![root; 6];
+        coastal_grass(1, 3, &sample, &mut shoots);
+        assert!(shoots.len() > 6);
+        for shoot in &shoots[6..] {
+            let p = Vec2::new(shoot.at[0], shoot.at[2]);
+            assert!(p.y >= 0.);
+            assert!((shoot.at[1] + 0.009 - sample(p).unwrap().floor).abs() < 1e-5);
+        }
+        let mut groups: [Vec<Instance>; KINDS.len()] = Default::default();
+        root.at[1] = SEA - 9.;
+        root.traits[0] = 19.;
+        groups[19].push(root);
+        coastal_canopy(&mut groups);
+        let crown = &groups[11][0];
+        assert!(crown.at[1] + 1.035*crown.shape[1] < SEA);
+        assert_eq!(crown.at, root.at);
+        assert!(groups[19][0].shape[1] < crown.shape[1]);
     }
 
     #[test]

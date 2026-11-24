@@ -834,7 +834,7 @@ impl WaterGpu {
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
             // + the dive exposure's switch, the display transforms (look.rs `DISPLAY_SHADER`, the camera look at group 0 bindings 16, 17)
-            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\nconst UW_DIVE_DETAIL: bool = {};\n", look.options.dive_exposure, look.options.dive_detail) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + include_str!("underwater.wgsl")
+            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\nconst UW_DIVE_DETAIL: bool = {};\nconst UW_COASTAL_HABITAT: bool = {};\n", look.options.dive_exposure, look.options.dive_detail, look.options.coastal_habitat) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + include_str!("underwater.wgsl")
         } else {
             draw_src
         };

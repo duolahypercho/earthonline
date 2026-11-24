@@ -37,6 +37,7 @@ struct Window {
 }
 pub struct OceanLife {
     reef: bool,
+    coastal_habitat: bool,
     sampler: Sampler,
     pipeline: wgpu::RenderPipeline,
     group: wgpu::BindGroup,
@@ -77,8 +78,14 @@ impl OceanLife {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut ranges = Vec::new();
-        for (kind, name) in KINDS.iter().copied().enumerate() {
-            let glb = if kind < field::CORE_KINDS {
+        for (kind, base_name) in KINDS.iter().copied().enumerate() {
+            let name = match base_name {
+                "eelgrass" if look.options.coastal_habitat => "eelgrass-shoots",
+                "bull-kelp" if look.options.coastal_habitat => "bull-kelp-crown",
+                "kelp-column" if look.options.dive_detail => "coastal-kelp",
+                _ => base_name,
+            };
+            let glb = if kind < field::CORE_KINDS && !matches!(name, "eelgrass-shoots" | "bull-kelp-crown") {
                 &native
             } else if let Some(library) = &reef {
                 library
@@ -86,7 +93,6 @@ impl OceanLife {
                 ranges.push(0..0);
                 continue;
             };
-            let name = if look.options.dive_detail && name == "kelp-column" { "coastal-kelp" } else { name };
             let mesh = glb
                 .meshes()
                 .find(|m| m.name() == Some(name))
@@ -167,7 +173,11 @@ impl OceanLife {
         });
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("marine life"),
-            source: wgpu::ShaderSource::Wgsl(format!("const DIVE_DETAIL: bool = {};\n{}", look.options.dive_detail, include_str!("ocean_life/habitat.wgsl")).into()),
+            source: wgpu::ShaderSource::Wgsl(format!(
+                "const DIVE_DETAIL: bool = {};\nconst COASTAL_HABITAT: bool = {};\nconst SWELL_DIR: f32 = {:.7};\nconst SWELL_OMEGA: f32 = {:.7};\n{}",
+                look.options.dive_detail, look.options.coastal_habitat, eo_water::waves::SWELL_DIR,
+                std::f64::consts::TAU / eo_water::waves::SWELL_TP[0], include_str!("ocean_life/habitat.wgsl"),
+            ).into()),
         });
         let pipeline=d.create_render_pipeline(&wgpu::RenderPipelineDescriptor{
             label:Some("marine life in the opaque underwater scene"),layout:Some(&pl),
@@ -185,6 +195,7 @@ impl OceanLife {
         };
         Ok(Self {
             reef: reef.is_some(),
+            coastal_habitat: look.options.coastal_habitat,
             sampler,
             pipeline,
             group,
@@ -265,6 +276,10 @@ impl OceanLife {
                     field::populate(x, z, &self.sampler, &mut groups);
                     if self.reef {
                         field::reef(x, z, &self.sampler, &mut groups);
+                        if self.coastal_habitat {
+                            field::coastal_canopy(&mut groups);
+                            field::coastal_grass(x, z, &self.sampler, &mut groups[3]);
+                        }
                     }
                     groups
                 });
@@ -285,7 +300,14 @@ impl OceanLife {
         if !all.is_empty() {
             q.write_buffer(&self.instances, 0, bytemuck::cast_slice(&all));
         }
-        let (v, ix) = sediment((cell.as_vec2() + 0.5) * TILE, &self.sampler, &w.bed);
+        let (mut v, ix) = sediment((cell.as_vec2() + 0.5) * TILE, &self.sampler, &w.bed);
+        if self.coastal_habitat {
+            let plants = |kind: usize| {
+                let r = &w.groups[kind].instances;
+                &all[r.start as usize..r.end as usize]
+            };
+            shade_plant_beds(&mut v, plants(3), plants(11));
+        }
         if !ix.is_empty() {
             q.write_buffer(&self.sediment, 0, bytemuck::cast_slice(&v));
             q.write_buffer(&self.sediment_indices, 0, bytemuck::cast_slice(&ix));
@@ -320,6 +342,46 @@ impl OceanLife {
         true
     }
 }
+/// The bed receives less diffuse sky beneath a canopy. Accumulate the solid
+/// angle of nearby crowns on the metre grid. Alpha zero still denotes dry land.
+fn shade_plant_beds(bed: &mut [Vertex], grass: &[Instance], kelp: &[Instance]) {
+    let Some(first) = bed.first() else {
+        return;
+    };
+    let origin = Vec2::new(first.pos[0], first.pos[2]);
+    for v in bed.iter_mut().filter(|v| v.color[3] != 0) {
+        v.color[3] = 255;
+    }
+    for plant in grass.iter().chain(kelp) {
+        let centre = Vec2::new(plant.at[0], plant.at[2]) - origin;
+        let canopy = plant.traits[0] == 11.;
+        let width = if canopy {
+            plant.shape[0] * 0.46
+        } else {
+            plant.shape[0] * 0.83
+        };
+        let radius = (width + 0.5).max(0.55);
+        let low = (centre - radius).floor().as_ivec2().max(glam::IVec2::ZERO);
+        let high = (centre + radius)
+            .ceil()
+            .as_ivec2()
+            .min(glam::IVec2::splat(BED_SIDE as i32 - 1));
+        for z in low.y..=high.y {
+            for x in low.x..=high.x {
+                let v = &mut bed[z as usize * BED_SIDE + x as usize];
+                if v.color[3] == 0 {
+                    continue;
+                }
+                let d2 =
+                    (Vec2::new(x as f32, z as f32) - centre).length_squared() / (radius * radius);
+                let covered = (1. - d2).max(0.).powi(2);
+                let loss = if canopy { 0.44 } else { 0.19 };
+                v.color[3] = ((v.color[3] as f32 * (1. - loss * covered)).round() as u8).max(1);
+            }
+        }
+    }
+}
+
 fn sediment(centre: Vec2, sample: &Sampler, previous: &[Vertex]) -> (Vec<Vertex>, Vec<u32>) {
     let mut verts = Vec::with_capacity(BED_SIDE * BED_SIDE);
     let mut wet = Vec::with_capacity(verts.capacity());
@@ -397,7 +459,7 @@ mod tests {
         let (before, _) = sediment(Vec2::new(-3., 3.), &sample, &[]);
         calls.store(0, Ordering::Relaxed);
         let centre = Vec2::new(-9., 9.);
-        let (v, ix) = sediment(centre, &sample, &before);
+        let (mut v, ix) = sediment(centre, &sample, &before);
         assert_eq!(
             calls.load(Ordering::Relaxed),
             BED_SIDE * BED_SIDE - (BED_SIDE - 6).pow(2)
