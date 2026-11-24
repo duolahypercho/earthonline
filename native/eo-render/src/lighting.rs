@@ -225,8 +225,8 @@ mod tests {
         sets.push(("shop light".into(), look::ShaderFeatures { shop_light: true, ..none }));
         sets.push(("facade clutter".into(), look::ShaderFeatures { facade_clutter: true, ..none }));
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
-        for bit in [look::NATURE_FOLIAGE, look::NATURE_LOD_FADE, look::NATURE_TURF, look::NATURE_PALM, look::NATURE_HILLS, look::NATURE_FOLIAGE | look::NATURE_PALM, look::NATURE_ALL] {
-            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`)
+        for bit in [look::NATURE_FOLIAGE, look::NATURE_LOD_FADE, look::NATURE_TURF, look::NATURE_PALM, look::NATURE_HILLS, look::NATURE_COVER, look::NATURE_FOLIAGE | look::NATURE_PALM, look::NATURE_TURF | look::NATURE_COVER, look::NATURE_ALL] {
+            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`)
         }
         sets.push(("all + nature".into(), look::ShaderFeatures { nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL }));
         sets
@@ -259,6 +259,11 @@ mod tests {
                     assert!(props.contains(&format!("const PR_PALM: u32 = {}u;", eo_props::Model::Palm as u32)), "PR_PALM is eo_props::Model::Palm");
                 }
                 assert_eq!(props.contains("var palm_leaf"), foliage || palm, "{name}: the shared block is in with either bit");
+                // (`--ground-cover`) the terrain's mosaic and its hook follow the bit
+                let city = look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false);
+                assert_eq!(city.contains("fn nt_cover("), f.nature & look::NATURE_COVER != 0, "{name}: the cover block follows its bit");
+                assert_eq!(city.contains("nt_cover(&s, nc_w"), f.nature & look::NATURE_COVER != 0, "{name}: the cover hook follows its bit");
+                assert!(!city.contains("// sf:"), "{name}: no marker is left in the city shader");
                 let far_trees = format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{}", look::city_shader_source_far(), crate::cove_canopy::VIEWS, crate::cove_canopy::LAYERS, look::sf_select(crate::hlod_trees::WGSL));
                 parse(&format!("{name}: far trees"), &far_trees);
                 let agents = format!(

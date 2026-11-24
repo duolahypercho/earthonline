@@ -1046,12 +1046,23 @@ fn shade(in: VOut) -> vec4<f32> {
         nt_w = nt_turf_weight(s.albedo); // (`--turf`) the grass in the tone, before the scans
     }
 // sf:end
+// sf:COVER+
+    var nc_w = vec2<f32>(0.0);
+    if (cc0_terrain && !cc0_sand) {
+        nc_w = nt_cover_weight(s.albedo); // (`--ground-cover`) the hills' cover in the tone, before the scans
+    }
+// sf:end
     if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
 // sf:TURF+
     if (cc0_terrain && !cc0_sand) {
         nt_turf(&s, nt_w, in.world, n, dpx, dpy); // (`--turf`) the grass as a canopy (landmarks_surface.wgsl)
+    }
+// sf:end
+// sf:COVER+
+    if (cc0_terrain && !cc0_sand) {
+        nt_cover(&s, nc_w, in.world, n, dpx, dpy); // (`--ground-cover`) grass, brush, groves and chert (landmarks_surface.wgsl)
     }
 // sf:end
     if (((m.flags >> LM_SURFACE_SHIFT) & 7u) != 0u) {

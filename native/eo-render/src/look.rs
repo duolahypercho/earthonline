@@ -196,7 +196,7 @@ pub struct LookOptions {
     /// (`ShaderFeatures::cinematic`); the sky reads `SkyOptions::cinematic`.
     pub look: eo_look::cinematic::LookProfile,
     /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
-    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`): 0 (the default) is the frame as before,
+    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`): 0 (the default) is the frame as before,
     /// and each bit's shader code is compiled out while it is off (`sf_select`).
     pub nature: u32,
 }
@@ -213,8 +213,13 @@ pub const NATURE_TURF: u32 = 4;
 pub const NATURE_PALM: u32 = 8;
 /// `--hill-cover`: the far hills' vegetation cover (farshore.wgsl `fs_cover`).
 pub const NATURE_HILLS: u32 = 16;
+/// `--ground-cover`: the city's hills and wild parks as a mosaic of grass, brush,
+/// groves and chert, their crowns drawn or shared out by the geometric-optical model
+/// (landmarks_surface.wgsl `nt_cover`), and their tones without the per-vertex
+/// jitter (ground2.rs `hill_tone`).
+pub const NATURE_COVER: u32 = 32;
 /// Every natural-detail bit.
-pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS;
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER;
 
 impl Default for LookOptions {
     fn default() -> Self {
@@ -737,7 +742,7 @@ impl ShaderFeatures {
 
 /// A shader file's natural-detail blocks for the features compiled in now: the
 /// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
-/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`: `NATURE_*`) in, those between `// sf:NAME-`
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`: `NATURE_*`) in, those between `// sf:NAME-`
 /// and `// sf:end` only without it, and the marker lines are dropped (`NAME|OTHER`:
 /// either bit; blocks do not nest). With every
 /// bit out the text is the file as it was before the bits existed, so a shader
@@ -751,6 +756,7 @@ pub fn sf_select(src: &str) -> String {
         "TURF" => f.nature & NATURE_TURF != 0,
         "PALM" => f.nature & NATURE_PALM != 0,
         "HILLS" => f.nature & NATURE_HILLS != 0,
+        "COVER" => f.nature & NATURE_COVER != 0,
         _ => false,
     };
     let mut out = String::with_capacity(src.len());

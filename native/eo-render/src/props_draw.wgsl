@@ -477,8 +477,10 @@ fn pr_basin(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, dlx: 
 const PR_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.55, 0.85, 0.3);
 const PR_LEAF_FWD_G: f32 = 0.5;
 const PR_LEAF_FWD_SHARE: f32 = 0.3;
-// a wet leaf's roughness (a water film on the cuticle: the glossy leaf of a wet tree).
-const PR_LEAF_WET_ROUGH: f32 = 0.3;
+// a wet leaf's roughness at the pixel's scale (drops beaded on the waxy cuticle:
+// glossier than the dry leaf's 0.7, never the mirror of a continuous film, which
+// read as a sky-blue sheen over a whole crown at night).
+const PR_LEAF_WET_ROUGH: f32 = 0.5;
 
 // Light through a leaf toward the eye (radiance, before the fog): `n` the face the eye
 // sees, `sh` the key light's shadow on the far face.
@@ -510,6 +512,8 @@ fn pr_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>, s
 // sf:end
 // sf:FOLIAGE|PALM+
 const PR_PALM: u32 = 7u; // eo_props::Model::Palm
+// the least n.v a leaf's shading normal keeps (it is seen, so it faces the eye)
+const PR_LEAF_NV_MIN: f32 = 0.1;
 // sf:end
 // sf:PALM+
 // ---- palm detail (`--palm-detail`; this block is in the shader only with it) ----
@@ -550,19 +554,27 @@ const PR_PALM_RELIEF: f32 = 0.03; // a base's rise out of its grooves (model m)
 const PR_PALM_V_PER_M: f32 = 0.148; // the atlas's v per model metre up the trunk
 const PR_PALM_LEAF_K: f32 = 0.5; // Beer-Lambert extinction of the sky light per unit leaf area
 const PR_PALM_LEAN: f32 = 0.3; // how far a leaflet's shading normal leans to the crown's
+// the variance of the leaflets' normals about their mean (the 0.22 jitter on three
+// axes and the 30 % lean toward the crown's outward normal, ~0.07 a component)
+const PR_PALM_NORMAL_VAR: f32 = 0.07;
 
 // the lattice's height (0 groove .. 1 boss top) at (a round, b up) in bases: each
-// base its own size (`j`, 0..1), its row wavering round the trunk.
-fn pr_palm_h(a: f32, b: f32, j: f32) -> f32 {
+// base its own (`j`, three hashes 0..1): its size, how far its cut was rounded
+// (a sharp diamond to a worn oval), how high it stands out of the fibre, and a
+// chipped corner on some; its row wavering round the trunk.
+fn pr_palm_h(a: f32, b: f32, j: vec3<f32>) -> f32 {
     let p = vec2<f32>(a + b, a - b);
     let f = fract(p) - vec2<f32>(0.5);
-    let e = 2.0 * max(abs(f.x), abs(f.y)) * (0.92 + 0.16 * j);
+    let diamond = 2.0 * max(abs(f.x), abs(f.y));
+    let oval = 2.0 * length(f); // >= the diamond's: a rounder base, never past its cell
+    let e = mix(diamond, oval, 0.75 * j.y) * (0.86 + 0.28 * j.x);
     let up = f.x - f.y; // -1 the base's foot .. 1 its top (b within the cell)
-    return (1.0 - smoothstep(0.72, 1.0, e)) * (0.75 + 0.25 * up);
+    let chip = 1.0 - 0.6 * step(0.7, j.z) * smoothstep(0.1, 0.45, f.x * select(1.0, -1.0, j.z > 0.85));
+    return (1.0 - smoothstep(0.66, 1.0, e)) * (0.7 + 0.3 * up) * (0.65 + 0.5 * j.z) * chip;
 }
 
 // The palm's surface; returns how much of it is thin leaf (for `--foliage-light`).
-fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: vec2<f32>, ng: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, duvx: vec2<f32>, duvy: vec2<f32>, dlx: vec3<f32>, dly: vec3<f32>) -> f32 {
+fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: vec2<f32>, ng: vec3<f32>, view: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, duvx: vec2<f32>, duvy: vec2<f32>, dlx: vec3<f32>, dly: vec3<f32>) -> f32 {
     let seed = st_hash(inst.pos.xz * 0.37 + vec2<f32>(3.1, 7.7)); // this palm
     let rel = local - vec3<f32>(0.0, PR_PALM_CROWN_Y, 0.0);
     let rh = length(rel.xz);
@@ -571,17 +583,19 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
     if (uv.x < 0.5) {
         // the trunk: the leaf-base lattice in bases round (a) and up (b).
         let b = local.y / PR_PALM_BASE_H;
-        let a = uv.x * 2.0 * PR_PALM_AROUND + 0.35 * (st_noise(vec2<f32>(b * 0.45, seed * 9.0)) - 0.5); // the spirals waver (in b only: the seam still closes)
+        let a = uv.x * 2.0 * PR_PALM_AROUND + 0.6 * (st_noise(vec2<f32>(b * 0.45, seed * 9.0)) - 0.5) + 0.25 * (st_noise(vec2<f32>(b * 1.7, seed * 5.0)) - 0.5); // the spirals waver (in b only: the seam still closes)
         // its cell, for the base's own tone and size (round the trunk modulo the count, so the seam closes)
         let c1 = floor(a + b);
         let c2 = floor(a - b);
         let ca = (c1 + c2) * 0.5;
         let cb = (c1 - c2) * 0.5;
-        let cell = st_hash(vec2<f32>(ca - PR_PALM_AROUND * floor(ca / PR_PALM_AROUND), cb) + vec2<f32>(seed * 17.0, 1.7));
-        let h = pr_palm_h(a, b, cell);
+        let cid = vec2<f32>(ca - PR_PALM_AROUND * floor(ca / PR_PALM_AROUND), cb);
+        let cell = st_hash(cid + vec2<f32>(seed * 17.0, 1.7));
+        let cj = vec3<f32>(cell, st_hash(cid + vec2<f32>(5.3, seed * 11.0)), st_hash(cid + vec2<f32>(seed * 7.0, 9.9)));
+        let h = pr_palm_h(a, b, cj);
         let eps = 0.03;
-        let ha = (pr_palm_h(a + eps, b, cell) - h) / eps;
-        let hb = (pr_palm_h(a, b + eps, cell) - h) / eps;
+        let ha = (pr_palm_h(a + eps, b, cj) - h) / eps;
+        let hb = (pr_palm_h(a, b + eps, cj) - h) / eps;
         let k = 1.0 - smoothstep(0.02 * sc, 0.07 * sc, fw); // the lattice resolved
         // the surface gradient of the height (world m): H_u grad u + H_y grad y.
         let r1 = cross(dpy, ng);
@@ -682,10 +696,25 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
     // the leaflets' normals: toward the crown's outward normal, each turned its own way
     let nv = pr_rot(inst.yaw, normalize(rel / vec3<f32>(4.0, 2.4, 4.0)));
     let jitter = vec3<f32>(lv, 0.5 * lw, sin(uv.y * 17713.0 + 2.1)) * 0.22;
-    let nl = normalize(mix((*s).n, nv, PR_PALM_LEAN) + jitter);
+    var nl = normalize(mix((*s).n, nv, PR_PALM_LEAN) + jitter);
+    // A shading normal turned from the eye (a leaflet on the crown's far side
+    // leaning out, away from the eye) makes the microfacet terms blow up at
+    // grazing (n.v near 0: the Fresnel near 1, the visibility term unbounded):
+    // the white slivers on night and wet fronds. The leaflet is seen, so its
+    // normal is kept in the eye's hemisphere (n.v at least PR_LEAF_NV_MIN).
+    let nvd = dot(nl, view);
+    if (nvd < PR_LEAF_NV_MIN) {
+        nl = normalize(nl + view * (PR_LEAF_NV_MIN - nvd));
+    }
     if (all(nl == nl)) {
         (*s).n = nl;
     }
+    // Leaflets narrower than the pixel each turn their own way: the pixel sees
+    // the spread of their normals as a wider lobe (Toksvig's normal-variance
+    // roughening: alpha^2 + 2 sigma^2), not one leaflet's glint.
+    let sub = smoothstep(0.008, 0.04, fw / sc);
+    let a2 = (*s).rough * (*s).rough;
+    (*s).rough = sqrt(min(sqrt(a2 * a2 + 2.0 * PR_PALM_NORMAL_VAR * sub), 1.0));
     return thin;
 }
 // sf:end
@@ -809,7 +838,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
 // sf:end
 // sf:PALM+
     if (inst.model == PR_PALM) {
-        palm_leaf = pr_palm(&s, inst, in.local, in.uv, n, dpx, dpy, duvx, duvy, dlx, dly); // (`--palm-detail`)
+        palm_leaf = pr_palm(&s, inst, in.local, in.uv, n, v, dpx, dpy, duvx, duvy, dlx, dly); // (`--palm-detail`)
     }
 // sf:end
     s.rough = clamp(s.rough, 0.03, 1.0);
@@ -821,13 +850,19 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         leaf = select(smoothstep(1.0, 1.3, s.albedo.g / max(s.albedo.r, 1e-4)), palm_leaf, palm_leaf >= 0.0);
     }
     if (leaf > 0.0) {
-        // In the rain a leaf's waxy cuticle carries a film of water on both
-        // faces, whichever way it faces (the ground's wetting takes only what
-        // faces up): a smoother, glossier surface, a little darker.
+        // In the rain a leaf's waxy cuticle carries water on both faces,
+        // whichever way it faces (the ground's wetting takes only what faces
+        // up): beaded drops, not a mirror film (a little glossier at the
+        // pixel's scale), and the leaf darker and deeper in tone.
         let wet = skyu.wet.x * leaf;
         if (sky_on(skyu.flags.x, SKY_WET) && wet > 0.02) {
             s.rough = mix(s.rough, min(s.rough, PR_LEAF_WET_ROUGH), wet);
             s.albedo = s.albedo * mix(1.0, 0.85, wet);
+        }
+        // a seen leaf faces the eye (see PR_LEAF_NV_MIN)
+        let lnv = dot(s.n, v);
+        if (lnv < PR_LEAF_NV_MIN) {
+            s.n = normalize(s.n + v * (PR_LEAF_NV_MIN - lnv));
         }
         // it passes the light on its far face (in the emissive slot: look_light
         // adds it before its fog); the sun's shadow there only when the sun is behind it.
@@ -836,6 +871,15 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
             leaf_sh = lk_shadow(in.world, -n);
         }
         m.emissive = vec4<f32>(m.emissive.rgb + pr_foliage(s.albedo, n, v, in.world, leaf_sh) * leaf, m.emissive.w);
+        // The street's lamps light the leaves from every side: what falls on
+        // the far face passes through as the sun's does (T = R x T/R), so a
+        // crown over a lamp glows a warm green from below. The same lights'
+        // loop on the far face (-n) with the leaf's transmittance as its
+        // diffuse; no specular there (f0 0, the eye on that face's normal).
+        if (skyu.lights.x != 0u) {
+            let tl = s.albedo * PR_LEAF_T_OVER_R;
+            m.emissive = vec4<f32>(m.emissive.rgb + sky_local_lights_ao(in.world, -n, -n, tl, vec3<f32>(0.0), 1.0, 1.0) * leaf, m.emissive.w);
+        }
     }
 // sf:end
     var c = look_light(s, m, v, in.world, n, 0u);
