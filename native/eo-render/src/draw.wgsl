@@ -1034,6 +1034,9 @@ fn shade(in: VOut) -> vec4<f32> {
                 if (wx_level() != 0u && paint_kind == 7u) {
                     wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
                 }
+                if (SF_STREET_PBR && paint_kind == 7u) {
+                    sp_paint_wet(&s); // (`--street-pbr`, street_pbr.wgsl) the markings wet with the street
+                }
             } else {
                 s.rough = ST_CONCRETE_ROUGHNESS;
                 s.env = ENV_SIDEWALK;

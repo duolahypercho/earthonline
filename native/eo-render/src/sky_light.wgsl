@@ -435,6 +435,9 @@ fn sky_wet_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>
     var pud = 0.0;
     if (n_geom.y > 0.95) {
         pud = sky_puddle(world.xz, select(-1.0, kerb, asphalt)) * w;
+        if (SF_STREET_PBR) {
+            pud = max(pud, sp_pond); // (`--street-pbr`, street_pbr.wgsl) the water the street's relief holds
+        }
     }
     if (cine && n_geom.y > 0.7) {
         sky_streak_w = w;

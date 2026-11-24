@@ -8,13 +8,20 @@
 // `street_surface`: the JS ground material, the CC0 scans, the decals and,
 // with `--grime`, the weathering), before the wet layer:
 //   the carriageway  calibrated to weathered asphalt, one world-anchored tone
-//                    field over every lane, polished wheel paths, the oil
-//                    band down each lane's middle, a cold joint at the pan;
-//   the gutter pan   poured concrete holding the street's silt;
+//                    field over every lane, polished and rutted wheel paths,
+//                    the oil band down each lane's middle, a cold joint at
+//                    the pan; in the wet, soaked darker, water standing in
+//                    the ruts and birdbaths deeper than what has drained;
+//   the gutter pan   poured concrete holding the street's silt, the run-off
+//                    standing along its flow line;
 //   the kerb         a rounded arris, the flow line's concave corner;
-//   the walk         slabs settled each at its own tilt, dark recessed
-//                    joints, cracked slabs, broken corners, asphalt repairs;
-//   the plazas       laid granite setts (cc0.wgsl calls `sp_setts`).
+//   the walk         slabs each its own pour and tilt, a few replaced or
+//                    stained, dark recessed joints, cracked slabs, broken
+//                    corners, asphalt repairs;
+//   the plazas       the paving's scan stochastically tiled, in relief
+//                    (parallax occlusion) and self-shadowed toward the sun
+//                    (cc0.wgsl calls `sp_pave`);
+//   the paint        wet with the street (draw.wgsl calls `sp_paint_wet`).
 // Every detail is filtered to its mean once it is under a few pixels.
 
 const SP_UP: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
@@ -71,6 +78,9 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, fw
     // Roughness: the composition's variation (scan, sealant, patches) round the binder's.
     var rough = SP_ASPHALT_ROUGH * clamp((*s).rough / ST_ASPHALT_ROUGHNESS, 0.6, 1.18);
     var lean = vec2<f32>(0.0);
+    // The relief that holds water (metres below the surface round it): the
+    // ruts below, and settled birdbaths over the whole carriageway.
+    var dip = SP_BIRDBATH_M * smoothstep(0.6, 0.9, st_noise(q / 4.3 + 7.1)) * (0.6 + 0.4 * st_noise(q / 1.1 + 3.3));
     let g = wx_kerb_grad();
     let gl = length(g);
     if (cls == SC_ASPHALT && kd >= 0.0 && gl > 0.3) {
@@ -107,18 +117,51 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, fw
             a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp) * (1.0 - 0.24 * oil);
             rough = mix(rough, SP_ASPHALT_ROUGH_POLISHED, 0.85 * wp);
             rough = rough * (1.0 - 0.12 * oil);
-            // rutting: each path's floor a few millimetres down, its sides leaning in
-            let depth = 0.004;
+            // rutting: each path's floor a few millimetres down (deeper and shallower
+            // along the road as the base gave way), its sides leaning in
+            let depth = SP_RUT_M * (0.35 + 1.3 * st_noise(vec2<f32>(along / 8.0, 2.3 + kd * 0.2)));
             let side = sign(abs(lx) - half_t) * sign(lx);
             let slope = select(0.0, 2.0 * depth * dt / (w * w), dt < w);
             lean = lean + gn * (-side * slope) * in_lane;
+            dip = max(dip, depth * max(1.0 - (dt / w) * (dt / w), 0.0) * in_lane);
         }
     }
+    // A lid, grate or plate laid in the road (cc0.wgsl's decals: cast iron,
+    // steel, a concrete-filled vault) keeps its own material: its tone, and
+    // the low roughness of its worn metal that mirrors the sky down a street.
+    let lid = clamp(cc0_p_alb.w, 0.0, 1.0);
+    a = mix(a, (*s).albedo, lid);
+    rough = mix(clamp(rough, 0.3, 1.0), (*s).rough, lid);
+    sp_wet_relief(&a, &rough, q, dip * (1.0 - lid), fw, SP_WET_DARKEN);
     (*s).albedo = a;
-    (*s).rough = clamp(rough, 0.3, 1.0);
+    (*s).rough = rough;
     if (any(lean != vec2<f32>(0.0))) {
-        sp_lean(s, lean);
+        sp_lean(s, lean * (1.0 - lid));
     }
+}
+
+// The wet street over its relief: the film soaks the porous surface darker
+// (`darken`: wet asphalt's reflectance is the film's and the binder's, whatever
+// the dry aggregate's tone), and water stands where the relief `dip` (m) is
+// deeper than what drains in the time since the rain (the weather's puddle
+// fill): in the ruts, the birdbaths, the gutter's flow line. The aggregate's
+// texture (+- a millimetre) rags the edges. Sets `sp_pond` (sky_wet_street
+// draws the water: mirror, flat, its rain rings).
+fn sp_wet_relief(a: ptr<function, vec3<f32>>, rough: ptr<function, f32>, q: vec2<f32>, dip: f32, fw: f32, darken: f32) {
+    let w = skyu.wet.x;
+    if (!sky_on(skyu.flags.x, SKY_WET) || w < 0.02) {
+        return;
+    }
+    *a = *a * mix(1.0, darken, w);
+    let fill = clamp(skyu.wet.y, 0.0, 1.0);
+    if (fill <= 0.0) {
+        return;
+    }
+    let micro = (st_noise(q / 0.11 + 1.7) - 0.5) * 0.0016 + (st_noise(q / 0.031 + 6.1) - 0.5) * 0.0008 * wx_keep(0.03, fw);
+    let water = dip + micro - SP_POND_DRAIN_M * (1.0 - fill);
+    // a few tenths of a millimetre of edge, wider as the pixel grows (the relief's slope ~1.5 %)
+    let pond = smoothstep(0.0, 3e-4 + fw * 0.015, water);
+    sp_pond = max(sp_pond, pond * w);
 }
 
 // The patch quilt (weathering.wgsl `wx_road` with `--grime`, in place of
@@ -183,10 +226,11 @@ fn sp_quilt(s: ptr<function, Surface>, world: vec3<f32>, fw: f32) {
             continue;
         }
         let inside = smoothstep(-0.5 * fw, 0.5 * fw, e);
-        let fresh = st_hash(hs + vec2<f32>(5.9, 8.3)) < WX_QUILT_FRESH * 0.55;
+        let fresh = st_hash(hs + vec2<f32>(5.9, 8.3)) < WX_QUILT_FRESH * 0.8;
         var tone = select(mix(WX_PATCH_OLD_LO, WX_PATCH_OLD_HI, h4), mix(WX_PATCH_NEW_LO, WX_PATCH_NEW_HI, h3), fresh);
-        // the roller's edge: the patch's tone eases in over a few decimetres
-        tone = mix(tone, 0.5 * (tone + 1.0), 1.0 - smoothstep(0.0, 0.35, e));
+        // the roller's edge: the patch's tone eases in over its last few centimetres
+        // (the whole patch keeps its own tone: a repair reads from down the street)
+        tone = mix(tone, 0.5 * (tone + 1.0), 1.0 - smoothstep(0.0, 0.07, e));
         mul = mul * mix(1.0, tone, inside);
         rough = rough * mix(1.0, select(1.05, 0.88, fresh), inside);
         seam = max(seam, wx_band(abs(e), WX_SEAM_M, fw));
@@ -237,8 +281,14 @@ fn sp_gutter(s: ptr<function, Surface>, world: vec3<f32>, kd: f32, tint: vec3<f3
     let flow = 1.0 - smoothstep(0.0, ST_GUTTER_WIDTH * 0.7, max(kd, 0.0));
     let streak = mix(0.6, st_noise(vec2<f32>(along / 2.6, kd / 0.06) + 4.4), wx_keep(0.06, fw));
     a = a * (1.0 - 0.38 * flow * (0.55 + 0.45 * streak));
+    var rough = clamp(0.9 * mix(1.0, t.rough / ST_CONCRETE_MEAN_ROUGH, 0.5) - 0.08 * flow, 0.5, 1.0);
+    // the pan falls to its flow line at the kerb: the run-off stands there
+    // longest, in reaches between the high spots of the pour
+    let reach = 0.55 + 0.9 * st_noise(vec2<f32>(along / 3.7, 8.1));
+    let dip = SP_GUTTER_DIP_M * (1.0 - clamp(max(kd, 0.0) / ST_GUTTER_WIDTH, 0.0, 1.0)) * reach;
+    sp_wet_relief(&a, &rough, world.xz, dip, fw, SP_CONCRETE_WET_DARKEN);
     (*s).albedo = a;
-    (*s).rough = clamp(0.9 * mix(1.0, t.rough / ST_CONCRETE_MEAN_ROUGH, 0.5) - 0.08 * flow, 0.5, 1.0);
+    (*s).rough = rough;
 }
 
 // ---- kerbs -------------------------------------------------------------------------
@@ -327,6 +377,23 @@ fn sp_slabs(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, kd: f32
         tilt = tilt * 3.5;
     }
     sp_lean(s, (tan * tilt.x + nrm * tilt.y) * keep);
+    // Each slab its own pour: the batch's tone and a little of its cement's
+    // hue; a few replaced since (a newer, paler, cooler paste), a few darkened
+    // by what was spilled or dripped on them. Held while the slab is a pixel
+    // or more (slabs read as a patchwork down the block).
+    let h6 = st_hash(cell + vec2<f32>(37.3, 88.1));
+    let h7 = st_hash(cell + vec2<f32>(63.7, 29.9));
+    var pour = 1.0 + (h6 - 0.5) * SP_SLAB_TONE * 2.0;
+    var hue = mix(vec3<f32>(0.985, 0.995, 1.02), vec3<f32>(1.025, 1.0, 0.97), h7);
+    if (h6 > 1.0 - SP_SLAB_NEW_SHARE) {
+        pour = SP_SLAB_NEW_TONE * (0.96 + 0.08 * h7);
+        hue = vec3<f32>(0.98, 0.995, 1.025);
+    } else if (h7 > 1.0 - SP_SLAB_STAINED_SHARE) {
+        pour = pour * (0.78 + 0.1 * h6);
+        hue = vec3<f32>(1.01, 1.0, 0.97);
+    }
+    let pk = 1.0 - smoothstep(pitch * 0.3, pitch * 0.9, fw);
+    (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), hue * pour, pk);
     // where the fragment is in its slab (metres) and its distance to the nearest joint
     let pl = vec2<f32>(la, lc) * pitch;
     let dj = min(min(pl.x, pitch - pl.x), min(pl.y, pitch - pl.y));
@@ -409,198 +476,323 @@ fn sp_paint_edge(s: ptr<function, Surface>, an: f32, gl: f32, nrm: vec2<f32>, fw
     sp_lean(s, nrm * (k1 - k0) * 0.35 * wx_keep(e, fw));
 }
 
-// ---- laid granite setts (the plazas) -------------------------------------------------
+// ---- laid paving from its scan (the plazas) --------------------------------------------
 
-struct SpSett {
-    albedo: vec3<f32>,
-    rough: f32,
-    ao: f32,
-    // the lean of the normal in the plane (q's axes)
-    lean: vec2<f32>,
+// The paving's scan (the plaza styles' CC0 sets) drawn as the relief it is:
+//  * stochastically tiled (Heitz & Neyret 2018, "High-Performance By-Example
+//    Noise using a Histogram-Preserving Blending Operator"; Mikkelsen 2022,
+//    "Practical Real-Time Hex-Tiling"): a triangle grid of tiles each at its
+//    own random offset into the scan, blended by height so that at a seam the
+//    higher stone wins whole (no ghosted double pattern, no repeat, no rails);
+//  * parallax occlusion mapped on that blended height near the eye, so the
+//    stones stand proud of their joints and hide them at a low view;
+//  * self-shadowed toward the key light (a march over the height toward the
+//    sun, soft with distance), then past its reach the relief's mean masking
+//    (Smith's G1 for the paving's slope spread), through `sp_sun_vis`;
+//  * crowns polished by feet where the macro traffic field runs, joints rough,
+//    a soiling field over metres that holds to the horizon.
+// Every scan term goes to its mip mean as the footprint grows (the GPU's
+// filtering, the same gradients for every tile), so nothing shimmers.
+
+// The key light's visibility over the surface's own relief (1: none of it
+// hidden). look_light.wgsl multiplies the key by it with `--street-pbr`; each
+// fragment starts at 1, only the street surface's paving sets it.
+var<private> sp_sun_vis: f32 = 1.0;
+// Standing water the street's relief holds (0..1, already scaled by the
+// film's wetness): sky_wet_street takes it as its puddle with `--street-pbr`.
+var<private> sp_pond: f32 = 0.0;
+
+struct SpHex {
+    // the three tiles' barycentric weights and offsets into the scan (uv)
+    w: vec3<f32>,
+    o0: vec2<f32>,
+    o1: vec2<f32>,
+    o2: vec2<f32>,
 };
 
-// One jittered boundary of a row of cells of mean size `c` (+-`j` of it): which cell
-// `x` falls in, and that cell's two ends.
-fn sp_cells(x: f32, c: f32, j: f32, seed: f32) -> vec3<f32> {
-    let i = floor(x / c);
-    let b0 = (i + j * (st_hash(vec2<f32>(i, seed)) - 0.5)) * c;
-    let b1 = (i + 1.0 + j * (st_hash(vec2<f32>(i + 1.0, seed)) - 0.5)) * c;
-    if (x < b0) {
-        let bm = (i - 1.0 + j * (st_hash(vec2<f32>(i - 1.0, seed)) - 0.5)) * c;
-        return vec3<f32>(i - 1.0, bm, b0);
-    }
-    if (x >= b1) {
-        let b2 = (i + 2.0 + j * (st_hash(vec2<f32>(i + 2.0, seed)) - 0.5)) * c;
-        return vec3<f32>(i + 1.0, b1, b2);
-    }
-    return vec3<f32>(i, b0, b1);
+fn sp_hash2(p: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(st_hash(p + vec2<f32>(3.1, 17.3)), st_hash(p + vec2<f32>(41.7, 5.9)));
 }
 
-// Granite setts laid in segmental arcs, each course in running bond: course
-// widths and stone lengths vary, each stone its own rock (most grey granite,
-// a few dark, a few warm), tone, crown polish and tilt, its arrises tumbled
-// round, its edge irregular; the joints sand-filled, grimed or mossy,
-// recessed and in shadow under a low sun, with the thin cast shadow a
-// neighbour's crown throws over a stone's sun-side shoulder. `q` metres in
-// the plane, `gx`/`gy` its screen derivatives. Each family of joints is
-// filtered along its own axis and every term goes to its mean once it is
-// under a few pixels (no moire, no rays). The stone and arc sizes are the
-// paving's (a material choice), not street dimensions.
-fn sp_setts(q: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>) -> SpSett {
-    var o: SpSett;
-    let cw = 0.12;
-    let cl = 0.15;
-    // Segmental arcs: bands `seg` wide, the courses in each bowed on a radius
-    // (they meet the next band's in a shallow V), so no course runs straight to
-    // the horizon. (u, y2): along the band from its middle, across the bowed courses.
-    let seg = 1.9;
-    let rad = 2.6;
-    let si = floor(q.x / seg);
-    let u = q.x - (si + 0.5) * seg;
-    let root = sqrt(max(rad * rad - u * u, 1e-4));
-    let sag = rad - root;
-    let sp = u / root;
-    let y2 = q.y - sag;
-    let gx2 = vec2<f32>(gx.x, gx.y - sp * gx.x);
-    let gy2 = vec2<f32>(gy.x, gy.y - sp * gy.x);
-    // the footprint along each axis: the course joints resolve while the
-    // footprint across them is small, the cross joints likewise, then each its mean.
-    let fx = abs(gx2.x) + abs(gy2.x);
-    let fy = abs(gx2.y) + abs(gy2.y);
-    let fwm = max(fx, fy);
-    let k_row = 1.0 - smoothstep(cw * 0.22, cw * 0.65, fy);
-    let k_col = 1.0 - smoothstep(cl * 0.22, cl * 0.65, fx);
-    let k_stone = min(k_row, k_col);
-    // slow fields: soiling and damp (2-20 m), foot traffic
-    let m0 = st_noise(q / 17.0 + 8.8);
-    let m1 = st_noise(q / 6.3 + 2.1);
-    let m2 = st_noise(q / 1.9 + 7.4);
-    let traffic = smoothstep(0.35, 0.75, st_noise(q / 11.0 + 5.5));
-    let soil = 1.0 + (m0 - 0.5) * 0.3 + (m1 - 0.5) * 0.28 + (m2 - 0.5) * 0.14;
-    let joint_col = mix(vec3<f32>(0.15, 0.135, 0.11), vec3<f32>(0.07, 0.075, 0.05), smoothstep(0.55, 0.8, m1) * (1.0 - traffic));
-    let jw_mean = 0.007;
-    let jshare = 2.0 * jw_mean / cw + 2.0 * jw_mean / cl;
-    let stone_mean = vec3<f32>(SP_SETT_ALBEDO) * 0.98;
-    // the joints read darker than their fill: their floor mostly in shadow
-    let mean_alb = stone_mean * (1.0 - jshare) + joint_col * 0.6 * jshare;
-    o.albedo = mean_alb * soil;
-    o.rough = mix(0.8, 0.68, traffic);
-    o.ao = 0.88;
-    o.lean = vec2<f32>(0.0);
-    if (max(k_row, k_col) <= 0.0) {
-        return o;
+// The triangle grid's three tiles round `uv` (cells SP_HEX_CELL repeats across).
+fn sp_hex(uv: vec2<f32>) -> SpHex {
+    let st = uv * (3.4641016 / SP_HEX_CELL);
+    let sk = vec2<f32>(st.x, -0.57735027 * st.x + 1.15470054 * st.y);
+    let b = floor(sk);
+    let f = fract(sk);
+    let z = 1.0 - f.x - f.y;
+    var h: SpHex;
+    var v0 = b;
+    var v1 = b + vec2<f32>(0.0, 1.0);
+    var v2 = b + vec2<f32>(1.0, 0.0);
+    h.w = vec3<f32>(z, f.y, f.x);
+    if (z <= 0.0) {
+        h.w = vec3<f32>(-z, 1.0 - f.y, 1.0 - f.x);
+        v0 = b + vec2<f32>(1.0, 1.0);
+        v1 = b + vec2<f32>(1.0, 0.0);
+        v2 = b + vec2<f32>(0.0, 1.0);
     }
-    // the stone under the fragment: its course, then its place along the course, cut at the band's seam
-    let row = sp_cells(y2, cw, 0.3, 17.0);
-    let off = st_hash(vec2<f32>(row.x, 3.3 + si)) * cl;
-    let qx = u + off;
-    var col = sp_cells(qx, cl, 0.6, row.x * 1.37 + si * 7.1 + 5.0);
-    col.y = max(col.y, off - 0.5 * seg);
-    col.z = min(col.z, off + 0.5 * seg);
-    let id = vec2<f32>(col.x + si * 53.0, row.x);
-    let h1 = st_hash(id + vec2<f32>(1.3, 8.1));
-    let h2 = st_hash(id + vec2<f32>(9.7, 2.2));
-    let h3 = st_hash(id + vec2<f32>(4.4, 6.6));
-    let h4 = st_hash(id + vec2<f32>(7.1, 0.3));
-    let c = vec2<f32>(0.5 * (col.y + col.z) - off, 0.5 * (row.y + row.z));
-    let hs = vec2<f32>(0.5 * (col.z - col.y), 0.5 * (row.z - row.y));
-    let jw = 0.005 + 0.004 * h3;
-    let p = vec2<f32>(u, y2) - c;
-    // the rounded-rectangle body (its corners tumbled), its edge irregular (split stone)
-    let rc = 0.3 * min(hs.x, hs.y);
-    let inner = max(hs - vec2<f32>(jw + rc), vec2<f32>(0.002));
-    let dq = abs(p) - inner;
-    let qo = max(dq, vec2<f32>(0.0));
-    let lq = length(qo);
-    var dd = lq + min(max(dq.x, dq.y), 0.0) - rc;
-    dd = dd + (st_noise(q / 0.035 + h1 * 17.0) - 0.5) * 0.007 * k_stone;
-    var gdir = sign(p) * select(select(vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), dq.x > dq.y), qo / max(lq, 1e-6), lq > 0.0);
-    gdir = select(gdir, vec2<f32>(1.0, 0.0), dot(gdir, gdir) < 0.5);
-    let e = -dd; // inside the stone, the distance to its edge
-    // the profile: a shoulder of radius rs rounding down to the joint, a low dome over the crown
-    let rs = 0.35 * min(hs.x, hs.y);
-    let hcrown = 0.011;
-    let es = clamp(e / rs, 0.0, 1.0);
-    let slope = select(0.0, 2.0 * hcrown * (1.0 - es) / rs, e > 0.0);
-    var lean = gdir * min(slope, 1.4) * (1.0 - smoothstep(rs * 0.3, rs * 0.9, fwm));
-    lean = lean + p / max(hs, vec2<f32>(0.01)) * 0.05;
-    lean = lean + (vec2<f32>(h2, h4) - 0.5) * 0.06;
-    // the rock: grey granite, a few dark (basalt-grey), a few warm (pink granite)
-    var tone = vec3<f32>(1.0, 1.0, 1.0) * (0.84 + 0.32 * h1);
-    if (h2 < 0.07) {
-        tone = vec3<f32>(0.62, 0.63, 0.66) * (0.9 + 0.2 * h1);
-    } else if (h2 > 0.92) {
-        tone = vec3<f32>(1.1, 0.98, 0.9) * (0.9 + 0.2 * h1);
-    } else {
-        tone = tone * mix(vec3<f32>(0.98, 0.99, 1.03), vec3<f32>(1.03, 1.0, 0.95), h3);
+    h.o0 = sp_hash2(v0);
+    h.o1 = sp_hash2(v1);
+    h.o2 = sp_hash2(v2);
+    return h;
+}
+
+// The tiles' heights at `uv` (only those `m` keeps; the rest read 0).
+fn sp_hex_hs(uv: vec2<f32>, hx: SpHex, m: vec3<f32>, la: i32, gx: vec2<f32>, gy: vec2<f32>) -> vec3<f32> {
+    var h = vec3<f32>(0.0);
+    if (m.x > 0.0) {
+        h.x = textureSampleGrad(cc0_rhm, cc0_samp, uv + hx.o0, la, gx, gy).z;
     }
-    // the stone's own mottle and the street's stains across stones
-    let mot = mix(1.0, 0.9 + 0.2 * st_noise(q / 0.03 + h4 * 19.0), 1.0 - smoothstep(0.004, 0.012, fwm));
-    let stain = 1.0 - 0.14 * smoothstep(0.55, 0.8, st_noise(q / 0.45 + 1.9));
-    // feldspar, quartz and mica: millimetre grain, only where a pixel resolves it
-    let gk = 1.0 - smoothstep(0.0008, 0.002, fwm);
-    let gr = st_noise(q / 0.0035 + h4 * 31.0);
-    let mica = smoothstep(0.86, 0.93, st_noise(q / 0.0021 + h3 * 23.0));
-    let grain = mix(1.0, (0.82 + 0.36 * gr) * (1.0 - 0.2 * mica), gk);
-    // dirt held toward the edges; the crown worn cleaner and polished by feet
-    let edge_dirt = mix(0.8, 1.0, smoothstep(0.0, 0.025, e));
-    var alb = vec3<f32>(SP_SETT_ALBEDO) * mix(vec3<f32>(1.0), tone, k_stone) * mot * stain * grain * mix(0.9, edge_dirt, k_stone) * soil;
-    var rough = mix(0.84, mix(0.62, 0.46, traffic), smoothstep(0.2, 0.9, es)) + (h3 - 0.5) * 0.08;
-    rough = mix(mix(0.8, 0.68, traffic), rough, k_stone);
-    var ao = mix(mix(0.72, 1.0, smoothstep(0.0, 0.02, e)), 0.9, 1.0 - k_stone);
-    // a low sun: the sun-side shoulder under the shadow of a neighbour's crown
-    let l = look.key_dir.xyz;
-    let lh = length(l.xz);
-    let tan_el = max(l.y, 0.0) / max(lh, 1e-3);
-    if (e > 0.0 && lh > 1e-3 && l.y > 0.0) {
-        let lb = vec2<f32>(l.x, l.z - sp * l.x);
-        let toward = dot(gdir, lb / max(length(lb), 1e-4));
-        if (toward > 0.0) {
-            // the neighbour's crown, beyond the joint, against this point's height
-            let drop = hcrown * (1.0 - es) * (1.0 - es);
-            let reach = (e + 2.0 * jw + rs * 0.5) / max(toward, 0.2);
-            let shd = smoothstep(0.0, 0.004, drop - reach * tan_el);
-            alb = alb * (1.0 - 0.6 * shd * k_stone);
+    if (m.y > 0.0) {
+        h.y = textureSampleGrad(cc0_rhm, cc0_samp, uv + hx.o1, la, gx, gy).z;
+    }
+    if (m.z > 0.0) {
+        h.z = textureSampleGrad(cc0_rhm, cc0_samp, uv + hx.o2, la, gx, gy).z;
+    }
+    return h;
+}
+
+// The height blend: each tile's height raised by its barycentric weight; the
+// highest wins, its neighbours within SP_HEX_SOFT of it share the pixel.
+fn sp_hex_blend(w: vec3<f32>, h: vec3<f32>, m: vec3<f32>) -> vec3<f32> {
+    let a = select(vec3<f32>(-8.0), h + w * SP_HEX_GAIN, m > vec3<f32>(0.0));
+    let top = max(a.x, max(a.y, a.z)) - SP_HEX_SOFT;
+    let b = max(a - vec3<f32>(top), vec3<f32>(0.0));
+    return b / max(b.x + b.y + b.z, 1e-6);
+}
+
+fn sp_hex_height(uv: vec2<f32>, hx: SpHex, m: vec3<f32>, la: i32, gx: vec2<f32>, gy: vec2<f32>) -> f32 {
+    let h = sp_hex_hs(uv, hx, m, la, gx, gy);
+    return dot(sp_hex_blend(hx.w, h, m), h);
+}
+
+struct SpPave {
+    // over the scan's means: albedo, roughness, occlusion
+    alb: vec3<f32>,
+    rough: f32,
+    ao: f32,
+    // the relief's lean of the normal (world x, z)
+    tn: vec2<f32>,
+};
+
+// The scan's taps at `uv` over the tiles `m` keeps of `hx`, blended by height.
+struct SpTaps {
+    alb: vec3<f32>,
+    nrm: vec2<f32>,
+    rough: f32,
+    ao: f32,
+    // the tiles' tone shift (-0.5..0.5) and the blended height
+    tone: f32,
+    h: f32,
+};
+
+fn sp_pave_taps(uv: vec2<f32>, hx: SpHex, m: vec3<f32>, la: i32, ugx: vec2<f32>, ugy: vec2<f32>) -> SpTaps {
+    var t: SpTaps;
+    // roughness, occlusion, height of each tile that may show (one read each)
+    var r0 = vec4<f32>(0.0);
+    var r1 = vec4<f32>(0.0);
+    var r2 = vec4<f32>(0.0);
+    if (m.x > 0.0) {
+        r0 = textureSampleGrad(cc0_rhm, cc0_samp, uv + hx.o0, la, ugx, ugy);
+    }
+    if (m.y > 0.0) {
+        r1 = textureSampleGrad(cc0_rhm, cc0_samp, uv + hx.o1, la, ugx, ugy);
+    }
+    if (m.z > 0.0) {
+        r2 = textureSampleGrad(cc0_rhm, cc0_samp, uv + hx.o2, la, ugx, ugy);
+    }
+    let hs = vec3<f32>(r0.z, r1.z, r2.z);
+    let wb = sp_hex_blend(hx.w, hs, m);
+    t.h = dot(wb, hs);
+    t.rough = dot(wb, vec3<f32>(r0.x, r1.x, r2.x));
+    t.ao = dot(wb, vec3<f32>(r0.y, r1.y, r2.y));
+    t.alb = vec3<f32>(0.0);
+    t.nrm = vec2<f32>(0.0);
+    t.tone = 0.0;
+    for (var k = 0; k < 3; k = k + 1) {
+        let wk = wb[k];
+        if (wk <= 0.002) {
+            continue;
+        }
+        var off = hx.o0;
+        if (k == 1) {
+            off = hx.o1;
+        } else if (k == 2) {
+            off = hx.o2;
+        }
+        let q = uv + off;
+        t.alb = t.alb + wk * textureSampleGrad(cc0_albedo, cc0_samp, q, la, ugx, ugy).rgb;
+        t.nrm = t.nrm + wk * (textureSampleGrad(cc0_normal, cc0_samp, q, la, ugx, ugy).xy * 2.0 - 1.0);
+        // each tile its own small shift of tone (another quarry lot, another soiling); none on the scan's own tiling
+        t.tone = t.tone + wk * select(0.0, st_hash(off * 97.0 + 1.7) - 0.5, any(off != vec2<f32>(0.0)));
+    }
+    return t;
+}
+
+fn sp_hex_plain() -> SpHex {
+    var h: SpHex;
+    h.w = vec3<f32>(1.0, 0.0, 0.0);
+    h.o0 = vec2<f32>(0.0);
+    h.o1 = vec2<f32>(0.0);
+    h.o2 = vec2<f32>(0.0);
+    return h;
+}
+
+// The paving at `p` (world xz, metres; `gx`/`gy` its screen derivatives) from
+// scan layer `la`. Near the eye the scan's own tiling (whole stones, as laid);
+// from SP_HEX_NEAR out, where its repeat would line up into rails, the
+// stochastic tiling where `stochastic` (the random setts; a bonded pattern
+// keeps its one tiling). Sets `sp_sun_vis`.
+fn sp_pave(la: i32, p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, world: vec3<f32>, stochastic: bool) -> SpPave {
+    var o: SpPave;
+    let ia = cc0_linv(la);
+    let uv = p * ia;
+    let ugx = gx * ia;
+    let ugy = gy * ia;
+    let to_eye = frame.cam_pos.xyz - world;
+    let dist = length(to_eye);
+    let v = to_eye / max(dist, 1e-4);
+    let hexk = select(0.0, smoothstep(SP_HEX_NEAR, SP_HEX_NEAR * 1.5, dist), stochastic);
+    let plain = sp_hex_plain();
+    let one = vec3<f32>(1.0, 0.0, 0.0);
+    var hx = plain;
+    var m = one;
+    if (hexk > 0.0) {
+        hx = sp_hex(uv);
+        // the tiles that show at all (most pixels: one)
+        let m_all = select(vec3<f32>(0.0), vec3<f32>(1.0), hx.w > vec3<f32>(0.0));
+        let w0 = sp_hex_blend(hx.w, sp_hex_hs(uv, hx, m_all, la, ugx, ugy), m_all);
+        m = select(vec3<f32>(0.0), vec3<f32>(1.0), w0 > vec3<f32>(0.002));
+    }
+    var uvp = uv;
+    // Parallax occlusion near the eye (inside SP_HEX_NEAR: the scan's own
+    // tiling): the ray from the stones' tops (the drawn plane) down through
+    // the height field to its first hit.
+    let pom_k = select(0.0, 1.0 - smoothstep(SP_POM_FAR * 0.55, SP_POM_FAR, dist), hexk <= 0.0);
+    if (pom_k > 0.0 && v.y > 0.02) {
+        let vy = max(v.y, 0.12);
+        let full = -v.xz / vy * SP_PAVE_DEPTH * ia * pom_k;
+        let steps = i32(mix(6.0, 16.0, clamp(1.0 - v.y, 0.0, 1.0)));
+        let dl = 1.0 / f32(steps);
+        var prev_d = 0.0;
+        var prev_s = 1.0 - textureSampleGrad(cc0_rhm, cc0_samp, uv, la, ugx, ugy).z;
+        for (var i = 1; i <= steps; i = i + 1) {
+            if (prev_s <= 0.0) {
+                break;
+            }
+            let d = f32(i) * dl;
+            let q = uv + full * d;
+            let s = 1.0 - textureSampleGrad(cc0_rhm, cc0_samp, q, la, ugx, ugy).z;
+            if (d >= s) {
+                let a = prev_s - prev_d;
+                let b = d - s;
+                uvp = uv + full * mix(prev_d, d, a / max(a + b, 1e-5));
+                break;
+            }
+            prev_d = d;
+            prev_s = s;
+            uvp = q;
         }
     }
-    // the joints: near, the stone's own outline; further, each family of joints
-    // as its filtered cover along its own axis, then its mean
-    let jin_near = 1.0 - smoothstep(-0.5 * fwm, 0.5 * fwm, e);
-    let dy = min(y2 - row.y, row.z - y2);
-    let dx = min(qx - col.y, col.z - qx);
-    let b_row = mix(2.0 * jw / cw, wx_band(dy, jw, fy), k_row);
-    let b_col = mix(2.0 * jw / cl, wx_band(dx, jw, fx), k_col);
-    let jin_far = 1.0 - (1.0 - b_row) * (1.0 - b_col);
-    let jin = clamp(mix(jin_far, jin_near, k_stone), 0.0, 1.0);
-    // the share of the joint's floor the sun reaches over its wall (the fill ~8 mm below the arrises)
-    let lit = clamp(1.0 - 0.008 / max(2.0 * jw * tan_el, 1e-4), 0.0, 1.0);
-    let jcol = joint_col * (0.75 + 0.5 * st_noise(q / 0.02 + 3.0)) * mix(0.35, 1.0, lit) * soil;
-    alb = mix(alb, jcol, jin);
-    rough = mix(rough, 0.95, jin);
-    ao = mix(ao, 0.45, jin * k_stone);
-    lean = lean * (1.0 - jin) * k_stone;
-    // from the band's (u, y2) to the plane's axes
-    lean = vec2<f32>(lean.x - sp * lean.y, lean.y);
-    let ll = length(lean);
-    if (ll > 0.85) {
-        lean = lean * (0.85 / ll);
+    // the shading taps at the hit: the scan's own tiling, the stochastic one, or both across the band between
+    var t: SpTaps;
+    if (hexk < 1.0) {
+        t = sp_pave_taps(uvp, plain, one, la, ugx, ugy);
     }
-    let k_any = max(k_row, k_col);
-    o.albedo = mix(o.albedo, alb, k_any);
-    o.rough = clamp(mix(o.rough, rough, k_any), 0.3, 1.0);
-    o.ao = mix(o.ao, ao, k_any);
-    o.lean = lean;
+    if (hexk > 0.0) {
+        let th = sp_pave_taps(uvp, hx, m, la, ugx, ugy);
+        if (hexk >= 1.0) {
+            t = th;
+        } else {
+            t.alb = mix(t.alb, th.alb, hexk);
+            t.nrm = mix(t.nrm, th.nrm, hexk);
+            t.rough = mix(t.rough, th.rough, hexk);
+            t.ao = mix(t.ao, th.ao, hexk);
+            t.tone = mix(t.tone, th.tone, hexk);
+            t.h = mix(t.h, th.h, hexk);
+        }
+    }
+    let hb = t.h;
+    let lm = cc0_lmean(la);
+    let lx = cc0_lmisc(la);
+    var rel = t.alb / max(lm.rgb, vec3<f32>(1e-3));
+    // The macro fields (metres; they hold to the horizon): soiling and damp,
+    // and the foot traffic's desire lines that clean and polish the crowns.
+    let m0 = st_noise(p / 17.0 + 8.8);
+    let m1 = st_noise(p / 6.3 + 2.1);
+    let m2 = st_noise(p / 2.2 + 7.4);
+    let traffic = smoothstep(0.4, 0.8, st_noise(p / 13.0 + 5.5));
+    let soil = 1.0 + (m0 - 0.5) * 0.3 + (m1 - 0.5) * 0.2 + (m2 - 0.5) * 0.1 + t.tone * 0.12;
+    let crown = smoothstep(0.55, 0.85, hb);
+    let low = 1.0 - smoothstep(0.12, 0.4, hb);
+    // grit and dirt held in the joints, deeper where the traffic does not sweep
+    rel = rel * soil * (1.0 - 0.25 * low * (1.0 - 0.5 * traffic)) * (1.0 + 0.06 * crown * traffic);
+    o.alb = rel;
+    o.rough = clamp(t.rough / max(lx.x, 0.05) * (1.0 - 0.22 * crown * traffic) * (1.0 + 0.12 * low), 0.3, 1.6);
+    o.ao = clamp(t.ao / max(lx.y, 0.05), 0.0, 1.5);
+    o.tn = vec2<f32>(t.nrm.x, -t.nrm.y);
+    // The key light over the relief: marched near, the relief's mean masking far.
+    let l = look.key_dir.xyz;
+    let lh = length(l.xz);
+    if (l.y > 0.0 && lh > 1e-3) {
+        let tan_el = l.y / lh;
+        // Smith's G1 (Beckmann, Walter et al. 2007's rational fit) at the paving's slope spread
+        let a = tan_el / SP_PAVE_SLOPE;
+        let g1 = select(1.0, (3.535 * a + 2.181 * a * a) / (1.0 + 2.276 * a + 2.577 * a * a), a < 1.6);
+        var vis = g1;
+        let near = 1.0 - smoothstep(SP_SHADOW_FAR * 0.6, SP_SHADOW_FAR, dist);
+        if (near > 0.0) {
+            // over the tiling that dominates the pixel, from its own height there
+            // (a start off the field it marches would shadow the stone by itself)
+            var hs_x = plain;
+            var hs_m = one;
+            var h0 = hb;
+            if (hexk > 0.0 && hexk < 1.0) {
+                if (hexk >= 0.5) {
+                    hs_x = hx;
+                    hs_m = m;
+                }
+                h0 = sp_hex_height(uvp, hs_x, hs_m, la, ugx, ugy);
+            } else if (hexk >= 1.0) {
+                hs_x = hx;
+                hs_m = m;
+            }
+            let reach = min((1.0 - h0) * SP_PAVE_DEPTH / tan_el, SP_SHADOW_REACH);
+            var march = 1.0;
+            if (reach > 5e-4) {
+                let dir = l.xz / lh * ia;
+                var occ = 0.0;
+                for (var i = 1; i <= 8; i = i + 1) {
+                    let s = reach * f32(i) / 8.0;
+                    // (a few hundredths of the relief over the start: the filtered field's own slope)
+                    let hr = h0 + SP_SHADOW_BIAS + s * tan_el / SP_PAVE_DEPTH;
+                    let hq = sp_hex_height(uvp + dir * s, hs_x, hs_m, la, ugx, ugy);
+                    // soft: the height above the ray over the penumbra's width there
+                    occ = max(occ, (hq - hr) * SP_PAVE_DEPTH / (s * SP_PENUMBRA + 4e-4));
+                }
+                march = clamp(1.0 - occ, 0.0, 1.0);
+            }
+            vis = mix(g1, march, near);
+        }
+        sp_sun_vis = vis;
+    }
     return o;
 }
 
-// The setts on an open space's paving (cc0.wgsl `cc0_surface`, the plaza mode's
-// grey-stone style): world-anchored in the plane, at every distance (the far
-// field their mean, so no ring where the scans used to stop).
-fn sp_plaza(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
-    let t = sp_setts(world.xz, dpx.xz, dpy.xz);
-    (*s).albedo = t.albedo;
-    (*s).rough = t.rough;
-    (*s).ao = t.ao;
-    (*s).metal = 0.0;
-    (*s).n = normalize(n + vec3<f32>(t.lean.x, 0.0, t.lean.y));
+// ---- wet paint (draw.wgsl, the street paint) -------------------------------------------
+
+// Thermoplastic and paint do not soak: the film over them darkens them a
+// little (its index against the paint's) and makes them glossy, and they take
+// the film's streaks of the lamps (sky_light.wgsl) as the asphalt round them.
+fn sp_paint_wet(s: ptr<function, Surface>) {
+    let w = skyu.wet.x;
+    if (!sky_on(skyu.flags.x, SKY_WET) || w < 0.02) {
+        return;
+    }
+    (*s).albedo = (*s).albedo * mix(1.0, SP_PAINT_WET_DARKEN, w);
+    (*s).rough = mix((*s).rough, min((*s).rough, SP_PAINT_WET_ROUGH), w);
+    if (SKY_CINE_FULL && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
+        sky_streak_w = w;
+    }
 }

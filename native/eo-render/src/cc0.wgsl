@@ -226,12 +226,6 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
         let warm = vcol.r - vcol.b;
         layer = select(select(CC0_L_COBBLESTONE_FLOOR_08, CC0_L_PATTERNED_CONCRETE_PAVERS, dot(vcol, CC0_LUMA) > 0.6), CC0_L_HERRINGBONE_PAVEMENT, warm > 0.12);
         inv = cc0_linv(layer);
-        if (SF_STREET_PBR && layer == CC0_L_COBBLESTONE_FLOOR_08) {
-            // (`--street-pbr`, street_pbr.wgsl) laid granite setts in place of the tiled scan
-            sp_plaza(s, world, n, dpx, dpy);
-            cc0_wall_hit = true;
-            return true;
-        }
     } else if (mode == CC0_MODE_SAND) {
         // Wet below the swash's reach (beach-surface.js wet margin, widened to the sand sheet).
         let wet = world.y < LM_SEA_LEVEL_Y + 1.2 + st_noise(world.xz / 9.0) * 0.8;
@@ -257,6 +251,16 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
         if (vfade <= 0.0) {
             return false;
         }
+    }
+    if (SF_STREET_PBR && mode == CC0_MODE_PLAZA && n.y > 0.9) {
+        // (`--street-pbr`, street_pbr.wgsl) the paving's scan stochastically tiled (the random setts), in relief, self-shadowed
+        let pv = sp_pave(layer, world.xz, dpx.xz, dpy.xz, world, layer == CC0_L_COBBLESTONE_FLOOR_08);
+        (*s).albedo = mix((*s).albedo, (*s).albedo * max(mix(vec3<f32>(1.0), pv.alb, e3.z), vec3<f32>(0.0)), vfade);
+        (*s).rough = clamp((*s).rough * mix(1.0, pv.rough, 0.7 * vfade), 0.04, 1.0);
+        (*s).ao = mix((*s).ao, clamp(mix(1.0, pv.ao, 0.85), 0.25, 1.0), vfade);
+        (*s).n = normalize(n + vec3<f32>(pv.tn.x, 0.0, pv.tn.y) * e2.w * vfade);
+        cc0_wall_hit = true;
+        return true;
     }
     if (cc0_on(CC0_RUN_POM) && e3.x > 0.0 && dist < CC0_POM_FAR) {
         let v = to_eye / max(dist, 1e-4);
@@ -551,6 +555,18 @@ fn cc0_street_concrete(f: ptr<function, StTap>, p: vec2<f32>, gx: vec2<f32>, gy:
             plaza = true;
         }
     }
+    if (SF_STREET_PBR && plaza) {
+        // (`--street-pbr`, street_pbr.wgsl) the pavers' scan stochastically tiled (the random setts),
+        // in relief and self-shadowed, through the same post terms as below.
+        let pv = sp_pave(la, p, gx, gy, world, la == CC0_L_COBBLESTONE_FLOOR_08);
+        cc0_p_plaza = vec4<f32>(pv.alb, 0.92);
+        cc0_p_n = vec3<f32>(pv.tn, 1.0);
+        (*f).albedo = mean;
+        (*f).rough = pv.rough * mean_rough;
+        (*f).ao = clamp(pv.ao * mean_ao, 0.0, 1.0);
+        (*f).tn = vec2<f32>(0.0);
+        return;
+    }
     let ia = cc0_linv(la);
     let t = cc0_tap(p * ia, gx * ia, gy * ia, la);
     var alb = t.alb.rgb / max(cc0_lmean(la).rgb, vec3<f32>(1e-3));
@@ -572,19 +588,6 @@ fn cc0_street_concrete(f: ptr<function, StTap>, p: vec2<f32>, gx: vec2<f32>, gy:
             alb = mix(alb, ab, w);
             tn = mix(tn, vec2<f32>(tb.n.x, -tb.n.y), w);
         }
-    }
-    if (SF_STREET_PBR && plaza && la == CC0_L_COBBLESTONE_FLOOR_08) {
-        // (`--street-pbr`, street_pbr.wgsl) laid granite setts: their albedo over the plaza tone's
-        // composition (the walk's base), their roughness and relief through the decal post terms.
-        let st = sp_setts(p, gx, gy);
-        cc0_p_plaza = vec4<f32>(st.albedo / max(tint * ST_CONCRETE_BASE, vec3<f32>(1e-3)), 1.0);
-        cc0_p_n = vec3<f32>(st.lean, 1.0);
-        cc0_p_rough = vec2<f32>(st.rough, 1.0);
-        (*f).albedo = mean;
-        (*f).rough = mean_rough;
-        (*f).ao = clamp(st.ao * mean_ao, 0.0, 1.0);
-        (*f).tn = vec2<f32>(0.0);
-        return;
     }
     if (plaza) {
         // Pavers past the walk's contrast clamps: the street scan's terms are
