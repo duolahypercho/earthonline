@@ -206,9 +206,11 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "shop_light" => features.shop_light = true,
             "clutter" => features.facade_clutter = true,
             "cinematic" => features.cinematic = true, // (`--look cinematic`, stage L0)
+            "street_pbr" => features.street_pbr = true, // (`--street-pbr`)
             _ => {}
         }
     }
+    features.street_pbr |= crate::street_pbr(); // the street's physically based surface (`--street-pbr`; no runtime gate, so only with its switch)
     eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(
         ctx,
