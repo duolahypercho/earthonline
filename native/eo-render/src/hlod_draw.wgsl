@@ -485,7 +485,9 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     let toward = l.xz / lh;
     let rise = max(l.y, 0.02) / lh;
     var shade = 0.0;
-    if (sun > 0.0) {
+    // once a cell is under a pixel only the mean shade below is kept: the march is skipped there (the same frame)
+    let fade = smoothstep(0.8, 1.6, fwm / FF_CELL_M);
+    if (sun > 0.0 && fade < 1.0) {
         for (var i = 0; i < 10; i = i + 1) {
             let sd = 0.4 + 0.22 * f32(i * i) + 0.6 * f32(i);
             let ray = sd * rise;
@@ -513,7 +515,6 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     let hatch = ff_cov1(q.x, ho.x, ho.x + hs.x, fw.x) * ff_cov1(q.y, ho.y, ho.y + hs.y, fw.y) * hatch_on;
     // once a cell is under a pixel: the cell's mean cover and shade (a unit's shade about 2.3 m
     // wide and its height over the sun's rise long; a penthouse's 4.5 m wide)
-    let fade = smoothstep(0.8, 1.6, fwm / FF_CELL_M);
     let mean_unit = share * 5.9 / (FF_CELL_M * FF_CELL_M);
     let mean_pent = pshare * 24.0 / (FF_PENT_M * FF_PENT_M);
     let reach_u = min(1.6 / max(rise, 0.05), 16.0);
