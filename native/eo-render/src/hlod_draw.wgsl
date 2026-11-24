@@ -604,6 +604,8 @@ struct FbOut {
     rough: f32,
     // (`--far-relief`) the sky's visibility under the projections (the ambient terms only); 1 without it
     ao: f32,
+    // (`--far-relief`) the lit window's light across its glass (1: even); 1 without it
+    lit: f32,
 };
 
 // (`--far-relief`) the stone front's projections (metres out of the wall
@@ -693,6 +695,7 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
     let side = select(0.0, sgn * sl.x / max(sl.z, 0.02), lit_face);
     var vis = 1.0;
     var sky = 1.0;
+    var lit = 1.0; // (`--far-relief`) the window light's share across a shop front (its shelves dark, its lights bright)
     // (`--far-relief`) the ground floor's arcade: the storey 1.5 m over the ground it stands on (the cell's lowest
     // point, or on the waterfront the quay's deck over the sea, whose ground the prism's foot reaches under it),
     // and any under it, below a storey of windows at least; and the pavilions
@@ -739,14 +742,26 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
                 sky = 0.4;
                 tau = depth * clamp(py / max(py - hit.y, 1e-3), 0.0, 1.0);
             } else {
-                // the back wall: a glazed shop front between stone piers, each bay its own
+                // the back wall: a shop front between stone piers, each bay its own: a kick plate, a
+                // bronze frame of three lights under a transom, and through it the shop's shelves
+                // under its lit ceiling (darker between the shelves, brightest under the lights)
                 let sx = fract((hit.x + FB_BAY_M * 0.5) / FB_BAY_M) * FB_BAY_M - FB_BAY_M * 0.5;
                 let shop = fb_cov(abs(sx) - 1.35, fw.x) * fb_cov(hit.y - 3.2, fw.y);
                 let hs = ff_h(vec2<f32>(bay, 7.0), g, 61u);
-                let goods = mix(vec3<f32>(0.20, 0.15, 0.10), vec3<f32>(0.32, 0.26, 0.18), hs) * (0.7 + 0.5 * ff_noise(vec2<f32>(hit.x * 2.1, hit.y * 1.7), g ^ 0x3bu));
-                col = mix(stone * 0.8, goods, shop);
-                glass = shop;
-                rough = mix(0.85, 0.2, shop);
+                let ax = abs(sx);
+                let frame = max(max(fb_cov(abs(ax - 0.45) - 0.03, fw.x), fb_cov(abs(hit.y - 2.5) - 0.04, fw.y)), max(fb_cov(hit.y - 0.45, fw.y), fb_cov(1.27 - ax, fw.x)));
+                let row = floor(hit.y / 0.42);
+                let shelf = fb_cov(abs(fract(hit.y / 0.42) - 0.08) - 0.06, fw.y) * step(hit.y, 2.2);
+                let item = ff_noise(vec2<f32>(hit.x * 4.3 + bay * 7.0, row * 3.1), g ^ 0x3bu);
+                let hue = ff_h(vec2<f32>(bay, row), g, 63u);
+                let goods = mix(mix(vec3<f32>(0.30, 0.20, 0.12), vec3<f32>(0.16, 0.22, 0.30), step(0.55, hue)), vec3<f32>(0.42, 0.36, 0.26), step(0.85, hue)) * (0.45 + 0.8 * item);
+                let ceiling = smoothstep(2.0, 2.45, hit.y);
+                let interior = mix(mix(goods, vec3<f32>(0.08, 0.07, 0.06), shelf), vec3<f32>(0.55, 0.50, 0.42), ceiling * select(0.0, 1.0, hit.y < 2.46));
+                let pane = shop * (1.0 - frame);
+                col = mix(mix(stone * 0.8, vec3<f32>(0.06, 0.05, 0.04), shop * frame), interior * mix(0.75, 1.15, hs), pane);
+                glass = pane;
+                lit = mix(0.35 + 0.5 * item * (1.0 - shelf), 1.6, ceiling);
+                rough = mix(0.85, 0.2, pane);
                 nn = n;
                 occ = 0.7;
                 sky = 0.3; // the back wall sees the sky only through the opening
@@ -922,6 +937,7 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
     o.n = nn;
     o.rough = rough;
     o.ao = select(1.0, sky, relief);
+    o.lit = select(1.0, lit, relief);
     return o;
 }
 
@@ -1078,6 +1094,7 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
     var ff_rough = -1.0;
     var ff_n = vec3<f32>(0.0);
     var fr_ao = 1.0; // (`--far-relief`) the stone front's sky under its projections
+    var fr_lit = 1.0; // (`--far-relief`) its window light across a shop front
     if (ff_on() && !district && !roofish && in.layer < 0 && abs(n.y) < 0.3) {
         // (`--far-facades`) an untextured far wall (a plain prism): its stone facade
         let fb = fb_facade(in, n, albedo, dpx, dpy);
@@ -1087,6 +1104,7 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
         ff_n = fb.n;
         if (SF_FAR_RELIEF) {
             fr_ao = fb.ao;
+            fr_lit = fb.lit;
         }
     }
     if (wx_level() != 0u && !roofish) {
@@ -1154,6 +1172,9 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
     m.rough_flatten = 0.0;
     m.thin_absorption = 0.0;
     rm_emit = hl_windows(in, in.world, n, glass, dpx, dpy);
+    if (SF_FAR_RELIEF) {
+        rm_emit = rm_emit * fr_lit;
+    }
     if (FL_GLASS && !roofish) {
         rm_emit = rm_emit + hl_glass_sky(in, n_pane, v, glass); // the tilted pane
     }
