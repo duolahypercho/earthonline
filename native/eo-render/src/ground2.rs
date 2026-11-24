@@ -34,6 +34,7 @@
 
 use eo_data::roof_colours::{GreenGrid, native_assets, srgb_to_linear};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub type Linear = [f64; 3];
 
@@ -43,6 +44,34 @@ pub const SHORE_KEEP_M: f64 = 40.0;
 pub const SEA_KEEP_M: f64 = 1.0;
 /// The darkest the footprints' share makes open ground (x 1 - CONTACT_MAX x built).
 pub const CONTACT_MAX: f64 = 0.4;
+
+static COVER: AtomicBool = AtomicBool::new(false);
+
+/// `--ground-cover` (eo-render look::NATURE_COVER, off by default): the hills'
+/// tones vary over a smooth field instead of vertex by vertex, and the city
+/// shader (landmarks_surface.wgsl `nt_cover`) draws the mosaic, the crowns and
+/// the chert at the pixel. Set before the terrain is built.
+pub fn set_cover(on: bool) {
+    COVER.store(on, Ordering::Relaxed);
+}
+
+/// Whether `--ground-cover` is on (`set_cover`).
+pub fn cover() -> bool {
+    COVER.load(Ordering::Relaxed)
+}
+
+/// Value noise in [0, 1) over cells of `cell` m (smoothstep between the corners' hashes).
+pub fn value_noise(x: f64, z: f64, cell: f64, salt: u32) -> f64 {
+    let (fx, fz) = (x / cell, z / cell);
+    let (ix, iz) = (fx.floor(), fz.floor());
+    let (tx, tz) = (fx - ix, fz - iz);
+    let (ux, uz) = (tx * tx * (3.0 - 2.0 * tx), tz * tz * (3.0 - 2.0 * tz));
+    // corner hashes on a lattice a metre apart (hash01 rounds to the metre)
+    let h = |i: f64, j: f64| hash01(i, j, salt);
+    let a = h(ix, iz) + (h(ix + 1.0, iz) - h(ix, iz)) * ux;
+    let b = h(ix, iz + 1.0) + (h(ix + 1.0, iz + 1.0) - h(ix, iz + 1.0)) * ux;
+    a + (b - a) * uz
+}
 
 /// A switch: `EO_GROUND_<NAME>=off` (or 0) turns it off.
 pub fn on(name: &str) -> bool {
@@ -160,11 +189,18 @@ fn class_green(class: u8) -> f64 {
     }
 }
 
-/// Dry grass to scrub to `green` by the vegetation share (per vertex jitter).
+/// Dry grass to scrub to `green` by the vegetation share (per vertex jitter;
+/// with `--ground-cover` a smooth field of 40 and 14 m, whose spread is stretched
+/// to the jitter's, so the terrain's triangles do not show).
 pub fn hill_tone(share: f64, green: Linear, x: f64, z: f64) -> Linear {
-    let h = hash01(x, z, 7);
+    let (h, k) = if cover() {
+        let f = value_noise(x, z, 40.0, 7) * 0.65 + value_noise(x + 17.0, z - 29.0, 14.0, 13) * 0.35;
+        ((0.5 + (f - 0.5) * 2.2).clamp(0.0, 1.0), value_noise(x, z, 60.0, 11))
+    } else {
+        (hash01(x, z, 7), hash01(x, z, 11))
+    };
     let level = share * 2.2 + (h - 0.5) * 0.9;
-    let dry = mix(hex(DRY_A), hex(DRY_B), hash01(x, z, 11));
+    let dry = mix(hex(DRY_A), hex(DRY_B), k);
     if level < 1.0 { mix(dry, hex(SCRUB), smoothstep(0.4, 0.75, level)) } else { mix(hex(SCRUB), green, smoothstep(1.15, 1.5, level)) }
 }
 
@@ -324,6 +360,22 @@ mod tests {
         // Dry hills are mostly straw (the withered-grass scan).
         let straw = (0..2000).filter(|i| set_of(hill_tone(0.05, hex(GROVE), (*i % 50) as f64 * 8.0, (*i / 50) as f64 * 8.0)) == 2).count();
         assert!(straw > 1500, "{straw} of 2000 straw");
+    }
+
+    #[test]
+    fn the_cover_field_is_smooth_and_spread_like_the_jitter() {
+        // neighbouring vertices (8 m) differ little; the field still spans most of [0, 1)
+        let (mut lo, mut hi, mut step) = (1.0f64, 0.0f64, 0.0f64);
+        for i in 0..4000 {
+            let (x, z) = ((i % 80) as f64 * 8.0, (i / 80) as f64 * 8.0);
+            let a = value_noise(x, z, 40.0, 7);
+            lo = lo.min(a);
+            hi = hi.max(a);
+            step = step.max((value_noise(x + 8.0, z, 40.0, 7) - a).abs());
+        }
+        assert!(lo < 0.15 && hi > 0.85, "{lo} {hi}");
+        assert!(step < 0.35, "{step}");
+        assert!(!cover(), "off unless set");
     }
 
     #[test]

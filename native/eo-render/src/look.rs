@@ -238,11 +238,35 @@ pub struct LookOptions {
     /// `--car-materials` only): 0 off (the frame as before), 1 on. Its shader
     /// code sits behind `SF_CAR_REFLECTIONS` (`ShaderFeatures::car_reflections`).
     pub car_reflections: u8,
+    /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
+    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`): 0 (the default) is the frame as before,
+    /// and each bit's shader code is compiled out while it is off (`sf_select`).
+    pub nature: u32,
 }
+
+/// `--foliage-light`: leaves and palm fronds pass light through (props_draw.wgsl
+/// `pr_foliage`, hlod_trees.wgsl `ft_foliage`).
+pub const NATURE_FOLIAGE: u32 = 1;
+/// `--temporal-lod-fade`: the level cross-fades' dither moves every frame, so the
+/// temporal anti-aliasing resolves it to a blend (props_draw.wgsl, hlod_trees.wgsl).
+pub const NATURE_LOD_FADE: u32 = 2;
+/// `--turf`: lawns shaded as a grass canopy (landmarks_surface.wgsl `nt_turf`).
+pub const NATURE_TURF: u32 = 4;
+/// `--palm-detail`: the palms' trunk relief and crown shading (props_draw.wgsl `pr_palm`).
+pub const NATURE_PALM: u32 = 8;
+/// `--hill-cover`: the far hills' vegetation cover (farshore.wgsl `fs_cover`).
+pub const NATURE_HILLS: u32 = 16;
+/// `--ground-cover`: the city's hills and wild parks as a mosaic of grass, brush,
+/// groves and chert, their crowns drawn or shared out by the geometric-optical model
+/// (landmarks_surface.wgsl `nt_cover`), and their tones without the per-vertex
+/// jitter (ground2.rs `hill_tone`).
+pub const NATURE_COVER: u32 = 32;
+/// Every natural-detail bit.
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER;
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, car_materials: 0, car_contact: 0, car_reflections: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, car_materials: 0, car_contact: 0, car_reflections: 0, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -756,12 +780,16 @@ pub struct ShaderFeatures {
     pub office_floors: bool,
     /// Lit homes and shops seen from the night street (`--room-depth`; `SF_ROOM_DEPTH`, rooms.wgsl).
     pub room_depth: bool,
+    /// The natural-detail bits compiled in (`NATURE_*`; their `// sf:` blocks, `sf_select`).
+    /// New code with no runtime test: `ALL` leaves it out, as the shaders were before it.
+    pub nature: u32,
 }
 
 impl ShaderFeatures {
     /// Every feature compiled in (the shaders as before stage P1). The street's
     /// physically based pass stays out: it has no runtime gate, so compiling it in
-    /// turns it on; it comes in only with its switch (`--street-pbr`).
+    /// turns it on; it comes in only with its switch (`--street-pbr`). So do the
+    /// natural-detail bits (`nature`: new code with no runtime test).
     pub const ALL: Self = Self {
         lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true,
         facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, // the facades track
@@ -771,6 +799,7 @@ impl ShaderFeatures {
         camera: true, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, // the night track
+        nature: 0, // the nature track
     };
     /// No feature compiled in (the default frame's pipelines).
     pub const NONE: Self = Self {
@@ -782,6 +811,7 @@ impl ShaderFeatures {
         camera: false, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, // the night track
+        nature: 0, // the nature track
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -816,6 +846,7 @@ impl ShaderFeatures {
             urban_sky: o.sky.urban_sky,
             office_floors: o.sky.office_floors,
             room_depth: o.sky.room_depth,
+            nature: o.nature & NATURE_ALL,
         }
     }
 
@@ -888,6 +919,7 @@ impl ShaderFeatures {
         l.sky.urban_sky &= self.urban_sky;
         l.sky.office_floors &= self.office_floors;
         l.sky.room_depth &= self.room_depth;
+        l.nature &= self.nature;
         l
     }
 
@@ -963,6 +995,50 @@ fn night_gain(on: bool, f: &LookFrame) -> f32 {
     if on { eo_sky::night_photometry::practical_gain(f.model.sun.altitude_deg) as f32 } else { 0.0 }
 }
 
+/// A shader file's natural-detail blocks for the features compiled in now: the
+/// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`: `NATURE_*`) in, those between `// sf:NAME-`
+/// and `// sf:end` only without it, and the marker lines are dropped (`NAME|OTHER`:
+/// either bit; blocks do not nest). With every
+/// bit out the text is the file as it was before the bits existed, so a shader
+/// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
+/// before, and with a bit in it holds its code alone, not the code it replaces.
+pub fn sf_select(src: &str) -> String {
+    let f = shader_features();
+    let on = |name: &str| match name {
+        "FOLIAGE" => f.nature & NATURE_FOLIAGE != 0,
+        "LOD_FADE" => f.nature & NATURE_LOD_FADE != 0,
+        "TURF" => f.nature & NATURE_TURF != 0,
+        "PALM" => f.nature & NATURE_PALM != 0,
+        "HILLS" => f.nature & NATURE_HILLS != 0,
+        "COVER" => f.nature & NATURE_COVER != 0,
+        _ => false,
+    };
+    let mut out = String::with_capacity(src.len());
+    let mut keep = true;
+    for line in src.split_inclusive('\n') {
+        if let Some(rest) = line.trim().strip_prefix("// sf:") {
+            if rest == "end" {
+                keep = true;
+                continue;
+            }
+            // `A|B`: kept with either bit in (code two features share).
+            if let Some(names) = rest.strip_suffix('+') {
+                keep = names.split('|').any(on);
+                continue;
+            }
+            if let Some(names) = rest.strip_suffix('-') {
+                keep = !names.split('|').any(on);
+                continue;
+            }
+        }
+        if keep {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
 static SHADER_FEATURES: std::sync::RwLock<ShaderFeatures> = std::sync::RwLock::new(ShaderFeatures::ALL);
 
 /// Chooses the features compiled into every pipeline made after this call
@@ -1008,6 +1084,10 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// at the edge of what Apple's compiler takes, have room for the probe grid
 /// (probe_grid.wgsl, compiled in everywhere but the far layer).
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
+    sf_select(&city_shader_parts(ambient, shadow, single_probe)) // the natural-detail blocks (`// sf:`) of the features compiled in
+}
+
+fn city_shader_parts(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
     format!(
         "{}\n{}\n{}\n{}\n{}\n{}\n{}",
         include_str!("draw.wgsl"),

@@ -409,3 +409,415 @@ fn lm_fog_depth(m: Material, vd: f32) -> f32 {
     }
     return vd;
 }
+// sf:TURF+
+
+// ---- turf (`--turf`; this block is in the shader only with it): grass as a canopy ----
+// A lawn or a field of grass is not a painted plane: it is a layer of blades over
+// soil, and what the eye sees of it depends on where the sun and the eye stand.
+// Its reflectance follows the RPV model fitted to grass canopies (Rahman, Pinty
+// and Verstraete 1993): a Minnaert-like term (k < 1: brighter toward grazing, where
+// only lit blade sides show), a backward-peaked Henyey-Greenstein phase (theta < 0:
+// darker looking into the sun, where the shaded sides face the eye) and the hotspot
+// (the sun at the eye's back hides every shadow). It scales the ground's albedo by
+// its ratio to a Lambertian plane (1 at 45 degrees of sun and view, 90 degrees
+// apart), by the sun's share of the light for the direct part. Over it a mown
+// lawn's stripes (the mower's passes, the blades leaning along its path: light where
+// they lean away from the eye, dark where they lean toward it) and its tones at
+// every distance: irrigation patches, clumps, dry and worn patches.
+const NT_TURF_K: f32 = 0.75;
+const NT_TURF_THETA: f32 = -0.15;
+const NT_TURF_RHO0: f32 = 0.1;
+const NT_TURF_STRIPE_M: f32 = 1.6;
+const NT_TURF_STRIPE: f32 = 0.14;
+
+// How much of a ground tone is grass (x mown lawn: bright green; y any grass:
+// green or the dry summer straw), from the tone before the scans (cc0_ground_sets' kinds).
+fn nt_turf_weight(c: vec3<f32>) -> vec2<f32> {
+    let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let green = smoothstep(1.03, 1.12, c.g / max(c.r, 1e-4)) * smoothstep(1.12, 1.3, c.g / max(c.b, 1e-4));
+    let lawn = green * smoothstep(0.035, 0.06, l);
+    let warm = c.r / max(c.b, 1e-4);
+    let straw = (1.0 - smoothstep(0.1, 0.16, abs(c.r - c.g) / max(c.g, 1e-4))) * smoothstep(1.2, 1.35, warm);
+    return vec2<f32>(lawn, max(green, straw) * smoothstep(0.012, 0.02, l));
+}
+
+// The RPV reflectance (up to rho0) for sun cosine mi, view cosine mv, phase cosine cg and relative azimuth cosine cp.
+fn nt_rpv(mi: f32, mv: f32, cg: f32, cp: f32) -> f32 {
+    let k = NT_TURF_K;
+    let th = NT_TURF_THETA;
+    let m = pow(mi * mv * (mi + mv), k - 1.0);
+    let f = (1.0 - th * th) / pow(max(1.0 + 2.0 * th * cg + th * th, 1e-4), 1.5);
+    let ti = sqrt(max(1.0 - mi * mi, 0.0)) / mi;
+    let tv = sqrt(max(1.0 - mv * mv, 0.0)) / mv;
+    let g = sqrt(max(ti * ti + tv * tv - 2.0 * ti * tv * cp, 0.0));
+    return m * f * (1.0 + (1.0 - NT_TURF_RHO0) / (1.0 + g));
+}
+
+fn nt_turf(s: ptr<function, Surface>, w: vec2<f32>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    if (w.y <= 0.0 || n.y < 0.5) {
+        return;
+    }
+    let v = normalize(frame.cam_pos.xyz - world);
+    let l = look.key_dir.xyz;
+    // (the fits hold to about 78 degrees of view and 84 of sun: no further)
+    let mv = clamp(dot(n, v), 0.2, 1.0);
+    let mi = clamp(dot(n, l), 0.1, 1.0);
+    let lt = l - n * dot(n, l);
+    let vt = v - n * dot(n, v);
+    let cp = dot(lt, vt) / max(length(lt) * length(vt), 1e-4);
+    // reference: sun and view at 45 degrees, 90 degrees of azimuth apart (cos g 0.5, G sqrt 2).
+    let ref_rpv = nt_rpv(0.70710678, 0.70710678, 0.5, 0.0);
+    let sun = nt_rpv(mi, mv, clamp(dot(l, v), -1.0, 1.0), cp) / ref_rpv;
+    // the sky (an extended source): the view's part alone, the sky at 41 degrees, across.
+    let sky = nt_rpv(0.75, mv, 0.75 * mv, 0.0) / ref_rpv;
+    // the sun's share of the light where it reaches (its shadow: in the shade of a
+    // building the grass takes the sky's ratio alone, not the hotspot's brightening)
+    var key = dot(look.key.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) * max(dot(n, l), 0.0);
+    if (key > 0.0) {
+        key = key * lk_shadow(world, n) * sky_cloud_transmittance(world);
+    }
+    let amb = dot(look.hemi_sky.xyz + look.ambient.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let share = key / max(key + amb, 1e-6);
+    let canopy = clamp(mix(sky, sun, share), 0.55, 1.8);
+    var alb = (*s).albedo;
+    // The pixel's footprint (m): what is finer than it averages out.
+    let fw = max(length(dpx), length(dpy));
+    let p = world.xz;
+    // irrigation and soil patches (40 m and 13 m): lusher and bluer, or thinner and yellower.
+    let patchy = st_noise(p / 41.0 + vec2<f32>(7.1, 3.9)) * 0.6 + st_noise(p / 13.0 + vec2<f32>(1.3, 8.4)) * 0.4;
+    let lush = (patchy - 0.5) * 2.0;
+    alb = alb * mix(vec3<f32>(1.0), select(vec3<f32>(1.1, 1.02, 0.78), vec3<f32>(0.9, 1.04, 1.06), lush > 0.0), abs(lush) * 0.5);
+    alb = alb * (1.0 + 0.14 * lush);
+    // clumps and tufts (2.2 m and 0.7 m), gone where a pixel spans them.
+    let ck = 1.0 - smoothstep(0.4, 1.4, fw);
+    let tk = 1.0 - smoothstep(0.12, 0.45, fw);
+    let clump = (st_noise(p / 2.2 + vec2<f32>(4.4, 0.7)) - 0.5) * ck + (st_noise(p / 0.7 + vec2<f32>(9.2, 5.5)) - 0.5) * tk * 0.6;
+    alb = alb * (1.0 + 0.26 * clump);
+    // dry and worn patches (a mown lawn's under-watered spots, the trodden ground), ~15 %.
+    let dry_f = st_noise(p / 23.0 + vec2<f32>(2.7, 6.1)) * 0.65 + st_noise(p / 6.5 + vec2<f32>(5.3, 1.9)) * 0.35;
+    let dry = smoothstep(0.64, 0.8, dry_f) * w.x;
+    let straw = vec3<f32>(dot(alb, vec3<f32>(0.2126, 0.7152, 0.0722))) * vec3<f32>(1.5, 1.12, 0.62);
+    alb = mix(alb, straw, dry * 0.75);
+    // the mower's stripes along the street grid's axis.
+    let d = GF_AXIS;
+    let across = dot(p, vec2<f32>(-d.y, d.x)) / NT_TURF_STRIPE_M;
+    let sk = (1.0 - smoothstep(0.25, 0.6, fw / NT_TURF_STRIPE_M)) * w.x * (1.0 - dry);
+    if (sk > 0.0) {
+        let lean = clamp(sin(across * 3.14159265) * 4.0, -1.0, 1.0);
+        let toward = dot(vec2<f32>(v.x, v.z), d); // + : the eye stands where the blades lean
+        alb = alb * (1.0 - NT_TURF_STRIPE * lean * toward * sk);
+    }
+    (*s).albedo = mix((*s).albedo, alb * canopy, w.y);
+}
+// sf:end
+// sf:COVER+
+
+// ---- ground cover (`--ground-cover`; this block is in the shader only with it) ----
+// The city's unbuilt hills and wild parks (ground2.rs `hill_tone`: dry summer
+// grass through coyote brush to groves, by the measured vegetation share) are a
+// mosaic with edges, not a smear of tones: golden annual grass, coyote brush and
+// chaparral in clumps and up the steep faces, eucalyptus, cypress and oak groves
+// (more on the north faces), and the Franciscan chert breaking through on the
+// steep faces and the ridges (thin red-brown beds, weathered dull). The mosaic is
+// fractal noise from 48 m down to the pixel round the tone's level (each octave
+// faded where a pixel spans it), cut with a crisp edge as wide as the pixel.
+//
+// Brush and groves are crowns over grass. Where a pixel resolves them each crown
+// is drawn: a spheroid in a jittered cell (groves: cells of 7 m, crowns 3.2-4.6 m
+// across the radius, their base 2.5 m up; brush: cells of 2.4 m, 0.8-1.4 m, on the
+// ground), its normal bent over the dome so the light finds its sunlit and shaded
+// sides, leaf clumps in it, and the shadows the crowns cast along the sun's path
+// (a ray from the pixel toward the sun tested against the crowns round where it
+// crosses their height). Where a pixel spans them, Li and Strahler's
+// geometric-optical shares (1992, as the far hills' `--hill-cover`): sunlit and
+// shaded crown and grass seen in the proportions the sun's and the eye's gap
+// probabilities give, with the hotspot. Direct and sky light are weighed by the
+// sun's share of the light at the pixel (the building shadow taken).
+const NC_WOOD_CELL: f32 = 7.0;
+const NC_WOOD_BASE: f32 = 2.5;
+const NC_BRUSH_CELL: f32 = 2.4;
+// straw on the hills (ground2.rs DRY_A / DRY_B), coyote brush, a grove's crowns, chert
+const NC_BRUSH: vec3<f32> = vec3<f32>(0.050, 0.056, 0.032);
+const NC_WOOD: vec3<f32> = vec3<f32>(0.030, 0.042, 0.024);
+const NC_CHERT: vec3<f32> = vec3<f32>(0.150, 0.092, 0.066);
+
+fn nc_fbm(p: vec2<f32>, s0: f32, octaves: i32, fp: f32) -> f32 {
+    var sum = 0.0;
+    var norm = 0.0;
+    var a = 1.0;
+    var sc = s0;
+    for (var i = 0; i < octaves; i = i + 1) {
+        let k = 1.0 - smoothstep(0.6 * sc, 1.8 * sc, fp);
+        sum = sum + a * mix(0.5, st_noise(p / sc + vec2<f32>(f32(i) * 7.31, f32(i) * 3.17)), k);
+        norm = norm + a;
+        a = a * 0.6;
+        sc = sc * 0.37;
+    }
+    return sum / norm;
+}
+
+// How much of a ground tone (before the scans) is the hills' cover, and its level along
+// ground2.rs's line: 0 straw, 1 coyote brush, 2 grove (x weight, y level).
+fn nt_cover_weight(c: vec3<f32>) -> vec2<f32> {
+    let lum = max(dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-5);
+    let gr = c.g / max(c.r, 1e-5);
+    let br = c.b / max(c.r, 1e-5);
+    let x = log(lum);
+    // the line in (ln luminance, g/r): straw (-1.24, 0.91), brush (-2.94, 1.29), grove (-3.44, 1.76)
+    var t = clamp((-1.24 - x) / 1.70, 0.0, 1.0);
+    var line = mix(0.91, 1.29, t);
+    if (x < -2.94) {
+        let u = clamp((-2.94 - x) / 0.5, 0.0, 1.0);
+        t = 1.0 + u;
+        line = mix(1.29, 1.76, u);
+    }
+    let br_max = mix(0.64, 0.8, clamp(t - 0.8, 0.0, 1.0));
+    // (not the paler sand, bare earth and paving tones mapped on the flat: straw is ln 0.26-0.32)
+    let w = (1.0 - smoothstep(0.12, 0.24, abs(gr - line))) * (1.0 - smoothstep(br_max, br_max + 0.06, br)) * smoothstep(-4.3, -3.9, x) * (1.0 - smoothstep(-1.08, -0.95, x));
+    return vec2<f32>(w, t);
+}
+
+// sec and tan of the equivalent sphere's angle for a spheroid of half height b over radius r.
+fn nc_sec_eq(tan_t: f32, br: f32) -> vec2<f32> {
+    let t = br * tan_t;
+    return vec2<f32>(sqrt(1.0 + t * t), t);
+}
+
+// The geometric-optical shares (farshore.wgsl `fs_go`): x the ground sunlit and seen,
+// y the ground seen, z the crowns seen, w the crowns seen sunlit.
+fn nc_go(lam: f32, tan_i: f32, tan_v: f32, cos_phi: f32, sin_phi: f32, br: f32, hb: f32) -> vec4<f32> {
+    let i = nc_sec_eq(tan_i, br);
+    let v = nc_sec_eq(tan_v, br);
+    let d2 = max(i.y * i.y + v.y * v.y - 2.0 * i.y * v.y * cos_phi, 0.0);
+    let x = i.y * v.y * sin_phi;
+    let cos_t = clamp(hb * sqrt(d2 + x * x) / (i.x + v.x), -1.0, 1.0);
+    let t = acos(cos_t);
+    let overlap = (t - sin(t) * cos_t) * (i.x + v.x) / 3.14159265;
+    let pv = exp(-lam * v.x);
+    let kg = exp(-lam * (i.x + v.x - overlap));
+    let ci = 1.0 / i.x;
+    let cv = 1.0 / v.x;
+    let cos_xi = ci * cv + i.y * ci * v.y * cv * cos_phi;
+    let lit = 0.5 * (1.0 + cos_xi) * mix(1.0, 0.55, 1.0 - exp(-lam * i.x));
+    return vec4<f32>(kg, pv, 1.0 - pv, (1.0 - pv) * lit);
+}
+
+// One crown layer at p (m): the topmost crown over p in the 3 x 3 cells round it.
+// x its cover (antialiased by fw), y its surface's height over its base (m), zw the
+// offset from its centre (m); `r` the crown's radius out of its cell's.
+struct NcCrown {
+    cover: f32,
+    z: f32,
+    d: vec2<f32>,
+    r: f32,
+    seed: f32,
+};
+
+fn nc_crown_at(p: vec2<f32>, cell: f32, density: f32, rmin: f32, rmax: f32, hr: f32, salt: f32, fw: f32) -> NcCrown {
+    var o: NcCrown;
+    o.cover = 0.0;
+    o.z = -1.0;
+    o.d = vec2<f32>(0.0);
+    o.r = 1.0;
+    o.seed = 0.0;
+    let g = p / cell;
+    let i0 = floor(g);
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let id = i0 + vec2<f32>(f32(x), f32(y));
+            if (st_hash(id + vec2<f32>(salt, 1.7)) >= density) {
+                continue;
+            }
+            let c = (id + vec2<f32>(0.15) + 0.7 * vec2<f32>(st_hash(id + vec2<f32>(salt, 5.3)), st_hash(id + vec2<f32>(9.1, salt)))) * cell;
+            let d = p - c;
+            let seed = st_hash(id + vec2<f32>(salt, 13.0));
+            let a = atan2(d.y, d.x);
+            // a leafy outline: lobes round the crown
+            let r = cell * mix(rmin, rmax, seed) * (1.0 + 0.1 * sin(a * 5.0 + seed * 40.0) + 0.06 * sin(a * 9.0 + seed * 71.0));
+            let q = length(d) / r;
+            let cov = clamp((1.0 - q) * r / max(fw, 1e-3) + 0.5, 0.0, 1.0);
+            if (cov <= 0.0) {
+                continue;
+            }
+            let z = r * hr * sqrt(max(1.0 - q * q, 0.0));
+            if (z > o.z) {
+                o.cover = max(o.cover, cov);
+                o.z = z;
+                o.d = d;
+                o.r = r;
+                o.seed = seed;
+            }
+        }
+    }
+    return o;
+}
+
+// The light the crowns of one layer leave on a point `p` at height `h` (m) on its
+// way from the sun `l`: 1 open, down to `floor` through a crown.
+fn nc_crown_shade(p: vec2<f32>, h: f32, l: vec3<f32>, cell: f32, density: f32, rmin: f32, rmax: f32, hr: f32, base: f32, salt: f32, floor_t: f32) -> f32 {
+    let ly = max(l.y, 0.08);
+    let lxz = l.xz / ly;
+    var vis = 1.0;
+    // where the sun's ray crosses the crowns' middle height, and a crown's height above and below it
+    for (var k = -1; k <= 1; k = k + 1) {
+        let hc = base + cell * rmax * hr * (0.5 + 0.45 * f32(k));
+        if (hc <= h) {
+            continue;
+        }
+        let q = p + lxz * (hc - h);
+        let i0 = floor(q / cell);
+        for (var y = -1; y <= 1; y = y + 1) {
+            for (var x = -1; x <= 1; x = x + 1) {
+                let id = i0 + vec2<f32>(f32(x), f32(y));
+                if (st_hash(id + vec2<f32>(salt, 1.7)) >= density) {
+                    continue;
+                }
+                let c = (id + vec2<f32>(0.15) + 0.7 * vec2<f32>(st_hash(id + vec2<f32>(salt, 5.3)), st_hash(id + vec2<f32>(9.1, salt)))) * cell;
+                let r = cell * mix(rmin, rmax, st_hash(id + vec2<f32>(salt, 13.0)));
+                // the spheroid as a sphere: heights scaled by 1 / hr
+                let cy = base + r * hr * 0.35;
+                let rel = vec3<f32>(c.x - p.x, (cy - h) / hr, c.y - p.y);
+                let ld = normalize(vec3<f32>(l.x, l.y / hr, l.z));
+                let t = dot(rel, ld);
+                if (t <= 0.0) {
+                    continue;
+                }
+                let d = sqrt(max(dot(rel, rel) - t * t, 0.0));
+                vis = min(vis, mix(floor_t, 1.0, smoothstep(0.8 * r, 1.05 * r, d)));
+            }
+        }
+    }
+    return vis;
+}
+
+fn nt_cover(s: ptr<function, Surface>, wt: vec2<f32>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let w = wt.x;
+    if (w <= 0.0 || n.y < 0.3) {
+        return;
+    }
+    let p = world.xz;
+    let fw = max(length(dpx), length(dpy));
+    let v = normalize(frame.cam_pos.xyz - world);
+    let l = look.key_dir.xyz;
+    let flat_n = max(length(n.xz), 1e-4);
+    let slope = flat_n / max(n.y, 0.05); // rise over run
+    let north = clamp(-n.z / flat_n, -1.0, 1.0) * smoothstep(0.05, 0.3, slope);
+    // the mosaic round the tone's level: groves in the folds and on the north faces,
+    // brush on the steep faces, chert on the steepest and the ridges
+    let edge = clamp(fw / 8.0, 0.02, 0.3);
+    let f1 = nc_fbm(p, 48.0, 5, fw);
+    let f2 = nc_fbm(p + vec2<f32>(37.0, 91.0), 22.0, 4, fw);
+    let lvl = wt.y + (f1 - 0.5) * 1.4 + 0.3 * north + 0.35 * smoothstep(0.25, 0.6, slope);
+    let wood = smoothstep(1.45 - edge, 1.45 + edge, lvl + 0.25 * (f2 - 0.5));
+    let brush = smoothstep(0.62 - edge, 0.62 + edge, lvl + 0.3 * (f2 - 0.5)) * (1.0 - wood);
+    let rk = nc_fbm(p + vec2<f32>(13.0, 57.0), 30.0, 4, fw);
+    // (the chert crops out where the slope sheds its soil: none on the flat)
+    let rock = smoothstep(0.66 - edge, 0.66 + edge, rk + 0.45 * smoothstep(0.35, 0.9, slope)) * smoothstep(0.2, 0.45, slope) * (1.0 - wood);
+    // the grass: its tone as the scans left it, drier on the south faces, greener in the swales
+    let south = clamp(-north, 0.0, 1.0);
+    var grass = (*s).albedo * (0.86 + 0.28 * nc_fbm(p + vec2<f32>(41.0, 5.0), 9.0, 3, fw));
+    grass = grass * mix(vec3<f32>(1.0), vec3<f32>(1.08, 1.0, 0.86), south * 0.6);
+    // chert: thin beds (4-12 cm) folded along the strike, red-brown to grey, dull
+    let strike = vec2<f32>(0.83, 0.56);
+    let beds = st_noise(vec2<f32>(dot(p, strike) * 9.0 + 2.0 * st_noise(p * 0.6), 0.5));
+    let bk = 1.0 - smoothstep(0.03, 0.1, fw);
+    var chert = NC_CHERT * mix(0.8, 1.15, rk) * mix(1.0, mix(0.7, 1.2, beds), bk);
+    chert = mix(chert, vec3<f32>(0.11, 0.105, 0.095), smoothstep(0.55, 0.8, f2) * 0.6); // the greywacke and the lichen-grey faces
+    let bg = mix(grass, chert, rock);
+    // cover inside the patches: a closed grove ~0.85 with gaps, brush ~0.7
+    let thin = nc_fbm(p + vec2<f32>(7.0, 29.0), 12.0, 3, fw);
+    let f_wood = clamp(wood * (0.68 + 0.35 * thin), 0.0, 0.95);
+    let f_brush = clamp(brush * (0.5 + 0.4 * thin), 0.0, 0.9);
+    // the sun's share of the light here (its shadow taken), luminance-weighed
+    let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let nl_g = max(dot(n, l), 0.0);
+    var key = dot(look.key.xyz, luma) * nl_g;
+    if (key > 0.0) {
+        key = key * lk_shadow(world, n) * sky_cloud_transmittance(world);
+    }
+    let amb = dot(look.hemi_sky.xyz + look.ambient.xyz, luma);
+    let share = key / max(key + amb, 1e-6);
+    // the aggregate (a pixel spanning the crowns): geometric-optical shares in the ground's frame
+    let ci = clamp(dot(n, l), 0.02, 1.0);
+    let cv = clamp(dot(n, v), 0.02, 1.0);
+    let tan_i = sqrt(1.0 - ci * ci) / ci;
+    let tan_v = sqrt(1.0 - cv * cv) / cv;
+    let lt = l - n * dot(n, l);
+    let vt = v - n * dot(n, v);
+    let cos_phi = clamp(dot(lt, vt) / max(length(lt) * length(vt), 1e-4), -1.0, 1.0);
+    let sin_phi = sqrt(max(1.0 - cos_phi * cos_phi, 0.0));
+    let lam_t = -log(1.0 - f_wood);
+    let lam_s = -log(1.0 - f_brush);
+    let go_t = nc_go(lam_t, tan_i, tan_v, cos_phi, sin_phi, 0.8, (NC_WOOD_BASE + 3.0) / 3.0);
+    let go_s = nc_go(lam_s, tan_i, tan_v, cos_phi, sin_phi, 0.7, 1.0);
+    let tone = 0.85 + 0.3 * f2;
+    let brush_c = NC_BRUSH * tone;
+    let wood_c = NC_WOOD * tone * mix(1.0, 0.8, clamp(north, 0.0, 1.0));
+    // the brush over the grass (x sun, y sky as albedos), then the groves over that
+    let lit_s = go_s.w / max(go_s.z, 1e-4);
+    let b_sun = go_s.z * lit_s * brush_c + go_s.x * bg;
+    let b_sky = go_s.z * brush_c + go_s.y * bg * (0.5 + 0.5 * exp(-lam_s));
+    let lit_t = go_t.w / max(go_t.z, 1e-4);
+    let t_sun = go_t.z * lit_t * wood_c + go_t.x * b_sun;
+    let t_sky = go_t.z * wood_c + go_t.y * b_sky * (0.5 + 0.5 * exp(-lam_t));
+    var alb = mix(t_sky, t_sun, share);
+    // resolved crowns (groves to ~2.5 m a pixel, brush to ~0.8 m), drawn over the aggregate
+    let k_wood = (1.0 - smoothstep(0.9, 2.6, fw)) * step(1e-3, f_wood);
+    let k_brush = (1.0 - smoothstep(0.3, 0.8, fw)) * step(1e-3, f_brush);
+    if (k_wood > 0.0 || k_brush > 0.0) {
+        // the brush layer at the pixel: its crown, or the grass among them with their shadows
+        var lb_sun = b_sun;
+        var lb_sky = b_sky;
+        var h = 0.0;
+        if (k_brush > 0.0) {
+            let tb = nc_crown_at(p, NC_BRUSH_CELL, f_brush * 1.3, 0.34, 0.6, 0.7, 5.0, fw);
+            var r_sun = bg;
+            var r_sky = bg * (0.5 + 0.5 * exp(-lam_s));
+            if (tb.cover > 0.0) {
+                let hz = tb.r * 0.7;
+                let nn = normalize(vec3<f32>(tb.d.x / (tb.r * tb.r), max(tb.z, 0.05 * hz) / (hz * hz), tb.d.y / (tb.r * tb.r)));
+                let clump = st_noise(p / 0.3 + vec2<f32>(tb.seed * 50.0)) - 0.5;
+                let a = brush_c * mix(0.85, 1.2, tb.seed) * (1.0 + 0.4 * clump * (1.0 - smoothstep(0.1, 0.3, fw)));
+                let c_sun = a * max(dot(nn, l), 0.0) / max(nl_g, 0.05);
+                let c_sky = a * mix(0.6, 1.0, tb.z / max(hz, 1e-3));
+                r_sun = mix(r_sun, c_sun, tb.cover);
+                r_sky = mix(r_sky, c_sky, tb.cover);
+                h = tb.z * tb.cover;
+            }
+            if (key > 0.0) {
+                r_sun = r_sun * nc_crown_shade(p, h, l, NC_BRUSH_CELL, f_brush * 1.3, 0.34, 0.6, 0.7, 0.0, 5.0, 0.2);
+            }
+            lb_sun = mix(b_sun, r_sun, k_brush);
+            lb_sky = mix(b_sky, r_sky, k_brush);
+        }
+        // the groves over it
+        var lt_sun = go_t.z * lit_t * wood_c + go_t.x * lb_sun;
+        var lt_sky = go_t.z * wood_c + go_t.y * lb_sky * (0.5 + 0.5 * exp(-lam_t));
+        if (k_wood > 0.0) {
+            let tw = nc_crown_at(p, NC_WOOD_CELL, f_wood * 1.25, 0.46, 0.66, 0.8, 3.0, fw);
+            var r_sun = lb_sun;
+            var r_sky = lb_sky * (0.5 + 0.5 * exp(-lam_t));
+            var hw = h;
+            if (tw.cover > 0.0) {
+                let hz = tw.r * 0.8;
+                let nn = normalize(vec3<f32>(tw.d.x / (tw.r * tw.r), max(tw.z, 0.05 * hz) / (hz * hz), tw.d.y / (tw.r * tw.r)));
+                let clump = st_noise(p / 0.7 + vec2<f32>(tw.seed * 50.0)) - 0.5;
+                let a = wood_c * mix(0.85, 1.2, tw.seed) * (1.0 + 0.5 * clump * (1.0 - smoothstep(0.2, 0.6, fw)));
+                let c_sun = a * max(dot(nn, l), 0.0) / max(nl_g, 0.05);
+                let c_sky = a * mix(0.55, 1.0, tw.z / max(hz, 1e-3));
+                r_sun = mix(r_sun, c_sun, tw.cover);
+                r_sky = mix(r_sky, c_sky, tw.cover);
+                hw = mix(h, NC_WOOD_BASE + tw.z, tw.cover);
+            }
+            if (key > 0.0) {
+                r_sun = r_sun * nc_crown_shade(p, hw, l, NC_WOOD_CELL, f_wood * 1.25, 0.46, 0.66, 0.8, NC_WOOD_BASE, 3.0, 0.1);
+            }
+            lt_sun = mix(lt_sun, r_sun, k_wood);
+            lt_sky = mix(lt_sky, r_sky, k_wood);
+        }
+        alb = mix(lt_sky, lt_sun, share);
+    }
+    (*s).albedo = mix((*s).albedo, alb, w);
+    (*s).rough = mix((*s).rough, 0.9, w);
+}
+// sf:end

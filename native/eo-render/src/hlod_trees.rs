@@ -356,7 +356,7 @@ impl FarTrees {
         };
         let cull_plain = compute(&pm, &lay_p, "hlod_tree_cull");
         let cull_hzb = compute(&hm, &lay_h, "hlod_tree_cull (hzb)");
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{WGSL}", crate::look::city_shader_source_far(), cove_canopy::VIEWS, cove_canopy::LAYERS).into()) }); // the far layer's city shader (lighting)
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(crate::look::sf_select(&format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{WGSL}", crate::look::city_shader_source_far(), cove_canopy::VIEWS, cove_canopy::LAYERS)).into()) }); // the far layer's city shader (lighting)
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-far-trees-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&bgl)], immediate_size: 0 });
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: crate::IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
