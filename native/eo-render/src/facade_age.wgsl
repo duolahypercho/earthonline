@@ -631,6 +631,11 @@ const FW_WET_PAINT: vec2<f32> = vec2<f32>(0.84, 0.22);
 const FW_FILM_ROUGH: f32 = 0.1;
 // the salt's tone (efflorescence) at the damp's tide line
 const FW_SALT: vec3<f32> = vec3<f32>(0.66, 0.65, 0.62);
+// a pale finish's aged reflectance (new .. worn building): a white paint film's binder chalks
+// under the sun and the street's soot settles into it, a pale render dulls the same way, so a
+// white trim or wall a few years painted reads about 0.6-0.7 (fresh titanium white 0.8-0.85),
+// each wall a little its own. INFERRED from aged-paint reflectance.
+const FW_PALE_CEILING: vec2<f32> = vec2<f32>(0.72, 0.60);
 
 fn fw_on() -> bool {
     return SF_FACADE_WEATHER && (fa_run() & 4194304u) != 0u;
@@ -684,12 +689,27 @@ fn fw_streak(x: f32, depth: f32, xc: f32, key: vec3<i32>, salt: u32, wear: f32, 
 
 fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f32>, object: u32, code: f32, dcode: vec2<f32>, depth: f32, dpx: vec3<f32>, dpy: vec3<f32>) {
     let cls = (m.flags >> 8u) & 7u;
-    if (cls == FA_AGE_ROOF || cls == FA_AGE_METAL || abs(ng.y) > 0.3) {
+    if (cls == FA_AGE_ROOF || cls == FA_AGE_METAL) {
         return;
     }
     let ob = objects[object];
     let d = fa_drivers(fa_ages[ob.lod_group]);
     let wear = clamp(d.wear, 0.0, 1.0);
+    {
+        // a pale finish aged (sills and cornice tops too): its reflectance eased under the
+        // building's ceiling, chalking greying its colour a little
+        let a = (*s).albedo;
+        let l = dot(a, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let c = mix(FW_PALE_CEILING.x, FW_PALE_CEILING.y, wear) * (0.95 + 0.1 * fract(d.seed * 7.31));
+        let knee = 0.8 * c;
+        if (l > knee) {
+            let lo = knee + (c - knee) * (1.0 - exp(-(l - knee) / (c - knee)));
+            (*s).albedo = mix(a * (lo / l), vec3<f32>(lo), 0.15 * wear);
+        }
+    }
+    if (abs(ng.y) > 0.3) {
+        return;
+    }
     let fw = max(length(dpx), length(dpy));
     let t = normalize(vec3<f32>(-ng.z, 0.0, ng.x));
     var dirt = 0.0;
