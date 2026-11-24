@@ -439,6 +439,10 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-hill-cover" => a.look.nature &= !eo_render::look::NATURE_HILLS,
             "--ground-cover" => a.look.nature |= eo_render::look::NATURE_COVER,
             "--no-ground-cover" => a.look.nature &= !eo_render::look::NATURE_COVER,
+            "--bare-ground" => a.look.nature |= eo_render::look::NATURE_BARE,
+            "--no-bare-ground" => a.look.nature &= !eo_render::look::NATURE_BARE,
+            "--palm-variety" => a.look.nature |= eo_render::look::NATURE_PALM_VARIETY,
+            "--no-palm-variety" => a.look.nature &= !eo_render::look::NATURE_PALM_VARIETY,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
@@ -1041,6 +1045,8 @@ pub fn load_world(args: &Args) -> Result<World> {
     let beach_fit = eo_render::ground2::on("beach_fit");
     // (`--ground-cover`) the hills' tones without the per-vertex jitter (the shader draws the mosaic)
     eo_render::ground2::set_cover(args.look.nature & eo_render::look::NATURE_COVER != 0);
+    // (`--bare-ground`) bare ground and the revetments marked for the city shader, the shore band drawn as inland
+    eo_render::ground2::set_bare(args.look.nature & eo_render::look::NATURE_BARE != 0);
     let ground_tone_fn = |x: f32, z: f32| -> Option<u32> {
         let cover = cover.as_ref()?;
         let (x, z) = (x as f64, z as f64);
@@ -1075,6 +1081,10 @@ pub fn load_world(args: &Args) -> Result<World> {
             (Some(a), Some(b), Some(c), Some(d)) => ((b - a).hypot(d - c)) / 12.0,
             _ => 0.0,
         };
+        // (`--bare-ground`) bare ground and the revetments' rock, marked for the city shader
+        if let Some(c) = eo_render::ground2::bare_ground(x, z, class, park.map(|p| p.0), shore, h(0.0, 0.0).map(|h| h - eo_water::SEA_LEVEL_Y), slope) {
+            return Some(pack(c, eo_render::ground2::BARE_ALPHA));
+        }
         if let Some(c) = eo_render::ground2::open_ground(x, z, class, park, shore, h(0.0, 0.0).map(|h| h - eo_water::SEA_LEVEL_Y), slope) {
             return Some(pack(c, 255));
         }
