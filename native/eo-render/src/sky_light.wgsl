@@ -273,7 +273,6 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
         let w = clamp(1.0 - pow(dist / li.range, 4.0), 0.0, 1.0);
         let ca = dot(-l, li.dir);
         var shape = 1.0;
-        var dif = 1.0;
         if (li.kind == 0u) {
             // A full-cutoff road luminaire: batwing toward its 60 deg peak, nothing past 75 deg.
             shape = (1.0 + 1.5 * (1.0 - ca * ca)) * smoothstep(li.cos_outer, li.cos_inner, ca);
@@ -319,10 +318,6 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
                 // it than NT_SIGNAL_CLEAR_M (what stood there would hide the lens).
                 let sig = li.kind == NT_SIGNAL_KIND;
                 shape = nt_lobe(-l, li.dir, select(NT_REAR_V, NT_SIGNAL_V, sig), select(NT_REAR_H, NT_SIGNAL_H, sig)) * select(1.0, smoothstep(0.75 * NT_SIGNAL_CLEAR_M, NT_SIGNAL_CLEAR_M, dist), sig);
-                // a signal's beam has no shadow here: it lights no surface diffusely (it
-                // would through trunks, poles and heads); what shows of it is its lens's
-                // image, the specular (the wet street's streaks, paint, glass)
-                dif = select(1.0, 0.0, sig);
             }
         }
         let nl = max(dot(n, l), 0.0);
@@ -357,7 +352,7 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
                 // dry share's lobe only
                 spec = spec * (1.0 - sky_streak_w);
             }
-            out = out + li.color * e * (diffuse * dif / LK_PI + spec);
+            out = out + li.color * e * (diffuse / LK_PI + spec);
         }
     }
     if (SKY_CINE_FULL && cine && sky_streak_w > 0.0) {

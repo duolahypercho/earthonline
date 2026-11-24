@@ -630,17 +630,20 @@ fn lights_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocati
     let total = g.x * g.y * g.z;
     // (`--shop-light`) the street lamps and vehicle lamps first, then the shop
     // windows' lights in what room is left (none without them: one pass).
-    // (`--signal-spill`) the signals' lenses after those, in what room is left: they light
-    // no surface diffusely (sky_light.wgsl), so a full cluster drops them, not a window.
-    let sig_on = SG_ON && (skyu.flags.x & SG_BIT) != 0u;
-    let phases = select(select(1u, 2u, lt.shops.x > 0.0 || lt_bounce_on()), 3u, sig_on);
+    let phases = select(1u, 2u, lt.shops.x > 0.0 || lt_bounce_on());
     for (var phase = 0u; phase < phases; phase = phase + 1u) {
         for (var i = lid; i < n; i = i + 64u) {
             let l = lt_frame[i];
-            // (`--lamp-bounce`: the pools with the shops; `--rear-lamps`: their lenses with the shops)
+            if (SG_ON && l.kind == NT_SIGNAL_KIND) {
+                // (`--signal-spill`) a signal's beam has no shadow: in the clusters it lit trunks,
+                // poles, sign backs and the next head (diffuse and specular) and glowed in the haze
+                // in front of a trunk that hides it. It stays out of them: its light shows only as
+                // its lens's image in the wet street (the streak list, sky_streaks.wgsl).
+                continue;
+            }
+            // (`--lamp-bounce`: the pools with the shops, last; `--rear-lamps`: their lenses with the shops)
             let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) || ((SG_ON || RL_ON) && l.kind >= NT_SIGNAL_KIND);
-            let rank = select(select(0u, 1u, late), 2u, sig_on && l.kind == NT_SIGNAL_KIND);
-            if (phases > 1u && rank != phase) {
+            if (phases == 2u && late != (phase == 1u)) {
                 continue;
             }
             let v = lt_view(l.pos);
