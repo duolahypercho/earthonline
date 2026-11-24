@@ -1071,6 +1071,8 @@ fn sw_transverse(a: f32, c: f32, t: vec2<f32>, salt: f32, share: f32) -> SwLine 
     return o;
 }
 
+const SW_LONGITUDINAL_ON: bool = false;
+
 // Longitudinal cracks along the paving lanes' joints (on the lane lines from
 // the parking lane's edge) and in the outer wheel path, in runs along the road.
 fn sw_longitudinal(a: f32, kd: f32, n: vec2<f32>) -> SwLine {
@@ -1179,7 +1181,9 @@ fn sw_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, kd: f32,
         a = dot(world.xz, t);
         let c = dot(world.xz, n);
         l = sw_transverse(a, c, t, 0.0, SW_TRANSVERSE_SHARE);
-        if (kd >= 0.0) {
+        if (kd >= 0.0 && SW_LONGITUDINAL_ON) {
+            // (held out: on the wide streets the sealed joint drew a dark band half a metre
+            // wide down the lane, not a bead; its cause is still open, see the street notes)
             var lg = sw_longitudinal(a, kd, n);
             lg.dir = g / gl;
             l = sw_nearer(l, lg);
