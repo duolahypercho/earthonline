@@ -145,6 +145,12 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
     var dip = SP_BIRDBATH_M * smoothstep(0.6, 0.9, st_noise(q / 4.3 + 7.1)) * (0.6 + 0.4 * st_noise(q / 1.1 + 3.3));
     let g = wx_kerb_grad();
     let gl = length(g);
+    var wpath = 0.0; // (`--street-glare`) the wheel paths' polish share
+    // the kerb-distance lane model's share: everywhere, or with `--street-wear` only past the decals' reach
+    var lane_k = 1.0;
+    if (SF_STREET_WEAR) {
+        lane_k = smoothstep(CC0_EXTRA_FAR * 0.8, CC0_EXTRA_FAR, length(frame.cam_pos.xyz - world));
+    }
     if (cls == SC_ASPHALT && kd >= 0.0 && gl > 0.3) {
         let gn = g / gl; // across, away from the kerb
         let along = dot(q, vec2<f32>(gn.y, -gn.x));
@@ -160,12 +166,13 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         // Wheel paths and the oil band: the travel lanes from the parking lane's
         // edge (standards: the parking lane, the lane, the design vehicle's track),
         // drifting with the drivers' wander along the road.
-        if (SP_LANE_M > 0.0 && SP_TRACK_M > 0.0) {
+        // (`--street-wear`: only past the decals' reach, `lane_k`; nearer the painted lanes' own, below)
+        if (SP_LANE_M > 0.0 && SP_TRACK_M > 0.0 && lane_k > 0.0) {
             let wob = (st_noise(vec2<f32>(along / 23.0, 3.1)) - 0.5) * 0.5 + (st_noise(vec2<f32>(along / 5.0, 7.7)) - 0.5) * 0.14;
             let x = kd - SP_PARKING_M + wob;
             let lane = SP_LANE_M;
             let lx = x - lane * floor(x / lane) - 0.5 * lane;
-            let in_lane = smoothstep(-0.4, 0.3, x);
+            let in_lane = smoothstep(-0.4, 0.3, x) * lane_k;
             let half_t = 0.5 * SP_TRACK_M;
             let dt = abs(abs(lx) - half_t);
             let w = 0.3 + 0.1 * st_noise(vec2<f32>(along / 4.0, 1.7));
@@ -175,6 +182,7 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
             // drips between the wheel paths, densest at the lane's middle, in blots along it
             let blot = 0.45 + 0.55 * smoothstep(0.3, 0.75, st_noise(vec2<f32>(along / 1.3, kd / 0.25) + 2.2));
             let oil = (1.0 - smoothstep(0.1, 0.55, abs(lx))) * in_lane * mix(0.7, blot, wx_keep(0.25, fw));
+            wpath = wp;
             // worn binder shows the aggregate (lighter, less brown); drips darken and close the texture
             a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp) * (1.0 - 0.24 * oil);
             rough = mix(rough, SP_ASPHALT_ROUGH_POLISHED, 0.85 * wp);
@@ -188,6 +196,17 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
             dip = max(dip, depth * max(1.0 - (dt / w) * (dt / w), 0.0) * in_lane);
         }
     }
+    if (SF_STREET_WEAR && cls == SC_ASPHALT && lane_k < 1.0) {
+        // (`--street-wear`) the painted lanes' wheel paths (cc0.wgsl's decals, `sw_note_wheel`):
+        // the kerb-distance lane model puts a wheel path at a lane-less street's crown,
+        // where that distance has no gradient (a dark line between two polished bands)
+        let wp = sw_wheel * (1.0 - lane_k);
+        a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp);
+        rough = mix(rough, SP_ASPHALT_ROUGH_POLISHED, 0.85 * wp);
+        lean = lean + sw_wheel_lean * (1.0 - lane_k);
+        dip = max(dip, sw_wheel_dip * (1.0 - lane_k));
+        wpath = max(wpath, wp);
+    }
     // the cracks the weathering drew: sealant as bitumen, open ones in their own shadow
     sp_crack_materials(s, &a, &rough, &lean, q, fw);
     // A lid, grate or plate laid in the road (cc0.wgsl's decals: cast iron,
@@ -196,9 +215,26 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
     let lid = clamp(cc0_p_alb.w, 0.0, 1.0);
     a = mix(a, (*s).albedo, lid);
     rough = mix(clamp(rough, min(SP_SEAL_ROUGH, 0.3), 1.0), (*s).rough, lid);
+    if (SF_STREET_WEAR) {
+        // (`--street-wear`) a utility repair's fill: fresh, open-textured hot mix, unpolished
+        rough = mix(rough, max(rough, 0.9), sw_patch);
+        wpath = wpath * (1.0 - sw_patch);
+    }
     sp_wet_relief(&a, &rough, q, dip * (1.0 - lid), fw, SP_WET_DARKEN);
     (*s).albedo = a;
     (*s).rough = rough;
+    if (SF_STREET_GLARE) {
+        // (`--street-glare`) the aggregate's polished tops as a smooth layer,
+        // their share of the view growing toward grazing; near the eye stone by
+        // stone (exposed and polished, or still filmed with dull binder)
+        let v = normalize(frame.cam_pos.xyz - world);
+        let tau = sg_top_share(n_geom, v, SG_MACRO_SLOPE, mix(SG_TOPS, SG_TOPS_WHEEL, wpath));
+        let stone = select(0.3, 1.7, st_hash(floor(q / SG_AGGREGATE_M) + vec2<f32>(0.37, 5.1)) > 0.5);
+        let k = mix(SG_POLISH, SG_POLISH_WHEEL, wpath) * tau * mix(1.0, stone, wx_keep(SG_AGGREGATE_M * 1.5, fw));
+        // (the sealant and a lid keep their own finish)
+        let fresh_fill = select(0.0, 0.7 * sw_patch, SF_STREET_WEAR);
+        sg_coat(k * (1.0 - lid) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)) * (1.0 - fresh_fill), mix(SG_COAT_ROUGH, SG_COAT_ROUGH_WHEEL, wpath));
+    }
     if (any(lean != vec2<f32>(0.0))) {
         sp_lean(s, lean * (1.0 - lid));
     }
@@ -403,6 +439,10 @@ fn sp_kerb(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_geo
         // its worn edge shows the aggregate: lighter, smoother; a break lighter still and rough
         (*s).albedo = (*s).albedo * (1.0 + (0.12 + 0.16 * chip) * t * keep);
         (*s).rough = min(1.0, (*s).rough + 0.1 * chip * t);
+        if (SF_STREET_GLARE) {
+            // (`--street-glare`) the arris worn smooth by soles and tyres (not where it broke)
+            (*s).rough = mix((*s).rough, SG_COAT_ROUGH_WHEEL, 0.6 * t * (1.0 - chip) * keep);
+        }
         // the concave corner with the gutter: occluded, with the grit it holds
         let c = 1.0 - smoothstep(0.0, CC0_CURB_H * 0.35, kd);
         (*s).ao = (*s).ao * (1.0 - 0.5 * c);
@@ -833,6 +873,11 @@ fn sp_pave(la: i32, p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, world: vec3<f32>
     rel = rel * soil * (1.0 - 0.25 * low * (1.0 - 0.5 * traffic)) * (1.0 + 0.06 * crown * traffic);
     o.alb = rel;
     o.rough = clamp(t.rough / max(lx.x, 0.05) * (1.0 - 0.22 * crown * traffic) * (1.0 + 0.12 * low), 0.3, 1.6);
+    if (SF_STREET_GLARE) {
+        // (`--street-glare`) the crowns the feet polish, a layer that grows toward grazing (the setts' relief masks the joints)
+        let tau = sg_top_share(SP_UP, v, SP_PAVE_SLOPE, 0.4);
+        sg_coat(SG_SETT_POLISH * crown * (0.4 + 0.6 * traffic) * tau, SG_SETT_ROUGH);
+    }
     o.ao = clamp(t.ao / max(lx.y, 0.05), 0.0, 1.5);
     o.tn = vec2<f32>(t.nrm.x, -t.nrm.y);
     // The key light over the relief: marched near, the relief's mean masking far.
@@ -941,7 +986,11 @@ fn sp_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, an: f32, dpx: vec3
         var c: Surface = *s;
         c.albedo = a;
         c.rough = rough;
-        wx_cracks(&c, world, g, fw, length(world - frame.cam_pos.xyz));
+        if (SF_STREET_WEAR) {
+            sw_cracks(&c, world, g, -1.0, fw, length(world - frame.cam_pos.xyz)); // (`--street-wear`) the road's transverse cracks on through the line
+        } else {
+            wx_cracks(&c, world, g, fw, length(world - frame.cam_pos.xyz));
+        }
         a = c.albedo;
         rough = c.rough;
         sp_crack_materials(s, &a, &rough, &lean, q, fw);
@@ -950,6 +999,12 @@ fn sp_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, an: f32, dpx: vec3
     (*s).rough = rough;
     if (any(lean != vec2<f32>(0.0))) {
         sp_lean(s, lean);
+    }
+    if (SF_STREET_GLARE) {
+        // (`--street-glare`) the line's resin film fills the road's texture: a smooth layer over more of it,
+        // so a marking keeps its glare where the polished road round it catches the low sun
+        let v = normalize(frame.cam_pos.xyz - world);
+        sg_coat(SG_POLISH_WHEEL * sg_top_share(SP_UP, v, SG_MACRO_SLOPE, SG_TOPS_WHEEL) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)), SG_COAT_ROUGH_WHEEL);
     }
 }
 
@@ -967,5 +1022,303 @@ fn sp_paint_wet(s: ptr<function, Surface>) {
     (*s).rough = mix((*s).rough, min((*s).rough, SP_PAINT_WET_ROUGH), w);
     if (SKY_CINE_FULL && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
         sky_streak_w = w;
+    }
+}
+
+// ---- `--street-wear`: the carriageway's distress by its causes (SF_STREET_WEAR) ---------
+
+// One crack line under the fragment: its distance (m, signed across it), the
+// direction across it (world xz), the hash that decides it, and whether it is
+// drawn at all there (its run, 0..1).
+struct SwLine {
+    d: f32,
+    dir: vec2<f32>,
+    h: f32,
+    on: f32,
+};
+
+fn sw_nearer(b: SwLine, c: SwLine) -> SwLine {
+    if (c.on > 0.0 && abs(c.d) < abs(b.d)) {
+        return c;
+    }
+    return b;
+}
+
+// Transverse cracks (thermal) across a road whose along coordinate is `a` and
+// across one `c` (world-anchored, metres): one chance per SW_TRANSVERSE_CELL_M,
+// each crossing the road (or a few metres of it) as a meandering line.
+fn sw_transverse(a: f32, c: f32, t: vec2<f32>, salt: f32, share: f32) -> SwLine {
+    var o = SwLine(1e9, t, 0.0, 0.0);
+    let cl = SW_TRANSVERSE_CELL_M;
+    let k0 = floor(a / cl);
+    for (var i = -1; i <= 1; i = i + 1) {
+        let k = k0 + f32(i);
+        let h = st_hash(vec2<f32>(k + salt * 17.0, 3.7 + salt));
+        if (h > share) {
+            continue;
+        }
+        let h1 = st_hash(vec2<f32>(k + salt * 17.0, 9.1));
+        // its course: a slow wander across the road, a decimetre kink, the fine break
+        let x = (k + 0.2 + 0.6 * h1) * cl + (st_noise(vec2<f32>(c / 6.5, k * 3.1 + salt)) - 0.5) * 0.9 + (st_noise(vec2<f32>(c / 1.1, k * 1.7)) - 0.5) * 0.14 + (st_noise(vec2<f32>(c / 0.21, k * 5.3)) - 0.5) * 0.03;
+        // across the whole road (most), or broken into a few metres of it
+        let whole = fract(h1 * 7.13) < 0.55;
+        let run = select(smoothstep(0.38, 0.48, st_noise(vec2<f32>(c / 3.4, k * 2.9 + 1.3))), 1.0, whole);
+        let l = SwLine(a - x, t, fract(h * 13.71 + h1), run);
+        o = sw_nearer(o, l);
+    }
+    return o;
+}
+
+// Longitudinal cracks along the paving lanes' joints (on the lane lines from
+// the parking lane's edge) and in the outer wheel path, in runs along the road.
+fn sw_longitudinal(a: f32, kd: f32, n: vec2<f32>) -> SwLine {
+    var o = SwLine(1e9, n, 0.0, 0.0);
+    if (SP_LANE_M <= 0.0) {
+        return o;
+    }
+    let lane = SP_LANE_M;
+    let j = max(round((kd - SP_PARKING_M) / lane), 0.0);
+    for (var w = 0; w < 2; w = w + 1) {
+        // the joint, then the lane's outer wheel path
+        var y = SP_PARKING_M + j * lane;
+        if (w == 1) {
+            let jj = floor(max(kd - SP_PARKING_M, 0.0) / lane);
+            y = SP_PARKING_M + jj * lane + 0.5 * lane - 0.5 * SP_TRACK_M;
+        }
+        let salt = j * 3.3 + f32(w) * 11.0;
+        y = y + (st_noise(vec2<f32>(a / 4.3, salt + 5.1)) - 0.5) * 0.18 + (st_noise(vec2<f32>(a / 0.9, salt)) - 0.5) * 0.05 + (st_noise(vec2<f32>(a / 0.19, salt + 2.0)) - 0.5) * 0.012;
+        let seg = floor(a / 13.0);
+        let h = st_hash(vec2<f32>(seg, salt + 0.7));
+        let share = select(SW_LONGITUDINAL_SHARE, SW_LONGITUDINAL_SHARE * 0.6, w == 1);
+        let run = smoothstep(1.0 - share, 1.0 - share + 0.08, st_noise(vec2<f32>(a / 9.0, salt + 0.3)));
+        o = sw_nearer(o, SwLine(kd - y, n, h, run));
+    }
+    return o;
+}
+
+// Fatigue cracking in the wheel paths: small sharp-angled pieces (the cells of
+// a stretched Voronoi field in the road's frame), open hairlines, in the worst
+// stretches of a path only. Returns the hairline's cover.
+fn sw_fatigue(a: f32, kd: f32, fw: f32) -> f32 {
+    if (SP_LANE_M <= 0.0 || SP_TRACK_M <= 0.0 || kd < 0.0) {
+        return 0.0;
+    }
+    let lane = SP_LANE_M;
+    let x = kd - SP_PARKING_M + (st_noise(vec2<f32>(a / 23.0, 3.1)) - 0.5) * 0.5;
+    let li = floor(x / lane);
+    let lx = x - lane * li - 0.5 * lane;
+    let dt = abs(abs(lx) - 0.5 * SP_TRACK_M);
+    let path = (1.0 - smoothstep(0.18, 0.36, dt)) * smoothstep(-0.4, 0.3, x);
+    let stretch = smoothstep(1.0 - SW_FATIGUE_SHARE, 1.0 - SW_FATIGUE_SHARE + 0.06, st_noise(vec2<f32>(a / 7.0, li * 2.3 + sign(lx) * 0.9 + 1.1)));
+    let k = path * stretch;
+    let keep = wx_keep(SW_FATIGUE_CELL_M * 0.5, fw);
+    if (k <= 0.0) {
+        return 0.0;
+    }
+    if (keep <= 0.0) {
+        return k * 0.12; // the hairlines' mean cover over a piece
+    }
+    let cell = vec2<f32>(SW_FATIGUE_CELL_M * 1.3, SW_FATIGUE_CELL_M);
+    let p = vec2<f32>(a, kd) / cell;
+    let base = floor(p);
+    var f1 = 1e9;
+    var f2 = 1e9;
+    var c1 = vec2<f32>(0.0);
+    var c2 = vec2<f32>(0.0);
+    for (var j = -1; j <= 1; j = j + 1) {
+        for (var i = -1; i <= 1; i = i + 1) {
+            let c = base + vec2<f32>(f32(i), f32(j));
+            let pt = c + 0.15 + 0.7 * vec2<f32>(st_hash(c + vec2<f32>(5.1, 2.9)), st_hash(c + vec2<f32>(1.7, 8.3)));
+            let dm = (p - pt) * cell;
+            let dd = dot(dm, dm);
+            if (dd < f1) {
+                f2 = f1;
+                c2 = c1;
+                f1 = dd;
+                c1 = pt;
+            } else if (dd < f2) {
+                f2 = dd;
+                c2 = pt;
+            }
+        }
+    }
+    let e = normalize((c2 - c1) * cell + vec2<f32>(1e-6, 0.0));
+    let d = abs(dot(p * cell - 0.5 * (c1 + c2) * cell, e));
+    let hw = WX_CRACK_HAIR_M * (0.4 + 0.7 * st_noise(vec2<f32>(a, kd) / 0.13));
+    return mix(k * 0.12, k * wx_band(d, hw, fw), keep);
+}
+
+// The cracks (weathering.wgsl `wx_road` calls this in place of `wx_cracks`):
+// transverse and longitudinal lines in the road's frame (at a junction pad,
+// whose frame is not defined, two families on the world's axes, sparser),
+// each sealed under a meandering overband or left open; fatigue in the wheel
+// paths. The sealant and the open cracks are noted for `sp_crack_materials`.
+fn sw_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, kd: f32, fw: f32, dist: f32) {
+    let far = 1.0 - smoothstep(WX_SNAKE_FAR * 0.6, WX_SNAKE_FAR, dist);
+    // cracked stretches of pavement and sound ones (its age, its base)
+    let present = smoothstep(0.1, 0.3, st_noise(world.xz / 47.0 + 17.0));
+    if (far * present <= 0.0) {
+        return;
+    }
+    // the road's frame (a marking passes its own across direction and no kerb distance: transverse only)
+    let gl = length(g);
+    let framed = gl > 0.3;
+    var l: SwLine;
+    var a = world.x;
+    if (framed) {
+        var n = g / gl;
+        if (n.y < 0.0 || (n.y == 0.0 && n.x < 0.0)) {
+            n = -n;
+        }
+        let t = vec2<f32>(n.y, -n.x);
+        a = dot(world.xz, t);
+        let c = dot(world.xz, n);
+        l = sw_transverse(a, c, t, 0.0, SW_TRANSVERSE_SHARE);
+        if (kd >= 0.0) {
+            var lg = sw_longitudinal(a, kd, n);
+            lg.dir = g / gl;
+            l = sw_nearer(l, lg);
+        }
+    } else {
+        // a junction pad: two families on the world's axes (a pad's cracks run on from every approach)
+        l = sw_transverse(world.x, world.z, vec2<f32>(1.0, 0.0), 0.37, SW_TRANSVERSE_SHARE);
+        l = sw_nearer(l, sw_transverse(world.z, world.x, vec2<f32>(0.0, 1.0), 0.71, SW_TRANSVERSE_SHARE));
+    }
+    let on = l.on * far * present;
+    if (on > 0.0 && abs(l.d) < 0.2) {
+        if (l.h < SW_SEALED_SHARE) {
+            // the overband: wider and narrower along the crack (the squeegee's
+            // passes), its edges ragged, a thin feathered film beyond them
+            let q = world.xz;
+            let hw = SW_SEAL_HALF_M * (0.7 + 0.6 * st_noise(q / 0.9 + l.h * 9.0)) + (st_noise(q / 0.05) - 0.5) * 0.008 * wx_keep(0.05, fw);
+            let bead = wx_band(l.d, hw, fw);
+            let film = wx_band(l.d, hw * 1.7, fw) * 0.3 * (0.5 + st_noise(q / 0.31 + 2.0));
+            let k = clamp(max(bead, film), 0.0, 1.0) * on;
+            let age = step(1.0 - WX_CRACK_AGED_SHARE, fract(l.h * 7.31)) * (0.6 + 0.4 * st_noise(q / 3.0 + 5.7));
+            let tone = mix(WX_CRACK_ALBEDO, WX_CRACK_ALBEDO_AGED, age);
+            (*s).albedo = mix((*s).albedo, min((*s).albedo, vec3<f32>(tone)), k);
+            (*s).rough = mix((*s).rough, mix(WX_SNAKE_ROUGH, WX_SNAKE_ROUGH_AGED, age), k);
+            sp_note_seal(k, bead * on, age, l.d / max(hw, 1e-4), hw, l.dir);
+        } else {
+            // an open crack: a hairline whose width wanders, ravelled at its lips
+            let hw = WX_CRACK_HAIR_M * (0.5 + 1.0 * st_noise(world.xz / 0.4 + 3.3));
+            let k = wx_band(l.d, hw, fw) * on;
+            let ravel = wx_band(l.d, hw * WX_CRACK_RAVEL, fw) * on * (0.5 + st_noise(world.xz / 0.25 + 6.6));
+            (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * k) * (1.0 - WX_CRACK_RAVEL_DARK * clamp(ravel, 0.0, 1.0));
+            (*s).rough = min(1.0, (*s).rough + 0.1 * k);
+            sp_note_crack(k + 0.4 * ravel);
+        }
+    }
+    if (framed && kd >= 0.0 && dist < 60.0) {
+        let fk = sw_fatigue(a, kd, fw) * present * (1.0 - smoothstep(40.0, 60.0, dist));
+        if (fk > 0.0) {
+            (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * fk);
+            sp_note_crack(fk);
+        }
+    }
+}
+
+// Oil drips down a lane's middle (the cc0 decals' drip line, `across` from its
+// centre, `hw` its half-width): drips' pools 3-9 cm across, a little drawn out
+// along the lane, fresh ones black and older ones spread and paler, densest at
+// the middle of the vehicles' track and in stretches where they stand (stops,
+// queues). Past a few pixels a pool is its share of cover: the band reads as
+// a soft darkening, never as a line. Returns the darkening's cover (0..1).
+fn sw_drips(a: f32, across: f32, hw: f32, seed: f32, fw: f32) -> f32 {
+    let rho = (1.0 - smoothstep(0.2, 1.0, abs(across) / max(hw, 1e-3))) * (0.35 + 0.65 * smoothstep(0.3, 0.75, st_noise(vec2<f32>(a / 11.0 + seed * 7.0, 0.3))));
+    // the old drips merged into the binder, and the pools' expected cover
+    let haze = rho * 0.1;
+    let mean = haze + rho * 0.07;
+    let cs = SW_DRIP_CELL_M;
+    let keep = wx_keep(cs * 0.6, fw);
+    if (keep <= 0.0 || rho <= 0.0) {
+        return mean;
+    }
+    let cell = vec2<f32>(cs * 1.6, cs);
+    let p = vec2<f32>(a, across) / cell;
+    let f = floor(p);
+    let off = select(vec2<f32>(-1.0), vec2<f32>(0.0), fract(p) > vec2<f32>(0.5));
+    var cover = 0.0;
+    for (var j = 0; j < 2; j = j + 1) {
+        for (var i = 0; i < 2; i = i + 1) {
+            let c = f + off + vec2<f32>(f32(i), f32(j));
+            let h = st_hash(c + vec2<f32>(seed * 13.0, 4.4));
+            if (h > rho * 0.55) {
+                continue;
+            }
+            let h2 = st_hash(c + vec2<f32>(7.7, seed * 5.0));
+            let h3 = st_hash(c + vec2<f32>(2.2, 9.9));
+            let centre = c + 0.2 + 0.6 * vec2<f32>(h2, h3);
+            let dm = (p - centre) * cell;
+            let r = 0.015 + 0.03 * fract(h * 17.3 + h2);
+            // older pools spread wider and paler; the rim ragged
+            let old = fract(h3 * 5.9);
+            let rr = r * (1.0 + 0.8 * old);
+            let dd = length(dm / vec2<f32>(1.4, 1.0)) + (st_noise(dm / 0.012 + h * 31.0) - 0.5) * 0.25 * rr;
+            let spot = 1.0 - smoothstep(rr * 0.55, rr, dd);
+            cover = max(cover, spot * mix(1.0, 0.45, old));
+        }
+    }
+    return mix(mean, haze + (1.0 - haze) * cover, keep);
+}
+
+// The painted lanes' wheel paths (cc0.wgsl's DK_WHEEL decals, which the
+// decal placement lays from the run's own lane paint): their polish share,
+// the rut's depth there (m) and the lean of its sides, for `sp_asphalt` in
+// place of its kerb-distance lane model (which on a lane-less street puts a
+// wheel path at the crown, whose kerb-distance gradient is not defined: a
+// dark line down the middle of the alley between two polished bands).
+var<private> sw_wheel: f32 = 0.0;
+var<private> sw_wheel_dip: f32 = 0.0;
+var<private> sw_wheel_lean: vec2<f32> = vec2<f32>(0.0);
+
+fn sw_note_wheel(w: f32, along: f32, across: f32, hw: f32, seed: f32, px: vec2<f32>) {
+    sw_wheel = max(sw_wheel, w);
+    // the floor a few millimetres down where the base gave way, in reaches of a few metres
+    // with sound road between (so the wet road holds water in pools along the path, not a
+    // continuous strip); its sides lean in
+    let u = clamp(across / max(hw, 1e-3), -1.0, 1.0);
+    let depth = SP_RUT_M * (0.2 + 1.5 * smoothstep(0.3, 0.75, st_noise(vec2<f32>(along / 5.5, seed * 5.0 + 2.3))));
+    sw_wheel_dip = max(sw_wheel_dip, depth * (1.0 - u * u) * w);
+    // h = -depth (1 - u^2): dh/dacross = 2 depth u / hw, the normal leans against it
+    sw_wheel_lean = sw_wheel_lean - px * (2.0 * depth * u / max(hw, 1e-3) * w);
+}
+
+// Utility patches of one pour (cc0.wgsl's DK_PATCH decals): the cut's fill a
+// tone of its own keyed on the world (so the pieces of one repair, decals
+// side by side, read as one pour: no panels), its seam darkening the cut.
+var<private> sw_patch: f32 = 0.0;
+var<private> sw_patch_seam: f32 = 0.0;
+
+fn sw_patch_tone(world: vec3<f32>) -> f32 {
+    // newer (darker, x0.74 as the earlier composition) or older and oxidised (near the road's own tone)
+    let age = st_noise(world.xz / 9.0 + 41.0);
+    return mix(0.74, 0.95, smoothstep(0.35, 0.65, age)) * (0.96 + 0.08 * st_noise(world.xz / 1.3 + 2.0));
+}
+
+// ---- `--street-glare`: the polished tops over the rough road (SF_STREET_GLARE) ----------
+
+// The share of what the eye sees that is the macrotexture's tops: `tops` of
+// the plan, while the valleys are masked toward grazing by Smith's G1 (GGX) at
+// the relief's slope spread `slope`.
+fn sg_top_share(n_geom: vec3<f32>, v: vec3<f32>, slope: f32, tops: f32) -> f32 {
+    let mu = clamp(dot(n_geom, v), 0.02, 1.0);
+    let t2 = (1.0 - mu * mu) / (mu * mu);
+    let g1 = 2.0 / (1.0 + sqrt(1.0 + slope * slope * t2));
+    return tops / (tops + (1.0 - tops) * g1);
+}
+
+// The layer look_light.wgsl draws over the surface (its coat: F0 0.04 on the
+// plane, its own roughness, the base under it by 1 - k F). Dry only: the wet
+// layer brings its own film.
+fn sg_coat(k: f32, rough: f32) {
+    var w = 0.0;
+    if (sky_on(skyu.flags.x, SKY_WET)) {
+        w = skyu.wet.x;
+    }
+    let kk = k * (1.0 - smoothstep(0.02, 0.3, w));
+    if (kk > sky_coat) {
+        sky_coat = kk;
+        sky_coat_rough = rough;
     }
 }

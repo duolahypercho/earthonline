@@ -426,7 +426,9 @@ fn wx_road(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
         }
     }
     if (dist < WX_SNAKE_FAR) {
-        if (WX_STREET_V1) {
+        if (SF_STREET_WEAR) {
+            sw_cracks(s, world, g, kd, fw, dist); // (`--street-wear`, street_pbr.wgsl) the cracks by their causes
+        } else if (WX_STREET_V1) {
             wx_snakes(s, world, fw, dist);
         } else {
             wx_cracks(s, world, g, fw, dist);

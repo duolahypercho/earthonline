@@ -75,6 +75,82 @@ pub const SLAB_NEW_SHARE: f64 = 0.06;
 pub const SLAB_NEW_TONE: f64 = 1.2;
 pub const SLAB_STAINED_SHARE: f64 = 0.05;
 
+// ---- `--street-wear` (look::STREET_WEAR; street_pbr.wgsl `sw_*`) ----------------------
+//
+// The carriageway's distress laid out by its causes, as the FHWA's Distress
+// Identification Manual for the LTPP (FHWA-RD-03-031) sorts it: transverse
+// cracks across the road (thermal: from one edge, or across it, meandering),
+// longitudinal cracks along the paving lanes' joints and in the wheel paths,
+// fatigue ("alligator") cracking only in the wheel paths, in pieces under
+// 0.3 m; sealed cracks under an overband of hot-poured sealant (FHWA-RD-99-147,
+// "Materials and Procedures for Sealing and Filling Cracks in Asphalt-Surfaced
+// Pavements": overband ("band-aid") configurations 75-125 mm wide over the
+// crack; SF's are narrower, worn down by the traffic).
+
+/// One chance of a transverse crack per this length of road (m), and that
+/// chance (a shading choice: SF's mild climate cracks a road every 5-20 m).
+pub const WEAR_TRANSVERSE_CELL_M: f64 = 9.0;
+pub const WEAR_TRANSVERSE_SHARE: f64 = 0.7;
+/// The share of a lane joint's or wheel path's length cracked along it.
+pub const WEAR_LONGITUDINAL_SHARE: f64 = 0.55;
+/// Fatigue cracking's pieces (m; LTPP: "many-sided, sharp-angled pieces,
+/// usually less than 0.3 m on the longest side") and the share of a wheel
+/// path's length it covers (a shading choice: an old street's worst stretches).
+pub const WEAR_FATIGUE_CELL_M: f64 = 0.2;
+pub const WEAR_FATIGUE_SHARE: f64 = 0.22;
+/// The share of the cracks sealed (SF seals most), and the overband's
+/// half-width (m: 50-80 mm across, the narrow end of FHWA-RD-99-147's band,
+/// worn down by the traffic).
+pub const WEAR_SEALED_SHARE: f64 = 0.6;
+pub const WEAR_SEAL_HALF_M: f64 = 0.032;
+/// Oil drips down a lane's middle: one chance of a drip's pool per cell of
+/// this size across (m; 1.6 x it along), and how much a fresh pool darkens
+/// the road (a shading choice: drips 3-9 cm across, black when fresh).
+pub const WEAR_DRIP_CELL_M: f64 = 0.2;
+pub const WEAR_DRIP_DARK: f64 = 0.45;
+
+// ---- `--street-glare` (look::STREET_GLARE; street_pbr.wgsl `sg_*`) ----------------------
+//
+// Asphalt reflects as two surfaces: the oxidised binder and fines in the
+// texture's valleys (rough, the road's own roughness) and the coarse
+// aggregate's tops, which the traffic polishes and the binder films over
+// (smoother). Toward grazing the valleys are masked by the tops (Smith's
+// masking of the macrotexture, its slope spread from a dense-graded mix's
+// 0.5-1 mm mean texture depth over 9.5-12.5 mm aggregate), so the share of
+// what the eye sees that is polished tops grows, and the road's specular
+// response with it: the low sun's glare down a road, brightest on the wheel
+// paths. The tops are drawn as a smooth layer over the road (look_light.wgsl's
+// coat: F0 0.04 on the surface's plane), weighted by the share of tops seen.
+
+/// The macrotexture's slope spread (GGX alpha of the tops-and-valleys relief).
+pub const GLARE_MACRO_SLOPE: f64 = 0.25;
+/// The share of the road's plan that is exposed aggregate tops, between the
+/// wheel paths and in them (worn to the stone), and how polished they are.
+pub const GLARE_TOPS: f64 = 0.28;
+pub const GLARE_TOPS_WHEEL: f64 = 0.45;
+pub const GLARE_POLISH: f64 = 0.4;
+pub const GLARE_POLISH_WHEEL: f64 = 0.85;
+/// The polished tops' roughness (perceptual; 0.5 and over the screen-space
+/// trace leaves them to the sky: no trace on the road's whole area).
+pub const GLARE_COAT_ROUGH: f64 = 0.5;
+pub const GLARE_COAT_ROUGH_WHEEL: f64 = 0.46;
+/// The coarse aggregate's size (m): near the eye, the tops polished stone by stone.
+pub const GLARE_AGGREGATE_M: f64 = 0.009;
+/// Granite setts' crowns polished by feet (the share of the crown's layer)
+/// and their roughness; the setts' own relief spread is SP_PAVE_SLOPE.
+pub const GLARE_SETT_POLISH: f64 = 0.55;
+pub const GLARE_SETT_ROUGH: f64 = 0.44;
+
+/// (`--street-glare`) The share of what the eye sees that is the macrotexture's
+/// tops at the view's cosine `mu` to the surface (street_pbr.wgsl `sg_top_share`):
+/// `tops` of the plan, the valleys masked by Smith's G1 (GGX) at `slope`.
+pub fn glare_top_share(mu: f64, slope: f64, tops: f64) -> f64 {
+    let mu = mu.clamp(0.02, 1.0);
+    let t2 = (1.0 - mu * mu) / (mu * mu);
+    let g1 = 2.0 / (1.0 + (1.0 + slope * slope * t2).sqrt());
+    tops / (tops + (1.0 - tops) * g1)
+}
+
 /// The paving's relief (m) from its scan's height 0 to 1: setts' joints sit
 /// 5-10 mm under their arrises and their crowns a few millimetres over them
 /// (BS 7533-7 laying tolerances; the critic's 5-10 mm joint depth).
@@ -268,6 +344,25 @@ pub fn wgsl() -> String {
         ("SP_SETT_ALBEDO", SETT_ALBEDO),
         ("SP_BRICK_PAVER_ALBEDO", BRICK_PAVER_ALBEDO),
         ("SP_CONCRETE_PAVER_ALBEDO", CONCRETE_PAVER_ALBEDO),
+        ("SW_TRANSVERSE_CELL_M", WEAR_TRANSVERSE_CELL_M),
+        ("SW_TRANSVERSE_SHARE", WEAR_TRANSVERSE_SHARE),
+        ("SW_LONGITUDINAL_SHARE", WEAR_LONGITUDINAL_SHARE),
+        ("SW_FATIGUE_CELL_M", WEAR_FATIGUE_CELL_M),
+        ("SW_FATIGUE_SHARE", WEAR_FATIGUE_SHARE),
+        ("SW_SEALED_SHARE", WEAR_SEALED_SHARE),
+        ("SW_SEAL_HALF_M", WEAR_SEAL_HALF_M),
+        ("SW_DRIP_CELL_M", WEAR_DRIP_CELL_M),
+        ("SW_DRIP_DARK", WEAR_DRIP_DARK),
+        ("SG_MACRO_SLOPE", GLARE_MACRO_SLOPE),
+        ("SG_TOPS", GLARE_TOPS),
+        ("SG_TOPS_WHEEL", GLARE_TOPS_WHEEL),
+        ("SG_POLISH", GLARE_POLISH),
+        ("SG_POLISH_WHEEL", GLARE_POLISH_WHEEL),
+        ("SG_COAT_ROUGH", GLARE_COAT_ROUGH),
+        ("SG_COAT_ROUGH_WHEEL", GLARE_COAT_ROUGH_WHEEL),
+        ("SG_AGGREGATE_M", GLARE_AGGREGATE_M),
+        ("SG_SETT_POLISH", GLARE_SETT_POLISH),
+        ("SG_SETT_ROUGH", GLARE_SETT_ROUGH),
     ] {
         s.push_str(&format!("const {k}: f32 = {};\n", f(v)));
     }
@@ -314,6 +409,33 @@ mod tests {
         }
         let w = wgsl();
         for k in ["SP_SEAL_ALBEDO", "SP_SEAL_ROUGH", "SP_CRACK_OCCLUSION", "SP_PAINT_WORN", "SP_SETT_ALBEDO"] {
+            assert!(w.contains(&format!("const {k}: f32 = ")), "{k}");
+        }
+    }
+
+    /// (`--street-wear`, `--street-glare`) The distress and the polished tops
+    /// inside their sources' bands: an overband 50-80 mm across, fatigue's pieces
+    /// under LTPP's 0.3 m, more sealed than open; the tops' layer smoother than
+    /// the road and its wheel paths no rougher than the street pass's polish,
+    /// its share the plan's at normal view and growing toward grazing.
+    #[test]
+    fn wear_and_glare_stay_in_their_bands() {
+        assert!((0.025..=0.04).contains(&WEAR_SEAL_HALF_M), "{WEAR_SEAL_HALF_M}");
+        assert!(WEAR_FATIGUE_CELL_M < 0.3 && WEAR_FATIGUE_SHARE < 0.5);
+        assert!(WEAR_SEALED_SHARE > 0.5 && WEAR_SEALED_SHARE < 1.0);
+        assert!(WEAR_TRANSVERSE_SHARE <= 1.0 && WEAR_LONGITUDINAL_SHARE <= 1.0 && WEAR_DRIP_DARK < 0.6);
+        assert!(GLARE_COAT_ROUGH_WHEEL <= GLARE_COAT_ROUGH && GLARE_COAT_ROUGH < ASPHALT_ROUGH && GLARE_COAT_ROUGH_WHEEL <= ASPHALT_ROUGH_POLISHED);
+        assert!(GLARE_TOPS < GLARE_TOPS_WHEEL && GLARE_POLISH < GLARE_POLISH_WHEEL && GLARE_POLISH_WHEEL <= 1.0);
+        let normal = glare_top_share(1.0, GLARE_MACRO_SLOPE, GLARE_TOPS);
+        assert!((normal - GLARE_TOPS).abs() < 1e-9, "{normal}");
+        let mut last = normal;
+        for deg in [30.0f64, 60.0, 75.0, 85.0, 88.0] {
+            let t = glare_top_share(deg.to_radians().cos(), GLARE_MACRO_SLOPE, GLARE_TOPS);
+            assert!(t > last && t < 1.0, "{deg}: {t}");
+            last = t;
+        }
+        let w = wgsl();
+        for k in ["SW_TRANSVERSE_CELL_M", "SW_SEAL_HALF_M", "SW_DRIP_DARK", "SG_MACRO_SLOPE", "SG_COAT_ROUGH", "SG_SETT_ROUGH"] {
             assert!(w.contains(&format!("const {k}: f32 = ")), "{k}");
         }
     }

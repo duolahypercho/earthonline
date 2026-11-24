@@ -795,9 +795,18 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     // Polished and rubber-darkened in the tracks.
                     cc0_p_dark = cc0_p_dark * (1.0 - 0.07 * w);
                     cc0_p_rough = vec2<f32>(mean_rough * 0.8, max(cc0_p_rough.y, w * 0.6));
+                    if (SF_STREET_WEAR) {
+                        // (`--street-wear`, street_pbr.wgsl) the painted lanes' wheel paths drive the street pass's polish and ruts
+                        sw_note_wheel(w, along, across, d1.y, seed, px);
+                    }
                 }
             } else if (kind == CC0_DK_OIL_LINE) {
-                if (asphalt) {
+                if (asphalt && SF_STREET_WEAR) {
+                    // (`--street-wear`, street_pbr.wgsl) drips' pools down the lane, not a streak
+                    let cov = sw_drips(along, across, d1.y, seed, length(gxa) + length(gya));
+                    cc0_p_dark = cc0_p_dark * (1.0 - SW_DRIP_DARK * cov);
+                    cc0_p_rough = vec2<f32>(mean_rough * 0.8, max(cc0_p_rough.y, cov * 0.6));
+                } else if (asphalt) {
                     // Drips down the lane centre: the stain scan's blotches, stretched along the lane and broken up.
                     let li = CC0_D_SURFACEIMPERFECTIONS002;
                     let sz = cc0_dsize(li);
@@ -864,7 +873,13 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     let edge = min(d1.x - abs(along), d1.y - abs(across));
                     let fw = length(gxa) + length(gya);
                     let seam = 1.0 - smoothstep(0.02, 0.02 + fw, abs(edge - 0.03));
-                    cc0_p_dark = cc0_p_dark * 0.74 * (1.0 - 0.35 * seam);
+                    if (SF_STREET_WEAR) {
+                        // (`--street-wear`, street_pbr.wgsl) one pour's tone over every piece of the repair (applied below)
+                        sw_patch = 1.0;
+                        sw_patch_seam = max(sw_patch_seam, seam);
+                    } else {
+                        cc0_p_dark = cc0_p_dark * 0.74 * (1.0 - 0.35 * seam);
+                    }
                     // (`--street-pbr`: the hot-mix as open-textured as the road round it, no sheen of its own)
                     cc0_p_rough = vec2<f32>(mean_rough * select(0.82, 1.0, SF_STREET_PBR), max(cc0_p_rough.y, 1.0));
                     if (SF_STREET_PBR) {
@@ -935,6 +950,9 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
     }
     if (wx_edge > 0.0) {
         cc0_p_dark = cc0_p_dark * (1.0 - 0.32 * wx_edge);
+    }
+    if (SF_STREET_WEAR && sw_patch > 0.0) {
+        cc0_p_dark = cc0_p_dark * sw_patch_tone(world) * (1.0 - 0.35 * sw_patch_seam); // (`--street-wear`) the repair's one pour
     }
 }
 

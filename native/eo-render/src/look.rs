@@ -261,6 +261,17 @@ pub const NATURE_HILLS: u32 = 16;
 /// (landmarks_surface.wgsl `nt_cover`), and their tones without the per-vertex
 /// jitter (ground2.rs `hill_tone`).
 pub const NATURE_COVER: u32 = 32;
+/// `--street-wear` (the street track, round 2; street_pbr.wgsl `sw_*`): the
+/// carriageway's distress as laid out by its causes (transverse and lane-joint
+/// cracks, fatigue cracking in the wheel paths, sealed with meandering tar
+/// snakes) in place of the weathering's crack web, the oil drips as a field of
+/// spots down the lane, and utility patches of one pour.
+pub const STREET_WEAR: u32 = 1;
+/// `--street-glare` (street_pbr.wgsl `sg_*`): the polished binder on the
+/// aggregate's tops as a smooth layer over the rough road, its share growing
+/// toward grazing as the texture's valleys are masked (the low-sun glare down
+/// a road, the wheel paths brightest); the kerb arris and the setts' crowns too.
+pub const STREET_GLARE: u32 = 2;
 /// Every natural-detail bit.
 pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER;
 
@@ -745,6 +756,10 @@ pub struct ShaderFeatures {
     /// `SF_STREET_PBR`): compiled in only with the switch (eo-app sets it; the look's
     /// options do not carry it, and `ALL` leaves it out), and then always on.
     pub street_pbr: bool,
+    /// The street track's round-2 passes (`STREET_*` bits: `--street-wear`,
+    /// `--street-glare`; `SF_STREET_WEAR`, `SF_STREET_GLARE`): as `street_pbr`,
+    /// compiled in only with their switches (eo-app sets them; `ALL` leaves them out).
+    pub street: u32,
     /// The sun bounce (`--sun-bounce`; `SF_SUN_BOUNCE`): the occlusion pass's
     /// gather (surfaces_ao_sun.wgsl, its binding 5; `ao_shader_source`).
     pub sun_bounce: bool,
@@ -793,7 +808,7 @@ impl ShaderFeatures {
     pub const ALL: Self = Self {
         lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true,
         facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, // the facades track
-        street_pbr: false, // the street track
+        street_pbr: false, street: 0, // the street track
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
         wet_surfaces: true, screen_reflect: true, // the reflect track
         camera: true, // the camera track
@@ -805,7 +820,7 @@ impl ShaderFeatures {
     pub const NONE: Self = Self {
         lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false,
         facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, // the facades track
-        street_pbr: false, // the street track
+        street_pbr: false, street: 0, // the street track
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
         wet_surfaces: false, screen_reflect: false, // the reflect track
         camera: false, // the camera track
@@ -832,6 +847,7 @@ impl ShaderFeatures {
             facade_weather: false,
             canyon_glass: false,
             street_pbr: false,
+            street: 0,
             sun_bounce: o.sun_bounce,
             ao_albedo: o.ao_albedo,
             soft_shadows: o.soft_shadows,
@@ -943,6 +959,8 @@ impl ShaderFeatures {
                 ("SF_CANYON_GLASS", self.canyon_glass),
                 // the street track
                 ("SF_STREET_PBR", self.street_pbr),
+                ("SF_STREET_WEAR", self.street & STREET_WEAR != 0),
+                ("SF_STREET_GLARE", self.street & STREET_GLARE != 0),
                 // the light track
                 ("SF_SUN_BOUNCE", self.sun_bounce),
                 ("SF_AO_ALBEDO", self.ao_albedo),
