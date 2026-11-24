@@ -296,3 +296,38 @@ fn a_car_in_a_bore_is_lit_by_the_bore_not_the_sun() {
     let k = (y.min(H - 1) * W + x.min(W - 1)) as usize;
     assert!((lit[k] - bore[k]).abs() <= 0.02 * lit[k].max(1e-3), "the ground beside: {} vs {}", lit[k], bore[k]);
 }
+
+/// `--car-materials`: with every shader feature compiled in (the tests'
+/// default, so the agents' pipelines carry the cars' own shading and Apple's
+/// compiler takes them), a library cooked with the roles draws the frame of
+/// the plain library while the level is 0, and with the level on the car's
+/// pixels change and nothing else does.
+#[test]
+fn car_materials_change_the_car_alone_and_nothing_while_off() {
+    let ctx = ctx();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let people = eo_agents::library::PeopleSource::Off;
+    let cook = |car_materials| Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &people, eo_agents::library::CookOptions { car_materials, ..Default::default() }).expect("agent library");
+    let (plain, roles) = (cook(false), cook(true));
+    // A sedan side-on 7 m north of the camera, and the camera looking at it.
+    let cam = Camera::new(Vec3::new(0.0, 1.5, 0.0), 0.0, -0.08, W as f32 / H as f32);
+    let shot = |lib: &Library, level: u8| {
+        let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+        slab(&mut v, &mut i, &mut o);
+        let mut r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+        let options = eo_render::look::LookOptions { car_materials: level, ..r.look.options };
+        r.look.set_options(&ctx.device, options);
+        r.attach_agents(&ctx, lib).unwrap();
+        let a = r.agents.get().unwrap();
+        a.upload(&ctx.queue, &[car(lib, "sedan", Vec3::new(0.0, 0.0, -7.0), std::f32::consts::FRAC_PI_2)]);
+        render(&ctx, &r, &cam, 2)
+    };
+    let (base, off, on) = (shot(&plain, 0), shot(&roles, 0), shot(&roles, 1));
+    let differ = |a: &[f32], b: &[f32]| a.iter().zip(b).filter(|(x, y)| (*x - *y).abs() > 1e-3 * (1.0 + x.abs())).count();
+    assert_eq!(differ(&base, &off), 0, "level 0: the roles and the plates' coordinates draw nothing");
+    let changed = differ(&base, &on);
+    assert!(changed > 200, "level 1 changes the car ({changed} pixels)");
+    // Only pixels round the car: the slab's far corners are untouched.
+    let corner = |img: &[f32]| (0..20).flat_map(|y| (0..20).map(move |x| y * W as usize + x)).chain((0..20).flat_map(|y| (0..20).map(move |x| (H as usize - 1 - y) * W as usize + W as usize - 1 - x))).map(|k| img[k]).collect::<Vec<_>>();
+    assert_eq!(differ(&corner(&base), &corner(&on)), 0, "nothing but the car changes");
+}
