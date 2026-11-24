@@ -241,6 +241,10 @@ mod tests {
         sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)
         sets.push(("screen gi".into(), look::ShaderFeatures { screen_gi: true, ..none })); // (`--screen-gi`)
         sets.push(("screen gi + sun bounce".into(), look::ShaderFeatures { screen_gi: true, sun_bounce: true, ..none }));
+        sets.push(("wet surfaces".into(), look::ShaderFeatures { wet_surfaces: true, ..none })); // (`--wet-surfaces`)
+        sets.push(("wet surfaces, cinematic".into(), look::ShaderFeatures { wet_surfaces: true, cinematic: true, ..none }));
+        sets.push(("screen reflect".into(), look::ShaderFeatures { screen_reflect: true, ..none })); // (`--screen-reflect`)
+        sets.push(("screen reflect, wet surfaces, cinematic".into(), look::ShaderFeatures { screen_reflect: true, wet_surfaces: true, cinematic: true, ..none }));
         sets
     }
 
@@ -302,8 +306,9 @@ mod tests {
         let f = look::ShaderFeatures::of(&on, true, true, true);
         // (the look profile is its own, below; the facades track's switches are read from the
         // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options;
-        // the sun bounce, the albedo's multi-bounce, the penumbra and the screen-space indirect light are their own, below)
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, ..look::ShaderFeatures::ALL });
+        // the sun bounce, the albedo's multi-bounce, the penumbra and the screen-space indirect light,
+        // and the reflect track's switches are their own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, wet_surfaces: false, screen_reflect: false, ..look::ShaderFeatures::ALL });
         assert!(!f.street_pbr && !look::ShaderFeatures::ALL.street_pbr, "the street pass comes in with its switch only (eo-app)");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
@@ -341,6 +346,26 @@ mod tests {
         assert!(look::ShaderFeatures::ALL.limit(&gi).screen_gi);
         assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SCREEN_GI: bool = false;"));
         assert!(look::ao_gi_filter_source().contains(&format!("const GI_FILTER_PLANE_M: f32 = {:.8};", eo_look::screen_gi::FILTER_PLANE_M)), "the gather's constants reach the filter");
+    }
+
+    #[test]
+    fn the_reflect_tracks_switches_are_compiled_in_only_when_asked_and_limited_with_them() {
+        // (`--wet-surfaces`, `--screen-reflect`) the default compiles both out; each switch compiles in its own.
+        let o = look::LookOptions::default();
+        let f = look::ShaderFeatures::of(&o, false, false, false);
+        assert!(!f.wet_surfaces && !f.screen_reflect);
+        for (k, v) in [("SF_WET_SURFACES", false), ("SF_SCREEN_REFLECT", false)] {
+            assert!(look::ShaderFeatures::NONE.wgsl().contains(&format!("const {k}: bool = {v};")), "{k}");
+            assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const {k}: bool = {};", !v)), "{k}");
+        }
+        let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}");
+        for (wet, sr) in [(true, false), (false, true), (true, true)] {
+            let on = look::LookOptions { sky: crate::sky::SkyOptions { wet_surfaces: wet, screen_reflect: sr, ..o.sky }, ..o };
+            let f = look::ShaderFeatures::of(&on, false, false, false);
+            assert_eq!(f, look::ShaderFeatures { wet_surfaces: wet, screen_reflect: sr, ..look::ShaderFeatures::NONE }, "each alone compiles in nothing else");
+            assert!(same(&f.limit(&on), &on), "compiled in, it stays as asked");
+            assert!(same(&look::ShaderFeatures::NONE.limit(&on), &o), "compiled out, it stays off (the default frame)");
+        }
     }
 
     #[test]

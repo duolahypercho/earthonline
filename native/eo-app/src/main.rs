@@ -400,6 +400,10 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-cloud-shadows" => a.look.sky.cloud_shadows = false,
             "--cloud-depth-haze" => a.look.sky.cloud_depth_haze = true,
             "--no-cloud-depth-haze" => a.look.sky.cloud_depth_haze = false,
+            "--wet-surfaces" => a.look.sky.wet_surfaces = true, // (the reflect track) every exposed surface takes the rain by its porosity, puddles, the water's whole environment
+            "--no-wet-surfaces" => a.look.sky.wet_surfaces = false,
+            "--screen-reflect" => a.look.sky.screen_reflect = true, // (the reflect track) the jittered, lobe-filtered trace, the frame's sky, glass
+            "--no-screen-reflect" => a.look.sky.screen_reflect = false,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,

@@ -715,6 +715,10 @@ pub struct ShaderFeatures {
     /// The screen-space indirect light (`--screen-gi`; `SF_SCREEN_GI`): the
     /// occlusion pass's gather, history and filter (`ao_shader_source`, `ao_gi_filter_source`).
     pub screen_gi: bool,
+    /// The wet surfaces (`--wet-surfaces`; sky_light.wgsl `sky_w2_on`, `SF_WET_SURFACES`).
+    pub wet_surfaces: bool,
+    /// The screen-space reflection's second generation (`--screen-reflect`; sky_light.wgsl `sky_sr_on`, `SF_SCREEN_REFLECT`).
+    pub screen_reflect: bool,
 }
 
 impl ShaderFeatures {
@@ -726,6 +730,7 @@ impl ShaderFeatures {
         facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, // the facades track
         street_pbr: false, // the street track
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
+        wet_surfaces: true, screen_reflect: true, // the reflect track
     };
     /// No feature compiled in (the default frame's pipelines).
     pub const NONE: Self = Self {
@@ -733,6 +738,7 @@ impl ShaderFeatures {
         facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, // the facades track
         street_pbr: false, // the street track
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
+        wet_surfaces: false, screen_reflect: false, // the reflect track
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -757,6 +763,8 @@ impl ShaderFeatures {
             ao_albedo: o.ao_albedo,
             soft_shadows: o.soft_shadows,
             screen_gi: o.screen_gi,
+            wet_surfaces: o.sky.wet_surfaces,
+            screen_reflect: o.sky.screen_reflect,
         }
     }
 
@@ -811,6 +819,12 @@ impl ShaderFeatures {
         l.ao_albedo &= self.ao_albedo;
         l.soft_shadows &= self.soft_shadows;
         l.screen_gi &= self.screen_gi;
+        if !self.wet_surfaces {
+            l.sky.wet_surfaces = false;
+        }
+        if !self.screen_reflect {
+            l.sky.screen_reflect = false;
+        }
         l
     }
 
@@ -839,6 +853,9 @@ impl ShaderFeatures {
                 ("SF_AO_ALBEDO", self.ao_albedo),
                 ("SF_SOFT_SHADOWS", self.soft_shadows),
                 ("SF_SCREEN_GI", self.screen_gi),
+                // the reflect track
+                ("SF_WET_SURFACES", self.wet_surfaces),
+                ("SF_SCREEN_REFLECT", self.screen_reflect),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
@@ -921,7 +938,7 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         include_str!("facade_age.wgsl"),             // facade
         crate::facade::facade_constants_wgsl()        // facade
     ) + "\n" + &crate::rooms::wgsl_constants() + include_str!("rooms.wgsl")
-        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
+        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + &crate::sky_reflect::sky_light_source(single_probe || shadow != ShadowLevels::Full) // sky (the reflect track's switches' code out of the agents' variant, sky_reflect.rs)
         + "\n" + LOOK_EXT_WGSL // group 1 bindings 12-18
         + "\n" + crate::far_shadow::WGSL + &shadow_wgsl(shadow) // the far sun shadow map's lookup and the variant's shadow parts (lighting)
         + "\n" + &crate::ambient::wgsl(ambient) // the ambient volume's sampling (lighting)
@@ -1614,7 +1631,7 @@ impl LookGpu {
         let lighting = self.lighting_bound.lock().unwrap().clone();
         // main_bg[p] is bound while the resolve writes history p: it reads history 1 - p.
         let bg = |p: usize| {
-            let prev = self.sky.history_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone());
+            let prev = self.sky.reflect_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone()); // (`--screen-reflect`: with its mip chain)
             Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &lighting)
         };
         *self.main_bg.lock().unwrap() = [bg(0), bg(1)];

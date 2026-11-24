@@ -216,6 +216,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "facade_weather" => features.facade_weather = true,
             "canyon_glass" => features.canyon_glass = true,
             "street_pbr" => features.street_pbr = true, // (`--street-pbr`)
+            "wet_surfaces" => features.wet_surfaces = true, // (`--wet-surfaces`)
+            "screen_reflect" => features.screen_reflect = true, // (`--screen-reflect`)
             _ => {}
         }
     }
