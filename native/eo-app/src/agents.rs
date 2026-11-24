@@ -32,6 +32,13 @@
 //!   never: the cards drew the simulation of the bench's first path, metres
 //!   to kilometres away). The same focus, hour and network give the same
 //!   street. `settle` waits for a pending cut (the captures call it).
+//! * Where the people walk: the footways stand on the drawn walks and stop
+//!   and cross at the drawn kerbs (`drawn_sections`, from eo-street's plan),
+//!   an unsignalled street is crossed only at a mapped crosswalk
+//!   (`crossing_points`), and the paved plazas the landmarks lay are crossed
+//!   by walks of their own (`plaza_paths`).
+//! * The bodies: kept apart and out of the vehicles, and no twins in sight
+//!   (the feed's `separate`, eo-agents `feed::separate`).
 
 use crate::{Args, World};
 use anyhow::Result;
@@ -102,6 +109,67 @@ pub fn walk_paths(paths: &eo_data::DataPaths, city: &eo_data::City) -> Vec<eo_si
         .filter(|r| matches!(r.highway.as_str(), "pedestrian" | "footway" | "path") && !r.bridge && !r.tunnel && r.layer == 0 && r.points64.len() >= 2 && !street_walks.contains(&r.id))
         .map(|r| eo_sim::native::PathWay { id: r.id.clone(), highway: r.highway.clone(), points: r.points64.clone() })
         .collect()
+}
+
+/// `--crowd`: the mapped crosswalks' middles (eo-sim
+/// `NativeSource::with_crossings`): the city file's `crossingWays` (OSM
+/// `footway=crossing`, marked, unmarked or signalled), on the scaled plan.
+pub fn crossing_points(paths: &eo_data::DataPaths) -> Vec<[f64; 2]> {
+    #[derive(serde::Deserialize)]
+    struct Way {
+        #[serde(default)]
+        points: Vec<f64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Lists {
+        #[serde(rename = "crossingWays", default)]
+        crossings: Vec<Way>,
+    }
+    let gs = eo_data::groundscale::scale();
+    eo_data::read_maybe_gzip(&paths.sf("sf-city.json.gz"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Lists>(&b).ok())
+        .map(|l| {
+            l.crossings
+                .iter()
+                .filter(|w| w.points.len() >= 4)
+                .map(|w| {
+                    let n = w.points.len() / 2;
+                    let (sx, sz) = w.points.chunks_exact(2).fold((0.0, 0.0), |a, c| (a.0 + c[0], a.1 + c[1]));
+                    [sx / n as f64 * gs, sz / n as f64 * gs]
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `--crowd`: the drawn street's cross-sections (eo-sim
+/// `NativeSource::with_sections`): every straight piece of every drawn
+/// carriageway's centreline with its half width and its walks (eo-street's
+/// plan; a structure's leg into a junction is not drawn and is left out).
+pub fn drawn_sections(sw: &eo_street::StreetWorld) -> Vec<eo_sim::native::DrawnSection> {
+    sw.plan
+        .entries
+        .iter()
+        .filter(|e| e.structure_leg.is_none() && e.half > 0.0)
+        .flat_map(|e| e.points.windows(2).map(move |w| eo_sim::native::DrawnSection { a: w[0], b: w[1], half: e.half, walks: e.walks }))
+        .collect()
+}
+
+/// `--crowd`: the paved plazas the landmarks lay (eo-landmarks `plaza::plan`
+/// over sf-lots-parks, a footprint test from the drawn buildings): each
+/// one's id and outer ring. None when the plazas do not load.
+pub fn plaza_rings(root: &std::path::Path, sw: &eo_street::StreetWorld) -> Vec<(String, Vec<[f64; 2]>)> {
+    let Ok((greens, water)) = eo_landmarks::plaza::load_areas(root) else { return vec![] };
+    let k = &eo_landmarks::LandmarksJs::get().open_space.plaza;
+    let plan = eo_landmarks::plaza::plan(k, &greens, &water, Some(&|x: f64, z: f64| sw.buildings.contains(x, z)));
+    plan.plazas.iter().filter_map(|p| p.rings.first().map(|r| (p.id.clone(), r.clone()))).collect()
+}
+
+/// `--crowd`: the plazas' walks (eo-sim `plaza_walks`): each crossed by
+/// straight walks between points of its outline and walked round.
+pub fn plaza_paths(rings: &[(String, Vec<[f64; 2]>)]) -> Vec<eo_sim::native::PathWay> {
+    rings.iter().flat_map(|(id, r)| eo_sim::native::plaza_walks(id, r)).collect()
 }
 
 /// `--crowd`: every building edge of the city file as a front the footways
@@ -201,6 +269,8 @@ pub struct AgentRuntime {
     cut_post: Option<u64>,
     /// `--crowd`: cuts made (the capture JSON reports them).
     pub cuts: u64,
+    /// `--crowd`: the paved plazas (set by the simulation's builder, handed to the feed).
+    plazas: Arc<std::sync::Mutex<Option<Arc<eo_agents::feed::Plazas>>>>,
 }
 
 /// One region around `focus` at `density` times the default population;
@@ -269,6 +339,7 @@ impl AgentRuntime {
             cut_rx: None,
             cut_post: None,
             cuts: 0,
+            plazas: Default::default(),
         };
         if !opts.on {
             return rt;
@@ -283,7 +354,14 @@ impl AgentRuntime {
         std::thread::Builder::new()
             .name("eo-agents-load".into())
             .spawn(move || {
-                let _ = tx.send(Library::load_opts(&repo, cache.as_deref(), &people, cook).map_err(|e| format!("{e:#}")));
+                // (`--people-contact`) the people's contact anchors, made at load (never cached).
+                let lib = Library::load_opts(&repo, cache.as_deref(), &people, cook).map(|mut l| {
+                    if eo_render::agents::people_contact() {
+                        eo_agents::people::add_contact_anchors(&mut l);
+                    }
+                    l
+                });
+                let _ = tx.send(lib.map_err(|e| format!("{e:#}")));
             })
             .expect("spawn agent library loader");
         rt.lib_rx = Some(rx);
@@ -308,6 +386,9 @@ impl AgentRuntime {
         let crowd = self.opts.crowd.then_some(self.start_hour);
         let city = self.city.clone();
         let paths = world.paths.clone();
+        // `--crowd`: the drawn street (the walks the footways stand on, the plazas' paving).
+        let street = if self.opts.crowd { world.street.as_ref().map(|s| s.world.clone()) } else { None };
+        let plazas_out = self.plazas.clone();
         // The structure level of each way (`--structures`; empty otherwise, which leaves the sim as it was).
         let levels = self.structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
         let (tx, rx) = std::sync::mpsc::channel();
@@ -317,7 +398,17 @@ impl AgentRuntime {
                 let r = (|| -> Result<(SimWorld, Arc<eo_sim::native::NativeSource>)> {
                     let mut source = eo_sim::native::load(&paths)?.with_levels(levels);
                     if let Some(c) = &city {
-                        source = source.with_frontage(frontage_edges(c)).with_paths(walk_paths(&paths, c)); // `--crowd`
+                        // `--crowd`: the fronts, the walks of their own and the plazas', the
+                        // drawn walks and kerbs, the mapped crosswalks.
+                        let mut walks = walk_paths(&paths, c);
+                        let mut sections = vec![];
+                        if let Some(sw) = &street {
+                            let rings = plaza_rings(&paths.repo_root, sw);
+                            walks.extend(plaza_paths(&rings));
+                            *plazas_out.lock().unwrap() = Some(Arc::new(eo_agents::feed::Plazas::new(rings.into_iter().map(|(_, r)| r).collect())));
+                            sections = drawn_sections(sw);
+                        }
+                        source = source.with_frontage(frontage_edges(c)).with_paths(walks).with_sections(sections).with_crossings(crossing_points(&paths));
                     }
                     let source = Arc::new(source);
                     let w = build_sim(&source, focus, density, crowd, WARMUP_STEPS);
@@ -396,7 +487,11 @@ impl AgentRuntime {
             // a remote runtime starts its feed without a local simulation
             if let Some(lib) = &self.lib {
                 match Feeder::new(lib.clone(), self.ground.clone(), self.structures.clone(), SEED_INT) {
-                    Ok(f) => self.feed = Some(FeedThread::start(f)),
+                    Ok(mut f) => {
+                        f.separate = self.opts.crowd; // `--crowd`: the bodies kept apart
+                        f.plazas = self.plazas.lock().unwrap().clone(); // `--crowd`: on the plazas' paving
+                        self.feed = Some(FeedThread::start(f));
+                    }
                     Err(e) => self.errors.push(format!("{e:#}")),
                 }
             }

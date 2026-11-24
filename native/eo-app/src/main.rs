@@ -472,6 +472,10 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-crowd" => agents::CROWD.store(false, std::sync::atomic::Ordering::Relaxed),
             "--people-shading" => eo_render::agents::set_people_shading(true), // skin, cloth and hair (agents_draw.wgsl `pp_person`)
             "--no-people-shading" => eo_render::agents::set_people_shading(false),
+            "--people-bounce" => eo_render::agents::set_people_bounce(true), // the ground round the feet lights a person (agents_draw.wgsl `pb_person`)
+            "--no-people-bounce" => eo_render::agents::set_people_bounce(false),
+            "--people-contact" => eo_render::agents::set_people_contact(true), // the ground round a person occluded by them (agents_contact.wgsl)
+            "--no-people-contact" => eo_render::agents::set_people_contact(false),
             // read by eo_render::hlod::HlodOptions::from_env and bench/hlod_shots.rs
             "--hlod-shots" => {}
             "--far-shots" | "--far-diag" => {} // bench/far_shots.rs reads them
