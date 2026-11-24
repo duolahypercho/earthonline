@@ -419,9 +419,15 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // the cars in the wet: the wet street's mirror of the lights behind them cut by their bodies (agents_contact.wgsl `ag_ct_wet`; off by default).
             "--car-wet" => a.look.car_wet = 1,
             "--no-car-wet" => a.look.car_wet = 0,
+            // the cars' finish as the street wears it: flake and orange peel, road film, dust, faded lacquer, green-grey glass, rain beads (agents_draw.wgsl `ag_car_finish_*`; off by default).
+            "--car-finish" => a.look.car_finish = 1,
+            "--no-car-finish" => a.look.car_finish = 0,
             // the capture cards' streets with their simulated traffic (agents.rs `warm_traffic`; off by default).
             "--car-traffic" => crate::agents::set_warm_traffic(true),
             "--no-car-traffic" => crate::agents::set_warm_traffic(false),
+            // the traffic by street class and hour: each lane round the focus at its class's density (eo-sim `TrafficDensity`; off by default).
+            "--car-density" => crate::agents::set_car_density(true),
+            "--no-car-density" => crate::agents::set_car_density(false),
             "--night-photometry" => a.look.sky.night_photometry = true,
             "--no-night-photometry" => a.look.sky.night_photometry = false,
             "--lamp-bounce" => a.look.sky.lamp_bounce = true,

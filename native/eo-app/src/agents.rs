@@ -236,6 +236,23 @@ pub fn warm_traffic_on() -> bool {
     WARM_TRAFFIC.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// (`--car-density`; off by default, the JS pool as before) The traffic by
+/// street class and hour (eo-sim `TrafficDensity`): each lane round the focus
+/// carries its class's density at the drawn hour's share of the busiest
+/// (`lane_density_per_km`, `hour_footfall`), the fleet up to
+/// `DENSE_VEHICLE_POOL` cars, the local recycler keeping the near streets'
+/// share; the capture cards take it at their own hour.
+static CAR_DENSITY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `--car-density` / `--no-car-density`.
+pub fn set_car_density(on: bool) {
+    CAR_DENSITY.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn car_density_on() -> bool {
+    CAR_DENSITY.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct AgentOpts {
     pub on: bool,
@@ -305,6 +322,8 @@ pub struct AgentRuntime {
     city: Option<Arc<eo_data::City>>,
     source: Option<Arc<eo_sim::native::NativeSource>>,
     start_hour: f64,
+    /// (`--car-density`) the hour the traffic's density is taken at (the start's; a warmed card's own)
+    traffic_hour: f64,
     last_focus: Option<([f64; 3], f64)>,
     cut_rx: Option<(Receiver<Result<SimWorld, String>>, [f64; 3], f64)>,
     cut_post: Option<u64>,
@@ -319,9 +338,14 @@ pub struct AgentRuntime {
 /// One region around `focus` at `density` times the default population;
 /// with `crowd` (`--crowd`) the people by place and `hour` instead of the
 /// People setting's disc, the clock starting at `hour` (else noon, as before).
-fn region_config(density: u32, crowd: Option<f64>) -> RegionConfig {
+fn region_config(density: u32, crowd: Option<f64>, traffic: Option<f64>) -> RegionConfig {
     let mut cfg = RegionConfig::game_default(SEED_INT);
     let n = density.max(1) as usize;
+    if let Some(hour) = traffic {
+        // (`--car-density`) the traffic by street class at the hour
+        cfg.vehicle_pool = eo_sim::consts::DENSE_VEHICLE_POOL;
+        cfg.traffic = Some(eo_sim::region::TrafficDensity::standard(hour.rem_euclid(24.0)));
+    }
     cfg.vehicle_pool *= n;
     if let People::Bubble(b) = &mut cfg.people {
         b.max_bodies *= n;
@@ -378,6 +402,7 @@ impl AgentRuntime {
             city: opts.crowd.then(|| world.city.clone()),
             source: None,
             start_hour: args.time_of_day,
+            traffic_hour: args.time_of_day,
             last_focus: None,
             cut_rx: None,
             cut_post: None,
@@ -432,6 +457,7 @@ impl AgentRuntime {
         self.cut_post = None;
         self.last_focus = None;
         let crowd = self.opts.crowd.then_some(self.start_hour);
+        let traffic = car_density_on().then_some(self.traffic_hour); // (`--car-density`; None without it)
         let city = self.city.clone();
         let paths = world.paths.clone();
         // `--crowd`: the drawn street (the walks the footways stand on, the plazas' paving).
@@ -459,7 +485,7 @@ impl AgentRuntime {
                         source = source.with_frontage(frontage_edges(c)).with_paths(walks).with_sections(sections).with_crossings(crossing_points(&paths));
                     }
                     let source = Arc::new(source);
-                    let w = build_sim(&source, focus, density, crowd, WARMUP_STEPS);
+                    let w = build_sim(&source, focus, density, crowd, traffic, WARMUP_STEPS);
                     Ok((w, source))
                 })();
                 let _ = tx.send(r.map_err(|e| format!("{e:#}")));
@@ -675,7 +701,7 @@ impl AgentRuntime {
         std::thread::Builder::new()
             .name("eo-agents-sim-cut".into())
             .spawn(move || {
-                let _ = tx.send(Ok(build_sim(&src, focus, density, Some(hour), CUT_WARMUP_STEPS)));
+                let _ = tx.send(Ok(build_sim(&src, focus, density, Some(hour), car_density_on().then_some(hour), CUT_WARMUP_STEPS)));
             })
             .expect("spawn simulation cut");
         self.cut_rx = Some((rx, focus, hour));
@@ -784,10 +810,11 @@ impl AgentRuntime {
     /// simulated agents within `WARM_CLEAR_M` of the eye hidden until
     /// `hide_near` is cleared. Returns the vehicles and people it drew, or
     /// None (nothing warmed: no simulation here, or not in time).
-    pub fn warm_traffic(&mut self, ctx: &GpuContext, renderer: &Renderer, world: &World, eye: Vec3, forward: Vec3) -> Option<(usize, usize)> {
+    pub fn warm_traffic(&mut self, ctx: &GpuContext, renderer: &Renderer, world: &World, eye: Vec3, forward: Vec3, hour: f64) -> Option<(usize, usize)> {
         if self.remote_mode || !self.opts.on {
             return None;
         }
+        self.traffic_hour = hour; // (`--car-density`) the card's own hour
         let focus = Self::focus_of(eye, forward);
         self.restart_sim(world, focus, self.opts.density);
         self.hide_near = vec![(eye.to_array(), WARM_CLEAR_M)];
@@ -812,13 +839,13 @@ impl AgentRuntime {
 
 /// A simulation round `focus`: the network within `SIM_RADIUS_M` from the
 /// source, one region (`region_config`), `steps` fixed steps run.
-fn build_sim(source: &eo_sim::native::NativeSource, focus: [f64; 3], density: u32, crowd: Option<f64>, steps: usize) -> SimWorld {
+fn build_sim(source: &eo_sim::native::NativeSource, focus: [f64; 3], density: u32, crowd: Option<f64>, traffic: Option<f64>, steps: usize) -> SimWorld {
     let tiles = eo_sim::native::tiles_around(focus[0], focus[1], SIM_RADIUS_M);
     let mut net = Network::new(source.timing.clone());
     net.add(source.build(&tiles));
     let mut w = SimWorld::new(net);
     let f = Focus { x: focus[0], z: focus[1], yaw: focus[2] };
-    let r = Region::new(&w.net, 0, region_config(density, crowd), f);
+    let r = Region::new(&w.net, 0, region_config(density, crowd, traffic), f);
     w.regions.push(r);
     for _ in 0..steps {
         w.step();
@@ -912,7 +939,7 @@ mod tests {
             ("embarcadero-blue", 3087.0, -2068.0, 19.25),
         ] {
             let t = std::time::Instant::now();
-            let _ = build_sim(&source, [x, z, 0.0], 1, Some(hour), 60);
+            let _ = build_sim(&source, [x, z, 0.0], 1, Some(hour), None, 60);
             eprintln!("  {name}: {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
         }
     }
