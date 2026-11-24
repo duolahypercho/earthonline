@@ -20,6 +20,7 @@ pub mod rig;
 pub mod shadow;
 pub mod sky;
 pub mod sun;
+pub mod sun_bounce;
 pub mod tone;
 
 use math::*;
