@@ -1057,6 +1057,15 @@ const SKY_SR_NEAR_M: f32 = 0.25;
 /// half-resolution texel's own depth slope on ground seen low).
 const SKY_SR_THICK: vec2<f32> = vec2<f32>(0.4, 0.04);
 const SKY_SR_BIAS: vec2<f32> = vec2<f32>(0.03, 0.004);
+/// The first thing a ray passes behind holds it (the ray is inside it) where
+/// the ray is no deeper behind its face than x times its width (a canopy, a
+/// facade, a car: about as deep as they are wide); its width measured where
+/// the depth stays within y of its own at taps this many half-resolution
+/// texels out (`sky_sr_width`). Without it a ray from a puddle up into a
+/// street tree's crown passed behind the leaves the camera sees and read the
+/// sky beyond: a hole the colour of the sky in the tree's reflection.
+const SKY_SR_WIDE: vec2<f32> = vec2<f32>(1.0, 0.35);
+const SKY_SR_WIDE_TAPS: vec3<f32> = vec3<f32>(4.0, 12.0, 32.0);
 /// Four depth texels are one surface for the bilinear read within this share
 /// of their nearest.
 const SKY_SR_LIN_TOL: f32 = 0.08;
@@ -1200,6 +1209,28 @@ fn sky_sr_open(q: vec2<f32>, rho: f32) -> f32 {
     return open * 0.2;
 }
 
+/// The width (half-resolution texels) of what stands at texel `s` (view depth
+/// `z`) along the ray's screen direction `dir` and across it: how far the
+/// depth stays within `SKY_SR_WIDE.y` of `z` at taps `SKY_SR_WIDE_TAPS` out
+/// (ahead; either side, summed), the smaller of the two.
+fn sky_sr_width(s: vec2<f32>, dir: vec2<f32>, z: f32, top: vec2<i32>) -> f32 {
+    let perp = vec2<f32>(-dir.y, dir.x);
+    var along = 0.0;
+    var left = 0.0;
+    var right = 0.0;
+    for (var m = 0; m < 3; m = m + 1) {
+        let o = select(select(SKY_SR_WIDE_TAPS.z, SKY_SR_WIDE_TAPS.y, m == 1), SKY_SR_WIDE_TAPS.x, m == 0);
+        let za = sky_sr_depth(s + dir * o, top);
+        let zl = sky_sr_depth(s + perp * o, top);
+        let zr = sky_sr_depth(s - perp * o, top);
+        let tol = SKY_SR_WIDE.y * z;
+        along = select(along, o, za > 0.0 && abs(za - z) < tol);
+        left = select(left, o, zl > 0.0 && abs(zl - z) < tol);
+        right = select(right, o, zr > 0.0 && abs(zr - z) < tol);
+    }
+    return min(along, left + right);
+}
+
 /// The trace (see above) from `p0` along `r`, jittered by `j`: the hit's uv,
 /// its distance along the ray (m) and its weight (0: none; the thickness
 /// test's fade). No hit: z -1 where the ray escaped (it stayed on the frame
@@ -1291,7 +1322,20 @@ fn sky_sr_trace(p0: vec3<f32>, r: vec3<f32>, j: f32) -> vec4<f32> {
             f_hit = f_out;
             break;
         }
-        behind = behind || (z < SKY_SR_HIZ_FAR && min(za, zb) > z + thick);
+        let past = z < SKY_SR_HIZ_FAR && min(za, zb) > z + thick;
+        if (past && !behind) {
+            // the first thing the ray passes behind: as deep as it is wide
+            // (a canopy, a facade, a car body), the ray is inside it, not
+            // past it; a pole, a sign or a person (narrow across the ray's
+            // path) it passes. The width: how far the depth stays near this
+            // texel's along the ray's path and either side of it.
+            let w_m = sky_sr_width(s0 + ds * f, ds / len, z, top) * z * 2.0 * skyu.cluster.z / dims.y;
+            if (min(za, zb) - z < SKY_SR_WIDE.x * w_m) {
+                let kf = mix(k0, k1, f);
+                return vec4<f32>((s0 + ds * f) / dims, reach * k1 * f / kf, 1.0);
+            }
+        }
+        behind = behind || past;
         f = f_out + nudge;
         lvl = min(1, l_top);
     }
