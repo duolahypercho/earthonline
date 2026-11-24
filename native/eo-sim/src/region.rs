@@ -76,6 +76,14 @@ pub struct RegionConfig {
     /// groups keep together (`Crowd::keep_parties`), and window-shopping
     /// stops only where the walk has shop windows.
     pub groups: bool,
+    /// (eo-app `--people-windows`; false, the default, as before) a
+    /// window-shopping stop only where a walk-in shop's window fronts the
+    /// walker's own stretch of the walk (`FootActivity::shop_fronts`).
+    pub windows: bool,
+    /// (eo-app `--people-stagger`; false, the default, as before) a walking
+    /// group's line turned from square across the walk by its own keyed
+    /// angle (`GROUP_STAGGER_RAD`).
+    pub stagger: bool,
 }
 
 /// The game camera of the JS harnesses: 52 degrees vertical at 16:9.
@@ -98,6 +106,8 @@ impl RegionConfig {
             draw_horizon: traffic_window(Level::High).1,
             crowd: None,
             groups: false,
+            windows: false,
+            stagger: false,
         }
     }
 
@@ -116,6 +126,8 @@ impl RegionConfig {
             draw_horizon: traffic_window(Level::High).1,
             crowd: None,
             groups: false,
+            windows: false,
+            stagger: false,
         }
     }
 }
@@ -652,7 +664,7 @@ impl Region {
                 c.night += fw.activity.night as f64 * inside;
                 c.storeys += fw.activity.storeys as f64 * inside;
                 c.class_weight += fw.weight * inside;
-                c.people += footway_density(fw.weight, fw.activity, hour) * d.scale * inside;
+                c.people += footway_density_with(fw.weight, fw.activity, hour, d.evening) * d.scale * inside;
             }
         }
         if c.length_m > 0.0 {
@@ -710,7 +722,7 @@ impl Region {
                 if inside <= 0.0 {
                     continue;
                 }
-                let people = footway_density(fw.weight, fw.activity, hour) * d.scale * inside;
+                let people = footway_density_with(fw.weight, fw.activity, hour, d.evening) * d.scale * inside;
                 if people <= 0.0 {
                     continue;
                 }
@@ -1156,6 +1168,8 @@ impl Region {
                 car_speed: &self.fleet.spd,
                 car_level: &self.fleet.level,
                 groups: self.cfg.groups,
+                windows: self.cfg.windows,
+                stagger: self.cfg.stagger,
             };
             self.crowd.step(&wctx, dt, parity);
         }

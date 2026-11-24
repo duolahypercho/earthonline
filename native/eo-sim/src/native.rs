@@ -466,6 +466,8 @@ impl FrontageIndex {
         }
         let n = (len / FRONT_SAMPLE_M).ceil().max(1.0) as usize;
         let (mut shops, mut night, mut storeys) = (0u32, 0u32, 0.0f64);
+        // each sample's front a walk-in shop (`FootActivity::shop_fronts`)
+        let mut shop_at = vec![false; n];
         for i in 0..n {
             let (x, z, _, _, _) = geom::at_arc(points, &cum, (i as f64 + 0.5) * len / n as f64);
             let lo = front_cell(x - reach, z - reach);
@@ -488,10 +490,14 @@ impl FrontageIndex {
                 shops += e.shops as u32;
                 night += e.night as u32;
                 storeys += e.storeys as f64;
+                shop_at[i] = e.shops;
             }
         }
+        // each of the walk's stretches takes the sample nearest its middle
+        let slots = crate::consts::SHOP_FRONT_SLOTS;
+        let shop_fronts = (0..slots).filter(|&j| shop_at[(((j as f64 + 0.5) / slots as f64) * n as f64) as usize % n]).fold(0u64, |m, j| m | 1u64 << j);
         let n = n as f64;
-        crate::consts::FootActivity { shops: (shops as f64 / n) as f32, night: (night as f64 / n) as f32, storeys: (storeys / n) as f32, place: 0.0 }
+        crate::consts::FootActivity { shops: (shops as f64 / n) as f32, night: (night as f64 / n) as f32, storeys: (storeys / n) as f32, place: 0.0, shop_fronts }
     }
 }
 

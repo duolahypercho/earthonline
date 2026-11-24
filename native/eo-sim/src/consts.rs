@@ -131,6 +131,15 @@ pub const GROUP_TALK_GAP_M: f64 = 1.0;
 /// How fast a member steps to its new place when the group's formation
 /// changes (stopping, setting off, turning to talk), m/s: a side step.
 pub const GROUP_STEP_ASIDE_MPS: f64 = 0.6;
+/// (`--people-stagger`) How far a walking group's line may turn from square
+/// across the walk, either way, radians (each group its own keyed turn, held
+/// while it walks): companions walk side by side but rarely exactly level,
+/// one a shoulder ahead (Moussaid et al. 2010 give the abreast line as the
+/// mean at low density, the members' places spread about it). At 25 degrees
+/// a pair 0.75 m apart walks up to 0.32 m out of level, enough that two
+/// companions seen from the side show two shoulder lines, not one. A model
+/// choice within those observations, not a measured constant.
+pub const GROUP_STAGGER_RAD: f64 = 25.0 * std::f64::consts::PI / 180.0;
 
 /// What a walker is doing (`PEDESTRIAN_ACTIVITIES` + `AMBULATORY_ACTIVITIES`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -370,14 +379,68 @@ pub struct FootActivity {
     pub night: f32,
     pub storeys: f32,
     pub place: f32,
+    /// Where along the walk a walk-in shop fronts it: bit i for the i-th of
+    /// `SHOP_FRONT_SLOTS` equal stretches of its walking line, each the use
+    /// of the front found at its middle (0 without a frontage survey). Read
+    /// by `--people-windows` (`shop_front_at`).
+    pub shop_fronts: u64,
+}
+
+/// The stretches `FootActivity::shop_fronts` divides a walking line into.
+pub const SHOP_FRONT_SLOTS: usize = 64;
+
+impl FootActivity {
+    /// Whether a walk-in shop fronts the walk at arc `s` of its `length`.
+    pub fn shop_front_at(&self, s: f64, length: f64) -> bool {
+        if !(length > 0.0) || self.shop_fronts == 0 {
+            return false;
+        }
+        let k = ((s / length).clamp(0.0, 1.0) * SHOP_FRONT_SLOTS as f64) as usize;
+        self.shop_fronts >> k.min(SHOP_FRONT_SLOTS - 1) & 1 == 1
+    }
 }
 
 /// People a metre of a footway's walking line holds at `hour` (see above).
 pub fn footway_density(class_weight: f64, a: FootActivity, hour: f64) -> f64 {
+    footway_density_with(class_weight, a, hour, false)
+}
+
+/// `footway_density`, with (`evening`, eo-app `--people-evening`) the
+/// walk-in shops' share of the flow following a neighbourhood commercial
+/// street's day (`shop_footfall`) instead of the offices' (`hour_footfall`).
+pub fn footway_density_with(class_weight: f64, a: FootActivity, hour: f64, evening: bool) -> f64 {
     let day = hour_footfall(hour);
-    let flow = ((CROWD_FLOW_CLASS_PPH + CROWD_FLOW_STOREY_PPH * a.storeys as f64) * class_weight + CROWD_FLOW_SHOPS_PPH * a.shops as f64 + CROWD_FLOW_PLACE_PPH * a.place as f64) * day
+    let shops = if evening { shop_footfall(hour) } else { day };
+    let flow = ((CROWD_FLOW_CLASS_PPH + CROWD_FLOW_STOREY_PPH * a.storeys as f64) * class_weight + CROWD_FLOW_PLACE_PPH * a.place as f64) * day
+        + CROWD_FLOW_SHOPS_PPH * a.shops as f64 * shops
         + CROWD_FLOW_NIGHT_PPH * a.night as f64 * night_footfall(hour);
     flow / (3600.0 * PED_CRUISE_MODE)
+}
+
+/// (`--people-evening`) A neighbourhood commercial street's footfall (0..1)
+/// through the day. San Francisco Planning's public life study of 9th Avenue
+/// and Irving and of Upper Market and Castro (2008: ten-minute counts in each
+/// hour, times six, weekdays 8:00-23:00 and Saturdays 10:00-23:00, at three
+/// blocks of 9th and Irving and one each of Castro and Market Streets) found
+/// the evening's counts at about the day's: at 9th and Irving 200-850 people
+/// an hour a block, the three blocks' sum between 20:00 and 23:00 at 0.8-1.0
+/// of its 10:00-17:00 mean (one low hour at 18:00); Market Street's weekday
+/// peak was 20:00-21:00, and Castro Street's counts rose again between 21:00
+/// and 23:00. A street of shops, cafes and restaurants holds its walkers into
+/// the night as an office district (`hour_footfall`, 0.32 at 22:00) does not.
+/// Here: 1 from 9:00 to 17:00, 0.85 at 18:00, 0.8 from 19:00 to 22:00 (the
+/// counts, smoothed and taken at their low side); past 23:00, where the
+/// counts end, falling to `hour_footfall`'s small hours (INFERRED), and the
+/// morning before 8:00 as `hour_footfall`.
+pub fn shop_footfall(hour: f64) -> f64 {
+    const TABLE: [f64; 24] = [
+        0.20, 0.07, 0.05, 0.04, 0.05, 0.10, 0.24, 0.52, 0.85, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00,
+        0.85, 0.80, 0.80, 0.80, 0.80, 0.45,
+    ];
+    let h = if hour.is_finite() { ((hour % 24.0) + 24.0) % 24.0 } else { 12.0 };
+    let i = h.floor() as usize;
+    let f = h - i as f64;
+    TABLE[i % 24] * (1.0 - f) + TABLE[(i + 1) % 24] * f
 }
 
 /// The resident disc of the crowd by place and hour (`RegionConfig::crowd`).
@@ -390,6 +453,9 @@ pub struct CrowdDensity {
     pub max_bodies: usize,
     /// Multiplies every footway's density (eo-app `--agent-density`).
     pub scale: f64,
+    /// (eo-app `--people-evening`; false as before) the walk-in shops' flow
+    /// by a commercial street's day (`shop_footfall`).
+    pub evening: bool,
 }
 
 impl CrowdDensity {
@@ -401,6 +467,7 @@ impl CrowdDensity {
             in_shot_guard_m: CROWD_IN_SHOT_GUARD_M,
             max_bodies: CROWD_MAX_BODIES,
             scale,
+            evening: false,
         }
     }
 }

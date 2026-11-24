@@ -3,7 +3,7 @@
 //! walks of their own on a natively built network, and the resident disc
 //! holding what its footways hold, cuts included.
 
-use eo_sim::consts::{self, CrowdDensity, FootActivity, footway_density, hour_footfall, night_footfall};
+use eo_sim::consts::{self, CrowdDensity, FootActivity, footway_density, footway_density_with, hour_footfall, night_footfall, shop_footfall};
 use eo_sim::geom::length_in_disc;
 use eo_sim::native::{self, FrontEdge, NativeSource, PathWay};
 use eo_sim::region::{Focus, Region, RegionConfig};
@@ -25,8 +25,8 @@ fn a_line_is_clipped_to_the_disc() {
 #[test]
 fn density_follows_the_place_and_the_hour() {
     let none = FootActivity::default();
-    let towers = FootActivity { shops: 0.5, night: 0.1, storeys: 15.0, place: 0.0 };
-    let bars = FootActivity { shops: 0.3, night: 0.5, storeys: 3.0, place: 0.0 };
+    let towers = FootActivity { shops: 0.5, night: 0.1, storeys: 15.0, place: 0.0, ..none };
+    let bars = FootActivity { shops: 0.3, night: 0.5, storeys: 3.0, place: 0.0, ..none };
     let plaza = FootActivity { place: consts::PLACE_PEDESTRIAN, ..none };
     let per100 = |w: f64, a: FootActivity, h: f64| footway_density(w, a, h) * 100.0;
     // a residential street at noon: a person or two every 100 m; a service lane less.
@@ -486,4 +486,149 @@ fn corner_legs_keep_to_their_corner() {
     assert!(after > 20, "corner legs are still walked: {after}");
     assert_eq!(over_after, 0, "a corner leg crossed a street");
     assert!(over_before > 0, "the JS routing does cross some (the test sees them)");
+}
+
+/// (`--people-windows`, `RegionConfig::windows`) A window-shopping stop only
+/// in front of a shop's window: round SoMa with every footway's front a shop
+/// on one stretch of its line and a house on the next (fronts alternating
+/// every 12 m), every walker stopped to look in a window over four minutes
+/// stands where a shop fronts its walk (`FootActivity::shop_fronts`), and
+/// the masks hold both uses. Without the option browsers stand anywhere on
+/// such a walk, a house's front too (the JS's pause table).
+#[test]
+fn window_shoppers_stand_at_shop_windows() {
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let tiles = native::tiles_around(SOMA[0], SOMA[1], 600.0);
+    let plain = base.build(&tiles);
+    let mut edges = vec![];
+    for f in &plain.footways {
+        let out = [f.normal[0] * f.road_side as f64 * 3.0, f.normal[1] * f.road_side as f64 * 3.0];
+        for w in f.points.windows(2) {
+            let (a, b) = ([w[0][0] + out[0], w[0][1] + out[1]], [w[1][0] + out[0], w[1][1] + out[1]]);
+            let n = ((b[0] - a[0]).hypot(b[1] - a[1]) / 12.0).ceil().max(1.0) as usize;
+            for k in 0..n {
+                let (t0, t1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+                let at = |t: f64| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+                edges.push(FrontEdge { a: at(t0), b: at(t1), storeys: 3.0, shops: k % 2 == 0, night: false });
+            }
+        }
+    }
+    let src = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap().with_frontage(edges);
+    let mut net = Network::new(src.timing.clone());
+    net.add(src.build(&tiles));
+    let mixed = net.footways.iter().filter(|f| f.alive && f.length > 30.0).filter(|f| f.activity.shop_fronts != 0 && f.activity.shop_fronts != u64::MAX).count();
+    let long = net.footways.iter().filter(|f| f.alive && f.length > 30.0).count();
+    assert!(mixed * 10 > long * 7, "{mixed} of {long} long footways hold both uses");
+    let run = |windows: bool| {
+        let mut cfg = RegionConfig::game_default(1);
+        cfg.hour = 13.0;
+        cfg.crowd = Some(CrowdDensity::standard(1.0));
+        cfg.windows = windows;
+        let mut r = Region::new(&net, 0, cfg, Focus { x: SOMA[0], z: SOMA[1], yaw: 0.0 });
+        let (mut at_shop, mut elsewhere) = (0usize, 0usize);
+        for s in 1..=(240 * 60) {
+            r.step(&net, s as f64 / 60.0, 1.0 / 60.0);
+            if s % 30 != 0 {
+                continue;
+            }
+            for w in &r.crowd.walkers {
+                if w.activity != consts::Activity::Browse || w.leg.is_some() || w.ground_speed > 0.0 {
+                    continue;
+                }
+                let f = &net.footways[w.footway as usize];
+                if f.activity.shop_front_at(w.s, f.length) { at_shop += 1 } else { elsewhere += 1 }
+            }
+        }
+        (at_shop, elsewhere)
+    };
+    let (off_shop, off_else) = run(false);
+    let (on_shop, on_else) = run(true);
+    println!("browsing samples: without {off_shop} at a shop, {off_else} elsewhere; with {on_shop} at a shop, {on_else} elsewhere");
+    assert!(off_else > 0, "without the option some look into a house's front");
+    assert!(on_shop > 0 && on_else == 0, "with it every browser stands at a shop's window");
+}
+
+/// (`--people-stagger`, `RegionConfig::stagger`) A walking group's line is
+/// turned from square by its own angle: a pair keeps its 0.75 m apart, but
+/// one walks up to `GROUP_STAGGER_RAD` out of level, each pair its own way
+/// (both ways among the pairs, none past the limit); without the option every
+/// pair walks level. Measured on pairs walking with their leader, 0.75 m
+/// apart within 5 cm.
+#[test]
+fn walking_pairs_walk_a_shoulder_apart() {
+    let (net, _) = soma(true, false);
+    let run = |stagger: bool| {
+        let mut cfg = RegionConfig::game_default(1);
+        cfg.hour = 13.0;
+        cfg.crowd = Some(CrowdDensity::standard(1.0));
+        cfg.groups = true;
+        cfg.stagger = stagger;
+        let mut r = Region::new(&net, 0, cfg, Focus { x: SOMA[0], z: SOMA[1], yaw: 0.0 });
+        let mut offs = vec![];
+        for s in 1..=(120 * 60) {
+            r.step(&net, s as f64 / 60.0, 1.0 / 60.0);
+            if s % 60 != 0 {
+                continue;
+            }
+            let at: std::collections::HashMap<u32, usize> = r.crowd.walkers.iter().enumerate().map(|(i, w)| (w.key, i)).collect();
+            for (i, w) in r.crowd.walkers.iter().enumerate() {
+                let Some(p) = w.party.filter(|p| p.slot == 1 && p.size == 2 && p.at[0].is_finite()) else { continue };
+                let Some(&li) = at.get(&p.leader) else { continue };
+                let lead = &r.crowd.walkers[li];
+                if lead.ground_speed <= 0.0 || lead.leg.is_some() {
+                    continue;
+                }
+                // the member's place against the leader's, ahead along the frame's heading
+                let (fs, fc) = p.frame.sin_cos();
+                let (dx, dz) = (r.crowd.x[i] - r.crowd.x[li], r.crowd.z[i] - r.crowd.z[li]);
+                let d = dx.hypot(dz);
+                if (d - consts::GROUP_ABREAST_M).abs() < 0.05 {
+                    offs.push(dx * fs + dz * fc);
+                }
+            }
+        }
+        offs
+    };
+    let level = run(false);
+    let turned = run(true);
+    let most = consts::GROUP_ABREAST_M * consts::GROUP_STAGGER_RAD.sin();
+    println!("{} level samples, {} turned; turned out of level {:.2} to {:.2} m", level.len(), turned.len(), turned.iter().cloned().fold(f64::MAX, f64::min), turned.iter().cloned().fold(f64::MIN, f64::max));
+    assert!(level.len() > 50 && turned.len() > 50);
+    // (a pair re-forming after a stop, or turning a corner, steps through
+    // other places for a moment: the shares below are of every sample)
+    let share = |v: &[f64], f: &dyn Fn(f64) -> bool| v.iter().filter(|o| f(**o)).count() as f64 / v.len() as f64;
+    assert!(share(&level, &|o| o.abs() < 0.02) > 0.9, "level without the option");
+    assert!(share(&turned, &|o| o.abs() <= most + 0.02) > 0.9, "within the turn's limit");
+    assert!(share(&turned, &|o| o > 0.1) > 0.15 && share(&turned, &|o| o < -0.1) > 0.15, "each pair its own way");
+}
+
+/// (`--people-evening`, `CrowdDensity::evening`) A street of shops holds its
+/// walkers into the evening as San Francisco Planning's 2008 counts of 9th
+/// and Irving found (20:00-23:00 at 0.8-1.0 of the day's mean): with the
+/// option a shop-fronted walk at 21:00 and 22:00 holds at least 0.75 of its
+/// noon walkers, the day (9:00-17:00) is unchanged, and the small hours stay
+/// small; without it the walk follows the offices' day (a third of noon at
+/// 22:00). Fronts with no shops are the same either way.
+#[test]
+fn a_shopping_street_keeps_its_evening() {
+    let none = FootActivity::default();
+    let shops = FootActivity { shops: 0.8, storeys: 3.0, ..none };
+    let homes = FootActivity { storeys: 3.0, ..none };
+    let w = consts::sidewalk_class_weight("tertiary");
+    let noon = footway_density_with(w, shops, 12.0, true);
+    for h in [21.0, 22.0] {
+        let on = footway_density_with(w, shops, h, true);
+        let off = footway_density_with(w, shops, h, false);
+        assert!(on >= 0.65 * noon, "{h} h: {on} of {noon}");
+        assert!(off < 0.6 * noon, "{h} h without: {off} of {noon}");
+        assert_eq!(footway_density_with(w, homes, h, true), footway_density_with(w, homes, h, false));
+    }
+    for h in 9..=17 {
+        assert_eq!(shop_footfall(h as f64), 1.0);
+        assert!((footway_density_with(w, shops, h as f64, true) - footway_density(w, shops, h as f64)).abs() <= footway_density(w, shops, h as f64) * (1.0 - hour_footfall(h as f64)) + 1e-12);
+    }
+    for h in [2.0, 3.0, 4.0] {
+        assert!(shop_footfall(h) <= hour_footfall(h) + 1e-12);
+    }
+    assert_eq!(footway_density_with(w, shops, 15.5, false), footway_density(w, shops, 15.5));
 }

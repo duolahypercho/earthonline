@@ -158,6 +158,12 @@ pub struct WalkCtx<'a> {
     /// (`--people-groups`, `RegionConfig::groups`; false as before) social
     /// groups keep together, and window-shopping stops only at shop fronts.
     pub groups: bool,
+    /// (`--people-windows`, `RegionConfig::windows`; false as before) a
+    /// window-shopping stop only in front of a shop's window.
+    pub windows: bool,
+    /// (`--people-stagger`, `RegionConfig::stagger`; false as before) a
+    /// walking group's line turned by its own keyed angle.
+    pub stagger: bool,
 }
 
 /// `cadenceForSpeed(speed)` at the reference height, steps/s (gait-activity-contract.js).
@@ -253,7 +259,7 @@ impl Walker {
     }
 
     /// `advancePedestrianActivity`: returns whether the walker moves this step.
-    fn advance_activity(&mut self, net: &Network, hour: f64, dt: f64, groups: bool) -> bool {
+    fn advance_activity(&mut self, net: &Network, hour: f64, dt: f64, groups: bool, windows: bool) -> bool {
         if self.activity_timer.is_nan() {
             self.activity_leg = 0;
             self.activity_timer = 4.0 + walker_draw_salt(self.key, "seed") * 24.0;
@@ -306,7 +312,22 @@ impl Walker {
         // walk's frontage that is walk-in shops (none beside a blank wall, a
         // car park or houses; with the frontage survey, `--crowd`).
         let shops = net.footways[self.footway as usize].activity.shops as f64;
-        let weight = |e: &(Activity, f64, f64, f64, bool)| if groups && e.0 == Activity::Browse { e.1 * shops.clamp(0.0, 1.0) } else { e.1 };
+        // (`--people-windows`) and only in front of a shop's window: the front
+        // at the walker's own stretch of the walk, not the walk's share (a
+        // walk half shops, half houses had people looking into the houses'
+        // fronts and blank walls, standing with their faces to them).
+        let window = if windows { net.footways[self.footway as usize].activity.shop_front_at(self.s, total) as u8 as f64 } else { 1.0 };
+        let weight = |e: &(Activity, f64, f64, f64, bool)| {
+            if e.0 != Activity::Browse {
+                e.1
+            } else if windows {
+                e.1 * window
+            } else if groups {
+                e.1 * shops.clamp(0.0, 1.0)
+            } else {
+                e.1
+            }
+        };
         let mut weight_total = 0.0;
         for e in PAUSE_TABLE.iter() {
             if !e.4 || near_corner {
@@ -414,7 +435,7 @@ impl Crowd {
         }
         self.stats = stats;
         if ctx.groups {
-            self.keep_parties(ctx.net, dt, &leaders);
+            self.keep_parties(ctx.net, dt, &leaders, ctx.stagger);
         }
     }
 
@@ -442,7 +463,7 @@ impl Crowd {
     /// the window while it waits or looks in, on a circle facing its middle
     /// while it stands talking; each place reached at a side step's pace and
     /// each heading at a walker's turning rate.
-    fn keep_parties(&mut self, net: &Network, dt: f64, leaders: &HashMap<u32, usize>) {
+    fn keep_parties(&mut self, net: &Network, dt: f64, leaders: &HashMap<u32, usize>, stagger: bool) {
         let n = self.walkers.len();
         // The leaders' frames: their heading while they walk, held while they stand.
         for &li in leaders.values() {
@@ -491,7 +512,16 @@ impl Crowd {
             let (k, size) = (p.slot as f64, p.size as f64);
             let mid = k - (size - 1.0) / 2.0;
             let target = if moving {
-                [mid * GROUP_ABREAST_M, if p.size == 3 && p.slot == 1 { -GROUP_V_BACK_M } else { 0.0 }]
+                let back = if p.size == 3 && p.slot == 1 { -GROUP_V_BACK_M } else { 0.0 };
+                if stagger {
+                    // (`--people-stagger`) the abreast line turned by the group's
+                    // own angle (keyed by its leader), the V's middle still back.
+                    let turn = (2.0 * walker_draw_salt(p.leader, "stagger") - 1.0) * GROUP_STAGGER_RAD;
+                    let (ts, tc) = turn.sin_cos();
+                    [mid * GROUP_ABREAST_M * tc, mid * GROUP_ABREAST_M * ts + back]
+                } else {
+                    [mid * GROUP_ABREAST_M, back]
+                }
             } else if line && lead.kerb.is_some() {
                 // at the kerb the leader stands at the crossing's foot; the
                 // others along the kerb behind it, none past it into the junction.
@@ -917,7 +947,7 @@ fn step_walker(ctx: &WalkCtx, w: &mut Walker, dt: f64, stats: &mut CrowdStats) {
     let net = ctx.net;
     let waiting = update_kerb_wait(ctx, w, dt, stats);
     let on_leg = w.leg.is_some();
-    let scheduled = if waiting || on_leg { false } else { w.advance_activity(net, ctx.hour, dt, ctx.groups) };
+    let scheduled = if waiting || on_leg { false } else { w.advance_activity(net, ctx.hour, dt, ctx.groups, ctx.windows) };
     if on_leg {
         w.activity = Activity::Walk;
         w.facing = Facing::Keep;
