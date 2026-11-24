@@ -415,6 +415,9 @@ fn street_surface(in: VOut, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -
         // weathering (`--grime`, weathering.wgsl): aged walks, chipped kerbs, a patched and sealed carriageway.
         wx_street(&s, in.world, in.rel, cls, in.aux.y * 6.35, dpx, dpy);
     }
+    if (SF_STREET_PBR) {
+        sp_street(&s, in.world, in.rel, cls, in.aux.y * 6.35, n_geom, dpx, dpy, in.color); // the physically based street (`--street-pbr`, street_pbr.wgsl)
+    }
     sky_wet_street(&s, in.world, n_geom, in.aux.y * 6.35, !concrete); // wet ground, puddles, rain rings
     return s;
 }
@@ -1036,6 +1039,10 @@ fn shade(in: VOut) -> vec4<f32> {
                 cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry, scan_bare);
                 if (wx_level() != 0u && paint_kind == 7u) {
                     wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
+                }
+                if (SF_STREET_PBR && paint_kind == 7u) {
+                    sp_paint_wear(&s, in.world, in.aux.y * 6.35, dpx, dpy); // (`--street-pbr`) worn to the road, cracked with it
+                    sp_paint_wet(&s); // (`--street-pbr`, street_pbr.wgsl) the markings wet with the street
                 }
             } else {
                 s.rough = ST_CONCRETE_ROUGHNESS;

@@ -60,6 +60,7 @@ pub mod upload;
 pub mod view_detail;
 pub mod weathering; // surface weathering that reads (`--grime`, stage W1)
 pub mod street_life; // litter, graffiti, posters (`--street-life`, stage W2b)
+pub mod street_pbr; // the street's physically based surface (`--street-pbr`)
 pub mod seabed;
 pub mod water; // water
 pub mod surf; // the surf strip along the beaches

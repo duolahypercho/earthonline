@@ -246,11 +246,25 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
     // and seen far: their scan fades out between 150 and 220 m, where its mips
     // are close to their mean.
     var vfade = 1.0;
+    if (SF_STREET_PBR && mode == CC0_MODE_PLAZA) {
+        // (`--street-pbr`, street_pbr.wgsl) the paving at its material's albedo, at every distance
+        (*s).albedo = (*s).albedo * sp_pave_cal(layer);
+    }
     if (vertex_colour) {
         vfade = 1.0 - smoothstep(150.0, 220.0, dist);
         if (vfade <= 0.0) {
             return false;
         }
+    }
+    if (SF_STREET_PBR && mode == CC0_MODE_PLAZA && n.y > 0.9) {
+        // (`--street-pbr`, street_pbr.wgsl) the paving's scan stochastically tiled (the random setts), in relief, self-shadowed
+        let pv = sp_pave(layer, world.xz, dpx.xz, dpy.xz, world, layer == CC0_L_COBBLESTONE_FLOOR_08);
+        (*s).albedo = mix((*s).albedo, (*s).albedo * max(mix(vec3<f32>(1.0), pv.alb, e3.z), vec3<f32>(0.0)), vfade);
+        (*s).rough = clamp((*s).rough * mix(1.0, pv.rough, 0.7 * vfade), 0.04, 1.0);
+        (*s).ao = mix((*s).ao, clamp(mix(1.0, pv.ao, 0.85), 0.25, 1.0), vfade);
+        (*s).n = normalize(n + vec3<f32>(pv.tn.x, 0.0, pv.tn.y) * e2.w * vfade);
+        cc0_wall_hit = true;
+        return true;
     }
     if (cc0_on(CC0_RUN_POM) && e3.x > 0.0 && dist < CC0_POM_FAR) {
         let v = to_eye / max(dist, 1e-4);
@@ -545,6 +559,20 @@ fn cc0_street_concrete(f: ptr<function, StTap>, p: vec2<f32>, gx: vec2<f32>, gy:
             plaza = true;
         }
     }
+    if (SF_STREET_PBR && plaza) {
+        // (`--street-pbr`, street_pbr.wgsl) the pavers' scan stochastically tiled (the random setts),
+        // in relief and self-shadowed, through the same post terms as below.
+        let pv = sp_pave(la, p, gx, gy, world, la == CC0_L_COBBLESTONE_FLOOR_08);
+        // at its material's albedo: the post's 0.92 share of the pattern carries the scale over the tint's concrete base
+        let cal = max((sp_pave_cal(la) / max(ST_CONCRETE_BASE, 1e-3) - 0.08) / 0.92, 0.05);
+        cc0_p_plaza = vec4<f32>(pv.alb * cal, 0.92);
+        cc0_p_n = vec3<f32>(pv.tn, 1.0);
+        (*f).albedo = mean;
+        (*f).rough = pv.rough * mean_rough;
+        (*f).ao = clamp(pv.ao * mean_ao, 0.0, 1.0);
+        (*f).tn = vec2<f32>(0.0);
+        return;
+    }
     let ia = cc0_linv(la);
     let t = cc0_tap(p * ia, gx * ia, gy * ia, la);
     var alb = t.alb.rgb / max(cc0_lmean(la).rgb, vec3<f32>(1e-3));
@@ -665,8 +693,11 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     // The tooled border along each joint: troweled smooth (lighter, less rough) inside the broomed field.
     let border = pitch * CC0_TOOLED_EDGE_FRAC;
     let band = (1.0 - smoothstep(border * 0.85, border * 1.15 + fw, dj)) * fade;
-    (*s).albedo = (*s).albedo * (1.0 + 0.045 * band);
-    (*s).rough = clamp((*s).rough - 0.1 * band, 0.04, 1.0);
+    if (!SF_STREET_PBR) {
+        // (`--street-pbr` draws the joints as dark recessed grooves instead: no lighter, glossier border to glint)
+        (*s).albedo = (*s).albedo * (1.0 + 0.045 * band);
+        (*s).rough = clamp((*s).rough - 0.1 * band, 0.04, 1.0);
+    }
     // The broom finish: fine striations across the walk in the field, only where a pixel resolves them.
     let broom_fade = (1.0 - smoothstep(0.004, 0.012, fa)) * (1.0 - band);
     if (broom_fade > 0.0) {
@@ -695,7 +726,9 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     let ta = normalize(vec3<f32>(tan.x, 0.0, tan.y) - n_geom * dot(vec3<f32>(tan.x, 0.0, tan.y), n_geom));
     let tc = normalize(vec3<f32>(nrm.x, 0.0, nrm.y) - n_geom * dot(vec3<f32>(nrm.x, 0.0, nrm.y), n_geom));
     let lean = ta * (sign(sa) * ga) + tc * (sign(sc) * gc);
-    (*s).n = normalize((*s).n + lean * 0.45 * fade);
+    if (!SF_STREET_PBR) {
+        (*s).n = normalize((*s).n + lean * 0.45 * fade);
+    }
 }
 
 fn cc0_reset_post() {
@@ -832,7 +865,14 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     let fw = length(gxa) + length(gya);
                     let seam = 1.0 - smoothstep(0.02, 0.02 + fw, abs(edge - 0.03));
                     cc0_p_dark = cc0_p_dark * 0.74 * (1.0 - 0.35 * seam);
-                    cc0_p_rough = vec2<f32>(mean_rough * 0.82, max(cc0_p_rough.y, 1.0));
+                    // (`--street-pbr`: the hot-mix as open-textured as the road round it, no sheen of its own)
+                    cc0_p_rough = vec2<f32>(mean_rough * select(0.82, 1.0, SF_STREET_PBR), max(cc0_p_rough.y, 1.0));
+                    if (SF_STREET_PBR) {
+                        // (`--street-pbr`, street_pbr.wgsl) the saw cut sealed with a bead of binder, drawn as bitumen
+                        let ea = d1.x - abs(along) < d1.y - abs(across);
+                        let out_dir = select(px * sign(across), ax * sign(along), ea);
+                        sp_note_seal(seam, seam, 0.5 + 0.5 * fract(seed * 7.31), (0.03 - edge) / 0.02, 0.02, out_dir);
+                    }
                 }
             } else if (kind == CC0_DK_CRACK || kind == CC0_DK_WALK_CRACK) {
                 if ((asphalt && kind == CC0_DK_CRACK) || (walk && kind == CC0_DK_WALK_CRACK)) {
@@ -1024,6 +1064,9 @@ fn cc0_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, a
     }
     let nrm = g / gl;
     let tan = vec2<f32>(-nrm.y, nrm.x);
+    if (SF_STREET_PBR) {
+        sp_paint_edge(s, an, gl, nrm, max(length(dpx), length(dpy))); // (`--street-pbr`) the raised line's edges
+    }
     let w0 = CC0_PAINT_STRIPE_M;
     // The scan's stripe interior (u 0.30-0.70) is about 0.4 of its 256 px width; its 1024 px run along v.
     let rep = w0 / 0.4 * 4.0;

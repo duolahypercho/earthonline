@@ -388,6 +388,10 @@ fn wx_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, fw: f32,
         // binder over the road: its own tone, but never lighter than the road under it.
         (*s).albedo = mix((*s).albedo, min((*s).albedo, vec3<f32>(tone)), k);
         (*s).rough = mix((*s).rough, mix(WX_SNAKE_ROUGH, WX_SNAKE_ROUGH_AGED, age), k);
+        if (SF_STREET_PBR) {
+            // (`--street-pbr`, street_pbr.wgsl) the sealant drawn as its own material: the fragment across the bead
+            sp_note_seal(k, bead * on, age, dot(pm - 0.5 * (a + b), e) / max(hw, 1e-4), hw, t * e.x + n * e.y);
+        }
     } else {
         // an open crack: a hairline whose width wanders, darkened by its shadow.
         let hw = WX_CRACK_HAIR_M * (0.5 + 1.0 * st_noise(world.xz / 0.4 + 3.3));
@@ -395,6 +399,9 @@ fn wx_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, fw: f32,
         let ravel = wx_band(d, hw * WX_CRACK_RAVEL, fw) * on * (0.5 + st_noise(world.xz / 0.25 + 6.6));
         (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * k) * (1.0 - WX_CRACK_RAVEL_DARK * clamp(ravel, 0.0, 1.0));
         (*s).rough = min(1.0, (*s).rough + 0.1 * k);
+        if (SF_STREET_PBR) {
+            sp_note_crack(k + 0.4 * ravel); // (`--street-pbr`) the crack's walls occlude its floor
+        }
     }
 }
 
@@ -409,9 +416,13 @@ fn wx_road(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
         return;
     }
     if (cls == SC_ASPHALT && kd >= 0.0 && dist < WX_QUILT_FAR) {
-        let r = wx_run(rel, g, WX_QUILT_CELL_M);
-        if (r.ok) {
-            wx_quilt(s, r, kd, fw);
+        if (SF_STREET_PBR) {
+            sp_quilt(s, world, fw); // (`--street-pbr`) the quilt in the road's own frame, sealed and eased
+        } else {
+            let r = wx_run(rel, g, WX_QUILT_CELL_M);
+            if (r.ok) {
+                wx_quilt(s, r, kd, fw);
+            }
         }
     }
     if (dist < WX_SNAKE_FAR) {

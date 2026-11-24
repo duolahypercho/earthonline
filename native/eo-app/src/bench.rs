@@ -1798,6 +1798,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     out["stand_ins"] = crate::quality::stand_ins_json(args); // procedural models for absent prop GLBs (`--stand-ins`)
     out["surveyed_furniture"] = crate::quality::surveyed_furniture_json(args); // the furniture walk's mode (`--surveyed-furniture`)
     out["tree_basins"] = crate::quality::tree_basins_json(args); // the street trees' basins (`--tree-basins`)
+    out["street_pbr"] = serde_json::json!(crate::street_pbr()); // the street's physically based surface (`--street-pbr`)
     out["car_detail"] = crate::quality::car_detail_json(args); // far bodies and nearer full-detail cars (`--car-detail`)
     out["photo_finish"] = crate::quality::photo_finish_json(args); // the camera, the air, the lens (`--photo-finish`)
     out["facade_clutter"] = crate::quality::facade_clutter_json(args); // fire escapes, awnings, signs (`--facade-clutter`)

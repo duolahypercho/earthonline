@@ -80,6 +80,7 @@ pub fn cc0_survey(city: &City) {
 /// and the skirts of the Blender-built buildings.
 pub fn prepare(world: Arc<StreetWorld>, group_base: u32, authored: &mut AuthoredSet, city: &City, palette: Option<StreetPalette>) -> (StreetSet, StreetStatic, Vec<Skirt>) {
     cc0_survey(city); // before any street tile places its decals
+    eo_render::street::set_smooth_carriageway(crate::street_pbr()); // (`--street-pbr`) before any street tile is cooked
     let t = std::time::Instant::now();
     let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
     let (set, st) = StreetSet::prepare(world.clone(), group_base, palette, threads);

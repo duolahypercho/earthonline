@@ -186,6 +186,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     var key = vec3<f32>(0.0);
     if (nl > 0.0 && dot(ng, l) > -0.05) {
         key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng); // cloud and contact shadows
+        if (SF_STREET_PBR) {
+            key = key * sp_sun_vis; // (`--street-pbr`, street_pbr.wgsl) the paving's own relief over the key
+        }
     }
     var direct_d = key * diffuse / LK_PI;
     var direct_s = key * lk_ggx(n, v, l, f0, rough);
