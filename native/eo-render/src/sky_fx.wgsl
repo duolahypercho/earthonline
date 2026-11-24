@@ -133,7 +133,12 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     out.uv = c * size;
     // Luminance of the lens: the intensity over its projected area (`--night-photometry`: toward the eye).
     let eye = fx_eye_share(l);
-    let lens = lum.w * eye / (FX_LENS_M * FX_LENS_M * 3.14159) * (FX_LENS_M / core) * (FX_LENS_M / core);
+    var lens = lum.w * eye / (FX_LENS_M * FX_LENS_M * 3.14159) * (FX_LENS_M / core) * (FX_LENS_M / core);
+    if (SF_LUMINAIRES && (u32(l.pad) & 4u) != 0u) {
+        // (`--luminaires`) its fixture's lit glass is drawn (props_draw.wgsl `pr_lamp_glass`):
+        // no core over it; the core comes back as the fixture nears its draw distance.
+        lens = lens * smoothstep(0.75 * LUM_GLASS_CUT_M, 0.95 * LUM_GLASS_CUT_M, length(rel));
+    }
     out.color = vec4<f32>(l.color * lens, core);
     // z: (lighting, `--lit-fog`) the share of the lamp's air light the lit fog's
     // volume already draws, not added twice: within the clusters' far depth, and
@@ -352,7 +357,7 @@ fn glitter_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) 
     var out: FxOut;
     out.clip = vec4<f32>(0.0, 0.0, -1.0, 1.0);
     let l = fx_lights[ii];
-    if (vi >= 6u || (l.kind != 0u && l.kind != 3u) || u32(l.pad) < 2u || !sky_on(skyu.flags.x, SKY_SPRITES)) {
+    if (vi >= 6u || (l.kind != 0u && l.kind != 3u) || (u32(l.pad) & 2u) == 0u || !sky_on(skyu.flags.x, SKY_SPRITES)) { // (bit 1: by the water; bit 2 `--luminaires`)
         return out;
     }
     // The lens, as the luminaire sprite draws it.

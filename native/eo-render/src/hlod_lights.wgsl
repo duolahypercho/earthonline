@@ -64,7 +64,15 @@ fn far_lamp_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     // area its pixels cover (the Gaussian below, exp(-3 r^2), integrates to
     // pi (1 - e^-3) / 3 = 0.317 pi over the unit disc), with the fog's transmittance.
     // candela -> the rig's units (sky.rs: the lights' scale is lamp_k x lamps_on; lamp_k rides bloom_w2.z).
-    let intensity = l.candela * skyu.bloom_w2.z * lamps_on;
+    var intensity = l.candela * skyu.bloom_w2.z * lamps_on;
+    // (`--lamp-units`) each far lamp is a unit as the near gather draws it (its seed where it stands,
+    // the same f32 position as the gather's record): off, failed or at its own output and colour bin.
+    let units = SF_LAMP_UNITS && (skyu.flags.x & LU_BIT) != 0u;
+    let seed = lu_seed_at(l.pos);
+    intensity = intensity * lu_factor(seed, lamps_on, units);
+    if (intensity <= 0.0) {
+        return out;
+    }
     var vd = z;
     if (skyu.flags.x != 0u) {
         let u = max(abs(l.pos.y - look.cam_pos.y) - 20.0, 0.0) / 400.0;
@@ -74,7 +82,7 @@ fn far_lamp_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     }
     let trans = 1.0 - lk_smooth(look.fog.x, look.fog.y, vd);
     let area = 3.14159265 * r_m * r_m * 0.317;
-    out.rad = ls_led(l.color) * (intensity / max(area, 1e-4)) * trans * fade; // (lighting, `--light-shadows`: SF's LED lamps; as given otherwise)
+    out.rad = ls_led(l.color) * lu_tint(seed, units) * (intensity / max(area, 1e-4)) * trans * fade; // (lighting, `--light-shadows`: SF's LED lamps; as given otherwise)
     return out;
 }
 

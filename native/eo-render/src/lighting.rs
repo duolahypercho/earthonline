@@ -253,6 +253,12 @@ mod tests {
         sets.push(("urban sky".into(), look::ShaderFeatures { urban_sky: true, night_photometry: true, ..none })); // (`--urban-sky`)
         sets.push(("office floors".into(), look::ShaderFeatures { office_floors: true, ..none })); // (`--office-floors`)
         sets.push(("room depth".into(), look::ShaderFeatures { room_depth: true, ..none })); // (`--room-depth`)
+        sets.push(("lamp units".into(), look::ShaderFeatures { lamp_units: true, ..none })); // (`--lamp-units`)
+        sets.push(("luminaires".into(), look::ShaderFeatures { luminaires: true, ..none })); // (`--luminaires`)
+        sets.push(("lamp units, luminaires, cinematic, night photometry".into(), look::ShaderFeatures { lamp_units: true, luminaires: true, cinematic: true, night_photometry: true, ..none }));
+        sets.push(("rear lamps, cinematic".into(), look::ShaderFeatures { rear_lamps: true, cinematic: true, ..none })); // (`--rear-lamps`)
+        sets.push(("signal spill, cinematic".into(), look::ShaderFeatures { signal_spill: true, cinematic: true, ..none })); // (`--signal-spill`)
+        sets.push(("lit rooms, room depth".into(), look::ShaderFeatures { lit_rooms: true, room_depth: true, ..none })); // (`--lit-rooms`)
         for bit in [look::NATURE_FOLIAGE, look::NATURE_LOD_FADE, look::NATURE_TURF, look::NATURE_PALM, look::NATURE_HILLS, look::NATURE_COVER, look::NATURE_FOLIAGE | look::NATURE_PALM, look::NATURE_TURF | look::NATURE_COVER, look::NATURE_ALL] {
             sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`)
         }
@@ -332,7 +338,7 @@ mod tests {
             lighting: LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true },
             grime: 2,
             street_life: 1,
-            sky: crate::sky::SkyOptions { shop_light: 2, night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, ..o.sky },
+            sky: crate::sky::SkyOptions { shop_light: 2, night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, ..o.sky },
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
@@ -351,6 +357,7 @@ mod tests {
         assert!(!none.sky.night_photometry, "(`--night-photometry`) compiled out, off");
         assert!(!none.sky.lamp_bounce && !none.sky.urban_sky, "(`--lamp-bounce`, `--urban-sky`) compiled out, off");
         assert!(!none.sky.office_floors && !none.sky.room_depth, "(`--office-floors`, `--room-depth`) compiled out, off");
+        assert!(!none.sky.lamp_units && !none.sky.luminaires && !none.sky.rear_lamps && !none.sky.signal_spill && !none.sky.lit_rooms, "(`--lamp-units`, `--luminaires`, `--rear-lamps`, `--signal-spill`, `--lit-rooms`) compiled out, off");
         assert!(same(&none, &look::LookOptions { lighting: LightingOptions::OFF, grime: 0, street_life: 0, sky: o.sky, ..on }), "nothing else changes");
         // each lighting bit keeps only its own option.
         let blend_only = look::ShaderFeatures { lx_bits: look::LX_BIT_CASCADE_BLEND, ..look::ShaderFeatures::NONE }.limit(&on);

@@ -68,6 +68,10 @@ fn prop_vs(
     out.normal = pr_rot(inst.yaw, normal.xyz / max(inst.scale, vec3<f32>(1e-3)));
     out.uv = uv;
     out.color = srgb_decode(color.rgb);
+    if (SF_LUMINAIRES && color.a < 0.9) {
+        // (`--luminaires`) a district light's lit glass: its radiance (`pr_lamp_glass`) in the colour
+        out.color = pr_lamp_glass(color, inst, pos, normalize(look.cam_pos.xyz - world));
+    }
     out.material = material;
     out.inst = idx;
     out.local = pos;
@@ -718,6 +722,47 @@ fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: ve
     return thin;
 }
 // sf:end
+// ---- (`--luminaires`) a district light's lit glass ----
+// eo-render props_lib `luminaire_sockets`, props_lib2 `add_mesh_glow`: a glass
+// vertex's colour carries its socket's shading (r its area / 0.5 m^2, g the
+// socket's height / 10 m (model), b its share of the post's light, a 0.25 a
+// lantern or 0.5 a lens; every other vertex's alpha is 1). Shaded in the
+// vertex stage (the lit fragment stands at Apple's compiler's limit), its
+// radiance handed to the fragment in the colour. The lamp's intensity is the gather's for that socket
+// (sky_lights.wgsl `lights_props` under the look: the RP-8 pool's nadir from
+// the socket's height, its share, its unit's factor); the glass shows it as:
+// kind 1, a lantern's frosted panes, seen from the side: the intensity over
+// the panes' projected area, brightest level with the lamp inside; kind 2, a
+// cobra head's flat lens facing down: I(theta) / (A cos theta), its intensity
+// toward the eye by the full-cutoff tail (eo-sky lit_fog `luminaire_shape`), dark
+// from above. Linear radiance in the lamps' units (x the practicals' gain
+// taken back off by the caller's division).
+const PR_LAMP_GLOW: u32 = 1048576u; // props_lib P_LAMP_GLOW (1 << 20)
+fn pr_lamp_glass(c: vec4<f32>, inst: PrInstance, local: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
+    if ((skyu.flags.x & LUM_BIT) == 0u) {
+        return vec3<f32>(0.0);
+    }
+    let g = vec4<f32>(select(1.0, 2.0, c.a > 0.375), c.r * 0.5, c.g * 10.0, c.b);
+    let units = SF_LAMP_UNITS && (skyu.flags.x & LU_BIT) != 0u;
+    let uf = lu_factor(inst.pad, skyu.night.x, units);
+    let h = g.z * inst.scale.y;
+    let i = LUM_POOL_PEAK_LUX * skyu.bloom_w2.z * skyu.night.x * h * h * g.w * uf;
+    var l = 0.0;
+    if (g.x < 1.5) {
+        let dy = (local.y - g.z) / 0.2;
+        l = i / max(g.y, 1e-3) * (0.55 + 0.9 * exp(-dy * dy));
+    } else {
+        let c = -v.y;
+        if (c > 0.0) {
+            let tail = pow(min(c / LUM_EYE_FULL_COS, 1.0), LUM_EYE_TAIL_POWER);
+            let share = clamp((1.0 + 1.5 * (1.0 - c * c)) * tail, 0.03, 1.0);
+            l = i * share / (max(g.y, 1e-3) * max(c, 0.05));
+        }
+    }
+    let col = select(LUM_COLOR_WARM, LUM_COLOR_LED, inst.model == LUM_MODEL_COBRA);
+    return col * lu_tint(inst.pad, units) * l;
+}
+
 fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     var m = materials[in.material];
     let inst = pr_instances[in.inst];
@@ -832,6 +877,12 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let hue = select(vec3<f32>(0.85, 0.85, 0.8), pr_lens[1].rgb * 0.6, hand);
         m.emissive = vec4<f32>(select(hue * 0.04, hue, lit) * pr.lens.x, 0.0);
         s.albedo = vec3<f32>(0.02);
+    }
+    if (SF_LUMINAIRES && (m.flags & PR_LAMP_GLOW) != 0u) {
+        // (`--luminaires`) a district light's glass lit by its own lamp (`pr_lamp_glass`, in the
+        // vertex stage: its radiance rides the colour), over the glass's small diffuse return.
+        m.emissive = vec4<f32>(in.color * lk_practical_gain(), 0.0);
+        s.albedo = m.base.rgb * albedo_tex.rgb * 0.3;
     }
     // (`--night-photometry`) a lens's radiance is solved in display terms (x 1 / exposure):
     // look_light's practicals' gain does not apply to it (it lit the dark aspects).

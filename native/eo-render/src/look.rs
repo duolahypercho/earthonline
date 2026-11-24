@@ -780,6 +780,18 @@ pub struct ShaderFeatures {
     pub office_floors: bool,
     /// Lit homes and shops seen from the night street (`--room-depth`; `SF_ROOM_DEPTH`, rooms.wgsl).
     pub room_depth: bool,
+    /// The street lamps as units (`--lamp-units`; `SF_LAMP_UNITS`: each switched on by its own
+    /// control, its output, colour bin and faults; sky_lights.wgsl, hlod_lights.wgsl, props_draw.wgsl).
+    pub lamp_units: bool,
+    /// The luminaires' own optics (`--luminaires`; `SF_LUMINAIRES`: the lamp in its lantern
+    /// or lens, the glass lit by it, no sprite orb where the fixture is drawn).
+    pub luminaires: bool,
+    /// The vehicles' rear lamps as lights (`--rear-lamps`; `SF_REAR_LAMPS`, sky_lights.wgsl).
+    pub rear_lamps: bool,
+    /// The signals' lit lenses as lights (`--signal-spill`; `SF_SIGNAL_SPILL`, sky_lights.wgsl).
+    pub signal_spill: bool,
+    /// Lit homes on the lamps' photometric scale (`--lit-rooms`; `SF_LIT_ROOMS`, rooms.wgsl).
+    pub lit_rooms: bool,
     /// The natural-detail bits compiled in (`NATURE_*`; their `// sf:` blocks, `sf_select`).
     /// New code with no runtime test: `ALL` leaves it out, as the shaders were before it.
     pub nature: u32,
@@ -798,7 +810,7 @@ impl ShaderFeatures {
         wet_surfaces: true, screen_reflect: true, // the reflect track
         camera: true, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
-        night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, // the night track
+        night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, // the night track
         nature: 0, // the nature track
     };
     /// No feature compiled in (the default frame's pipelines).
@@ -810,7 +822,7 @@ impl ShaderFeatures {
         wet_surfaces: false, screen_reflect: false, // the reflect track
         camera: false, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
-        night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, // the night track
+        night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, // the night track
         nature: 0, // the nature track
     };
 
@@ -846,6 +858,11 @@ impl ShaderFeatures {
             urban_sky: o.sky.urban_sky,
             office_floors: o.sky.office_floors,
             room_depth: o.sky.room_depth,
+            lamp_units: o.sky.lamp_units,
+            luminaires: o.sky.luminaires,
+            rear_lamps: o.sky.rear_lamps,
+            signal_spill: o.sky.signal_spill,
+            lit_rooms: o.sky.lit_rooms,
             nature: o.nature & NATURE_ALL,
         }
     }
@@ -919,6 +936,11 @@ impl ShaderFeatures {
         l.sky.urban_sky &= self.urban_sky;
         l.sky.office_floors &= self.office_floors;
         l.sky.room_depth &= self.room_depth;
+        l.sky.lamp_units &= self.lamp_units;
+        l.sky.luminaires &= self.luminaires;
+        l.sky.rear_lamps &= self.rear_lamps;
+        l.sky.signal_spill &= self.signal_spill;
+        l.sky.lit_rooms &= self.lit_rooms;
         l.nature &= self.nature;
         l
     }
@@ -962,11 +984,16 @@ impl ShaderFeatures {
                 ("SF_URBAN_SKY", self.urban_sky),
                 ("SF_OFFICE_FLOORS", self.office_floors),
                 ("SF_ROOM_DEPTH", self.room_depth),
+                ("SF_LAMP_UNITS", self.lamp_units),
+                ("SF_LUMINAIRES", self.luminaires),
+                ("SF_REAR_LAMPS", self.rear_lamps),
+                ("SF_SIGNAL_SPILL", self.signal_spill),
+                ("SF_LIT_ROOMS", self.lit_rooms),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
             .collect::<String>(),
-            penumbra_wgsl()
+            penumbra_wgsl() + &crate::sky::lamp_units_wgsl_with(self.lamp_units) // (`--lamp-units`) the units' functions (LU_ON its compile flag)
         )
     }
 }
@@ -2123,6 +2150,14 @@ impl LookGpu {
         self.post_source.store(r.map(|p| p as u32 + 1).unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// (bench captures) The look's and the sky's frame counters restart at
+    /// `frame` (sky.rs `reset_frame_phase`; here the grain's and the photo
+    /// finish's phase), so a capture's frames do not depend on its settle's length.
+    pub fn reset_frame_phase(&self, frame: u32) {
+        self.state.lock().unwrap().frame_index = frame;
+        self.sky.reset_frame_phase(frame);
+    }
+
     /// The clock (hours, 0..24); the sky model and light rig follow on the next update.
     pub fn set_time_of_day(&self, hour: f64) {
         let mut s = self.state.lock().unwrap();
@@ -2236,6 +2271,7 @@ impl LookGpu {
                 let fi = s.frame_index;
                 let (mut f, mut terms) = s.keys.frame(h, inputs, fi, true);
                 self.cinematic_night(&mut f, terms.as_mut());
+                Self::lamp_units(opts.lamp_units, &f, terms.as_mut()); // (`--lamp-units`)
                 self.night_photometry(opts.night_photometry, &mut f, terms.as_mut()); // (`--night-photometry`)
                 s.frame = Some(f);
                 s.terms = terms;
@@ -2255,6 +2291,7 @@ impl LookGpu {
                 }
                 let (mut f, mut terms) = eo_sky::frame::look_frame_from_with(&s.sky_base.as_ref().unwrap().2, &c, t, fo);
                 self.cinematic_night(&mut f, Some(&mut terms));
+                Self::lamp_units(opts.lamp_units, &f, Some(&mut terms)); // (`--lamp-units`)
                 self.night_photometry(opts.night_photometry, &mut f, Some(&mut terms)); // (`--night-photometry`)
                 s.frame = Some(f);
                 s.terms = Some(terms);
@@ -2308,6 +2345,18 @@ impl LookGpu {
     /// `frame` has built (after `cinematic_night`): the lamps' units per lux
     /// with the practicals' gain and the exposure's night share metered on the
     /// lit street (eo-sky `night_photometry::apply`). Nothing without the switch.
+    /// (`--lamp-units`) the share of the city's lamp units switched on
+    /// (eo-sky `lamp_units::population_on`: none in sun, all by the blue hour,
+    /// earlier under cloud) in place of the JS's one dimmer; the shaders turn
+    /// each unit on or off by it (`lu_factor`).
+    fn lamp_units(on: bool, f: &LookFrame, terms: Option<&mut eo_sky::SkyTerms>) {
+        if !on {
+            return;
+        }
+        let Some(t) = terms else { return };
+        t.lamps_on = eo_sky::lamp_units::population_on(f.model.sun.altitude_deg, t.weather.profile.brightness);
+    }
+
     fn night_photometry(&self, on: bool, f: &mut LookFrame, terms: Option<&mut eo_sky::SkyTerms>) {
         if !on {
             return;

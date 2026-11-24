@@ -865,7 +865,7 @@ mod tests {
         assert_eq!(size("LsFrame"), (frame_rows() * 16) as u32);
         assert_eq!(size("LsRec"), 32);
         // the sky's light parameters as the gather declares them
-        let sky = naga::front::wgsl::parse_str(&format!("{}\n{}\nconst LT_TILE_M: f32 = 1.0;\n{}{}", include_str!("sky_common.wgsl"), crate::sky::sea_wgsl(), crate::shop_lights::wgsl() + &crate::sky::cine_lamps_wgsl(true) + &crate::sky::night_photometry_wgsl() + &crate::sky::lamp_bounce_wgsl(), include_str!("sky_lights.wgsl"))).unwrap();
+        let sky = naga::front::wgsl::parse_str(&format!("{}\n{}\nconst LT_TILE_M: f32 = 1.0;\n{}{}", include_str!("sky_common.wgsl"), crate::sky::sea_wgsl(), crate::shop_lights::wgsl() + &crate::sky::cine_lamps_wgsl(true) + &crate::sky::night_photometry_wgsl() + &crate::sky::lamp_bounce_wgsl() + &crate::sky::lamp_units_wgsl(), include_str!("sky_lights.wgsl"))).unwrap();
         let lt = sky.types.iter().find(|(_, t)| t.name.as_deref() == Some("LtParams")).map(|(_, t)| t.inner.size(sky.to_ctx())).unwrap();
         assert_eq!(size("LsLt"), lt);
     }
