@@ -512,22 +512,253 @@ pub fn weather_marks(planned: &eo_kit::pipeline::Planned, rung: u32, mesh: &eo_k
 /// The depth under the sill a step of the normal's y byte stands for (127 steps: 6.35 m).
 pub const WEATHER_DEPTH_STEP_M: f64 = 0.05;
 
+/// (`--window-depth`) The meta flag on a floor band's piece under one opening of a split ribbon.
+pub const WD_BAY_META: &str = "wdBay";
+/// (`--window-depth`) A step of a pane's packed reveal depth (4 bits an axis: 0-0.45 m).
+pub const WD_DEPTH_STEP_M: f64 = 0.03;
+
+/// (`--window-depth`, `facade::window_depth_from_args`) A near-rung plan
+/// whose ribbon glass behind piers and floor bands (a downtown tower's
+/// punched grid, a curtain wall's bays: eo-kit downtown_tower.rs `detail`)
+/// is cut into the openings those leave, so each opening is a window of its
+/// own (its own frame, rooms.rs `bake`, and its own reveal). The glass
+/// hidden behind a pier or a band is left out, and each pier and band is
+/// carried back to the glass's back so no slot opens behind it; each band
+/// is cut at the piers into one piece an opening (`WD_BAY_META`), which the
+/// weather marks take as the spandrel under that window (`column_marks`).
+/// None when the plan has no such ribbon. Drawn (and so cooked) on the near
+/// rung only: the mid rung keeps its ribbons, and the arenas their size.
+pub fn split_ribbons(plan: &eo_kit::elevation::Plan) -> Option<eo_kit::elevation::Plan> {
+    use eo_kit::elevation::Part;
+    fn minus(span: (f64, f64), cuts: &[(f64, f64)]) -> Vec<(f64, f64)> {
+        let mut out = vec![];
+        let mut at = span.0;
+        let mut c: Vec<(f64, f64)> = cuts.iter().copied().filter(|c| c.1 > span.0 && c.0 < span.1).collect();
+        c.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        for (c0, c1) in c {
+            if c0 > at {
+                out.push((at, c0.min(span.1)));
+            }
+            at = at.max(c1);
+        }
+        if span.1 > at {
+            out.push((at, span.1));
+        }
+        out.into_iter().filter(|(a, b)| b - a > 0.05).collect()
+    }
+    let is = |p: &Part, kind: &str| p.is_box() && p.kind == kind && p.edge.is_some();
+    let mut edges: Vec<usize> = plan.parts.iter().filter(|p| is(p, "glass")).filter_map(|p| p.edge).collect();
+    edges.sort_unstable();
+    edges.dedup();
+    let mut out = plan.clone();
+    let mut changed = false;
+    for e in edges {
+        let glass: Vec<&Part> = plan.parts.iter().filter(|p| is(p, "glass") && p.edge == Some(e)).collect();
+        let back = glass.iter().map(|g| g.w0).fold(f64::INFINITY, f64::min);
+        let front = glass.iter().map(|g| g.w1).fold(f64::NEG_INFINITY, f64::max);
+        let piers: Vec<&Part> = plan.parts.iter().filter(|p| is(p, "pier") && p.edge == Some(e) && p.w1 > front).collect();
+        let bands: Vec<&Part> = plan.parts.iter().filter(|p| is(p, "floor-band") && p.edge == Some(e) && p.w1 > front).collect();
+        if piers.is_empty() && bands.is_empty() {
+            continue;
+        }
+        let mut pieces: Vec<Part> = vec![];
+        let mut cut_any = false;
+        for g in &glass {
+            let s_cuts: Vec<(f64, f64)> = piers.iter().filter(|p| p.y1 > g.y0 && p.y0 < g.y1).map(|p| (p.s0, p.s1)).collect();
+            let y_cuts: Vec<(f64, f64)> = bands.iter().filter(|b| b.s1 > g.s0 && b.s0 < g.s1).map(|b| (b.y0, b.y1)).collect();
+            let xs = minus((g.s0, g.s1), &s_cuts);
+            let ys = minus((g.y0, g.y1), &y_cuts);
+            if xs.len() * ys.len() <= 1 && xs.first().is_some_and(|x| (x.0 - g.s0).abs() < 1e-6 && (x.1 - g.s1).abs() < 1e-6) {
+                continue;
+            }
+            cut_any = true;
+            for (i, x) in xs.iter().enumerate() {
+                for (j, y) in ys.iter().enumerate() {
+                    let mut q = (*g).clone();
+                    q.id = format!("{}-o{i}-{j}", g.id);
+                    (q.s0, q.s1, q.y0, q.y1) = (x.0, x.1, y.0, y.1);
+                    pieces.push(q);
+                }
+            }
+        }
+        if !cut_any {
+            continue;
+        }
+        changed = true;
+        let pier_spans: Vec<(f64, f64, f64, f64)> = piers.iter().map(|p| (p.s0, p.s1, p.y0, p.y1)).collect();
+        let mut next: Vec<Part> = Vec::with_capacity(out.parts.len() + pieces.len());
+        for p in out.parts.drain(..) {
+            if p.edge != Some(e) || !p.is_box() {
+                next.push(p);
+                continue;
+            }
+            if p.kind == "glass" && glass.iter().any(|g| g.id == p.id) {
+                continue; // in its openings below
+            }
+            if p.kind == "pier" && p.w1 > front {
+                let mut q = p;
+                q.w0 = q.w0.min(back);
+                next.push(q);
+                continue;
+            }
+            if p.kind == "floor-band" && p.w1 > front {
+                let cuts: Vec<(f64, f64)> = pier_spans.iter().filter(|c| c.3 > p.y0 && c.2 < p.y1).map(|c| (c.0, c.1)).collect();
+                for (i, x) in minus((p.s0, p.s1), &cuts).into_iter().enumerate() {
+                    let mut q = p.clone();
+                    q.id = format!("{}-b{i}", p.id);
+                    (q.s0, q.s1) = x;
+                    q.w0 = q.w0.min(back);
+                    if let Some(m) = q.meta.as_object_mut() {
+                        m.insert(WD_BAY_META.into(), serde_json::Value::Bool(true));
+                    } else {
+                        q.meta = serde_json::json!({ WD_BAY_META: true });
+                    }
+                    next.push(q);
+                }
+                continue;
+            }
+            next.push(p);
+        }
+        next.extend(pieces);
+        out.parts = next;
+    }
+    changed.then_some(out)
+}
+
+/// (`--window-depth`) What stands proud of the glass round a split
+/// ribbon's openings (`split_ribbons`), by edge: (edge, s0, s1, y0, y1, front
+/// w, a pier (else a floor band)).
+pub fn reveal_occluders(plan: &eo_kit::elevation::Plan) -> Vec<(usize, f64, f64, f64, f64, f64, bool)> {
+    plan.parts
+        .iter()
+        .filter(|p| p.is_box() && (p.kind == "pier" || p.kind == "floor-band"))
+        .filter_map(|p| p.edge.map(|e| (e, p.s0, p.s1, p.y0, p.y1, p.w1, p.kind == "pier")))
+        .collect()
+}
+
+/// (`--window-depth`, `facade::window_depth_from_args`) How deep each pane
+/// of a kit window stands in its reveal, across (to its jambs' face) and up
+/// (to its head's and sill's). The outward face of an upright glass vertex
+/// with a window frame (`rooms::bake`, width over 0) is set in its building's
+/// frame edge whose outward normal it shares (within 5 degrees) and along
+/// whose length it lies: its depth behind that edge's line is both, unless a
+/// pier (across) or a floor band (up) stands at its opening's side (a split
+/// ribbon's opening, `split_ribbons`), whose front it is then behind. Each
+/// face takes the deepest of its vertices (so the bytes are one value over
+/// it), packed in `WD_DEPTH_STEP_M` steps as the normal's y byte, across in
+/// bits 0..4 and up in bits 4..8 (an upright face's own y is 0; draw.wgsl
+/// clears it before the normal is used; 0x80, which snorm8 reads as 0x81, is
+/// never written). A pane in no edge's plane (a bay's slanted side, a storey
+/// set back past 1.27 m) or flush with it packs 0 and draws no reveal
+/// (rooms.wgsl `wd_pane`).
+pub fn glass_depths(
+    frame: &eo_kit::frame::Frame,
+    occluders: &[(usize, f64, f64, f64, f64, f64, bool)],
+    positions: &[[f64; 3]],
+    normals: &[[f32; 3]],
+    indices: &[u32],
+    frames: &[([u8; 3], u8)],
+) -> Vec<u8> {
+    const TOUCH: f64 = 0.02;
+    let mut depth = vec![(0.0f64, 0.0f64); positions.len()];
+    for (k, (p, n)) in positions.iter().zip(normals).enumerate() {
+        if frames.get(k).is_none_or(|f| f.0[2] & 127 == 0) || n[1].abs() > 0.5 {
+            continue;
+        }
+        let len = (n[0] as f64).hypot(n[2] as f64);
+        if len < 1e-6 {
+            continue;
+        }
+        let (nx, nz) = (n[0] as f64 / len, n[2] as f64 / len);
+        let mut best: Option<(usize, f64, f64)> = None;
+        for e in &frame.edges {
+            let b = &e.basis;
+            if b.n[0] * nx + b.n[1] * nz < 0.996 {
+                continue;
+            }
+            let (dx, dz) = (p[0] - b.origin[0], p[2] - b.origin[1]);
+            let s = dx * b.u[0] + dz * b.u[1];
+            let w = dx * b.n[0] + dz * b.n[1];
+            if s < -0.05 || s > e.length + 0.05 || !(-1.27..=0.02).contains(&w) {
+                continue;
+            }
+            if best.is_none_or(|bb| w > bb.2) {
+                best = Some((e.index, s, w));
+            }
+        }
+        let Some((e, s, w)) = best else { continue };
+        let (mut across, mut up) = (-w, -w);
+        for &(oe, s0, s1, y0, y1, front, pier) in occluders {
+            if oe != e {
+                continue;
+            }
+            let y = p[1];
+            if pier && ((s - s0).abs() < TOUCH || (s - s1).abs() < TOUCH) && y > y0 - TOUCH && y < y1 + TOUCH {
+                across = across.max(front - w);
+            }
+            if !pier && ((y - y0).abs() < TOUCH || (y - y1).abs() < TOUCH) && s > s0 - TOUCH && s < s1 + TOUCH {
+                up = up.max(front - w);
+            }
+        }
+        depth[k] = (across, up);
+    }
+    // one value a face: its triangles' vertices joined
+    let mut parent: Vec<usize> = (0..positions.len()).collect();
+    fn find(p: &mut [usize], mut x: usize) -> usize {
+        while p[x] != x {
+            p[x] = p[p[x]];
+            x = p[x];
+        }
+        x
+    }
+    for t in indices.chunks_exact(3) {
+        let a = find(&mut parent, t[0] as usize);
+        for &v in &t[1..] {
+            let r = find(&mut parent, v as usize);
+            parent[r] = a;
+        }
+    }
+    let mut face: HashMap<usize, (f64, f64)> = HashMap::new();
+    for (k, d) in depth.iter().enumerate() {
+        let r = find(&mut parent, k);
+        let e = face.entry(r).or_insert((0.0, 0.0));
+        *e = (e.0.max(d.0), e.1.max(d.1));
+    }
+    let q = |d: f64| (d / WD_DEPTH_STEP_M).round().clamp(0.0, 15.0) as u8;
+    (0..positions.len())
+        .map(|k| {
+            let (a, u) = face[&find(&mut parent, k)];
+            let (qa, qu) = (q(a), q(u));
+            if qa == 0 && qu == 0 {
+                return 0;
+            }
+            let b = qa | (qu << 4);
+            if b == 0x80 { 0x81 } else { b }
+        })
+        .collect()
+}
+
 /// A wall piece's front-face marks (`weather_marks`), if it stands in a
 /// window's column with a window's sill above it within the y byte's reach.
 fn column_marks(plan: &eo_kit::elevation::Plan, part: &eo_kit::elevation::Part, sink: &eo_kit::mesh::Sink) -> Option<[u16; 4]> {
-    if !part.is_box() || !matches!(part.kind.as_str(), "wall" | "spandrel" | "bulkhead") || sink.positions.len() < 4 {
+    // (`--window-depth`) a floor band's piece under one opening of a split ribbon (`split_ribbons`): its top is that window's sill
+    let band = part.is_box() && part.kind == "floor-band" && part.meta_flag(WD_BAY_META);
+    if !part.is_box() || !(band || matches!(part.kind.as_str(), "wall" | "spandrel" | "bulkhead")) || sink.positions.len() < 4 {
         return None;
     }
     let e = part.edge?;
     let rec = plan.edges.iter().find(|r| r.index == e)?;
     const EPS: f64 = 2e-3;
     // the lowest window bottom at or over the piece's top, in its column (a piece never spans a window)
-    let sill = rec
-        .openings
-        .iter()
-        .filter(|o| (o.s0 - part.s0).abs() < EPS && (o.s1 - part.s1).abs() < EPS && o.y0 >= part.y1 - EPS)
-        .map(|o| o.y0)
-        .fold(f64::INFINITY, f64::min);
+    let sill = if band {
+        part.y1
+    } else {
+        rec.openings
+            .iter()
+            .filter(|o| (o.s0 - part.s0).abs() < EPS && (o.s1 - part.s1).abs() < EPS && o.y0 >= part.y1 - EPS)
+            .map(|o| o.y0)
+            .fold(f64::INFINITY, f64::min)
+    };
     let reach = 127.0 * WEATHER_DEPTH_STEP_M;
     if !sill.is_finite() || sill - part.y0 > reach || part.s1 - part.s0 < 0.2 {
         return None;
@@ -580,10 +811,20 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
         // the building's appearance, packed as the JS tile stream packs it.
         let age = eo_kit::appearance::planned_appearance(&kc.records[i], &planned, base_y);
         let ft = FACADE_TEST.load(Ordering::Relaxed);
+        let wd = crate::facade::window_depth_from_args();
+        let mut planned = planned;
         for (k, rung) in [if ft != 0 { 3u32 } else { 0 }, 2].into_iter().enumerate() {
+            // (`--window-depth`) the near rung's ribbons behind piers and floor bands drawn as the openings they leave
+            let split = if wd && rung == 0 { split_ribbons(&planned.plan) } else { None };
+            let whole = split.map(|p| std::mem::replace(&mut planned.plan, p));
             let mesh = eo_kit::pipeline::build_rung(&planned, rung);
             // (`--facade-weather`) the wall pieces under the windows (none without it: the packs as before).
             let weather = (crate::facade::weather_from_args() && (rung == 0 || rung == 2)).then(|| weather_marks(&planned, rung, &mesh));
+            // (`--window-depth`) what stands in front of the glass round its openings
+            let occluders = if wd { reveal_occluders(&planned.plan) } else { vec![] };
+            if let Some(p) = whole {
+                planned.plan = p;
+            }
             let pack = &mut packs[k];
             let mut ft_top: Option<f32> = None; // the envelope walls' top
             let vertex_start = pack.vertices.len() as u32;
@@ -613,6 +854,8 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
                     let r = &kc.records[i];
                     crate::rooms::bake(&sink.positions, &sink.normals, &sink.indices, Some(base_y), crate::rooms::night_use(&r.amenity, r.program, r.usage))
                 });
+                // (`--window-depth`) how far each pane stands behind its wall's face (none without it: the packs as before).
+                let depths = frames.as_ref().filter(|_| wd).map(|f| glass_depths(&planned.frame, &occluders, &sink.positions, &sink.normals, &sink.indices, f));
                 for (k, (p, n)) in sink.positions.iter().zip(&sink.normals).enumerate() {
                     let pos = [p[0] as f32, p[1] as f32, p[2] as f32];
                     for a in 0..3 {
@@ -625,6 +868,9 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
                         let (rgb, nw) = f[k];
                         c = rgb[0] as u32 | ((rgb[1] as u32) << 8) | ((rgb[2] as u32) << 16) | ((pal as u32) << 24);
                         normal |= (nw as u32) << 24;
+                        if let Some(d) = depths.as_ref().map(|d| d[k]).filter(|d| *d != 0) {
+                            normal = (normal & !0x0000_ff00) | ((d as u32) << 8); // (`--window-depth`) the y byte of an upright pane
+                        }
                     } else if let Some(l) = letters {
                         let b = l[k];
                         c = b[0] as u32 | ((b[1] as u32) << 8) | ((b[2] as u32) << 16) | ((pal as u32) << 24);
@@ -768,6 +1014,8 @@ pub fn inputs_key_with(repo_root: &Path, palette: &[String], streets: bool, stre
 
 /// What `--facade-weather` adds to the kit tile cache key (`weather_marks`; off: the key is unchanged).
 pub const WEATHER_CACHE_TAG: &str = "|facade-weather-v1";
+/// What `--window-depth` adds to the kit tile cache key (`glass_depths`; off: the key is unchanged).
+pub const WINDOW_DEPTH_CACHE_TAG: &str = "|window-depth-v2";
 
 /// The kit tile cache folder for the planner's inputs key: the key itself,
 /// or with the facade clutter on (`eo_kit::clutter::cache_tag`, `--facade-clutter`)
@@ -777,6 +1025,9 @@ pub fn tile_cache_key(inputs_key: &str) -> String {
     let mut tag = eo_kit::clutter::cache_tag();
     if crate::facade::weather_from_args() {
         tag.push_str(WEATHER_CACHE_TAG); // (`--facade-weather`) the marked wall pieces cook into their own folder
+    }
+    if crate::facade::window_depth_from_args() {
+        tag.push_str(WINDOW_DEPTH_CACHE_TAG); // (`--window-depth`) the panes' depths cook into their own folder
     }
     if tag.is_empty() {
         return inputs_key.to_string();
@@ -1568,4 +1819,69 @@ pub fn spawn_kit_city(city: Arc<eo_data::City>, repo_root: PathBuf, palette: Vec
         let _ = tx.send(r);
     });
     rx
+}
+
+#[cfg(test)]
+mod window_depth_tests {
+    use super::*;
+    use eo_kit::elevation::{PartArgs, Plan};
+    use eo_kit::frame::{footprint_frame, FrameOptions, P2};
+
+    /// A 10 m facade of a tower's punched grid: one ribbon of glass 0.26 m in, behind three piers
+    /// (0.2 m proud) and two floor bands (0.12 m proud), on the frame's edge 0.
+    fn tower() -> (eo_kit::frame::Frame, Plan) {
+        let poly = [P2 { x: 0.0, z: 0.0 }, P2 { x: 10.0, z: 0.0 }, P2 { x: 10.0, z: 8.0 }, P2 { x: 0.0, z: 8.0 }];
+        let frame = footprint_frame(&poly, 0, &FrameOptions::default()).expect("a frame");
+        let e = &frame.edges[0];
+        let (b, len) = (e.basis, e.length);
+        let mut plan = Plan::empty();
+        plan.add_box(&b, PartArgs::new("glass", "glass", 0.0, len, 3.0, 12.0, -0.272, -0.26).edge(0).shadow(false));
+        for s in [0.0, (len - 0.9) * 0.5, len - 0.9] {
+            plan.add_box(&b, PartArgs::new("pier", "trim", s, s + 0.9, 3.0, 12.0, -0.03, 0.2).edge(0));
+        }
+        for y in [5.0, 8.0] {
+            plan.add_box(&b, PartArgs::new("floor-band", "spandrel", 0.0, len, y, y + 1.5, -0.04, 0.12).edge(0).meta(serde_json::json!({ "part": "floor-band" })));
+        }
+        (frame, plan)
+    }
+
+    #[test]
+    fn a_ribbon_behind_piers_and_bands_is_cut_into_its_openings() {
+        let (_, plan) = tower();
+        let split = split_ribbons(&plan).expect("the ribbon is split");
+        let glass: Vec<_> = split.parts.iter().filter(|p| p.kind == "glass").collect();
+        assert_eq!(glass.len(), 6, "two bays by three storeys");
+        assert!(glass.iter().all(|g| g.s1 - g.s0 > 3.0 && g.y1 - g.y0 >= 1.5 - 1e-9), "each the gap the piers and bands leave");
+        let bands: Vec<_> = split.parts.iter().filter(|p| p.kind == "floor-band").collect();
+        assert_eq!(bands.len(), 4, "each band cut at the piers, one piece an opening");
+        assert!(bands.iter().all(|p| p.meta_flag(WD_BAY_META) && (p.w0 + 0.272).abs() < 1e-9));
+        assert!(split.parts.iter().filter(|p| p.kind == "pier").all(|p| (p.w0 + 0.272).abs() < 1e-9), "carried back to the glass");
+        // a facade with nothing in front of its glass is left alone
+        let mut plain = Plan::empty();
+        plain.parts.extend(plan.parts.iter().filter(|p| p.kind == "glass").cloned());
+        assert!(split_ribbons(&plain).is_none());
+    }
+
+    #[test]
+    fn an_opening_packs_its_depth_behind_its_piers_and_its_bands() {
+        let (frame, plan) = tower();
+        let split = split_ribbons(&plan).expect("the ribbon is split");
+        let occ = reveal_occluders(&split);
+        let g = split.parts.iter().find(|p| p.kind == "glass").expect("an opening");
+        let b = g.basis;
+        let corner = |s: f64, y: f64| {
+            let (x, z) = b.at(s, g.w1);
+            [x, y, z]
+        };
+        let positions = vec![corner(g.s0, g.y0), corner(g.s1, g.y0), corner(g.s1, g.y1), corner(g.s0, g.y1)];
+        let normals = vec![[b.n[0] as f32, 0.0, b.n[1] as f32]; 4];
+        let indices = [0u32, 1, 2, 0, 2, 3];
+        let frames = crate::rooms::bake(&positions, &normals, &indices, Some(0.0), None);
+        let d = glass_depths(&frame, &occ, &positions, &normals, &indices, &frames);
+        // across: 0.26 + 0.2 = 0.46 m, past the 4 bits (0.45 m); up: 0.26 + 0.12 = 0.38 m, 13 steps
+        assert!(d.iter().all(|v| *v == 15 | (13 << 4)), "{d:?}");
+        // without the piers and bands it is a punched window 0.26 m behind the wall's face
+        let d = glass_depths(&frame, &[], &positions, &normals, &indices, &frames);
+        assert!(d.iter().all(|v| *v == 9 | (9 << 4)), "{d:?}");
+    }
 }

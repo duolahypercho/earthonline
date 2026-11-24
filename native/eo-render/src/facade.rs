@@ -553,6 +553,29 @@ pub fn patina_from_args() -> bool {
     })
 }
 
+/// `--window-depth` (`--no-window-depth`; off by default): the reveal round
+/// every kit pane. Each glass face of a kit window carries how deep it stands
+/// in its reveal, behind its jambs and behind its head and sill (kit.rs
+/// `glass_depths`: the normal's y byte, 4 bits an axis), and on the near rung
+/// a ribbon behind piers and floor bands is cut into the openings they leave
+/// (kit.rs `split_ribbons`), all cooked into its own kit cache folder. The
+/// pane is shaded as glass in a hole in a wall: the sun reaches it only past
+/// the jambs and the head (their hard-edged shadows across the pane and the
+/// blinds behind it), the sky reaches the room behind it less near the
+/// reveal, and it reflects the reveal (the head's soffit, the jambs, the
+/// sill) where its reflected ray meets them before it clears the opening
+/// (draw.wgsl, rooms.wgsl `wd_pane` behind `SF_WINDOW_DEPTH`; the key light's
+/// share through look_light.wgsl `fr_sun_vis`). Compiled in only with the
+/// switch (no runtime gate); off, the code is compiled out, the kit packs and
+/// their cache key are as before and the frame is as before.
+pub fn window_depth_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--window-depth", "--no-window-depth")
+    })
+}
+
 /// The facades track's runtime bits in the frame switches (`fa_run()`), high
 /// enough to stay clear of the others: with a feature's code compiled in
 /// (`ShaderFeatures`) it draws only with its bit set, so a renderer with every
