@@ -682,6 +682,13 @@ mod tests {
                             assert!(v.at[1] > floor && v.at[1] < SEA);
                         }
                     }
+                    // Exercise the additional opt-in stages as the renderer does.
+                    coastal_canopy(&mut a);
+                    vary_crowns(x, z, &mut a);
+                    rock_aprons(x, z, &s, &mut a);
+                    for (k, group) in a.iter().enumerate().skip(CORE_KINDS) {
+                        observed[k] |= !group.is_empty();
+                    }
                 }
             }
         }
