@@ -139,6 +139,7 @@ fn ao_gi_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let sn = fract(52.9829189 * fract(dot(vec2<f32>(hp) + look.post2.w * 5.588238, vec2<f32>(0.00583715, 0.06711056))));
         // the sun bounce leaves the gather's reach to it as it leaves the 4 m search its own
         sb_near_m = GI_RADIUS_M;
+        sb_samples = SB_SAMPLES_WITH_HISTORY; // (the history's mean takes the rest)
         sun_b = ao_sun_bounce(world, N, sn * 2.0 * LK_PI, fract(sn * 11.7 + 0.61), reach >= 2.0);
     }
     if (reach < 2.0) {

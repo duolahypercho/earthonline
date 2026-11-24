@@ -381,6 +381,9 @@ mod tests {
         assert!(look::ShaderFeatures::ALL.limit(&gi).screen_gi);
         assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SCREEN_GI: bool = false;"));
         assert!(look::ao_gi_filter_source().contains(&format!("const GI_FILTER_PLANE_M: f32 = {:.8};", eo_look::screen_gi::FILTER_PLANE_M)), "the gather's constants reach the filter");
+        // (`--soft-shadows`) the penumbra's discs are eo-look's Vogel taps.
+        let d = eo_look::penumbra::vogel_disc(eo_look::penumbra::SEARCH_TAPS);
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_SEARCH_DISC: array<vec2<f32>, {}> = array<vec2<f32>, {}>(vec2<f32>({:.8}, {:.8}),", d.len(), d.len(), d[0][0], d[0][1])));
     }
 
     #[test]

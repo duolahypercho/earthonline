@@ -52,6 +52,9 @@ fn sb_cover_at(world: vec3<f32>) -> f32 {
 // bounce gathers the near field (its share, d^2 / R^2, is left to it; R
 // `sb_near_m`, the 4 m search's, or `--screen-gi`'s reach where it gathers).
 var<private> sb_near_m: f32 = AO_RADIUS_M;
+// The samples a point gathers this frame: SB_SAMPLES, or SB_SAMPLES_WITH_HISTORY
+// where the screen-space gather's history (`--screen-gi`) holds the result.
+var<private> sb_samples: i32 = SB_SAMPLES;
 fn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool) -> vec3<f32> {
     if ((u32(look.ao_params.w + 0.5) & 1u) == 0u || look.key_dir.w <= 0.0) {
         return vec3<f32>(0.0);
@@ -83,9 +86,9 @@ fn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool)
     var e = vec3<f32>(0.0);
     let wall = SB_WALL_ALBEDO * look.key.xyz;
     let stand_in = look.hemi_ground.xyz;
-    let n_s = f32(SB_SAMPLES);
+    let n_s = f32(sb_samples);
     let sq_r = sqrt(SB_RADIUS_M);
-    for (var i = 0; i < SB_SAMPLES; i = i + 1) {
+    for (var i = 0; i < sb_samples; i = i + 1) {
         let u = (f32(i) + jit) / n_s;
         let r = SB_RADIUS_M * u * u;
         let a = f32(i) * SB_GOLDEN_ANGLE + rot;

@@ -141,8 +141,10 @@ fn ag_surface(in: AgOut, bore: bool) -> AgSurf {
     // Derivatives first, in uniform control flow.
     let duvx = dpdx(in.uv);
     let duvy = dpdy(in.uv);
-    // (SF_TUNNELS false: no bore, no agent in one, and the test compiled out; look.rs `ShaderFeatures`)
-    if (SF_TUNNELS && ((a.flags & AG_IN_BORE) != 0u) != bore) {
+    // (SF_TUNNELS false: no bore, no agent in one, and the test compiled out; look.rs `ShaderFeatures`.
+    // AG_KEEP_DISCARD, look.rs `ShaderFeatures::wgsl`: with the penumbra compiled in
+    // it stays, never taken without a bore; Apple's compiler builds the opaque pipeline only with a discard here.)
+    if ((SF_TUNNELS || AG_KEEP_DISCARD) && ((a.flags & AG_IN_BORE) != 0u) != bore) {
         discard;
     }
     let v = normalize(frame.cam_pos.xyz - in.world);
