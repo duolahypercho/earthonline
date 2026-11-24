@@ -376,8 +376,20 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let amb = amb_on();
     var av = AMB_OPEN;
     if (amb) {
-        av = amb_sample(world, ng);
+        if (amb_ol_on()) {
+            av = amb_sample_ground(world, ng); // (`--occluder-light`) and the street's own sky under the point
+        } else {
+            av = amb_sample(world, ng);
+        }
         irr = amb_irradiance(av, n, env_e * env_i);
+        if (amb_ol_on() && rnl > 0.0) {
+            // (`--occluder-light`) the rig's rim (the sky opposite the sun, unshadowed)
+            // hidden as the rest of the sky is: by the volume's visible share along it
+            // against the open sky's (eo-look `occluder::rim_hidden`).
+            let rk = amb_rim_hidden(av, rl);
+            direct_d = direct_d - rim * diffuse / LK_PI * rk;
+            direct_s = direct_s - rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM) * rk;
+        }
         // the ground bounce (`--ground-bounce`, ambient.wgsl): light from the
         // sunlit open ground below (look.lx[0].yzw, zero while off or at night).
         if (AMB_SHADER_LEVELS > 0u) {
@@ -436,7 +448,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         // the ambient volume: the environment by the sky seen along the
         // reflection, what blocks it by its own radiance (ambient.wgsl).
         let aw = amb_reflection(av, r);
-        rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_s * aw.y / LK_PI);
+        rad_e = rad_e * aw.x + amb_occluder_light() * (env_s * aw.y / LK_PI); // (`--occluder-light`: the shaded walls)
     }
     if (SF_CANYON_GLASS && glass && cg_sky.w > 0.0) {
         rad_e = cg_apply(rad) * env_i; // (`--canyon-glass`, rooms.wgsl) the street canyon in kit glass, the volume's occlusion in it
@@ -506,7 +518,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             // (`--car-materials`) the lacquer's environment as the base's: by the
             // sky the ambient volume sees along it (a car under a deck reflects the deck)
             let awc = amb_reflection(av, rc);
-            rad_ce = rad_ce * awc.x + look.hemi_ground.xyz * (env_s * awc.y / LK_PI);
+            rad_ce = rad_ce * awc.x + amb_occluder_light() * (env_s * awc.y / LK_PI);
         }
         rad_c = mix(rad_ce, ssr.rgb, ssr.a); // the street it stands on, where the reflection finds it
         let dfg_c = lk_dfg(nvc, ccr);

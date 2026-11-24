@@ -222,6 +222,14 @@ pub struct LookOptions {
     /// rig's. Needs `ao`. Off: the frame as before (the gather, the history
     /// and the filter are compiled out, `ShaderFeatures::screen_gi`).
     pub screen_gi: bool,
+    /// The light of what hides the sky (`--occluder-light`; ambient.wgsl
+    /// `amb_irradiance`, eo-look `occluder`): with the ambient volume, the
+    /// blocked sky is lit by the shaded walls' own exitance (their sky, the
+    /// street below them and each other) instead of the rig's sunlit-street
+    /// lobe, the street's lobe keeps its sky part only as far as the street
+    /// sees the sky, and the sun bounce adds a sunlit wall's sun part whole.
+    /// Off: the frame as before (compiled out, `ShaderFeatures::occluder_light`).
+    pub occluder_light: bool,
     /// The cars' materials and lamps (`--car-materials`; agents_draw.wgsl
     /// `ag_car_*`, eo-agents `CookOptions::car_materials`): 0 off (the frame
     /// as before), 1 on. Its shader code sits behind `SF_CAR_MATERIALS`
@@ -266,7 +274,7 @@ pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NAT
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, car_materials: 0, car_contact: 0, car_reflections: 0, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, car_materials: 0, car_contact: 0, car_reflections: 0, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -755,6 +763,9 @@ pub struct ShaderFeatures {
     /// The screen-space indirect light (`--screen-gi`; `SF_SCREEN_GI`): the
     /// occlusion pass's gather, history and filter (`ao_shader_source`, `ao_gi_filter_source`).
     pub screen_gi: bool,
+    /// The light of what hides the sky (`--occluder-light`; `SF_OCCLUDER_LIGHT`,
+    /// ambient.wgsl `amb_irradiance`, surfaces_ao_sun.wgsl's stand-in).
+    pub occluder_light: bool,
     /// The wet surfaces (`--wet-surfaces`; sky_light.wgsl `sky_w2_on`, `SF_WET_SURFACES`).
     pub wet_surfaces: bool,
     /// The screen-space reflection's second generation (`--screen-reflect`; sky_light.wgsl `sky_sr_on`, `SF_SCREEN_REFLECT`).
@@ -794,7 +805,7 @@ impl ShaderFeatures {
         lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true,
         facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, // the facades track
         street_pbr: false, // the street track
-        sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, // the light track
+        sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, occluder_light: true, // the light track
         wet_surfaces: true, screen_reflect: true, // the reflect track
         camera: true, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
@@ -806,7 +817,7 @@ impl ShaderFeatures {
         lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false,
         facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, // the facades track
         street_pbr: false, // the street track
-        sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, // the light track
+        sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, // the light track
         wet_surfaces: false, screen_reflect: false, // the reflect track
         camera: false, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
@@ -836,6 +847,7 @@ impl ShaderFeatures {
             ao_albedo: o.ao_albedo,
             soft_shadows: o.soft_shadows,
             screen_gi: o.screen_gi,
+            occluder_light: o.occluder_light,
             wet_surfaces: o.sky.wet_surfaces,
             screen_reflect: o.sky.screen_reflect,
             camera: o.look.is_cinematic() && o.sky.cine_camera,
@@ -901,6 +913,7 @@ impl ShaderFeatures {
         l.ao_albedo &= self.ao_albedo;
         l.soft_shadows &= self.soft_shadows;
         l.screen_gi &= self.screen_gi;
+        l.occluder_light &= self.occluder_light;
         if !self.wet_surfaces {
             l.sky.wet_surfaces = false;
         }
@@ -948,6 +961,7 @@ impl ShaderFeatures {
                 ("SF_AO_ALBEDO", self.ao_albedo),
                 ("SF_SOFT_SHADOWS", self.soft_shadows),
                 ("SF_SCREEN_GI", self.screen_gi),
+                ("SF_OCCLUDER_LIGHT", self.occluder_light),
                 // the reflect track
                 ("SF_WET_SURFACES", self.wet_surfaces),
                 ("SF_SCREEN_REFLECT", self.screen_reflect),
@@ -966,7 +980,7 @@ impl ShaderFeatures {
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
             .collect::<String>(),
-            penumbra_wgsl()
+            penumbra_wgsl() + &occluder_wgsl()
         )
     }
 }
@@ -988,6 +1002,23 @@ fn penumbra_wgsl() -> String {
         p::FILTER_TAPS
     ) + &vogel_wgsl("PS_SEARCH_DISC", p::SEARCH_TAPS)
         + &vogel_wgsl("PS_FILTER_DISC", p::FILTER_TAPS)
+}
+
+/// (`--occluder-light`) the constants of the light of what hides the sky (eo-look
+/// `occluder`; read only behind `SF_OCCLUDER_LIGHT`, declared in every set).
+fn occluder_wgsl() -> String {
+    use eo_look::occluder as o;
+    let f = |v: f64| format!("{v:.8}");
+    format!(
+        "const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({}, {}, {});\nconst OL_GROUND_SKY_H_M: f32 = {};\nconst OL_SIDE_OPEN: f32 = {};\nconst OL_MIN_STREET_SKY: f32 = {};\nconst OL_MAX_STREET_SKY: f32 = {};\n",
+        f(o::WALL_ALBEDO[0]),
+        f(o::WALL_ALBEDO[1]),
+        f(o::WALL_ALBEDO[2]),
+        f(o::GROUND_SKY_H_M),
+        f(o::SIDE_OPEN),
+        f(o::MIN_STREET_SKY),
+        f(o::MAX_STREET_SKY)
+    )
 }
 
 /// (`--soft-shadows`) a Vogel disc of `n` taps as a constant array (eo-look
@@ -2491,8 +2522,9 @@ impl LookGpu {
                 1.0 / focal_px,
                 std::env::var("EO_AO_DEBUG").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
                 // the occlusion's additions that run: bit 0 (`--sun-bounce`) the gather (it reads
-                // ring 1 of the far sun map, in the occlusion pass), bit 1 (`--ao-albedo`) the albedo's multi-bounce.
-                (if self.ao_sun && self.options.sun_bounce && self.options.ao && self.options.lighting.far_shadows > 0 { 1.0 } else { 0.0 }) + if self.options.ao_albedo { 2.0 } else { 0.0 },
+                // ring 1 of the far sun map, in the occlusion pass), bit 1 (`--ao-albedo`) the albedo's multi-bounce,
+                // bit 2 (`--occluder-light`) the light of what hides the sky.
+                (if self.ao_sun && self.options.sun_bounce && self.options.ao && self.options.lighting.far_shadows > 0 { 1.0 } else { 0.0 }) + if self.options.ao_albedo { 2.0 } else { 0.0 } + if self.options.occluder_light { 4.0 } else { 0.0 },
             ],
             field: {
                 // makeGroundField's practicals ramps on the sun's altitude (dry, model exposure 1).

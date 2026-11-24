@@ -192,15 +192,124 @@ fn amb_bounce(a: AmbGround, n: vec3<f32>, cloud: f32) -> vec3<f32> {
     return share * sun - (a.w * lower) * min(lobe_sun, sun);
 }
 
+// (`--occluder-light`, SF_OCCLUDER_LIGHT; eo-look `occluder`, its CPU
+// reference and the reasoning) the light of what hides the sky. look_light
+// reads the volume with `amb_sample_ground`, which also sets `amb_vg` (the
+// street's own sky under the point), before `amb_irradiance`, which then lights the blocked sky by the shaded
+// walls' exitance (`amb_occluder_exitance`, kept in `amb_occ_m` for the
+// specular environment's occluders) and the street's lobe and the ambient
+// term's ground share by the street's sky. Run bit: look.ao_params.w bit 2.
+var<private> amb_vg: f32 = 1.0;
+var<private> amb_occ_m: vec3<f32> = vec3<f32>(0.0);
+
+// Only where the levels are read (AMB_SHADER_LEVELS > 0: the city, the
+// structures, the agents, the probe faces): the far layer's and the props'
+// pipelines read the plane alone and stand at the edge of what Apple's
+// compiler takes (`hlod-draw` failed with this in, r2i1); they keep the
+// stand-in, past the levels' reach and on small things.
+fn amb_ol_on() -> bool {
+    return SF_OCCLUDER_LIGHT && AMB_SHADER_LEVELS > 0u && (u32(look.ao_params.w + 0.5) & 4u) != 0u;
+}
+
+// `amb_sample` that also sets `amb_vg`, the street's own sky visibility
+// facing up (0..1) under the shaded point: the plane and the levels
+// OL_GROUND_SKY_H_M over the ground where the point reads (AMB_NORMAL_OFFSET_M
+// along the geometric normal: the street at a wall's foot, the ground under a
+// soffit), from the same plane texel and level rectangles.
+fn amb_sample_ground(world: vec3<f32>, ng: vec3<f32>) -> vec4<f32> {
+    let p = world + ng * AMB_NORMAL_OFFSET_M;
+    let pl = amb_plane(p.xz);
+    let h = p.y - pl.z;
+    let hg = OL_GROUND_SKY_H_M;
+    let reach = max(pl.w, 1.0);
+    let open_pl = vec4<f32>(pl.x, 0.0, pl.y, 0.0);
+    var v = mix(open_pl, AMB_OPEN, lk_smooth(0.0, reach, h));
+    var g = mix(open_pl, AMB_OPEN, lk_smooth(0.0, reach, hg));
+    if (AMB_SHADER_LEVELS > 0u) {
+        let wf = amb_edge(amb_rect(look.lx[10].x, look.lx[10].y), p.xz);
+        if (wf > 0.0) {
+            v = mix(v, amb_level(p.xz, h, 0u, AMB_FAR_CELL_M, reach), wf);
+            g = mix(g, amb_level(p.xz, hg, 0u, AMB_FAR_CELL_M, reach), wf);
+        }
+    }
+    if (AMB_SHADER_LEVELS > 1u) {
+        let wn = amb_edge(amb_rect(look.lx[10].z, look.lx[10].w), p.xz);
+        if (wn > 0.0) {
+            v = mix(v, amb_level(p.xz, h, 1u, AMB_NEAR_CELL_M, reach), wn);
+            g = mix(g, amb_level(p.xz, hg, 1u, AMB_NEAR_CELL_M, reach), wn);
+        }
+    }
+    amb_vg = clamp(g.x + g.z, 0.0, 1.0);
+    return v;
+}
+
+// The ground lobe's sky part (the street's reflection of the sky's fill), never more than the lobe.
+fn amb_lobe_sky() -> vec3<f32> {
+    return min(AMB_LOBE_SKY_ALBEDO * (look.hemi_sky.xyz + look.ambient.xyz), look.hemi_ground.xyz);
+}
+
+// The sky a canyon's wall sees, from the sky its street sees (eo-look
+// `occluder::wall_sky_view`): a street seeing `vg` of the sky lies between
+// walls H/W = (1 - vg^2) / (2 vg) high for its width (vg = sqrt(1 + (H/W)^2)
+// - H/W), and such a wall sees 1/2 (1 + W/H - sqrt(1 + (W/H)^2)) of it
+// (the two-dimensional canyon's view factors), OL_SIDE_OPEN in the open.
+fn amb_wall_sky(vg: f32) -> f32 {
+    let s = clamp(vg, OL_MIN_STREET_SKY, OL_MAX_STREET_SKY);
+    let x = 2.0 * s / (1.0 - s * s); // W / H
+    return OL_SIDE_OPEN * (1.0 + x - sqrt(1.0 + x * x));
+}
+
+// The exitance of the shaded walls that hide the sky (eo-look
+// `occluder::shaded_exitance`): the canyon's walls round a point whose street
+// sees `vg` of the sky see `amb_wall_sky(vg)` of it, the street's lobe below
+// them with its sky part at `vg`, the ambient term and the environment's
+// diffuse on a horizontal normal (the SH's azimuth mean) at the sky and
+// street they see, and over the rest of their upper half walls like
+// themselves (M = rho E / (1 - rho (1/2 - v_w))).
+fn amb_occluder_exitance(vg: f32) -> vec3<f32> {
+    let vw = amb_wall_sky(vg);
+    let g = look.hemi_ground.xyz - amb_lobe_sky() * (1.0 - vg);
+    let env_side = max(look.sh[0].xyz * 0.282095 + look.sh[6].xyz * 0.157696 + look.sh[8].xyz * 0.273137, vec3<f32>(0.0)) * (look.ambient.w * look.env_class.x);
+    let e = look.hemi_sky.xyz * vw + g * 0.5 + (look.ambient.xyz + env_side) * (vw + 0.5 * vg);
+    return OL_WALL_ALBEDO * e / (vec3<f32>(1.0) - OL_WALL_ALBEDO * (OL_SIDE_OPEN - vw));
+}
+
+// (`--occluder-light`) the share of the rig's rim light (a directional stand-in
+// for the sky opposite the sun, never shadowed) that what hides the sky
+// hides: 1 - the visible share along its direction over the open sky's.
+fn amb_rim_hidden(c: vec4<f32>, d: vec3<f32>) -> f32 {
+    return 1.0 - min(amb_vis(c, d) / max(0.5 + 0.5 * d.y, 1e-3), 1.0);
+}
+
+// (`--occluder-light`) the blocked sky's radiance x pi for the specular
+// environment's occluders: the shaded walls' exitance while it runs, else the
+// ground lobe (AMB_OCCLUDER's stand-in) as before.
+fn amb_occluder_light() -> vec3<f32> {
+    if (amb_ol_on()) {
+        return amb_occ_m;
+    }
+    return look.hemi_ground.xyz;
+}
+
 // look_light's indirect diffuse irradiance with the volume. The hemisphere's
 // sky part and the environment's diffuse take the visible sky (never more
 // than the open sky's share t); the sky the volume blocks is lit by what
 // blocks it (the ground lobe x AMB_OCCLUDER: facades and soffits stand in
 // the street's light), so nothing goes black. The ground part and the
 // ambient term as they were. With AMB_OPEN this is `hemi + ambient + env`.
+// (`--occluder-light`) the blocked sky at the shaded walls' exitance, the
+// street's lobe's sky part, the ambient term's and the environment's ground
+// share at the street's own sky (`amb_vg`): with the open sky and open
+// ground the same sum.
 fn amb_irradiance(c: vec4<f32>, n: vec3<f32>, env: vec3<f32>) -> vec3<f32> {
     let t = n.y * 0.5 + 0.5;
     let vs = min(amb_vis(c, n), t);
+    if (amb_ol_on()) {
+        let lower = 1.0 - t;
+        amb_occ_m = amb_occluder_exitance(amb_vg);
+        let lit = look.hemi_sky.xyz * vs + (look.hemi_ground.xyz - amb_lobe_sky() * (1.0 - amb_vg)) * lower + amb_occ_m * (t - vs);
+        return lit + (look.ambient.xyz + env) * (vs + lower * amb_vg);
+    }
     let fill = look.hemi_sky.xyz * vs + look.hemi_ground.xyz * (1.0 - t + AMB_OCCLUDER * (t - vs));
     return fill + look.ambient.xyz + env * (1.0 - t + vs);
 }

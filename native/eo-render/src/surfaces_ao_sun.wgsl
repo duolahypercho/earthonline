@@ -85,7 +85,12 @@ fn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool)
     let maxt = vec2<i32>(dims) - 1 - k;
     var e = vec3<f32>(0.0);
     let wall = SB_WALL_ALBEDO * look.key.xyz;
-    let stand_in = look.hemi_ground.xyz;
+    // (`--occluder-light`, look.ao_params.w bit 2) the shaded walls' exitance is
+    // the blocked sky's light already: a sunlit wall adds its sun part whole.
+    var stand_in = look.hemi_ground.xyz;
+    if (SF_OCCLUDER_LIGHT && (u32(look.ao_params.w + 0.5) & 4u) != 0u) {
+        stand_in = vec3<f32>(0.0);
+    }
     let n_s = f32(sb_samples);
     let sq_r = sqrt(SB_RADIUS_M);
     for (var i = 0; i < sb_samples; i = i + 1) {
