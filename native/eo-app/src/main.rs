@@ -460,6 +460,10 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-white-balance" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_WB,
             "--lens-halation" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_HALATION,
             "--no-lens-halation" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_HALATION,
+            "--camera-sharpen" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_SHARPEN,
+            "--no-camera-sharpen" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_SHARPEN,
+            "--lens-flare" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_FLARE,
+            "--no-lens-flare" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_FLARE,
             "--no-meter" => a.look.sky.meter = false, // the camera meter off (the hour's exposure curve alone)
             "--no-atmosphere" => a.look.sky.atmosphere = false, // the JS analytic dome instead of the atmosphere tables
             "--no-contact-shadows" => a.look.sky.contact = false,
