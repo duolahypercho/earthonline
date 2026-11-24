@@ -396,6 +396,12 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // the cars' occlusion of the street round them (eo-render agents_contact.wgsl; off by default).
             "--car-contact" => a.look.car_contact = 1,
             "--no-car-contact" => a.look.car_contact = 0,
+            // the cars' reflections of the street's brightest lights at any distance (agents_draw.wgsl `ag_car_far_lights`; off by default).
+            "--car-reflections" => a.look.car_reflections = 1,
+            "--no-car-reflections" => a.look.car_reflections = 0,
+            // the capture cards' streets with their simulated traffic (agents.rs `warm_traffic`; off by default).
+            "--car-traffic" => crate::agents::set_warm_traffic(true),
+            "--no-car-traffic" => crate::agents::set_warm_traffic(false),
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
