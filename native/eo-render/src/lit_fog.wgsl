@@ -155,6 +155,11 @@ fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32
     if (SF_LAMP_BOUNCE && li.kind == LF_BOUNCE_KIND) {
         return vec3<f32>(0.0); // (`--lamp-bounce`) a pool's bounce stands under the street: it lights no fog
     }
+    if (SF_SIGNAL_SPILL && li.kind == NT_SIGNAL_KIND) {
+        // (`--signal-spill`) a signal's beam has no shadow in the volume: it would glow in
+        // front of the trunk or pole that hides its head. Its glow is its lens's (the camera's).
+        return vec3<f32>(0.0);
+    }
     // where the light leaves its luminaire: a props street light's (kind 3) source stands `size` m
     // over its head (the JS practical's lift, which widens the pool), its intensity carrying the
     // pool gain (1 + lift)^2 (sky_fx `fx_luminaire`): the fog glows round the head, not over it.
@@ -198,14 +203,10 @@ fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32
         let hl = normalize(vec2<f32>(lt.x, lt.z) + vec2<f32>(1e-6, 0.0));
         let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
         shape = vert * smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
-    } else if ((SF_SIGNAL_SPILL || SF_REAR_LAMPS) && li.kind >= NT_SIGNAL_KIND) {
-        // (`--signal-spill`, `--rear-lamps`) a signal lens's or rear lamp's lobe (eo-sky lights
-        // `SIGNAL_LOBE`, `REAR_LOBE`): the haze glows in its beam, not round it every way.
-        // A signal's beam is clear near its lens (as on the surfaces, sky_light.wgsl: what
-        // stood there would hide the lens), so a head hidden behind a trunk or a pole
-        // leaves no glow floating in front of it; its lens's own glow is the camera's.
-        let sig = li.kind == NT_SIGNAL_KIND;
-        shape = nt_lobe(lt, li.dir, select(NT_REAR_V, NT_SIGNAL_V, sig), select(NT_REAR_H, NT_SIGNAL_H, sig)) * select(1.0, smoothstep(0.75 * NT_SIGNAL_CLEAR_M, NT_SIGNAL_CLEAR_M, dist), sig);
+    } else if (SF_REAR_LAMPS && li.kind == NT_REAR_KIND) {
+        // (`--rear-lamps`) a rear lamp's lobe (eo-sky lights `REAR_LOBE`): the haze glows in
+        // its beam, not round it every way.
+        shape = nt_lobe(lt, li.dir, NT_REAR_V, NT_REAR_H);
     }
     if (shape <= 0.0) {
         return vec3<f32>(0.0);
