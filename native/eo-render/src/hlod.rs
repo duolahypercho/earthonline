@@ -294,6 +294,20 @@ pub struct HlodGpu {
 pub const CULL_WGSL: &str = include_str!("hlod_cull.wgsl");
 pub const DRAW_WGSL: &str = include_str!("hlod_draw.wgsl");
 
+/// The far layer's draw as the pipelines compose it: `DRAW_WGSL`, and with
+/// the far facades compiled in (`--far-facades`, look.rs `ShaderFeatures`)
+/// the flat varying that carries an untextured wall's first corner and the
+/// cell's lowest point (hlod_draw.wgsl `fb_facade`); off, the source as before.
+pub fn draw_wgsl() -> String {
+    if !crate::look::shader_features().far_facades {
+        return DRAW_WGSL.to_string();
+    }
+    DRAW_WGSL
+        .replace("    // @ff-corner-field\n", "    @location(12) @interpolate(flat) ff_corner: vec4<f32>,\n")
+        .replace("    // @ff-corner-out\n", "    out.ff_corner = vec4<f32>(pos, hl_cells_d[entry].min.y);\n")
+        .replace("    return vec4<f32>(in.world, in.world.y - 10.0); // @ff-corner-read\n", "    return in.ff_corner;\n")
+}
+
 /// The pages are BC3 (set by `HlodGpu::new` from the device's features; the
 /// workers compress for it).
 pub static PAGES_BC: AtomicBool = AtomicBool::new(false);
@@ -405,7 +419,7 @@ impl HlodGpu {
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&sampler) },
             ],
         });
-        let dm = module("hlod_draw.wgsl", format!("{}\n{}{DRAW_WGSL}", crate::look::city_shader_source_far(), far_constants_wgsl(&i.opts))); // + the switches // the far layer's city shader (lighting: the ambient plane only)
+        let dm = module("hlod_draw.wgsl", format!("{}\n{}{}", crate::look::city_shader_source_far(), far_constants_wgsl(&i.opts), draw_wgsl())); // + the switches // the far layer's city shader (lighting: the ambient plane only)
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-draw-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&draw_bgl)], immediate_size: 0 });
         let attrs = [
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },

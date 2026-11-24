@@ -92,6 +92,8 @@ mod tests {
         vec![
             ("city", look::city_shader_source()),
             ("city, far layer", look::city_shader_source_far()),
+            // the far layer's draw as hlod.rs composes it (`--far-facades` lives in it).
+            ("far layer draw", format!("{}\n{}{}", look::city_shader_source_far(), crate::hlod::far_constants_wgsl(&crate::hlod::HlodOptions::from_env()), crate::hlod::draw_wgsl())),
             ("surf", crate::surf::shader_source()),
             // the far shore's, the water's and the prop wires' are composed in their `new`; this is their part.
             ("look common + sky light core + look ext", format!("{}\n{}\n{}\n@group(1) @binding(0) var<uniform> look: Look;\n", look::look_common_source(), include_str!("sky_light_core.wgsl"), look::LOOK_EXT_WGSL)),
@@ -225,6 +227,9 @@ mod tests {
         sets.push(("shop light".into(), look::ShaderFeatures { shop_light: true, ..none }));
         sets.push(("facade clutter".into(), look::ShaderFeatures { facade_clutter: true, ..none }));
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
+        sets.push(("facade glass".into(), look::ShaderFeatures { facade_glass: true, ..none })); // (`--facade-glass`)
+        sets.push(("facade glass with grime and street life".into(), look::ShaderFeatures { facade_glass: true, grime: true, street_life: true, shop_light: true, ..none }));
+        sets.push(("far facades".into(), look::ShaderFeatures { far_facades: true, ..none })); // (`--far-facades`)
         sets
     }
 
@@ -270,7 +275,9 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below)
+        // (the look profile is its own, below; the facades track's switches are read from the
+        // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, ..look::ShaderFeatures::ALL });
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));
