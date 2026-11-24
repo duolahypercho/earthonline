@@ -1190,14 +1190,18 @@ fn sw_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, kd: f32,
         l = sw_nearer(l, sw_transverse(world.z, world.x, vec2<f32>(0.0, 1.0), 0.71, SW_TRANSVERSE_SHARE));
     }
     let on = l.on * far * present;
-    if (on > 0.0 && abs(l.d) < 0.2) {
+    // the pixel's footprint across this line (m): the line filtered over that, not over the
+    // pixel's longest side (which, for a crack running away from the eye at a low view, is
+    // the long axis of the footprint and smeared the bead into a broad dark band down the lane)
+    let fwl = max(abs(dot(cc0_drx.xz, l.dir)) + abs(dot(cc0_dry.xz, l.dir)), 1e-5);
+    if (on > 0.0 && abs(l.d) < 0.2 + fwl) {
         if (l.h < SW_SEALED_SHARE) {
             // the overband: wider and narrower along the crack (the squeegee's
             // passes), its edges ragged, a thin feathered film beyond them
             let q = world.xz;
             let hw = SW_SEAL_HALF_M * (0.7 + 0.6 * st_noise(q / 0.9 + l.h * 9.0)) + (st_noise(q / 0.05) - 0.5) * 0.008 * wx_keep(0.05, fw);
-            let bead = wx_band(l.d, hw, fw);
-            let film = wx_band(l.d, hw * 1.7, fw) * 0.3 * (0.5 + st_noise(q / 0.31 + 2.0));
+            let bead = wx_band(l.d, hw, fwl);
+            let film = wx_band(l.d, hw * 1.7, fwl) * 0.3 * (0.5 + st_noise(q / 0.31 + 2.0));
             let k = clamp(max(bead, film), 0.0, 1.0) * on;
             let age = step(1.0 - WX_CRACK_AGED_SHARE, fract(l.h * 7.31)) * (0.6 + 0.4 * st_noise(q / 3.0 + 5.7));
             let tone = mix(WX_CRACK_ALBEDO, WX_CRACK_ALBEDO_AGED, age);
@@ -1207,8 +1211,8 @@ fn sw_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, kd: f32,
         } else {
             // an open crack: a hairline whose width wanders, ravelled at its lips
             let hw = WX_CRACK_HAIR_M * (0.5 + 1.0 * st_noise(world.xz / 0.4 + 3.3));
-            let k = wx_band(l.d, hw, fw) * on;
-            let ravel = wx_band(l.d, hw * WX_CRACK_RAVEL, fw) * on * (0.5 + st_noise(world.xz / 0.25 + 6.6));
+            let k = wx_band(l.d, hw, fwl) * on;
+            let ravel = wx_band(l.d, hw * WX_CRACK_RAVEL, fwl) * on * (0.5 + st_noise(world.xz / 0.25 + 6.6));
             (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * k) * (1.0 - WX_CRACK_RAVEL_DARK * clamp(ravel, 0.0, 1.0));
             (*s).rough = min(1.0, (*s).rough + 0.1 * k);
             sp_note_crack((k + 0.4 * ravel) * open_k);
