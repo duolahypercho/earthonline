@@ -906,7 +906,11 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
     // Road grime (`--grime`) on the body, its trim and liveries.
     let paint = (base.flags & AG_M_PAINT) != 0u || role == AG_ROLE_LIVERY;
     if (wx_level() != 0u && (paint || role == 0u || role == AG_ROLE_TRIM)) {
-        ag_car_grime(&(*g).s, local, nb, piv, r, arch, dirt, d.px, ag_car_finish_on());
+        if (ag_car_finish_on()) {
+            ag_cf_grime(&(*g).s, local, nb, piv, r, arch, dirt, d.px, md); // (`--car-finish`) where the road and the weather put it
+        } else {
+            ag_car_grime(&(*g).s, local, nb, piv, r, arch, dirt, d.px);
+        }
     }
     // (`--car-finish`) rain on the lacquer and the glass: one drop field (beads
     // on the paint, drops on the panes), its tilt for the branch below
@@ -1115,6 +1119,17 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             (*g).m.emissive = vec4<f32>(select(vec3<f32>(0.0), base.emissive.rgb * 6.0, on), 0.0);
         }
         case 12u: {
+            // (`--car-finish`) a caliper (the painted part of the brake) as street
+            // cars carry them: most bare cast iron, some black, a few red, the
+            // body's own colour on the rest
+            let bh = max(max(base.base.r, base.base.g), base.base.b);
+            if (ag_car_finish_on() && bh - min(min(base.base.r, base.base.g), base.base.b) > 0.3 * bh) {
+                let hc = st_hash(hs + vec2<f32>(5.1, 8.3));
+                let finish = select(select(select((*g).s.albedo, AG_CF_CALIPER_RED, hc < AG_CF_CALIPER_SHARE.z), AG_CF_CALIPER_BLACK, hc < AG_CF_CALIPER_SHARE.y), AG_CF_CALIPER_IRON, hc < AG_CF_CALIPER_SHARE.x);
+                (*g).s.albedo = mix(finish, AG_CAR_BRAKE_DUST, 0.3 + 0.4 * dirt);
+                (*g).s.metal = select(0.0, 0.4, hc < AG_CF_CALIPER_SHARE.x);
+                (*g).s.rough = max((*g).s.rough, 0.55);
+            }
             // Discs and calipers: rust on an old or parked car's discs.
             let rust = age * select(0.3, 0.7, parked);
             (*g).s.albedo = mix((*g).s.albedo, vec3<f32>(0.1, 0.045, 0.02), rust);
@@ -1202,11 +1217,13 @@ fn ag_car_finish(c_in: vec4<f32>, k: AgCar, world: vec3<f32>, g: AgSurf, local: 
         } else {
             far = ag_car_far_lights(world, g.s.n, g.v, mix(vec3<f32>(0.04), g.s.albedo, g.s.metal), g.s.rough);
         }
-        if (SF_CAR_FINISH && k.fx.w > 0.0) {
-            // (`--car-finish`) unresolved drops: the lamps they mirror break into a
-            // speckle (a fifth of the pixels' drops face the lamp; the mean kept)
+        if (SF_CAR_FINISH && k.fx.w > 0.0 && px < AG_CF_GLINT_PX) {
+            // (`--car-finish`) drops too small for their lens: the lamps they mirror
+            // break into a speckle (a fifth of the pixels' drops face the lamp; the
+            // mean kept), only where a pixel resolves a glint (`ag_cf_resolved`);
+            // further out a frame shows the mean (the lobe `ag_cf_paint` widened)
             let u = ag_cf_cell_hash(local, px, 11.0);
-            far = far * mix(1.0, select(0.25, 4.0, u < 0.2), k.fx.w);
+            far = far * mix(1.0, select(0.25, 4.0, u < 0.2), k.fx.w * ag_cf_resolved(px));
         }
     }
     if (k.glass) {
@@ -1352,38 +1369,17 @@ fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>
 // fine film of dust on the roof, bonnet and boot (the surfaces facing up).
 // The paint between stays as it is: no blotches, no noise across a panel.
 const AG_CAR_ROAD_FILM: vec3<f32> = vec3<f32>(0.12, 0.11, 0.095);
-fn ag_car_grime(s: ptr<function, Surface>, local: vec3<f32>, nb: vec3<f32>, piv: vec3<f32>, r: f32, arch: f32, dirt: f32, px: f32, fin: bool) {
+fn ag_car_grime(s: ptr<function, Surface>, local: vec3<f32>, nb: vec3<f32>, piv: vec3<f32>, r: f32, arch: f32, dirt: f32, px: f32) {
     let y = local.y - (piv.y - r);
     let wave = st_noise(vec2<f32>(local.z / 0.45 + local.x * 3.1, dirt * 13.0)) - 0.5;
     let drip = mix(0.5, st_noise(vec2<f32>(local.z / 0.035 + local.x * 7.3, y / 0.5) + dirt * 17.0), wx_keep(0.035, px)) - 0.5;
     let spray = 1.0 - smoothstep(0.0, r * 2.2, abs(local.z - (piv.z - r * 1.3)));
-    var top = r * (1.35 + 0.35 * wave + 0.7 * spray);
-    var film = dirt * 0.35 * smoothstep(0.55, 0.9, nb.y);
-    var film_c = AG_CAR_ROAD_FILM;
-    var cover = WX_CAR_DUST_COVER;
-    var dust = 0.45;
-    if (SF_CAR_FINISH && fin) {
-        // (`--car-finish`) the film the tyres throw reaches the lower third of
-        // the body (the sills to the door's middle, highest behind each wheel)
-        // as a dry grey-brown film over most of it on a car a few weeks from a
-        // wash; the dust settled on the roof, bonnet and boot is a matte film
-        // over most of them on a dusty car, dried rain spots in it where a pixel
-        // resolves them
-        top = r * AG_CF_FILM_REACH * (1.0 + 0.25 * wave + 0.45 * spray);
-        film_c = AG_CF_ROAD_FILM;
-        cover = AG_CF_FILM_COVER;
-        let spots = mix(0.5, st_noise(local.xz / 0.03 + vec2<f32>(dirt * 7.0, 3.1)), wx_keep(0.03, px));
-        film = dirt * AG_CF_DUST_COVER * smoothstep(0.45, 0.85, nb.y) * (0.7 + 0.6 * spots);
-        dust = 1.0;
-    }
-    var band = (1.0 - smoothstep(top * 0.3, top * (1.0 + 0.3 * drip), y)) * dirt;
-    if (SF_CAR_FINISH && fin) {
-        // (`--car-finish`) dense to half its height, thinning above (a few weeks' film)
-        band = (1.0 - smoothstep(top * 0.55, top * (1.1 + 0.3 * drip), y)) * min(dirt * 1.6, 1.0);
-    }
+    let top = r * (1.35 + 0.35 * wave + 0.7 * spray);
+    let band = (1.0 - smoothstep(top * 0.3, top * (1.0 + 0.3 * drip), y)) * dirt;
     let ring = (1.0 - smoothstep(1.02, 1.5, arch)) * (0.35 + 0.65 * dirt);
-    (*s).albedo = mix((*s).albedo, film_c, clamp(band * cover, 0.0, 1.0));
-    (*s).albedo = mix((*s).albedo, WX_CAR_DUST, clamp(film * dust, 0.0, 1.0));
+    let film = dirt * 0.35 * smoothstep(0.55, 0.9, nb.y);
+    (*s).albedo = mix((*s).albedo, AG_CAR_ROAD_FILM, clamp(band * WX_CAR_DUST_COVER, 0.0, 1.0));
+    (*s).albedo = mix((*s).albedo, WX_CAR_DUST, clamp(film * 0.45, 0.0, 1.0));
     (*s).albedo = mix((*s).albedo, WX_CAR_GRIME, clamp(ring * WX_CAR_GRIME_COVER, 0.0, 1.0));
     // the film's haze on the lacquer follows the band without its drips: a
     // roughness changing from one pixel to the next sparkles under a lamp.
@@ -1394,13 +1390,16 @@ fn ag_car_grime(s: ptr<function, Surface>, local: vec3<f32>, nb: vec3<f32>, piv:
 // ---- (`--car-finish`; SF_CAR_FINISH, look.rs `ShaderFeatures`: compiled out
 // without it, `ag.misc.z` bit 2 at run time) The cars' finish as the street
 // wears it. Paint: the base coat's metallic flakes glint one by one in the sun
-// (a pixel holds a few thousand flakes, of which only those turned within the
-// sun's quarter-degree of the half vector send it to the eye: a count of a
-// mean of a few, so the highlight on a metallic car is a field of sparks over
-// its smooth mean); the lacquer's orange peel (a 4 mm ripple of half a
-// degree, under a pixel at the cards' distances) as a slightly wider lobe;
-// the road film up the lower third and the dust settled on the roof, bonnet
-// and boot (`ag_car_grime`); on old cars the lacquer failed in patches on the
+// where a pixel resolves them (a 2 mm pixel holds a few hundred flakes, of
+// which only those turned within the sun's quarter-degree of the half vector
+// send it to the eye: a count of a mean of a few, a field of sparks over the
+// highlight's smooth mean); further out the camera's reconstruction filter and
+// its history average a pixel's few glints with its neighbours', so a frame
+// shows their mean, the flake lobe, and nothing crawls; the lacquer's orange
+// peel (a 4 mm ripple of half a degree, under a pixel at the cards'
+// distances) as a slightly wider lobe; road grime where the road and the
+// weather put it (`ag_cf_grime`: the tyres' spray, the tail's wake, run-off
+// streaks from the glass's foot, settled dust); on old cars the lacquer failed in patches on the
 // surfaces facing the sun (chalky, matte, no reflection). Glass: automotive
 // float glass is green-grey (iron oxide; ~75 % visible transmission), so the
 // cabin behind it, lit through it and seen through it, is dim and green-grey
@@ -1427,12 +1426,28 @@ const AG_CF_CABIN: vec3<f32> = vec3<f32>(0.633, 0.827, 0.707);
 const AG_CF_CABIN_ALBEDO_MAX: f32 = 0.12;
 const AG_CF_CABIN_ROUGH: f32 = 0.6;
 // The road film: dried asphalt fines, tyre and brake dust (a grey-brown
-// lighter than the wet film), its cover at full dirt, and how high it reaches
-// in wheel radii; the settled dust's cover on the surfaces facing up.
+// lighter than the wet film), its cover at full dirt (densest in each
+// wheel's wake, thinner between: its deposit is uneven, `AG_CF_FILM_PATCH_M`),
+// and how high it reaches in wheel radii; the tail's wake (the surfaces facing
+// back below the rear glass) at this share of the film's cover; the settled
+// dust's cover on the surfaces facing up.
 const AG_CF_ROAD_FILM: vec3<f32> = vec3<f32>(0.16, 0.145, 0.12);
-const AG_CF_FILM_COVER: f32 = 0.9;
+const AG_CF_FILM_COVER: f32 = 0.85;
 const AG_CF_FILM_REACH: f32 = 1.9;
-const AG_CF_DUST_COVER: f32 = 0.7;
+const AG_CF_FILM_PATCH_M: f32 = 0.3;
+const AG_CF_WAKE: f32 = 0.7;
+const AG_CF_DUST_COVER: f32 = 0.45;
+// Run-off: rain off the glass's foot carries the dust down the doors and the
+// tail in streaks: one may start in each run of this length along the
+// beltline (m), a streak this wide (m), reaching down at most this share of
+// the beltline's height, at this share of the film's cover.
+const AG_CF_RUN_M: f32 = 0.07;
+const AG_CF_RUN_W: f32 = 0.012;
+const AG_CF_RUN_REACH: f32 = 0.6;
+const AG_CF_RUN_COVER: f32 = 0.55;
+// A flake's glint is drawn one by one only where a pixel's footprint is
+// under this (m: ~2.5 m from the 1080-line camera); half of it and under in full.
+const AG_CF_GLINT_PX: f32 = 0.002;
 // Failed lacquer: the share of old cars showing it, the patches' size (m),
 // the chalked base under it.
 const AG_CF_FAIL_SHARE: f32 = 0.35;
@@ -1460,13 +1475,98 @@ const AG_CF_DROP_M: f32 = 0.011;
 const AG_CF_BEAD_COVER: f32 = 0.65;
 const AG_CF_DROP_COVER: f32 = 0.5;
 const AG_CF_WET_RUBBER_ROUGH: f32 = 0.32;
+// Calipers: the shares of the fleet with bare cast iron, black, red (cumulative;
+// the rest keep the body's own painted caliper) and their colours (iron a dull
+// grey-brown under brake dust).
+const AG_CF_CALIPER_SHARE: vec3<f32> = vec3<f32>(0.65, 0.85, 0.93);
+const AG_CF_CALIPER_IRON: vec3<f32> = vec3<f32>(0.11, 0.1, 0.09);
+const AG_CF_CALIPER_BLACK: vec3<f32> = vec3<f32>(0.02, 0.02, 0.021);
+const AG_CF_CALIPER_RED: vec3<f32> = vec3<f32>(0.3, 0.02, 0.02);
+
+// How much of a glint a pixel of footprint `px` (m) shows one by one (`AG_CF_GLINT_PX`): 1 where it
+// resolves the flakes' sparks, 0 where the camera's filter and history show their mean.
+fn ag_cf_resolved(px: f32) -> f32 {
+    return 1.0 - smoothstep(AG_CF_GLINT_PX * 0.5, AG_CF_GLINT_PX, px);
+}
+
+// A pattern of `scale` (m) drawn where it spans three pixels and more, its
+// mean where it spans under a pixel and a half (stricter than `wx_keep`: a
+// pattern of two or three pixels reads as grain on a car's smooth paint).
+fn ag_cf_keep(scale: f32, px: f32) -> f32 {
+    return 1.0 - smoothstep(scale * 0.16, scale * 0.33, px);
+}
+
+// (`--car-finish`, in `ag_car_grime`'s place) Road grime where the road and the
+// weather put it on a car a few weeks from a wash (`dirt` its level, `md` its
+// body): the tyres' spray as a grey-brown film densest at the sill, up the
+// lower body to about the wheels' tops, highest in each wheel's wake (the
+// rear of its arch and the panel behind it) and uneven along the body, its
+// upper edge run down in drips; the tail's wake (a hatch, a tailgate, a van's
+// doors: the surfaces facing back below the rear glass) dusted by the
+// low-pressure air behind the car; run-off streaks from the glass's foot down
+// the doors and the tail (each a narrow streak of the film fading downward,
+// drawn where a pixel resolves it, its mean cover where not); the dust
+// settled on the roof, bonnet and boot, uneven over half a metre; the grime
+// round each arch. Every pattern is under the pixel's resolve (`ag_cf_keep`):
+// no grain across a panel.
+fn ag_cf_grime(s: ptr<function, Surface>, local: vec3<f32>, nb: vec3<f32>, piv: vec3<f32>, r: f32, arch: f32, dirt: f32, px: f32, md: AgModel) {
+    let y = local.y - (piv.y - r);
+    // the beltline: the glass's foot (the occluder boxes' `belt`, eo-agents `contact_words`), else above the body's middle
+    var belt = md.center.y * 1.25;
+    if (md.pad.z != 0u) {
+        belt = unpack2x16snorm(md.pad.z).x * 32.767;
+    }
+    let wave = st_noise(vec2<f32>(local.z / 0.45 + local.x * 3.1, dirt * 13.0)) - 0.5;
+    let drip = mix(0.5, st_noise(vec2<f32>(local.z / 0.035 + local.x * 7.3, y / 0.5) + dirt * 17.0), ag_cf_keep(0.035, px)) - 0.5;
+    let spray = 1.0 - smoothstep(0.0, r * 2.2, abs(local.z - (piv.z - r * 1.3)));
+    let lay = st_noise(vec2<f32>(local.z, local.y + local.x * 0.7) / AG_CF_FILM_PATCH_M + vec2<f32>(dirt * 5.3, 1.7));
+    let top = r * AG_CF_FILM_REACH * (1.0 + 0.25 * wave + 0.45 * spray);
+    // the spray: dense to about half its height, thinning above
+    let band = (1.0 - smoothstep(top * 0.45, top * (1.1 + 0.3 * drip), y)) * min(dirt * 1.6, 1.0) * mix(0.65, 1.0, spray) * (0.75 + 0.5 * lay);
+    // the wake on the surfaces facing back, below the rear glass, heavier toward the bumper
+    let back = smoothstep(0.35, 0.75, -nb.z) * (1.0 - smoothstep(belt * 0.9, belt * 1.02, local.y));
+    let wake = back * AG_CF_WAKE * dirt * (0.7 + 0.3 * (1.0 - smoothstep(0.0, belt, local.y))) * (0.8 + 0.4 * lay);
+    // run-off streaks on the panels standing up (the side along z, the tail along x)
+    var run = 0.0;
+    let upright = 1.0 - smoothstep(0.35, 0.6, abs(nb.y));
+    if (upright > 0.0 && local.y < belt) {
+        let side = abs(nb.x) > abs(nb.z);
+        let along = select(local.x, local.z, side);
+        let ci = floor(along / AG_CF_RUN_M);
+        let salt = select(2.3, 7.9, side) + select(0.0, 3.1, select(nb.z, nb.x, side) < 0.0);
+        let hr = st_hash(vec2<f32>(ci + floor(dirt * 61.0), salt));
+        let hx = st_hash(vec2<f32>(ci * 1.7 + salt, 4.4));
+        let reach = belt * AG_CF_RUN_REACH * (0.3 + 0.7 * hr);
+        // down from the beltline, fading toward its foot
+        let fall = smoothstep(belt - reach, belt - reach * 0.4, local.y) * (1.0 - smoothstep(belt - 0.015, belt, local.y));
+        let w = AG_CF_RUN_W * (0.6 + 0.8 * hx);
+        let dx = abs((fract(along / AG_CF_RUN_M) - 0.2 - 0.6 * hx) * AG_CF_RUN_M);
+        let line = 1.0 - smoothstep(w * 0.5, w * 0.5 + px, dx);
+        let starts = select(0.0, 1.0, hr > 0.5);
+        // the mean cover of the streaks where a pixel does not resolve them
+        let mean = 0.5 * (w / AG_CF_RUN_M) * 0.7;
+        run = mix(mean, line * starts, ag_cf_keep(w * 3.0, px)) * fall * upright * dirt * AG_CF_RUN_COVER;
+    }
+    let ring = (1.0 - smoothstep(1.02, 1.5, arch)) * (0.35 + 0.65 * dirt);
+    // the dust settled on the surfaces facing up, uneven over half a metre
+    let lie = st_noise(local.xz / 0.5 + vec2<f32>(dirt * 7.0, 3.1));
+    let film = dirt * AG_CF_DUST_COVER * smoothstep(0.5, 0.85, nb.y) * (0.6 + 0.8 * lie);
+    let cover = clamp(max(max(band, wake), run) * AG_CF_FILM_COVER, 0.0, 1.0);
+    (*s).albedo = mix((*s).albedo, AG_CF_ROAD_FILM, cover);
+    (*s).albedo = mix((*s).albedo, WX_CAR_DUST, clamp(film, 0.0, 1.0));
+    (*s).albedo = mix((*s).albedo, WX_CAR_GRIME, clamp(ring * WX_CAR_GRIME_COVER, 0.0, 1.0));
+    // the film's haze on the lacquer follows the cover without its drips and streaks
+    // (a roughness changing from one pixel to the next sparkles under a lamp)
+    let haze = max((1.0 - smoothstep(top * 0.3, top, y)) * dirt * mix(0.65, 1.0, spray), wake);
+    (*s).rough = clamp(mix((*s).rough, 0.85, max(haze, ring) * 0.8 + film * 0.5), 0.03, 1.0);
+}
 
 // A drop's lens at a point of the body (its frame `local`, normal `nb`):
 // the tilt it gives the normal, in the body's frame (0 off a drop or where a
 // pixel `px` does not resolve the cells). Cells on the plane the normal faces
 // most, stretched down the vertical panes into running trails.
 fn ag_cf_drop(local: vec3<f32>, nb: vec3<f32>, px: f32, cell: f32, cover: f32) -> vec3<f32> {
-    let keep = wx_keep(cell, px);
+    let keep = ag_cf_keep(cell, px);
     if (keep <= 0.0) {
         return vec3<f32>(0.0);
     }
@@ -1521,7 +1621,7 @@ fn ag_cf_paint(g: ptr<function, AgSurf>, k: ptr<function, AgCar>, local: vec3<f3
     sky_coat_rough = sky_coat_rough + AG_CF_PEEL_ROUGH;
     if (rain > 0.0) {
         // beads: their lenses where a pixel resolves them; a wider lobe and the lamps' speckle where not
-        let unres = 1.0 - wx_keep(AG_CF_BEAD_M, d.px);
+        let unres = 1.0 - ag_cf_keep(AG_CF_BEAD_M, d.px);
         sky_coat_rough = sky_coat_rough + 0.05 * unres * rain;
         (*k).far_rough = mix((*k).far_rough, max((*k).far_rough, 0.12), unres * rain);
         (*k).fx.w = unres * rain;
@@ -1538,14 +1638,14 @@ fn ag_cf_glass(g: ptr<function, AgSurf>, k: ptr<function, AgCar>, local: vec3<f3
     let rear = smoothstep(0.2, 0.6, -nb.z);
     let screen = smoothstep(0.3, 0.7, nb.z);
     let foot = 1.0 - smoothstep(md.center.y, md.center.y + 0.5 * md.radius, local.y);
-    let spots = mix(0.5, st_noise(local.xy / 0.012 + local.zz * 37.0), wx_keep(0.012, d.px));
+    let spots = mix(0.5, st_noise(local.xy / 0.012 + local.zz * 37.0), ag_cf_keep(0.012, d.px));
     var haze = AG_CF_HAZE * dirt * (0.35 + 0.65 * age) * (1.0 + 1.5 * rear - 0.6 * screen) * (0.6 + 0.6 * foot) * (0.75 + 0.5 * spots);
     // the glass's outer face reflects the street as its base does: by the sky
     // the ambient volume sees along it (look_light's coat takes the occlusion
     // only with a class set; the glass's own, so its strength is unchanged)
     sky_coat_env = look.env_class.y;
     if (rain > 0.0) {
-        let unres = 1.0 - wx_keep(AG_CF_DROP_M, d.px);
+        let unres = 1.0 - ag_cf_keep(AG_CF_DROP_M, d.px);
         (*k).far_rough = mix((*k).far_rough, 0.15, unres * rain);
         (*k).fx.w = unres * rain;
         (*g).n = normalize((*g).n + drop - (*g).n * dot((*g).n, drop));
@@ -1606,7 +1706,8 @@ fn ag_cf_light(c: vec4<f32>, k: AgCar, world: vec3<f32>, local: vec3<f32>, g: Ag
             let dgx = exp((c2 - 1.0) / (c2 * m2)) / (LK_PI * m2 * c2 * c2);
             let cell = ag_cf_cell(px);
             let lam = AG_CF_FLAKE_RATE * cell * cell * dgx;
-            if (lam > 1e-3) {
+            let resolved = ag_cf_resolved(px);
+            if (lam > 1e-3 && resolved > 0.0) {
                 // the flakes' lobe from the sun (that D, Kelemen's visibility, the base coat's F0)
                 let f0 = mix(vec3<f32>(0.04), g.s.albedo, g.s.metal);
                 let lh = max(dot(l, hv), 0.05);
@@ -1614,7 +1715,7 @@ fn ag_cf_light(c: vec4<f32>, k: AgCar, world: vec3<f32>, local: vec3<f32>, g: Ag
                 let n = ag_cf_count(lam, ag_cf_cell_hash(local, px, 3.0));
                 let fcc = 0.04 + 0.96 * pow(1.0 - max(dot(g.n, g.v), 0.0), 5.0);
                 let under = (1.0 - sky_coat * fcc) * (1.0 - ag_car_fog(world, g.m));
-                o = vec4<f32>(max(o.rgb + mean * (n / lam - 1.0) * under, vec3<f32>(0.0)), o.a);
+                o = vec4<f32>(max(o.rgb + mean * (n / lam - 1.0) * under * resolved, vec3<f32>(0.0)), o.a);
             }
         }
     }
