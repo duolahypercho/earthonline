@@ -48,6 +48,11 @@ pub const WALL_ALBEDO: Rgb = crate::sun_bounce::WALL_ALBEDO;
 pub const GROUND_SKY_H_M: f64 = 1.0;
 /// The most of a wall's irradiance a vertical surface's sky can be (the open sky's share on a vertical surface).
 pub const SIDE_OPEN: f64 = 0.5;
+/// Shares under this are left out (the shader's skips): a surface with no lower
+/// hemisphere and at most this much of its sky blocked does not read the
+/// street's sky (it counts as open), and a rim at most this much hidden is
+/// left whole.
+pub const SKIP_SHARE: f64 = 0.01;
 /// The street's sky visibility is read between these for the canyon relation
 /// (a street seeing 2 % of the sky lies between walls 25 x its width high; one
 /// seeing 99.9 % is open ground).
