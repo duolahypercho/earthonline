@@ -426,6 +426,22 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-office-floors" => a.look.sky.office_floors = false,
             "--room-depth" => a.look.sky.room_depth = true,
             "--no-room-depth" => a.look.sky.room_depth = false,
+            "--lamp-units" => a.look.sky.lamp_units = true,
+            "--no-lamp-units" => a.look.sky.lamp_units = false,
+            "--luminaires" => {
+                a.look.sky.luminaires = true;
+                a.props2.luminaires = true;
+            }
+            "--no-luminaires" => {
+                a.look.sky.luminaires = false;
+                a.props2.luminaires = false;
+            }
+            "--rear-lamps" => a.look.sky.rear_lamps = true,
+            "--no-rear-lamps" => a.look.sky.rear_lamps = false,
+            "--signal-spill" => a.look.sky.signal_spill = true,
+            "--no-signal-spill" => a.look.sky.signal_spill = false,
+            "--lit-rooms" => a.look.sky.lit_rooms = true,
+            "--no-lit-rooms" => a.look.sky.lit_rooms = false,
             // the natural-detail shading (eo-render look::NATURE_*; off by default, compiled out while off).
             "--foliage-light" => a.look.nature |= eo_render::look::NATURE_FOLIAGE,
             "--no-foliage-light" => a.look.nature &= !eo_render::look::NATURE_FOLIAGE,
