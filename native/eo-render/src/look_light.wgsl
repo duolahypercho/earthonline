@@ -31,6 +31,13 @@ const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
 @group(1) @binding(1) var lk_shadow_map: texture_depth_2d_array;
 @group(1) @binding(2) var lk_shadow_cmp: sampler_comparison;
 
+/// (`--night-photometry`; eo-sky `night_photometry`) the practicals' gain on
+/// the emission carried in the rig's own units (lit rooms, signs, the lenses
+/// of lamps, signals and vehicles): the look uniform's `fog.z`, 1 off.
+fn lk_practical_gain() -> f32 {
+    return select(1.0, look.fog.z, SF_NIGHT_PHOTOMETRY && look.fog.z > 0.0);
+}
+
 fn lk_sh(n: vec3<f32>) -> vec3<f32> {
     let x = n.x;
     let y = n.y;
@@ -286,7 +293,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         return vec4<f32>(vec3<f32>(ao4.a), 1.0);
     }
 
-    var lit = direct_d + direct_s + indirect_d + indirect_s + bounce + m.emissive.rgb + rm_emit; // + the room
+    var lit = direct_d + direct_s + indirect_d + indirect_s + bounce + m.emissive.rgb * lk_practical_gain() + rm_emit; // + the room (`--night-photometry`: the lenses' gain)
     lit = lit + sky_local_lights_ao(world, n, v, diffuse, f0, rough, ao); // street lamps, headlamps (`ao` and their shadows only with the light shadows on)
     var alpha = s.alpha;
     if (glass && m.emissive.w > 0.0) {

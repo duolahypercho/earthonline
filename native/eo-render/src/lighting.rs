@@ -225,6 +225,7 @@ mod tests {
         sets.push(("shop light".into(), look::ShaderFeatures { shop_light: true, ..none }));
         sets.push(("facade clutter".into(), look::ShaderFeatures { facade_clutter: true, ..none }));
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
+        sets.push(("night photometry".into(), look::ShaderFeatures { night_photometry: true, ..none })); // (`--night-photometry`)
         sets
     }
 
@@ -266,7 +267,7 @@ mod tests {
             lighting: LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true },
             grime: 2,
             street_life: 1,
-            sky: crate::sky::SkyOptions { shop_light: 2, ..o.sky },
+            sky: crate::sky::SkyOptions { shop_light: 2, night_photometry: true, ..o.sky },
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
@@ -277,6 +278,7 @@ mod tests {
         let none = look::ShaderFeatures::NONE.limit(&on);
         assert_eq!(none.lighting, LightingOptions::OFF, "a feature compiled out stays off");
         assert_eq!((none.grime, none.street_life, none.sky.shop_light), (0, 0, 0));
+        assert!(!none.sky.night_photometry, "(`--night-photometry`) compiled out, off");
         assert!(same(&none, &look::LookOptions { lighting: LightingOptions::OFF, grime: 0, street_life: 0, sky: o.sky, ..on }), "nothing else changes");
         // each lighting bit keeps only its own option.
         let blend_only = look::ShaderFeatures { lx_bits: look::LX_BIT_CASCADE_BLEND, ..look::ShaderFeatures::NONE }.limit(&on);

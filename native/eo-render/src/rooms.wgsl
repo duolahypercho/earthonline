@@ -40,6 +40,30 @@ fn rm_filtered3(pattern: vec3<f32>, mean: vec3<f32>, footprint: f32, period: f32
 // of reach, where a room gives way to the rooms' own rule at its own distance.
 var<private> rm_shop_override: vec4<f32>;
 
+// (`--night-photometry`; `rm_kit_pane` sets it for an office pane, then clears
+// it) the office floor's lighting zone the room lies in: x the zone's switch
+// roll, y its lamp's roll (colour temperature), z its dimmer roll, w 1 set.
+var<private> rm_office_zone: vec4<f32>;
+
+/// (`--night-photometry`) An office zone's lamp: lit offices seen from the
+/// street at night are not one neutral white but a tenant's mix: 4000 K
+/// fluorescent with its green bias (most), 5000 K LED panels, 3300 K warm LED
+/// retrofits, a few 5300 K and 2700 K (IES Lighting Handbook 10th ed., office
+/// lighting practice: 3000-5000 K; fluorescent triphosphor lamps sit ~+0.003
+/// Duv above the Planckian locus, a green cast).
+fn rm_office_lamp(roll: f32) -> vec3<f32> {
+    if (roll < 0.34) {
+        return RM_COOL_A * vec3<f32>(0.95, 1.03, 0.93);
+    } else if (roll < 0.58) {
+        return RM_OFFICE_A;
+    } else if (roll < 0.82) {
+        return RM_WARM_B;
+    } else if (roll < 0.92) {
+        return RM_COOL_B;
+    }
+    return RM_WARM_A;
+}
+
 // (stage W5, `--street-life`; weathering.wgsl `wx_window_life_pre` sets it,
 // `wx_window` clears it) x 1 on, y the building's wear, z 1 a vacant shop, w
 // the share of a flat's windows with sill plants: `rm_room` hands what shows at
@@ -95,15 +119,33 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let floor_share = min(work.x / 0.7, 1.0);
     let floor_lit = rm_ss(floor_phase - band / 2.0, floor_phase + band / 2.0, floor_share);
     let bay_lit = step(rm_h(seed, 42.0), 0.7);
-    let lit = mix(lit_home, floor_lit * bay_lit, office);
+    var lit = mix(lit_home, floor_lit * bay_lit, office);
+    // (`--night-photometry`) an office floor is lit in zones (a tenant's open plan, a
+    // stretch of perimeter offices) that switch with the office share (the storey's
+    // phase and the zone's own roll, uniform together), the lit share the bays had
+    // (the floors' share x 0.7), with a few dark bays in a lit zone: bands of lit
+    // windows, not a per-bay checkerboard.
+    let zoned = SF_NIGHT_PHOTOMETRY && look.fog.z > 0.0 && rm_office_zone.w > 0.5 && office > 0.5;
+    if (zoned) {
+        let zk = fract(floor_phase + rm_office_zone.x);
+        let zone_share = floor_share * 0.7 / 0.93;
+        lit = rm_ss(zk - band / 2.0, zk + band / 2.0, zone_share) * step(rm_h(seed, 42.0), 0.93);
+    }
     // (`--look cinematic`, stage L2: work z the screens' share, w the clock; rooms.rs `drive_look`)
     let cine = SF_CINEMATIC && work.z > 0.0;
     let tv = step(rm_h(seed, 2.0), select(0.12, work.z, cine)) * (1.0 - shop) * (1.0 - office);
-    let level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
+    var level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
+    if (zoned) {
+        // the zone's dimmer, and a little from bay to bay
+        level = mix(0.5, 1.0, rm_office_zone.z) * mix(0.85, 1.0, rm_h(seed, 3.0));
+    }
     let cool = step(rm_h(seed, 4.0), env.w - shop * 0.1);
     let temp_mix = rm_h(seed, 5.0);
     let home_color = mix(mix(RM_WARM_A, RM_WARM_B, temp_mix), mix(RM_COOL_A, RM_COOL_B, temp_mix), cool);
     var lamp_color = mix(home_color, mix(RM_OFFICE_A, RM_OFFICE_B, temp_mix), office);
+    if (zoned) {
+        lamp_color = rm_office_lamp(rm_office_zone.y);
+    }
     if (cine) {
         // the look's wider spread of homes: a low amber lamp, a cold daylight LED.
         let roll = rm_h(seed, 44.0);
@@ -290,7 +332,8 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let kind_gain = mix(mix(1.0, 1.2, office), 1.0, shop);
     // all of it is seen through the pane (RM_DAY_THROUGH, the tinted glass's transmission).
     o.day = vec4<f32>(min(day_room * day_level * kind_gain, vec3<f32>(1.0)) * RM_DAY_THROUGH, show);
-    o.night = radiance * (1.0 - fresnel) * lit * env.x * has_room;
+    // (`--night-photometry`) a room lit by its own lamp carries the practicals' gain (a shop's own light below has it already).
+    o.night = radiance * (1.0 - fresnel) * lit * env.x * has_room * lk_practical_gain();
     if (shop_lit >= 0.0) {
         // the light carries the dusk (sky.rs: the lamps' units times the rooms' dusk).
         o.night = radiance * (1.0 - fresnel) * shop_lit * has_room;
@@ -450,12 +493,22 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
         trade = front.found && distance < reach && (env.x <= 0.0 || lit_rule);
     }
     var r: RmOut;
+    if (SF_NIGHT_PHOTOMETRY && look.fog.z > 0.0 && office > 0.5) {
+        // (`--night-photometry`) the office zone: a stretch of 9-24 m along the
+        // facade on each storey (3.6 m storeys anchored in the world), its own rolls.
+        let storey = floor(pos.y / 3.6);
+        let zone_m = mix(9.0, 24.0, rm_h(plane_hash + storey * 0.173, 61.0));
+        let zone = floor((dot(pos, tangent) + rm_h(plane_hash, 62.0) * 30.0) / zone_m);
+        let zs = fract(plane_hash * 7.13 + storey * 0.6180339 + zone * 0.4142136);
+        rm_office_zone = vec4<f32>(rm_h(zs, 63.0), rm_h(zs, 64.0), rm_h(zs, 65.0), 1.0);
+    }
     if (trade) {
         r = rm_shop_pane(front, pos, n, dir, distance, work);
     } else {
         r = rm_room(local, size, dir, vec4<f32>(seed, shop, office, distance), vec2<f32>(shop_key, pane_bottom), env, work, true, true);
     }
     rm_shop_override = vec4<f32>(0.0);
+    rm_office_zone = vec4<f32>(0.0);
     if (rm_w5.x > 0.5) {
         // stage W5 (`--street-life`, weathering.wgsl): plants on a flat's sill, a vacant shop's taped paper
         wx_room_life(&r, local, max(size, vec2<f32>(0.05)), dir, seed, shop, office * (1.0 - shop), work.y, distance);

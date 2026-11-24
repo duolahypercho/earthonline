@@ -1181,7 +1181,7 @@ fn shade(in: VOut) -> vec4<f32> {
         fc_on = sgn.mode != 0u;
     }
     if (fc_on) {
-        rm_emit = rm_emit + fc.emit * fc_lit(fc.q, fc.n, fc.roll) * select(1.0, FC_CINE_SIGN_GAIN, SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC));
+        rm_emit = rm_emit + fc.emit * fc_lit(fc.q, fc.n, fc.roll) * select(1.0, FC_CINE_SIGN_GAIN, SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC)) * lk_practical_gain(); // (`--night-photometry`: the signs' gain)
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);

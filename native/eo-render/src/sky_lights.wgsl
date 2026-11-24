@@ -246,10 +246,37 @@ fn lt_cine_lamp(l: ptr<function, SkyLight>, head: vec3<f32>, h: f32, tint: u32, 
     (*l).range = h * LT_CINE_RANGE_MH;
 }
 
+// ---- (`--night-photometry`; eo-sky `lit_fog::luminaire_shape`) ----
+// A full-cutoff street luminaire (SF's LED cobra heads and the fallback's
+// cobras and columns) sends little toward an eye near its horizontal plane:
+// its candela falls from the batwing's peak to none at 90 deg from the
+// nadir (IES cutoff classification), the shape the lit fog gives its tail.
+// The sprite's lens, air light and glare take the luminaire's intensity
+// toward the eye, not its nadir intensity (the lamps far down a long street
+// no longer show at full strength and sum to a wedge); the lens never under
+// `LT_EYE_LENS_FLOOR` of the nadir (INFERRED: the optics' edge and housing
+// glow a few per cent, so a row of far lamps still reads as dots). A globe,
+// a banner pendant, a landmark's and a bore's lamps keep their nadir.
+const LT_EYE_FULL_DEG: f32 = 72.0;
+const LT_EYE_TAIL_POWER: f32 = 3.0;
+const LT_EYE_LENS_FLOOR: f32 = 0.03;
+
+/// The luminaire at `head`'s intensity toward the eye over its nadir's, in [floor, 1].
+fn lt_eye_share(head: vec3<f32>) -> f32 {
+    let d = normalize(skyu.eye.xyz - head);
+    let c = -d.y;
+    if (c <= 0.0) {
+        return LT_EYE_LENS_FLOOR;
+    }
+    let tail = pow(min(c / cos(LT_EYE_FULL_DEG * 0.017453292), 1.0), LT_EYE_TAIL_POWER);
+    return clamp((1.0 + 1.5 * (1.0 - c * c)) * tail, LT_EYE_LENS_FLOOR, 1.0);
+}
+
 /// A street lamp into the frame's lights (near) and the luminaires (to the
 /// sprite reach). `head` is the luminaire (the lens; the source may stand
-/// above it).
-fn lt_emit(l: SkyLight, head: vec3<f32>) {
+/// above it); `cutoff` a full-cutoff street luminaire (`--night-photometry`:
+/// its sprite carries its intensity toward the eye, `lt_eye_share`).
+fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool) {
     let near = lt_visible(l.pos, l.range);
     if (near) {
         lt_push(l);
@@ -271,6 +298,10 @@ fn lt_emit(l: SkyLight, head: vec3<f32>) {
                 var s = l;
                 // bit 0: shaded by the clusters (no pool decal); bit 1: by the water (its glitter in the sea).
                 s.pad = select(0.0, 1.0, near && v.z - l.range <= skyu.cluster.y) + select(0.0, 2.0, by_water);
+                if (LT_NIGHT_PHOTOMETRY && cutoff && (skyu.flags.x & LT_NIGHT_PHOTOMETRY_BIT) != 0u) {
+                    // (`--night-photometry`) its share toward the eye in the fraction (sky_fx.wgsl `fx_eye_share`).
+                    s.pad = s.pad + 0.999 * (1.0 - lt_eye_share(head));
+                }
                 lt_sprites[k] = s;
             }
         }
@@ -295,7 +326,7 @@ fn lights_lamps(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else {
         l.color = lt_led(l.color);
     }
-    lt_emit(l, l.pos);
+    lt_emit(l, l.pos, l.kind == 0u);
 }
 
 /// `lampPracticals.sourceLiftMH`: the JS lamp practical's virtual source
@@ -347,7 +378,7 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
         let warm = p.kind == LT_MODEL_HISTORIC || p.kind == LT_MODEL_BANNER;
         lt_cine_lamp(&l, p.pos, h, select(4u, 3u, warm), p.kind == LT_MODEL_HISTORIC);
     }
-    lt_emit(l, p.pos);
+    lt_emit(l, p.pos, !tunnel && p.kind != LT_LANDMARK && p.kind != LT_MODEL_HISTORIC && p.kind != LT_MODEL_BANNER);
 }
 
 @compute @workgroup_size(64)

@@ -437,6 +437,12 @@ mod tests {
         assert!(clouds.contains(&format!("const CL_BASE_TILE: f32 = {CL_BASE_TILE:?};")), "sky_clouds.wgsl CL_BASE_TILE moved");
         assert!(include_str!("sky_lights.wgsl").contains(&format!("const LT_JS_SOURCE_LIFT_MH: f32 = {JS_SOURCE_LIFT_MH:?};")));
         assert!(include_str!("sky_fx.wgsl").contains(&format!("const FX_LENS_M: f32 = {:?};", 0.16f32)));
+        // (`--night-photometry`) the luminaires' toward-eye shape is the fog's tail, and the sky flag's bit.
+        let lt = include_str!("sky_lights.wgsl");
+        assert!(lt.contains(&format!("const LT_EYE_FULL_DEG: f32 = {:?};", eo_sky::lit_fog::LUMINAIRE_FULL_DEG as f32)));
+        assert!(lt.contains(&format!("const LT_EYE_TAIL_POWER: f32 = {:?};", eo_sky::lit_fog::LUMINAIRE_TAIL_POWER as f32)));
+        assert!(crate::sky::night_photometry_wgsl().contains(&format!("const LT_NIGHT_PHOTOMETRY_BIT: u32 = {}u;", 1u32 << 24)));
+        assert!(lt.contains("LT_NIGHT_PHOTOMETRY &&"), "the gather's toward-eye share is compiled out without the switch");
     }
 
     #[test]
