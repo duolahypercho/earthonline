@@ -778,7 +778,7 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         include_str!("facade_age.wgsl"),             // facade
         crate::facade::facade_constants_wgsl()        // facade
     ) + "\n" + &crate::rooms::wgsl_constants() + include_str!("rooms.wgsl")
-        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
+        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + &crate::sky_reflect::sky_light_source(single_probe || shadow != ShadowLevels::Full) // sky (the reflect track's switches' code out of the agents' variant, sky_reflect.rs)
         + "\n" + LOOK_EXT_WGSL // group 1 bindings 12-18
         + "\n" + crate::far_shadow::WGSL + &shadow_wgsl(shadow) // the far sun shadow map's lookup and the variant's shadow parts (lighting)
         + "\n" + &crate::ambient::wgsl(ambient) // the ambient volume's sampling (lighting)
@@ -1366,7 +1366,7 @@ impl LookGpu {
         let lighting = self.lighting_bound.lock().unwrap().clone();
         // main_bg[p] is bound while the resolve writes history p: it reads history 1 - p.
         let bg = |p: usize| {
-            let prev = self.sky.history_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone());
+            let prev = self.sky.reflect_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone()); // (`--screen-reflect`: with its mip chain)
             Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &lighting)
         };
         *self.main_bg.lock().unwrap() = [bg(0), bg(1)];

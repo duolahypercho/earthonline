@@ -397,6 +397,8 @@ struct Targets {
     lit_fog_gen: u64,
     bloom_bgs: [Vec<wgpu::BindGroup>; 2],
     bytes: u64,
+    /// (`--screen-reflect`) the histories' mip chain (sky_reflect.rs).
+    pyr: Option<crate::sky_reflect::ReflectTargets>,
 }
 
 struct SceneBinds {
@@ -552,6 +554,8 @@ pub struct SkyGpu {
     targets: Mutex<Option<Targets>>,
     state: Mutex<State>,
     pub bytes: u64,
+    /// (`--screen-reflect`) the histories' mip chain's pipelines (sky_reflect.rs), with SF_SCREEN_REFLECT compiled in.
+    reflect: Option<crate::sky_reflect::ReflectPyramid>,
 }
 
 fn tex(device: &wgpu::Device, label: &str, size: (u32, u32), format: wgpu::TextureFormat, usage: wgpu::TextureUsages) -> wgpu::TextureView {
@@ -1115,6 +1119,7 @@ impl SkyGpu {
                 shops: None,
             }),
             bytes,
+            reflect: crate::look::shader_features().screen_reflect.then(|| crate::sky_reflect::ReflectPyramid::new(d)),
         }
     }
 
@@ -1919,7 +1924,14 @@ impl SkyGpu {
         let volz = [0, 1].map(|_| tex(d, "sky-volume-z", half, wgpu::TextureFormat::R32Float, su));
         let full = [0, 1].map(|_| tex(d, "sky-volume-full", size, wgpu::TextureFormat::Rgba16Float, su));
         let fullz = [0, 1].map(|_| tex(d, "sky-volume-full-z", size, wgpu::TextureFormat::R32Float, su));
-        let hist = [tex(d, "sky-history-0", size, hdr_format, ru), tex(d, "sky-history-1", size, hdr_format, ru)];
+        // (`--screen-reflect`) with their mip chain (level-0 views as without it)
+        let (hist, pyr) = match self.reflect.as_ref().filter(|_| hdr_format == wgpu::TextureFormat::Rgba16Float) {
+            Some(r) => {
+                let (h, p) = r.histories(d, &self.uniform, size, hdr_format, ru);
+                (h, Some(p))
+            }
+            None => ([tex(d, "sky-history-0", size, hdr_format, ru), tex(d, "sky-history-1", size, hdr_format, ru)], None),
+        };
         let vel = tex(d, "sky-velocity", size, VEL_FORMAT, ru);
         let mut mips = vec![];
         let mut ups = vec![];
@@ -1960,7 +1972,8 @@ impl SkyGpu {
                 list.push(bg(src, &mips[i], &ups[i], i));
             }
         }
-        *t = Some(Targets { size, vol, volz, full, fullz, hist, vel, _mips: mips, ups, scene: None, lit_fog_gen: 0, bloom_bgs, bytes });
+        bytes += pyr.as_ref().map(|p| p.bytes).unwrap_or(0);
+        *t = Some(Targets { size, vol, volz, full, fullz, hist, vel, _mips: mips, ups, scene: None, lit_fog_gen: 0, bloom_bgs, bytes, pyr });
         let mut s = self.state.lock().unwrap();
         s.history_valid = false;
         true
@@ -1974,6 +1987,12 @@ impl SkyGpu {
     /// The previous resolved frame (the city pass's reflection source) for a parity.
     pub(crate) fn history_view(&self, p: usize) -> Option<wgpu::TextureView> {
         self.targets.lock().unwrap().as_ref().map(|t| t.hist[p].clone())
+    }
+
+    /// (`--screen-reflect`) The previous resolved frame for the city pass: every
+    /// level of its mip chain where the histories carry one, else `history_view`.
+    pub(crate) fn reflect_view(&self, p: usize) -> Option<wgpu::TextureView> {
+        self.targets.lock().unwrap().as_ref().map(|t| t.pyr.as_ref().map(|r| r.all[p].clone()).unwrap_or_else(|| t.hist[p].clone()))
     }
 
     /// The bloom result (up level 0).
@@ -2234,6 +2253,10 @@ impl SkyGpu {
             pass.set_pipeline(&self.resolve_pipe);
             pass.set_bind_group(0, &sb.resolve[parity], &[]);
             pass.draw(0..3, 0..1);
+        }
+        // (`--screen-reflect`) the history's mip chain, read next frame (sky_reflect.rs)
+        if let (Some(r), Some(p), true) = (&self.reflect, &t.pyr, o.screen_reflect) {
+            r.encode(enc, p, parity);
         }
         // Bloom.
         {

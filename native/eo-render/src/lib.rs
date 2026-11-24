@@ -51,6 +51,7 @@ pub mod rooms;
 pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
 pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
 pub mod sky; // sky
+mod sky_reflect; // (`--screen-reflect`) the histories' mip chain (the reflect track)
 pub mod smooth_time; // the drawn hour following the clock (`--smooth-time`)
 pub mod street;
 pub mod structures; // grade-separated roads (`--structures`)
