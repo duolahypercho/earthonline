@@ -167,6 +167,8 @@ pub struct AgentsGpu {
     pipes: AgentPipes,
     /// the velocity pipeline (single-sample renderers) and the model table the light gather reads.
     velocity: Option<wgpu::RenderPipeline>,
+    /// (`--car-contact`) the cars' occlusion of the street round them (agents_contact.rs); None without the switch.
+    contact: Option<crate::agents_contact::Contact>,
     models_buf: wgpu::Buffer,
     shadow: wgpu::RenderPipeline,
     timing: Mutex<Option<(wgpu::QuerySet, u32)>>,
@@ -481,14 +483,17 @@ impl AgentsGpu {
                 wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },                   // facade
             ],
         });
+        // (`--car-contact`) the cars' occlusion of the street, appended only with the switch on.
+        let contact_on = look.options.car_contact > 0;
         let draw_src = format!(
-            "{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}{}",
             // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
             crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
             include_str!("agents_draw.wgsl"),
-            include_str!("sky_velocity.wgsl") // sky
+            include_str!("sky_velocity.wgsl"), // sky
+            if contact_on { concat!("\n", include_str!("agents_contact.wgsl")) } else { "" }
         );
         let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -497,6 +502,7 @@ impl AgentsGpu {
             immediate_size: 0,
         });
         let pipes = AgentPipes { device: d.clone(), module: draw_module.clone(), layout: draw_layout.clone(), sample_count, debug_ids };
+        let contact = contact_on.then(|| crate::agents_contact::Contact::new(d, &draw_module, [&draw_bgl, look.main_bind_group_layout(), &data_bgl]));
         let attrs = AgentPipes::ATTRS;
         let stride = std::mem::size_of::<AgentVertex>() as u64;
         let make = |label: &str, blend: bool| pipes.make(label, if debug_ids { "agent_fs_ids" } else { "agent_fs" }, blend);
@@ -615,6 +621,7 @@ impl AgentsGpu {
             bore_live: AtomicBool::new(false),
             pipes,
             velocity,                // sky
+            contact,
             models_buf: models.clone(), // sky
             shadow,
             timing: Mutex::new(None),
@@ -834,6 +841,22 @@ impl AgentsGpu {
             pass.set_pipeline(&b[0]);
             pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
         }
+    }
+
+    /// (`--car-contact`) Whether the cars' occlusion of the street will read this depth after the city pass.
+    pub fn contact_reads(&self, depth: &wgpu::TextureView) -> bool {
+        self.contact.is_some() && crate::agents_contact::Contact::reads(depth)
+    }
+
+    /// (`--car-contact`) After the city pass: the street round each car near
+    /// the eye multiplied by what its body leaves of the light (agents_contact.wgsl).
+    /// Nothing without the switch or without agents this frame.
+    pub fn encode_contact(&self, enc: &mut wgpu::CommandEncoder, look: &LookGpu, hdr: &wgpu::TextureView, depth: &wgpu::TextureView) {
+        let Some(c) = &self.contact else { return };
+        if !self.active.load(Ordering::Relaxed) {
+            return;
+        }
+        c.encode(&self.pipes.device, enc, &self.draw_bg, &self.data_bg, look, hdr, depth, self.count());
     }
 
     /// the agent instances, the model table and how many agents are live (the lights' gather reads them).

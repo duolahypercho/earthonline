@@ -331,3 +331,49 @@ fn car_materials_change_the_car_alone_and_nothing_while_off() {
     let corner = |img: &[f32]| (0..20).flat_map(|y| (0..20).map(move |x| y * W as usize + x)).chain((0..20).flat_map(|y| (0..20).map(move |x| (H as usize - 1 - y) * W as usize + W as usize - 1 - x))).map(|k| img[k]).collect::<Vec<_>>();
     assert_eq!(differ(&corner(&base), &corner(&on)), 0, "nothing but the car changes");
 }
+
+/// `--car-contact`: the cars' occlusion of the street (agents_contact.wgsl,
+/// a pass of its own) darkens the slab at a car's foot and leaves the slab a
+/// few metres off as it was; without the switch no pass is made. (The
+/// screen-space occlusion is off here: the pass takes only what it left.)
+#[test]
+fn car_contact_darkens_the_street_at_the_car_alone() {
+    let ctx = ctx();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let people = eo_agents::library::PeopleSource::Off;
+    let lib = Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &people, eo_agents::library::CookOptions { car_materials: true, ..Default::default() }).expect("agent library");
+    // A sedan side-on 7 m north of the camera (its nose to +x), the camera 3 m up looking down at it.
+    let cam = Camera::new(Vec3::new(0.0, 3.0, 0.0), 0.0, -0.35, W as f32 / H as f32);
+    let shot = |contact: u8| {
+        let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+        slab(&mut v, &mut i, &mut o);
+        let mut r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+        // (the screen-space occlusion off: where it already took the car's share the pass takes no more)
+        let options = eo_render::look::LookOptions { car_contact: contact, ao: false, ..r.look.options };
+        r.look.set_options(&ctx.device, options);
+        r.attach_agents(&ctx, &lib).unwrap();
+        let a = r.agents.get().unwrap();
+        a.upload(&ctx.queue, &[car(&lib, "sedan", Vec3::new(0.0, 0.0, -7.0), std::f32::consts::FRAC_PI_2)]);
+        let made = a.contact_reads(&Targets::new(&ctx.device, W, H, wgpu::TextureFormat::Rgba8UnormSrgb, 1).depth);
+        (render(&ctx, &r, &cam, 2), made)
+    };
+    let ((off, made_off), (on, made_on)) = (shot(0), shot(1));
+    assert!(!made_off && made_on, "the pass is made with the switch alone");
+    let shape = eo_agents::vehicles::contact_shape(&eo_agents::vehicles::cook_body_with(&eo_agents::catalog::read_verified(&paths.repo_root, &eo_agents::catalog::AgentsJs::load().unwrap().vehicles["sedan"].lods[0].asset()).unwrap(), &eo_agents::vehicles::LampColours::from_js(&eo_agents::catalog::AgentsJs::load().unwrap()), true).unwrap());
+    // the slab 5 cm out from the sill on the camera's side, along the car's
+    // middle, and 10 cm in under the sill: darker (by the share of their light
+    // that is the sky's: this slab is lit mostly by the key), under the sill most.
+    let at = |p: Vec3| {
+        let (x, y) = project(&cam, p);
+        let k = (y.min(H - 1) * W + x.min(W - 1)) as usize;
+        on[k] / off[k].max(1e-6)
+    };
+    let foot = at(Vec3::new(0.3, 0.0, -7.0 + shape.lower_half_w + 0.05));
+    let under = at(Vec3::new(0.3, 0.0, -7.0 + shape.lower_half_w - 0.1));
+    eprintln!("the slab at the car's foot keeps {foot}, under the sill {under}");
+    assert!(foot < 0.99 && under < foot, "the slab at the car's foot keeps {foot}, under the sill {under}");
+    // the slab's far corners (tens of metres off) are untouched.
+    let corner = |img: &[f32]| (0..20).flat_map(|y| (0..20).map(move |x| (H as usize - 1 - y) * W as usize + x)).map(|k| img[k]).collect::<Vec<_>>();
+    let (a, b) = (corner(&off), corner(&on));
+    assert!(a.iter().zip(&b).all(|(p, q)| (p - q).abs() <= 1e-3 * (1.0 + p.abs())), "the far slab changed");
+}

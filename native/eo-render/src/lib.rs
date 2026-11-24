@@ -13,6 +13,7 @@
 //! objects per frame.
 
 pub mod agents; // agents
+mod agents_contact; // (`--car-contact`) the cars' occlusion of the street round them
 pub mod alloc;
 pub mod ambient; // the ambient volume (lighting)
 pub mod ambient_bake; // the ambient volume's sky-visibility bake (lighting)
@@ -1920,6 +1921,8 @@ impl Renderer {
         let keep_depth = (self.look.options.ao || self.look.sky_wants_depth()) && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1; // + the sky passes
         // the wire pass after the late city pass depth-tests against it.
         let keep_depth = keep_depth || self.props.get().is_some_and(|p| p.wires_pending());
+        // (`--car-contact`) the cars' occlusion of the street reads it after the city pass.
+        let keep_depth = keep_depth || self.agents.get().is_some_and(|a| a.contact_reads(depth));
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
         // with occlusion on the city is two passes, the early
         // (objects visible last frame, depth kept for the pyramid) and the
@@ -2096,6 +2099,9 @@ impl Renderer {
                     });
                 }
             }
+        }
+        if let Some(a) = self.agents.get() {
+            a.encode_contact(enc, &self.look, &hdr, depth); // (`--car-contact`) the street round the cars, before the water and the occlusion pass
         }
         // the FFT (+ the plain patch cull), the frame copy and the water
         // pass, the city's and the agents' glass drawn over it in the same pass.
