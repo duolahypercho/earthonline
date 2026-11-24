@@ -401,6 +401,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-palm-detail" => a.look.nature &= !eo_render::look::NATURE_PALM,
             "--hill-cover" => a.look.nature |= eo_render::look::NATURE_HILLS,
             "--no-hill-cover" => a.look.nature &= !eo_render::look::NATURE_HILLS,
+            "--ground-cover" => a.look.nature |= eo_render::look::NATURE_COVER,
+            "--no-ground-cover" => a.look.nature &= !eo_render::look::NATURE_COVER,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
@@ -977,6 +979,8 @@ pub fn load_world(args: &Args) -> Result<World> {
         elev.sample(x, z).filter(|h| *h > eo_water::SEA_LEVEL_Y + FAR_LAND_ABOVE_SEA_M)
     };
     let beach_fit = eo_render::ground2::on("beach_fit");
+    // (`--ground-cover`) the hills' tones without the per-vertex jitter (the shader draws the mosaic)
+    eo_render::ground2::set_cover(args.look.nature & eo_render::look::NATURE_COVER != 0);
     let ground_tone_fn = |x: f32, z: f32| -> Option<u32> {
         let cover = cover.as_ref()?;
         let (x, z) = (x as f64, z as f64);
