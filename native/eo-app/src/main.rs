@@ -371,6 +371,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--sun-bounce" | "--no-sun-bounce" => a.look.sun_bounce = s == "--sun-bounce",
             // (opt in) the occlusion's multi-bounce at each surface's own albedo instead of 0.7
             "--ao-albedo" | "--no-ao-albedo" => a.look.ao_albedo = s == "--ao-albedo",
+            // (opt in) the sun's penumbra: the cascades filtered over the sun's disc at the caster's distance
+            "--soft-shadows" | "--no-soft-shadows" => a.look.soft_shadows = s == "--soft-shadows",
             // weather (a preset or the shared schedule) and the stage switches.
             "--weather" => {
                 let v = val()?;
