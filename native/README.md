@@ -256,6 +256,7 @@ selection:
 | World additions (opt-in) | `--no-structures`, `--no-tunnels` (the last of a switch and its `--no-` form wins; `eo-server` takes them too) |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
+| Camera model | `--cine-camera` (with `--look cinematic`; off by default, no tier sets it) meters each frame from its own luminance histogram (lower-centre weighted, a percentile window, clamped against the hour's exposure) with a bilateral-grid local exposure, tone-maps with a hue-preserving AgX-style log sigmoid, spreads a threshold-free, energy-kept bloom over seven levels with a power-law tail, draws the visible sun's starburst and ghosts in place of the lamps' sprite starbursts, and adds cos^4 fall-off and mid-tone film grain (eo-render cine_post.rs, look_cine_camera.wgsl, cine_camera.wgsl). `--no-cine-camera` restores the previous camera |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
 
