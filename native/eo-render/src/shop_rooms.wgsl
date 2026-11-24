@@ -49,6 +49,11 @@ struct SrRoom {
     kind: u32,
 };
 
+// (`--room-depth`, rooms.wgsl `rm_shop_pane` sets it for one room, then
+// restores it) the share of the window-adapted level the lit surfaces show at
+// by night; 1 draws them as before.
+var<private> sr_surface: f32 = 1.0;
+
 struct SrOut {
     // per unit of the window's radiance (night), and the albedo the pane takes (day)
     night: vec3<f32>,
@@ -1245,7 +1250,7 @@ fn sr_room(o: vec3<f32>, d_in: vec3<f32>, r: SrRoom, pix: f32, dist: f32) -> SrO
     // far off: the fittings' and walls' mean
     let mean_alb = select(vec3<f32>(0.24, 0.22, 0.2), vec3<f32>(0.4, 0.39, 0.37), r.vacant);
     let alb = mix(mean_alb, sc.rgb, mix(0.55, 1.0, detail));
-    out.night = alb * e * SR_GAIN + vec3<f32>(sc.a + sheen);
+    out.night = alb * e * SR_GAIN * sr_surface + vec3<f32>(sc.a + sheen);
     // by day: the same room by its own light and the daylight near the window, its fixtures a little
     let near_win = 1.0 - smoothstep(0.0, 3.0, p.z);
     let lit_day = select(1.0, 0.25, r.vacant);

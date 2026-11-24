@@ -277,6 +277,8 @@ pub fn wgsl_constants() -> String {
     s.push_str(&crate::shop_lights::wgsl());
     // (`--shop-light`, stage N2) the shops' rooms by trade (shop_rooms.wgsl).
     s.push_str(&crate::shop_lights::rooms_wgsl());
+    // (`--office-floors`, `--room-depth`) their sky flags.
+    s.push_str(&crate::sky::interiors_wgsl());
     // the switches of the room fixes (see `RoomFixes`).
     let f = RoomFixes::from_args();
     s.push_str(&format!(
