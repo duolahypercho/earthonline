@@ -343,6 +343,84 @@ fn pp_person(g: AgSurf) -> vec3<f32> {
     return out * (1.0 - lk_fog_out);
 }
 
+// ---- the ground's light on a person (`--people-bounce`; agents.rs `SF_PEOPLE_BOUNCE`) ----
+// The rig lights the lower half of every surface's world with its ground
+// lobe (look.hemi_ground, and with the ground bounce the sunlit open ground's
+// exitance, ambient.wgsl `amb_bounce`): one colour for every street at every
+// hour, nothing from the street lamps. A person stands a metre or two over the
+// very ground the camera sees round their feet, so that ground's radiance L
+// is measured there instead: the previous frame (sky_prev, the scene's
+// radiance before exposure) read at a ring of points on the ground round the
+// feet (`PB_RING_M`, `PB_SAMPLES` of them), each kept only where the previous
+// frame's depth (lk_ao_z) shows that ground and not a body or car in front of
+// it, and the rig's ground term is replaced by a uniform lower half-space of
+// that radiance: irradiance pi L (1 - n.y) / 2 (the view factor of an infinite
+// plane below), weighted by the share of the ring found. A lamp's pool lights
+// a person from below at night, a sunlit street warms their underside by
+// day, a shaded alley's dark paving gives them little.
+const PB_RING_M: f32 = 0.9;
+const PB_SAMPLES: u32 = 6u;
+// how far the depth found may stand from the ring point's (m, and per m of distance)
+const PB_DEPTH_TOL: vec2<f32> = vec2<f32>(0.2, 0.02);
+
+// (radiance, share of the ring found) round the ground point `foot`.
+fn pb_ground(foot: vec3<f32>) -> vec4<f32> {
+    if (look.ao_params.x < 0.5 || frame.copy_step.z > 0.5) {
+        return vec4<f32>(0.0);
+    }
+    let dims = vec2<i32>(textureDimensions(lk_ao_z));
+    var sum = vec3<f32>(0.0);
+    var found = 0.0;
+    for (var k = 0u; k < PB_SAMPLES; k = k + 1u) {
+        let a = (f32(k) + 0.5) * (2.0 * LK_PI / f32(PB_SAMPLES));
+        let p = foot + vec3<f32>(cos(a) * PB_RING_M, 0.02, sin(a) * PB_RING_M);
+        let clip = look.ao_vp * vec4<f32>(p, 1.0);
+        if (clip.w <= 1e-3) {
+            continue;
+        }
+        let uv = vec2<f32>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5);
+        if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+            continue;
+        }
+        let z = textureLoad(lk_ao_z, clamp(vec2<i32>(uv * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
+        let zr = dot(p - look.ao_cam.xyz, look.ao_fwd.xyz);
+        if (z <= 0.0 || abs(zr - z) > PB_DEPTH_TOL.x + PB_DEPTH_TOL.y * zr) {
+            continue;
+        }
+        sum = sum + textureSampleLevel(sky_prev, lk_ao_samp, uv, 0.0).rgb;
+        found = found + 1.0;
+    }
+    if (found < 1.0) {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(sum / found, found / f32(PB_SAMPLES));
+}
+
+// What the measured ground adds to a person's fragment (outgoing radiance,
+// before the fog; may be negative where the ground is darker than the rig's).
+fn pb_person(g: AgSurf, world: vec3<f32>, foot: vec3<f32>) -> vec3<f32> {
+    let lg = pb_ground(foot);
+    if (lg.w <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let n = g.s.n;
+    let lower = 0.5 - 0.5 * n.y;
+    var rig = look.hemi_ground.xyz * lower;
+    if (AMB_SHADER_LEVELS > 0u && amb_on() && any(look.lx[0].yzw > vec3<f32>(0.0))) {
+        rig = rig + amb_bounce(amb_ground(world, g.n), n, sky_cloud_transmittance(world));
+    }
+    let measured = LK_PI * lg.rgb * lower;
+    let diffuse = g.s.albedo * (1.0 - g.s.metal);
+    let f0 = mix(vec3<f32>(0.04), g.s.albedo, g.s.metal);
+    let dfg = lk_dfg(max(dot(n, g.v), 1e-4), g.s.rough);
+    let fss = f0 * dfg.x + vec3<f32>(dfg.y);
+    var ao = g.s.ao;
+    if (frame.copy_step.z < 0.5) {
+        ao = ao * ao_multi_bounce(ao_fetch(world).a);
+    }
+    return (measured - rig) * lg.w * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
+}
+
 // Every agent but those in a tunnel's bore: the city's light rig (look_light.wgsl).
 fn ag_shade(in: AgOut) -> vec4<f32> {
     let g = ag_surface(in, false);
@@ -352,13 +430,18 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
         sky_coat_rough = mix(AG_CINE_COAT_ROUGH, AG_CINE_COAT_GRIME_ROUGH, grime);
     }
     // (`--people-shading`) a person's skin, cloth and hair; compiled out without it.
-    let person = SF_PEOPLE_SHADING && (g.m.flags & AG_M_ATLAS) != 0u && ag_models[ag_agents[in.agent].model].model_class == AG_PERSON;
+    let is_person = (g.m.flags & AG_M_ATLAS) != 0u && ag_models[ag_agents[in.agent].model].model_class == AG_PERSON;
+    let person = SF_PEOPLE_SHADING && is_person;
     if (person && pp_class(g.s.rough) == PP_SKIN) {
         lk_vis_wrap = PP_SKIN_WRAP_REACH; // the key's visibility past the terminator, for the band's tail
     }
     var c = look_light(g.s, g.m, g.v, in.world, g.n, 0u);
     if (person) {
         c = vec4<f32>(c.rgb + pp_person(g), c.a);
+    }
+    // (`--people-bounce`) the ground round the feet in place of the rig's ground lobe; compiled out without it.
+    if (SF_PEOPLE_BOUNCE && is_person) {
+        c = vec4<f32>(max(c.rgb + pb_person(g, in.world, ag_agents[in.agent].pos) * (1.0 - lk_fog_out), vec3<f32>(0.0)), c.a);
     }
     return c;
 }
