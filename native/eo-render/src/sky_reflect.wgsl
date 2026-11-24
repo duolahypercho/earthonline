@@ -10,11 +10,48 @@
 // and nothing else), so a disc a few pixels wide cannot spread a glow
 // through the coarse levels; the mean is otherwise energy-conserving (no
 // Karis weights: a tail lamp keeps its power as it spreads).
+//
+// The alpha is the trace's hierarchical depth (sky_reflect.rs): level 1's the
+// occlusion pass's half-resolution view depth (`rp_z`, the trace's own), each
+// later level's the nearest of the texels under it (with the last row or
+// column of an odd level above folded into its neighbour's), rounded toward
+// the eye before it is stored at half precision, so a cell never claims to
+// be further than anything in it; sky and nothing are `RP_FAR_M`.
 
 @group(0) @binding(0) var<uniform> skyu: Sky;
 @group(0) @binding(1) var rp_src: texture_2d<f32>;
 @group(0) @binding(2) var rp_lin: sampler;
 @group(0) @binding(3) var rp_dst: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(4) var rp_z: texture_2d<f32>;
+
+/// Sky and nothing in the Hi-Z (m; half precision's largest is 65504).
+const RP_FAR_M: f32 = 65000.0;
+/// The share a depth is pulled toward the eye before half precision rounds it
+/// (its step is 2^-11 of the value).
+const RP_NEAR_ROUND: f32 = 0.998;
+
+/// Level 1's Hi-Z: the view depth at its own texel.
+fn rp_near_first(p: vec2<u32>) -> f32 {
+    let zd = textureDimensions(rp_z);
+    let z = textureLoad(rp_z, min(p, zd - 1u), 0).r;
+    return select(RP_FAR_M, min(z * RP_NEAR_ROUND, RP_FAR_M), z > 0.0);
+}
+
+/// A later level's Hi-Z: the nearest of the level above's texels under `p`
+/// (an odd level's last row or column goes to the texel beside it).
+fn rp_near_down(p: vec2<u32>) -> f32 {
+    let sd = textureDimensions(rp_src);
+    let od = textureDimensions(rp_dst);
+    let ex = select(2u, 3u, p.x + 1u == od.x && sd.x > 2u * od.x);
+    let ey = select(2u, 3u, p.y + 1u == od.y && sd.y > 2u * od.y);
+    var z = RP_FAR_M;
+    for (var j = 0u; j < ey; j = j + 1u) {
+        for (var i = 0u; i < ex; i = i + 1u) {
+            z = min(z, textureLoad(rp_src, min(2u * p + vec2<u32>(i, j), sd - 1u), 0).a);
+        }
+    }
+    return z;
+}
 
 fn rp_tap(uv: vec2<f32>, ceiling: bool) -> vec3<f32> {
     var c = max(textureSampleLevel(rp_src, rp_lin, uv, 0.0).rgb, vec3<f32>(0.0));
@@ -53,7 +90,8 @@ fn rp_run(gid: vec3<u32>, ceiling: bool) {
     }
     let uv = (vec2<f32>(gid.xy) + 0.5) / vec2<f32>(od);
     let t = 1.0 / vec2<f32>(textureDimensions(rp_src));
-    textureStore(rp_dst, vec2<i32>(gid.xy), vec4<f32>(rp_down13(uv, t, ceiling), 1.0));
+    let z = select(rp_near_down(gid.xy), rp_near_first(gid.xy), ceiling);
+    textureStore(rp_dst, vec2<i32>(gid.xy), vec4<f32>(rp_down13(uv, t, ceiling), z));
 }
 
 /// Level 1 from the full-resolution history, each tap held to the ceiling.

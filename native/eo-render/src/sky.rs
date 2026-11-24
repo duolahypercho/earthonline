@@ -2387,7 +2387,7 @@ impl SkyGpu {
         }
         // (`--screen-reflect`) the history's mip chain, read next frame (sky_reflect.rs)
         if let (Some(r), Some(p), true) = (&self.reflect, &t.pyr, o.screen_reflect) {
-            r.encode(enc, p, parity);
+            r.encode(&self.device, &self.uniform, enc, p, parity, look.ao_z_view().as_ref()); // + the trace's Hi-Z from this frame's occlusion depth
         }
         // Bloom.
         {

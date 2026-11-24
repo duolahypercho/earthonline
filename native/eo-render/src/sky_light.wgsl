@@ -977,16 +977,22 @@ fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
 //   was made with), stepped on the screen (McGuire & Mara 2014): the ray's 1/w
 //   and its depth over w are linear on the screen, so its depth at each step
 //   is exact and every stretch of its path is looked at, near and far alike.
-//   At most `SKY_SR_STEPS` steps and never more than one a texel, denser
-//   toward the start (contact), the first a texel and a half out, jittered per
-//   pixel and frame (interleaved gradient noise, golden-ratio steps). A step
-//   hits where the depth there lies within the ray's depth over the step
-//   (passed by a small bias) and no more than the sample's assumed thickness in
-//   front of it; bisections on the screen place the hit against the depth
-//   read bilinearly where its four texels are one surface (a reflected facade
-//   moves smoothly with the pixel instead of in half-resolution blocks). A ray
-//   that stays on the frame to its full reach and meets nothing has escaped:
-//   it sees the sky;
+//   It walks the depth's hierarchy (Hi-Z: the reflection pyramid's alpha,
+//   sky_reflect.rs, the nearest depth of each cell of 2^l half-resolution
+//   texels): a cell the ray crosses wholly in front of its nearest depth is
+//   passed in one step and the walk climbs a level; a cell it may pass behind
+//   is looked into a level finer; a texel is tested. So every texel of the
+//   path is looked at (the linear march's 40 steps, packed toward the start,
+//   skipped up to 25 texels at a time at its far end: thin poles and kerbs
+//   were stepped over) in at most `SKY_SR_STEPS` steps. The first texel is a
+//   texel and a half out, jittered per pixel and frame (interleaved gradient
+//   noise, golden-ratio steps). A texel hits where its depth lies within the
+//   ray's depth across it (passed by a small bias) and no more than the
+//   sample's assumed thickness in front of it; bisections on the screen place
+//   the hit against the depth read bilinearly where its four texels are one
+//   surface (a reflected facade moves smoothly with the pixel instead of in
+//   half-resolution blocks). A ray that stays on the frame to its full reach
+//   and meets nothing has escaped: it sees the sky;
 // * the filter (`sky_sr_cone`): the surface's lobe at the hit seen through
 //   the mirror, read from the previous frame's mip chain (sky_reflect.rs). A
 //   GGX lobe of alpha a turns the reflected ray by about 1.1 a (a Gaussian's
@@ -1032,11 +1038,17 @@ const SKY_SR_FULL: bool = SF_SCREEN_REFLECT && LK_SHADOW_CASCADES && LK_SHADOW_F
 /// over 1.177); a mip level m's blur, about `y` 2^m pixels (13-tap means read
 /// bilinearly); the most taps along a streak.
 const SKY_SR_CONE: vec3<f32> = vec3<f32>(1.1, 0.8, 12.0);
-/// The trace: its most steps, the power that packs them toward the start,
-/// the bisections that place a hit.
-const SKY_SR_STEPS: i32 = 40;
-const SKY_SR_SPACING: f32 = 1.6;
+/// The trace: its most steps, its coarsest Hi-Z level (cells of 2^x
+/// half-resolution texels: the pyramid's level x + 1), the bisections that
+/// place a hit.
+const SKY_SR_STEPS: i32 = 48;
+const SKY_SR_HIZ_TOP: i32 = 6;
 const SKY_SR_REFINE: i32 = 5;
+/// The cone's coarsest level (1/32 of the frame: the widest lobe it filters;
+/// the pyramid goes on for the Hi-Z).
+const SKY_SR_CONE_TOP: f32 = 5.0;
+/// The Hi-Z's sky (sky_reflect.wgsl `RP_FAR_M`): no surface in the cell.
+const SKY_SR_HIZ_FAR: f32 = 60000.0;
 /// The ray's reach (m) and the nearest view depth it is followed to (m).
 const SKY_SR_REACH_M: f32 = 800.0;
 const SKY_SR_NEAR_M: f32 = 0.25;
@@ -1073,9 +1085,26 @@ const SKY_SR_OFF_FRAME: vec4<f32> = vec4<f32>(0.9553365, 0.6216100, 0.5, 2.0);
 const SKY_SR_FRAME_ENV: f32 = 0.6;
 /// (look_light) the surface being shaded is glass (set before `sky_ssr`).
 var<private> sky_sr_glass: bool;
+/// The share of the reflection's weight the trace's hit carries (set by
+/// `sky_sr_ssr`; the rest is the frame's sky along the ray).
+var<private> sky_sr_hit: f32;
 
 fn sky_sr_on() -> bool {
     return SKY_SR_FULL && sky_on(skyu.flags.x, SKY_SCREEN_REFLECT);
+}
+
+/// (look_light) The indirect specular: the environment `env` and the
+/// reflection `ssr` (rgb, weight) through the split sum `fss`, under the
+/// specular occlusion `so` (the occlusion pass's visibility as a cone, Lagarde
+/// & de Rousiers 2014) only where the trace did not find what the ray meets:
+/// a hit's radiance is what the occluder sends, and occluding it again took
+/// most of a car's, a kerb's or a wall's reflection at its foot (where the
+/// occlusion is deepest). Off, as before.
+fn sky_sr_spec(env: vec3<f32>, ssr: vec4<f32>, fss: vec3<f32>, so: f32) -> vec3<f32> {
+    if (!sky_sr_on()) {
+        return mix(env, ssr.rgb, ssr.a) * fss * so;
+    }
+    return mix(env * so, ssr.rgb * mix(so, 1.0, sky_sr_hit), ssr.a) * fss;
 }
 
 /// (look_light) The glass clearcoat's environment `rad` (x `env_i` there) with
@@ -1094,7 +1123,7 @@ fn sky_sr_glass_mix(rad: vec3<f32>, ssr: vec4<f32>, env_i: f32) -> vec3<f32> {
 /// each other; `j` slides them within a spacing), Gaussian-weighted; capped
 /// at 24 x the exposure.
 fn sky_sr_cone(uv: vec2<f32>, sig: vec2<f32>, j: f32) -> vec3<f32> {
-    let top = f32(textureNumLevels(sky_prev) - 1u);
+    let top = min(f32(textureNumLevels(sky_prev) - 1u), SKY_SR_CONE_TOP);
     let sa = max(sig.x, 0.5);
     let sl = max(sig.y, 0.5);
     let n = i32(clamp(ceil(2.0 * sl / sa), 1.0, SKY_SR_CONE.z));
@@ -1143,6 +1172,17 @@ fn sky_sr_depth_lin(s: vec2<f32>, top: vec2<i32>) -> f32 {
         return sky_sr_depth(s, top);
     }
     return mix(mix(z00, z10, f.x), mix(z01, z11, f.x), f.y);
+}
+
+/// The nearest view depth (m) in Hi-Z cell `c` of level `l` (0: the
+/// half-resolution depth's own texel, `top` its last; sky and nothing: far).
+fn sky_sr_hiz(c: vec2<i32>, l: i32, top: vec2<i32>) -> f32 {
+    if (l == 0) {
+        let z = textureLoad(lk_ao_z, clamp(c, vec2<i32>(0), top), 0).r;
+        return select(SKY_SR_HIZ_FAR, z, z > 0.0);
+    }
+    let d = vec2<i32>(textureDimensions(sky_prev, l + 1)) - 1;
+    return textureLoad(sky_prev, clamp(c, vec2<i32>(0), d), l + 1).a;
 }
 
 /// Open sky at the frame's `q` (uv): the share of five depth texels round it
@@ -1209,29 +1249,53 @@ fn sky_sr_trace(p0: vec3<f32>, r: vec3<f32>, j: f32) -> vec4<f32> {
     if (span < 2.0) {
         return vec4<f32>(0.0, 0.0, select(0.0, -1.0, whole), 0.0);
     }
-    let n = min(f32(SKY_SR_STEPS), ceil(span));
+    // the Hi-Z walk (see above): the levels the pyramid holds over this
+    // depth (none where its level 1 is not the depth's size: a texel at a time)
+    let hiz_ok = textureNumLevels(sky_prev) > 2u && all(textureDimensions(sky_prev, 1) == textureDimensions(lk_ao_z));
+    let l_top = select(0, min(SKY_SR_HIZ_TOP, i32(textureNumLevels(sky_prev)) - 2), hiz_ok);
+    let f_end = max(fe, 0.0);
+    let inv = vec2<f32>(select(1e30, 1.0 / ds.x, abs(ds.x) > 1e-6), select(1e30, 1.0 / ds.y, abs(ds.y) > 1e-6));
+    let toward = select(vec2<f32>(0.0), vec2<f32>(1.0), ds > vec2<f32>(0.0));
+    let nudge = 1e-3 / len;
+    var f = (1.5 + j) / len;
+    var lvl = 0;
     var f_prev = 0.0;
-    var z_prev = d0;
     var f_hit = -1.0;
     var behind = false;
     for (var i = 0; i < SKY_SR_STEPS; i = i + 1) {
-        if (f32(i) >= n) {
+        if (f >= f_end) {
             break;
         }
-        let f = (1.5 + (span - 1.5) * pow((f32(i) + j) / n, SKY_SR_SPACING)) / len;
-        let k = mix(k0, k1, f);
-        let zr = mix(q0, q1, f) / k;
-        let z = sky_sr_depth(s0 + ds * f, top);
+        let cs = exp2(f32(lvl));
+        let cell = floor((s0 + ds * f) / cs);
+        // where the ray leaves the cell
+        let tb = ((cell + toward) * cs - s0) * inv;
+        let f_out = min(max(min(tb.x, tb.y), f), f_end);
+        let za = mix(q0, q1, f) / mix(k0, k1, f);
+        let zb = mix(q0, q1, f_out) / mix(k0, k1, f_out);
+        let z = sky_sr_hiz(vec2<i32>(cell), lvl, top);
+        if (max(za, zb) <= z + SKY_SR_BIAS.x + SKY_SR_BIAS.y * z) {
+            // wholly in front of the cell's nearest: past it, a level up
+            f = f_out + nudge;
+            lvl = min(lvl + 1, l_top);
+            continue;
+        }
+        if (lvl > 0) {
+            lvl = lvl - 1;
+            continue;
+        }
+        // a texel: a hit where the ray crosses its depth within its thickness
         let thick = SKY_SR_THICK.x + SKY_SR_THICK.y * z;
-        if (z > 0.0 && max(zr, z_prev) > z + SKY_SR_BIAS.x + SKY_SR_BIAS.y * z && min(zr, z_prev) < z + thick) {
-            f_hit = f;
+        if (z < SKY_SR_HIZ_FAR && min(za, zb) < z + thick) {
+            f_prev = f;
+            f_hit = f_out;
             break;
         }
-        behind = behind || (z > 0.0 && zr > z + thick);
-        f_prev = f;
-        z_prev = zr;
+        behind = behind || (z < SKY_SR_HIZ_FAR && min(za, zb) > z + thick);
+        f = f_out + nudge;
+        lvl = min(1, l_top);
     }
-    let escaped = select(0.0, -1.0, whole && !behind);
+    let escaped = select(0.0, -1.0, whole && !behind && f >= f_end);
     if (f_hit < 0.0) {
         return vec4<f32>(0.0, 0.0, escaped, 0.0);
     }
@@ -1279,6 +1343,7 @@ fn sky_sr_dir(q: vec2<f32>) -> vec3<f32> {
 
 /// The reflection with the switch on (see above): rgb radiance, a weight.
 fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<f32> {
+    sky_sr_hit = 0.0;
     if (!sky_on(skyu.flags.x, SKY_SSR) || skyu.flags.z == 0u || look.ao_params.x < 0.5 || rough > SKY_CINE_SSR_ROUGH.y || frame.copy_step.z > 0.5) {
         return vec4<f32>(0.0);
     }
@@ -1384,6 +1449,7 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     if (w <= 0.0) {
         return vec4<f32>(0.0);
     }
+    sky_sr_hit = hit_w / w;
     // the lookups through the lobes (one call site: the lit pipelines stand
     // at Apple's compiler's limit): the hit through the surface's lobe and
     // the rings', the sky through the surface's

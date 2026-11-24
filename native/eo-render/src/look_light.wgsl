@@ -431,7 +431,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     if (SF_CANYON_GLASS && glass && cg_sky.w > 0.0) {
         rad_e = cg_apply(rad) * env_i; // (`--canyon-glass`, rooms.wgsl) the street canyon in kit glass, the volume's occlusion in it
     }
-    let indirect_s = mix(rad_e, ssr.rgb, ssr.a) * fss * spec_occ;
+    let indirect_s = sky_sr_spec(rad_e, ssr, fss, spec_occ); // (`--screen-reflect`) the occlusion on what the trace did not find
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
     let bounce = ao4.rgb * diffuse;

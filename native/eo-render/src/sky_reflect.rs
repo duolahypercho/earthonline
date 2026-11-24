@@ -12,10 +12,20 @@
 //! and every other reader are unchanged: their views stay level 0 alone.
 //! Made only with SF_SCREEN_REFLECT compiled in (`look::shader_features`), the
 //! levels built only while the switch is on.
+//!
+//! The levels' alpha is the trace's hierarchical depth (Hi-Z): level 1's the
+//! occlusion pass's half-resolution view depth of the same frame (the trace's
+//! own depth, `lk_ao_z`), each level after it the nearest of the texels under
+//! it, rounded toward the eye (sky and nothing: `HIZ_FAR_M`). The trace
+//! (sky_light.wgsl `sky_sr_trace`) skips a whole cell where its ray stays in
+//! front of the cell's nearest depth: every texel of its path is still looked
+//! at, in about a third of the steps the linear march took.
 
-/// The pyramid's levels: the full resolution and five halvings (1/32: a
-/// 60 x 34 level at 1080p, the widest lobe the trace filters).
-pub(crate) const REFLECT_MIPS: u32 = 6;
+/// The pyramid's levels: the full resolution and seven halvings. The cone
+/// reads levels 1-5 at most (1/32: a 60 x 34 level at 1080p, the widest lobe
+/// the trace filters, `sky_light.wgsl SKY_SR_CONE_TOP`); the Hi-Z all of them
+/// (its cells to 64 half-resolution texels).
+pub(crate) const REFLECT_MIPS: u32 = 8;
 
 /// The pyramid's pipelines (made once).
 pub(crate) struct ReflectPyramid {
@@ -23,6 +33,8 @@ pub(crate) struct ReflectPyramid {
     /// level 1 (the taps held to the bloom's ceiling), and the levels after it.
     pipes: [wgpu::ComputePipeline; 2],
     lin: wgpu::Sampler,
+    /// binding 4 of the levels past the first (they read no depth).
+    z_dummy: wgpu::TextureView,
 }
 
 /// The size-dependent part: every level of each history, and the bind
@@ -30,8 +42,15 @@ pub(crate) struct ReflectPyramid {
 pub(crate) struct ReflectTargets {
     /// Every level of history p (the city pass's previous frame).
     pub(crate) all: [wgpu::TextureView; 2],
-    /// Per parity, one per level 1.. (reads the level above, writes the level).
+    /// Per parity, one per level 2.. (reads the level above, writes the level).
     bgs: [Vec<wgpu::BindGroup>; 2],
+    /// Per parity, level 1's (the history's level 0 and the occlusion pass's
+    /// depth, made for the depth texture the pass last wrote).
+    first: std::sync::Mutex<Option<(wgpu::Texture, [wgpu::BindGroup; 2])>>,
+    /// Level 1's groups with no depth (the stand-in: the alpha far).
+    first_none: [wgpu::BindGroup; 2],
+    /// Level 0 and level 1 of each history (level 1's group reads and writes them).
+    level01: [[wgpu::TextureView; 2]; 2],
     sizes: Vec<(u32, u32)>,
     /// The levels' bytes past level 0, both histories.
     pub(crate) bytes: u64,
@@ -48,6 +67,7 @@ impl ReflectPyramid {
                 entry(1, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 entry(2, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
                 entry(3, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba16Float, view_dimension: wgpu::TextureViewDimension::D2 }),
+                entry(4, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             ],
         });
         let src = format!("{}\n{}", include_str!("sky_common.wgsl"), include_str!("sky_reflect.wgsl"));
@@ -60,7 +80,33 @@ impl ReflectPyramid {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        Self { bgl, pipes: [pipe("rp_first"), pipe("rp_down")], lin }
+        let z_dummy = d
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("sky-reflect-z-dummy"),
+                size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default());
+        Self { bgl, pipes: [pipe("rp_first"), pipe("rp_down")], lin, z_dummy }
+    }
+
+    fn bind(&self, d: &wgpu::Device, sky_uniform: &wgpu::Buffer, src: &wgpu::TextureView, dst: &wgpu::TextureView, z: &wgpu::TextureView) -> wgpu::BindGroup {
+        d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sky-reflect-pyramid-bg"),
+            layout: &self.bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: sky_uniform.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(src) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.lin) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(dst) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(z) },
+            ],
+        })
     }
 
     /// The two histories with their levels: level-0 views (the resolve's
@@ -86,30 +132,39 @@ impl ReflectPyramid {
         let all = [texs[0].create_view(&Default::default()), texs[1].create_view(&Default::default())];
         let sizes: Vec<(u32, u32)> = (1..mips).map(|m| ((size.0 >> m).max(1), (size.1 >> m).max(1))).collect();
         let bytes = 2 * sizes.iter().map(|s| s.0 as u64 * s.1 as u64 * 8).sum::<u64>();
-        let bgs = [0, 1].map(|p| {
-            (1..mips)
-                .map(|m| {
-                    d.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("sky-reflect-pyramid-bg"),
-                        layout: &self.bgl,
-                        entries: &[
-                            wgpu::BindGroupEntry { binding: 0, resource: sky_uniform.as_entire_binding() },
-                            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&level(&texs[p], m - 1)) },
-                            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.lin) },
-                            wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&level(&texs[p], m)) },
-                        ],
-                    })
-                })
-                .collect()
-        });
-        (hist, ReflectTargets { all, bgs, sizes, bytes })
+        let bgs = [0, 1].map(|p| (2..mips).map(|m| self.bind(d, sky_uniform, &level(&texs[p], m - 1), &level(&texs[p], m), &self.z_dummy)).collect());
+        let level01 = [0, 1].map(|p| [level(&texs[p], 0), level(&texs[p], 1.min(mips - 1))]);
+        let first_none = [0, 1].map(|p| self.bind(d, sky_uniform, &level01[p][0], &level01[p][1], &self.z_dummy));
+        (hist, ReflectTargets { all, bgs, first: std::sync::Mutex::new(None), first_none, level01, sizes, bytes })
     }
 
-    /// Build history `parity`'s levels (after the resolve wrote its level 0).
-    pub(crate) fn encode(&self, enc: &mut wgpu::CommandEncoder, t: &ReflectTargets, parity: usize) {
+    /// Build history `parity`'s levels (after the resolve wrote its level 0);
+    /// `z`: the occlusion pass's half-resolution view depth this frame (the
+    /// levels' Hi-Z alpha, level 1's; `None`: no depth, the alpha far).
+    pub(crate) fn encode(&self, d: &wgpu::Device, sky_uniform: &wgpu::Buffer, enc: &mut wgpu::CommandEncoder, t: &ReflectTargets, parity: usize, z: Option<&wgpu::TextureView>) {
+        if t.sizes.is_empty() {
+            return;
+        }
+        let Some(z) = z else {
+            Self::dispatch(&self.pipes, enc, &t.first_none[parity], &t.bgs[parity], &t.sizes);
+            return;
+        };
+        let mut first = t.first.lock().unwrap();
+        if first.as_ref().is_none_or(|(k, _)| k != z.texture()) {
+            crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 2);
+            *first = Some((z.texture().clone(), [0, 1].map(|p| self.bind(d, sky_uniform, &t.level01[p][0], &t.level01[p][1], z))));
+        }
+        let (_, bg1) = first.as_ref().expect("level 1's groups");
+        Self::dispatch(&self.pipes, enc, &bg1[parity], &t.bgs[parity], &t.sizes);
+    }
+
+    fn dispatch(pipes: &[wgpu::ComputePipeline; 2], enc: &mut wgpu::CommandEncoder, first: &wgpu::BindGroup, rest: &[wgpu::BindGroup], sizes: &[(u32, u32)]) {
         let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("sky-reflect-pyramid"), timestamp_writes: None });
-        for (i, (bg, s)) in t.bgs[parity].iter().zip(t.sizes.iter()).enumerate() {
-            pass.set_pipeline(&self.pipes[if i == 0 { 0 } else { 1 }]);
+        pass.set_pipeline(&pipes[0]);
+        pass.set_bind_group(0, first, &[]);
+        pass.dispatch_workgroups(sizes[0].0.div_ceil(8), sizes[0].1.div_ceil(8), 1);
+        pass.set_pipeline(&pipes[1]);
+        for (bg, s) in rest.iter().zip(sizes[1..].iter()) {
             pass.set_bind_group(0, bg, &[]);
             pass.dispatch_workgroups(s.0.div_ceil(8), s.1.div_ceil(8), 1);
         }
@@ -143,7 +198,7 @@ mod tests {
         let lean = super::sky_light_source(false);
         assert!(lean.len() < whole.len() && !lean.contains("fn sky_sr_trace") && !lean.contains("fn sky_w2_puddle"));
         // every reflect-track name the rest of the city shader calls has a stand-in
-        for name in ["fn sky_w2_on(", "fn sky_w2_env(", "fn sky_w2_street(", "fn sky_w2_generic(", "fn sky_sr_on(", "fn sky_sr_glass_mix(", "fn sky_sr_ssr(", "const SKY_W2_FULL", "const SKY_W2_RING_LOBE", "var<private> sky_w2_pud_alpha", "var<private> sky_w2_ring", "var<private> sky_w2_water", "var<private> sky_sr_glass"] {
+        for name in ["fn sky_w2_on(", "fn sky_w2_env(", "fn sky_w2_street(", "fn sky_w2_generic(", "fn sky_sr_on(", "fn sky_sr_glass_mix(", "fn sky_sr_ssr(", "fn sky_sr_spec(", "const SKY_W2_FULL", "const SKY_W2_RING_LOBE", "var<private> sky_w2_pud_alpha", "var<private> sky_w2_ring", "var<private> sky_w2_water", "var<private> sky_sr_glass"] {
             assert!(whole.contains(name) && lean.contains(name), "{name}");
         }
     }

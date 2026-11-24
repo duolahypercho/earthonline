@@ -2002,6 +2002,13 @@ impl LookGpu {
         st.ao_made = st.cur_cam.map(|(vp, eye, fwd, _)| (vp, eye, fwd));
     }
 
+    /// (`--screen-reflect`, the reflect track) the occlusion pass's half-resolution
+    /// view depth (group 1 binding 4, `lk_ao_z`), once made: the reflection
+    /// pyramid's Hi-Z is built from it (sky_reflect.rs).
+    pub(crate) fn ao_z_view(&self) -> Option<wgpu::TextureView> {
+        self.ao.lock().unwrap().as_ref().map(|t| t.z_view.clone())
+    }
+
     /// Bytes of the occlusion targets, once they exist.
     pub fn ao_bytes(&self) -> u64 {
         // (`--screen-gi`) + the scratch target and the history (8 + 8 + 4 bytes a texel).
