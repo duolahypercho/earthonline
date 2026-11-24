@@ -21,6 +21,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+/// (`--people-motion`) Bump when `rocketbox::steady_head` changes (part of the key with the option on).
+pub const STEADY_HEADS_VERSION: u32 = 1;
 /// Bump when the cooked layout or the cook changes.
 pub const COOK_VERSION: u32 = 5; // 4 -> 5 (people moved by the Rocketbox clips and 100STYLE walks only)
 const MAGIC: &[u8; 4] = b"EOAL";
@@ -91,6 +93,11 @@ pub struct CookOptions {
     /// three-box stand-in. Off: the box, and the library and its cache key
     /// are as before.
     pub far_body: bool,
+    /// `--people-motion`: the people's heads held steady in the bake
+    /// (`rocketbox::steady_head`), and the feed's motion choices that go
+    /// with it (`motion::MotionMeta::steady`). Off: the bake and the cache
+    /// key are as before.
+    pub steady_heads: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -195,6 +202,14 @@ fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &M
     }
     if let PeopleSource::Rocketbox(_) = people {
         h.update(b"rocketbox");
+        // (`--people-motion`) the steady heads; nothing added without them, so that key is as before.
+        if opts.steady_heads && motions.any() {
+            h.update(b"steady-heads");
+            h.update(STEADY_HEADS_VERSION.to_le_bytes());
+            for x in rocketbox::NOD_MEAN.iter().chain(&rocketbox::NOD_FRAME).chain(std::iter::once(&rocketbox::NOD_NECK_SHARE)) {
+                h.update(x.to_le_bytes());
+            }
+        }
         h.update(rocketbox::COOK_VERSION.to_le_bytes());
         h.update(rocketbox::Manifest::digest().as_bytes());
         // which motions are cooked in.
@@ -384,7 +399,7 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
     match people {
         PeopleSource::Rocketbox(root) => {
             let t = Instant::now();
-            match cook_rocketbox(&mut b, root, motions) {
+            match cook_rocketbox(&mut b, root, motions, opts.steady_heads) {
                 Ok(res) => {
                     atlas_res = res;
                     b.lib.meta.people_source = "rocketbox".into();
@@ -417,7 +432,7 @@ pub const MAX_MESHES: usize = 511;
 /// Rocketbox clips and the 100STYLE walks (both are needed: there is no other
 /// motion). The player's body is the first pool avatar. Returns the atlas
 /// side. Nothing is appended to the library unless at least one avatar cooked.
-fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result<u32> {
+fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots, steady: bool) -> Result<u32> {
     let manifest = rocketbox::Manifest::load()?;
     // The licence travels with the copy: no LICENSES.md (as the manifest pins it), no people.
     rocketbox::read_verified(root, &manifest, "LICENSES.md").context("the copy's LICENSES.md")?;
@@ -493,7 +508,7 @@ fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result
         })
         .collect();
     let skels: Vec<&rocketbox::BipSkeleton> = group_first.iter().map(|&i| &grouped[i].0.skeleton).collect();
-    let (segs, tables) = bake_groups(&skels, &female, &mo, &mut motion, &mut b.lib.meta.missing);
+    let (segs, tables) = bake_groups(&skels, &female, &mo, &mut motion, &mut b.lib.meta.missing, steady);
     let mut kept = vec![];
     for (av, g) in grouped {
         match &tables[g] {
@@ -650,7 +665,7 @@ fn layout(mo: &MotionSources) -> Vec<Seg> {
 
 /// every group's table over the layout, the motion meta filled for it. None
 /// for a group that cannot be baked (its people are left out).
-fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSources, meta: &mut crate::motion::MotionMeta, missing: &mut Vec<String>) -> (Vec<Seg>, Vec<Option<Vec<[f32; 4]>>>) {
+fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSources, meta: &mut crate::motion::MotionMeta, missing: &mut Vec<String>, steady: bool) -> (Vec<Seg>, Vec<Option<Vec<[f32; 4]>>>) {
     use crate::motion::{LoopMeta, ROLES, StyleMeta};
     use rocketbox::BakeSrc;
     let segs = layout(mo);
@@ -666,8 +681,12 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
                 SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &ROLES[r], frames: s.frames }),
             })
             .collect();
-        match srcs.ok_or_else(|| anyhow!("a role's clip is missing")).and_then(|srcs| rocketbox::bake_list(sk, &srcs, relaxed.as_deref())) {
+        match srcs.ok_or_else(|| anyhow!("a role's clip is missing")).and_then(|srcs| rocketbox::bake_list_opts(sk, &srcs, relaxed.as_deref(), steady)) {
             Ok(bk) => {
+                if g == 0 && steady {
+                    let moved: Vec<String> = segs.iter().zip(&bk.nods).filter_map(|(s, n)| n.filter(|(a, b)| (a - b).abs() > 0.5).map(|(a, b)| format!("{} {a:+.0} -> {b:+.0}", match s.kind { SegKind::Style(i) => mo.styles[i].name.clone(), SegKind::Role(r) => crate::motion::ROLES[r].name.to_string() }))).collect();
+                    meta.notes.push(format!("steady heads (mean nod, degrees down): {}", moved.join(", ")));
+                }
                 tables.push(Some(bk.rows));
                 strides.push(bk.strides);
             }
@@ -679,6 +698,7 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
         }
     }
     meta.walk = "100style".into();
+    meta.steady = steady;
     meta.standing = "rocketbox".into();
     meta.group_female = female.to_vec();
     meta.walk_frames = crate::motion::WALK_FRAMES;
