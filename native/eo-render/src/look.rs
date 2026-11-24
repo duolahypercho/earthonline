@@ -196,7 +196,7 @@ pub struct LookOptions {
     /// (`ShaderFeatures::cinematic`); the sky reads `SkyOptions::cinematic`.
     pub look: eo_look::cinematic::LookProfile,
     /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
-    /// `--temporal-lod-fade`, `--turf`): 0 (the default) is the frame as before,
+    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`): 0 (the default) is the frame as before,
     /// and each bit's shader code is compiled out while it is off (`sf_select`).
     pub nature: u32,
 }
@@ -209,8 +209,12 @@ pub const NATURE_FOLIAGE: u32 = 1;
 pub const NATURE_LOD_FADE: u32 = 2;
 /// `--turf`: lawns shaded as a grass canopy (landmarks_surface.wgsl `nt_turf`).
 pub const NATURE_TURF: u32 = 4;
+/// `--palm-detail`: the palms' trunk relief and crown shading (props_draw.wgsl `pr_palm`).
+pub const NATURE_PALM: u32 = 8;
+/// `--hill-cover`: the far hills' vegetation cover (farshore.wgsl `fs_cover`).
+pub const NATURE_HILLS: u32 = 16;
 /// Every natural-detail bit.
-pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF;
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS;
 
 impl Default for LookOptions {
     fn default() -> Self {
@@ -733,8 +737,9 @@ impl ShaderFeatures {
 
 /// A shader file's natural-detail blocks for the features compiled in now: the
 /// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
-/// (`FOLIAGE`, `LOD_FADE`, `TURF`: `NATURE_*`) in, those between `// sf:NAME-`
-/// and `// sf:end` only without it, and the marker lines are dropped. With every
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`: `NATURE_*`) in, those between `// sf:NAME-`
+/// and `// sf:end` only without it, and the marker lines are dropped (`NAME|OTHER`:
+/// either bit; blocks do not nest). With every
 /// bit out the text is the file as it was before the bits existed, so a shader
 /// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
 /// before, and with a bit in it holds its code alone, not the code it replaces.
@@ -744,6 +749,8 @@ pub fn sf_select(src: &str) -> String {
         "FOLIAGE" => f.nature & NATURE_FOLIAGE != 0,
         "LOD_FADE" => f.nature & NATURE_LOD_FADE != 0,
         "TURF" => f.nature & NATURE_TURF != 0,
+        "PALM" => f.nature & NATURE_PALM != 0,
+        "HILLS" => f.nature & NATURE_HILLS != 0,
         _ => false,
     };
     let mut out = String::with_capacity(src.len());
@@ -754,12 +761,13 @@ pub fn sf_select(src: &str) -> String {
                 keep = true;
                 continue;
             }
-            if let Some(name) = rest.strip_suffix('+') {
-                keep = on(name);
+            // `A|B`: kept with either bit in (code two features share).
+            if let Some(names) = rest.strip_suffix('+') {
+                keep = names.split('|').any(on);
                 continue;
             }
-            if let Some(name) = rest.strip_suffix('-') {
-                keep = !on(name);
+            if let Some(names) = rest.strip_suffix('-') {
+                keep = !names.split('|').any(on);
                 continue;
             }
         }

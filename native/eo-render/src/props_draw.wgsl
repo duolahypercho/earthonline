@@ -479,7 +479,6 @@ const PR_LEAF_FWD_G: f32 = 0.5;
 const PR_LEAF_FWD_SHARE: f32 = 0.3;
 // a wet leaf's roughness (a water film on the cuticle: the glossy leaf of a wet tree).
 const PR_LEAF_WET_ROUGH: f32 = 0.3;
-const PR_PALM: u32 = 7u; // eo_props::Model::Palm
 
 // Light through a leaf toward the eye (radiance, before the fog): `n` the face the eye
 // sees, `sh` the key light's shadow on the far face.
@@ -508,6 +507,187 @@ fn pr_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>, s
     return t * (e + irr * ao) / LK_PI;
 }
 
+// sf:end
+// sf:FOLIAGE|PALM+
+const PR_PALM: u32 = 7u; // eo_props::Model::Palm
+// sf:end
+// sf:PALM+
+// ---- palm detail (`--palm-detail`; this block is in the shader only with it) ----
+// The palm GLBs (public/assets/street-props/palm-v2.glb and palmFar-v2.glb, 10 m
+// tall in their own metres, scaled by the tree's height over 10) carry one material
+// on a shared atlas: the trunk's bark at u < 0.5 (u once round the trunk, v up it,
+// 0.148 of v a metre), the crown shaft's fibre at u < 0.75 and v < 0.5, the
+// rachises at v < 0.5 and the leaflets at v >= 0.5, each in four bands of age
+// (dead, yellowing, mature, young); every leaflet is a few triangles at one v.
+//
+// Trunk: a Canary Island date palm's trunk is the stubs of its old leaf bases,
+// cut back, in a diamond lattice on crossing spirals (about 10 round a trunk
+// 0.85 m across, a base about 26 cm wide and 17 cm tall, each its own size), each a raised boss with
+// the cut face looking up and out, and dark fibre packed in the grooves; the
+// lower trunk weathered to a grey-brown, the fresh cuts under the crown orange
+// brown, the rows wavering round the trunk. Drawn as a height field on the trunk's own (u, height): its slope bends
+// the normal (the surface gradient of Mikkelsen 2010, from the screen
+// derivatives of u and the height), its grooves take the sky's occlusion, and
+// where a pixel spans a base it fades to the lattice's mean tone.
+//
+// Crown: the leaflets' tones are the atlas bands' gradients carried onto
+// measured leaf reflectances (a mature leaflet's adaxial face about 0.06 / 0.10 /
+// 0.05 linear sRGB, luminance ~0.09: the atlas's young band was twice that, the
+// rachis three times), varied per leaflet (its v) and per frond (its bearing round the
+// crown), and per palm (some yellowing: potassium deficiency is common in the
+// city's date palms). The crown is a porous volume: the sky light reaching a
+// frond falls with the leaf area between it and the open sky (Beer-Lambert,
+// k 0.5: deep at the heart of the crown and under the upper fronds, open at the
+// tips), and the leaflets, inserted in several planes along the rachis, face
+// every way, so their shading normal leans toward the crown's own outward normal
+// (top fronds lit from above, the underside dark) and each leaflet turns a little
+// its own way.
+const PR_PALM_CROWN_Y: f32 = 7.4; // the crown's heart (model m above the base)
+const PR_PALM_TRUNK_R: f32 = 0.42; // the trunk's radius (model m)
+const PR_PALM_AROUND: f32 = 10.0; // leaf bases round the trunk (whole: the lattice closes on itself)
+const PR_PALM_BASE_H: f32 = 0.17; // a leaf base's height up the trunk (model m)
+const PR_PALM_RELIEF: f32 = 0.03; // a base's rise out of its grooves (model m)
+const PR_PALM_V_PER_M: f32 = 0.148; // the atlas's v per model metre up the trunk
+const PR_PALM_LEAF_K: f32 = 0.5; // Beer-Lambert extinction of the sky light per unit leaf area
+const PR_PALM_LEAN: f32 = 0.3; // how far a leaflet's shading normal leans to the crown's
+
+// the lattice's height (0 groove .. 1 boss top) at (a round, b up) in bases: each
+// base its own size (`j`, 0..1), its row wavering round the trunk.
+fn pr_palm_h(a: f32, b: f32, j: f32) -> f32 {
+    let p = vec2<f32>(a + b, a - b);
+    let f = fract(p) - vec2<f32>(0.5);
+    let e = 2.0 * max(abs(f.x), abs(f.y)) * (0.92 + 0.16 * j);
+    let up = f.x - f.y; // -1 the base's foot .. 1 its top (b within the cell)
+    return (1.0 - smoothstep(0.72, 1.0, e)) * (0.75 + 0.25 * up);
+}
+
+// The palm's surface; returns how much of it is thin leaf (for `--foliage-light`).
+fn pr_palm(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, uv: vec2<f32>, ng: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, duvx: vec2<f32>, duvy: vec2<f32>, dlx: vec3<f32>, dly: vec3<f32>) -> f32 {
+    let seed = st_hash(inst.pos.xz * 0.37 + vec2<f32>(3.1, 7.7)); // this palm
+    let rel = local - vec3<f32>(0.0, PR_PALM_CROWN_Y, 0.0);
+    let rh = length(rel.xz);
+    let fw = max(length(dpx), length(dpy)); // the pixel's footprint (world m)
+    let sc = max(inst.scale.y, 1e-3);
+    if (uv.x < 0.5) {
+        // the trunk: the leaf-base lattice in bases round (a) and up (b).
+        let b = local.y / PR_PALM_BASE_H;
+        let a = uv.x * 2.0 * PR_PALM_AROUND + 0.35 * (st_noise(vec2<f32>(b * 0.45, seed * 9.0)) - 0.5); // the spirals waver (in b only: the seam still closes)
+        // its cell, for the base's own tone and size (round the trunk modulo the count, so the seam closes)
+        let c1 = floor(a + b);
+        let c2 = floor(a - b);
+        let ca = (c1 + c2) * 0.5;
+        let cb = (c1 - c2) * 0.5;
+        let cell = st_hash(vec2<f32>(ca - PR_PALM_AROUND * floor(ca / PR_PALM_AROUND), cb) + vec2<f32>(seed * 17.0, 1.7));
+        let h = pr_palm_h(a, b, cell);
+        let eps = 0.03;
+        let ha = (pr_palm_h(a + eps, b, cell) - h) / eps;
+        let hb = (pr_palm_h(a, b + eps, cell) - h) / eps;
+        let k = 1.0 - smoothstep(0.02 * sc, 0.07 * sc, fw); // the lattice resolved
+        // the surface gradient of the height (world m): H_u grad u + H_y grad y.
+        let r1 = cross(dpy, ng);
+        let r2 = cross(ng, dpx);
+        let det = dot(dpx, r1);
+        if (abs(det) > 1e-12 && k > 0.0) {
+            let gu = (r1 * duvx.x + r2 * duvy.x) / det;
+            let gy = (r1 * dlx.y + r2 * dly.y) / det;
+            let amp = PR_PALM_RELIEF * sc;
+            let grad = amp * (ha * 2.0 * PR_PALM_AROUND * gu + hb / PR_PALM_BASE_H * gy);
+            let nb = normalize((*s).n - grad * k);
+            if (all(nb == nb)) {
+                (*s).n = nb;
+            }
+        }
+        // tones: weathered grey-brown below, fresh orange-brown cuts under the crown,
+        // dark fibre in the grooves, each base its own; soil splash at the foot.
+        let top = smoothstep(4.6, 6.4, local.y);
+        var bark = mix(vec3<f32>(0.185, 0.165, 0.140), vec3<f32>(0.230, 0.150, 0.085), top);
+        bark = bark * (0.86 + 0.28 * cell) * mix(vec3<f32>(1.0), vec3<f32>(0.92, 0.97, 1.06), step(0.82, cell) * (1.0 - top)); // a greyer, lichened base now and then
+        let fibre = vec3<f32>(0.085, 0.068, 0.050);
+        let groove = 1.0 - smoothstep(0.0, 0.25, h);
+        let streak = 0.9 + 0.2 * st_noise(vec2<f32>(a * 9.0, local.y * 1.3));
+        let near_tone = mix(bark * streak, fibre, groove);
+        let mean_tone = mix(bark, fibre, 0.15);
+        var alb = mix(mean_tone, near_tone, k);
+        alb = alb * mix(0.7, 1.0, smoothstep(0.0, 0.7, local.y)); // splash and grime at the foot
+        (*s).albedo = alb;
+        (*s).rough = 0.92;
+        (*s).metal = 0.0;
+        // the grooves' occlusion, and the crown's shade over the top of the trunk
+        let cav = mix(0.85, mix(1.0, 0.55, groove), k);
+        (*s).ao = (*s).ao * cav * exp(-PR_PALM_LEAF_K * 1.0 * smoothstep(4.8, 6.9, local.y));
+        return 0.0;
+    }
+    // the crown: the band (age) and part.
+    let fibre_part = uv.x < 0.75 && uv.y < 0.5;
+    let leaflet = uv.y >= 0.5;
+    let band = i32(clamp(floor(fract(uv.y * 2.0) * 4.0), 0.0, 3.0)); // 0 dead, 1 yellowing, 2 mature, 3 young
+    // the sky light through the crown: leaf area over the point
+    let lai = 1.3 * (1.0 - smoothstep(0.3, 3.8, rh)) + 0.5 * smoothstep(0.5, -1.8, rel.y) * (1.0 - smoothstep(2.4, 4.2, rh));
+    (*s).ao = (*s).ao * exp(-PR_PALM_LEAF_K * lai);
+    if (fibre_part) {
+        (*s).albedo = (*s).albedo * 0.8;
+        (*s).rough = 0.9;
+        return 0.0;
+    }
+    let lum = dot((*s).albedo, vec3<f32>(0.2126, 0.7152, 0.0722));
+    // each frond (its bearing round the crown) and each leaflet (its v) its own
+    let bearing = atan2(rel.z, rel.x) * 4.8 + seed * 31.0;
+    let frond = st_noise(vec2<f32>(bearing, seed * 13.0));
+    let lv = sin(uv.y * 31415.0);
+    let lw = sin(uv.y * 21377.0 + 1.3);
+    var target_c: vec3<f32>;
+    var band_lum: f32;
+    var thin = 1.0;
+    if (leaflet) {
+        if (band == 0) {
+            target_c = vec3<f32>(0.160, 0.120, 0.082); // dead: dry, pale brown-grey
+            band_lum = 0.123;
+            thin = 0.35;
+        } else if (band == 1) {
+            target_c = vec3<f32>(0.160, 0.132, 0.050); // yellowing
+            band_lum = 0.188;
+        } else if (band == 2) {
+            target_c = vec3<f32>(0.062, 0.098, 0.046); // mature
+            band_lum = 0.099;
+        } else {
+            target_c = vec3<f32>(0.082, 0.124, 0.052); // young
+            band_lum = 0.186;
+        }
+        (*s).rough = 0.52 + 0.1 * lw;
+    } else {
+        // the rachis: thick, yellow-green to orange at the base
+        if (band == 0) {
+            target_c = vec3<f32>(0.150, 0.110, 0.070);
+            band_lum = 0.133;
+        } else if (band == 1) {
+            target_c = vec3<f32>(0.180, 0.150, 0.065);
+            band_lum = 0.273;
+        } else if (band == 2) {
+            target_c = vec3<f32>(0.130, 0.130, 0.056);
+            band_lum = 0.265;
+        } else {
+            target_c = vec3<f32>(0.140, 0.150, 0.060);
+            band_lum = 0.307;
+        }
+        (*s).rough = 0.62;
+        thin = 0.15;
+    }
+    var alb = target_c * clamp(lum / band_lum, 0.5, 1.6);
+    // a palm's health, a frond's age within its band, a leaflet's own tone
+    let yellow = smoothstep(0.55, 0.95, seed * 0.6 + frond * 0.55) * select(0.0, 1.0, band == 2 && leaflet);
+    alb = mix(alb, vec3<f32>(0.105, 0.098, 0.040), yellow * 0.45);
+    alb = alb * (0.86 + 0.28 * frond) * (1.0 + 0.12 * lv);
+    (*s).albedo = alb;
+    (*s).metal = 0.0;
+    // the leaflets' normals: toward the crown's outward normal, each turned its own way
+    let nv = pr_rot(inst.yaw, normalize(rel / vec3<f32>(4.0, 2.4, 4.0)));
+    let jitter = vec3<f32>(lv, 0.5 * lw, sin(uv.y * 17713.0 + 2.1)) * 0.22;
+    let nl = normalize(mix((*s).n, nv, PR_PALM_LEAN) + jitter);
+    if (all(nl == nl)) {
+        (*s).n = nl;
+    }
+    return thin;
+}
 // sf:end
 fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     var m = materials[in.material];
@@ -624,13 +804,21 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         m.emissive = vec4<f32>(select(hue * 0.04, hue, lit) * pr.lens.x, 0.0);
         s.albedo = vec3<f32>(0.02);
     }
+// sf:FOLIAGE|PALM+
+    var palm_leaf = -1.0;
+// sf:end
+// sf:PALM+
+    if (inst.model == PR_PALM) {
+        palm_leaf = pr_palm(&s, inst, in.local, in.uv, n, dpx, dpy, duvx, duvy, dlx, dly); // (`--palm-detail`)
+    }
+// sf:end
     s.rough = clamp(s.rough, 0.03, 1.0);
 // sf:FOLIAGE+
     // (`--foliage-light`) a leaf card, or a palm's frond (the palm's one
-    // material: its green parts).
+    // material: its green parts; with `--palm-detail` its leaflets by the atlas).
     var leaf = select(0.0, 1.0, (m.flags & PR_LEAF) != 0u);
     if (inst.model == PR_PALM) {
-        leaf = smoothstep(1.0, 1.3, s.albedo.g / max(s.albedo.r, 1e-4));
+        leaf = select(smoothstep(1.0, 1.3, s.albedo.g / max(s.albedo.r, 1e-4)), palm_leaf, palm_leaf >= 0.0);
     }
     if (leaf > 0.0) {
         // In the rain a leaf's waxy cuticle carries a film of water on both

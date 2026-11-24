@@ -470,7 +470,12 @@ fn nt_turf(s: ptr<function, Surface>, w: vec2<f32>, world: vec3<f32>, n: vec3<f3
     let sun = nt_rpv(mi, mv, clamp(dot(l, v), -1.0, 1.0), cp) / ref_rpv;
     // the sky (an extended source): the view's part alone, the sky at 41 degrees, across.
     let sky = nt_rpv(0.75, mv, 0.75 * mv, 0.0) / ref_rpv;
-    let key = dot(look.key.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) * max(dot(n, l), 0.0);
+    // the sun's share of the light where it reaches (its shadow: in the shade of a
+    // building the grass takes the sky's ratio alone, not the hotspot's brightening)
+    var key = dot(look.key.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) * max(dot(n, l), 0.0);
+    if (key > 0.0) {
+        key = key * lk_shadow(world, n) * sky_cloud_transmittance(world);
+    }
     let amb = dot(look.hemi_sky.xyz + look.ambient.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
     let share = key / max(key + amb, 1e-6);
     let canopy = clamp(mix(sky, sun, share), 0.55, 1.8);
