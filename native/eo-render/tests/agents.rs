@@ -157,7 +157,7 @@ fn car_detail_draws_a_far_body_and_keeps_more_near_cars_whole() {
     let ctx = ctx();
     let paths = eo_data::DataPaths::discover().expect("repo data");
     let people = eo_agents::library::PeopleSource::from_env();
-    let opts = eo_agents::library::CookOptions { far_body: true };
+    let opts = eo_agents::library::CookOptions { far_body: true, ..Default::default() };
     let lib = Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &people, opts).expect("agent library with far bodies");
     let boxed = library();
     assert_eq!(lib.meshes.len(), boxed.meshes.len(), "the far bodies take the boxes' mesh slots");

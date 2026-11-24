@@ -150,7 +150,8 @@ impl AgentRuntime {
         // the Rocketbox people unless `--no-rocketbox` (or no copy at EO_PEOPLE_ROOT): then none.
         let people = if args.rocketbox { eo_agents::library::PeopleSource::from_env() } else { eo_agents::library::PeopleSource::Off };
         // (`--car-detail`) each body's far slot its own simplified body instead of three boxes.
-        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0 };
+        // (`--car-materials`) each vehicle material's role and the plates' own coordinates.
+        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0, car_materials: args.look.car_materials > 0 };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-load".into())

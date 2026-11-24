@@ -12,7 +12,7 @@ use crate::catalog::{AgentsJs, read_verified};
 use crate::motion::MotionRoots;
 use crate::people::{Atlas, CookedTier};
 use crate::rocketbox;
-use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, cook_body, far_body};
+use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, cook_body_with, far_body};
 use crate::{AgentMaterial, AgentVertex, CLASS_PERSON, CLASS_VEHICLE, CLIPS, GpuMesh, GpuModel, LODS, M_ATLAS, NO_MESH};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -91,6 +91,10 @@ pub struct CookOptions {
     /// three-box stand-in. Off: the box, and the library and its cache key
     /// are as before.
     pub far_body: bool,
+    /// `--car-materials`: each vehicle material's role in its flags and the
+    /// licence plates' own coordinates (eo-agents `vehicles::cook_body_with`).
+    /// Off: the library and its cache key are as before.
+    pub car_materials: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -186,6 +190,11 @@ fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &M
         h.update(FAR_BODY_VERSION.to_le_bytes());
         h.update(FAR_BODY_ERROR_M.to_le_bytes());
         h.update((FAR_BODY_TRIANGLES as u64).to_le_bytes());
+    }
+    // (`--car-materials`) the roles and the plates' coordinates; nothing added without them.
+    if opts.car_materials {
+        h.update(b"car-materials");
+        h.update(crate::vehicles::CAR_MATERIALS_VERSION.to_le_bytes());
     }
     // Which vehicle files this checkout holds (a body left out of it is not drawn).
     for b in js.vehicles.values() {
@@ -311,7 +320,7 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
                 let lamps = &lamps;
                 s.spawn(move || {
                     c.iter()
-                        .map(|(id, k, l)| (id.clone(), *k, read_verified(repo_root, &l.asset()).and_then(|b| cook_body(&b, lamps)).with_context(|| l.url.clone())))
+                        .map(|(id, k, l)| (id.clone(), *k, read_verified(repo_root, &l.asset()).and_then(|b| cook_body_with(&b, lamps, opts.car_materials)).with_context(|| l.url.clone())))
                         .collect::<Vec<_>>()
                 })
             })
