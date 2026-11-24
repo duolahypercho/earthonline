@@ -34,6 +34,24 @@
 //!   never shadowed) is hidden as the sky along it is (`rim_hidden`), taken
 //!   from the fill it stands for.
 //!
+//! * **the decks' undersides** (a lid over the point rather than walls round
+//!   it) by the ground they face: what hides the sky is a mix of the two,
+//!   by where the sky the point still sees lies (`lid_share`: under a lid it
+//!   is low, at the sides; between walls it is high, overhead). A deck's
+//!   underside sees, beyond its edges, as much open ground as the street under
+//!   it sees of the sky beyond them (the same edges from the other side:
+//!   exact for a flat deck over flat ground), that ground open to the sky and
+//!   in the sun; under itself, covered ground lit by the street's own sky
+//!   (`soffit_exitance`). Without this a viaduct's soffit stood in as a
+//!   canyon's walls, lit by the sky they do not see: the ground under it went
+//!   sky blue.
+//! * **the ground's sun part** (`bounce::added_irradiance_whole`): where the
+//!   ambient volume knows the ground, the rig's flat lobe's sun part leaves
+//!   whole and the sunlit ground's exitance comes back over its open share.
+//!   The ground bounce alone takes out at most the sunlit ground's exitance a
+//!   channel, which at a low sun (an orange exitance under a neutral lobe)
+//!   left the lobe's green and blue behind: a navy fill on every underside.
+//!
 //! With the open sky and open ground (`v_s = t`, `v_g = 1`) this is the rig's
 //! hemisphere, ambient and environment exactly: an open plaza is unchanged.
 //!
@@ -124,6 +142,61 @@ pub fn irradiance(f: &Fill, t: f64, vs: f64, vg: f64, env: Rgb) -> Rgb {
 /// (`(1 + d.y) / 2`).
 pub fn rim_hidden(vis_d: f64, d_y: f64) -> f64 {
     1.0 - (vis_d / (0.5 + 0.5 * d_y).max(1e-3)).min(1.0)
+}
+
+/// The decks' underside albedo: weathered grey concrete. INFERRED from the
+/// reference sheet (2.1) as `bounce::GROUND_ALBEDO`'s concrete: new grey
+/// concrete about 0.40 (US EPA 2012), weathered and soiled lower; 0.30, grey.
+pub const DECK_ALBEDO: f64 = 0.30;
+
+/// The lid's share of what hides the sky is read from where the sky a point
+/// still sees lies: `r = a0 / (a0 + ay)`, the visible sky's share on a
+/// vertical surface (its mean over azimuth, `a0`) over its share facing up.
+/// A patch of sky at elevation `e` adds `sin e` to the second and
+/// `cos e / pi` to the first, so `r` is 1/2 under the open sky, lower where
+/// walls close the sky's sides and leave the top (a canyon: 0.2 to 0.35 for
+/// H/W 1 to 3), higher where a lid closes the top and leaves the sides (a
+/// deck: 0.6 at its centre at H = half its width, more under a wider one).
+/// The lid's share eases from 0 at `LID_R0` to 1 at `LID_R1`.
+pub const LID_R0: f64 = 0.5;
+pub const LID_R1: f64 = 0.8;
+
+/// The lid's share of what hides the sky over a point whose volume visibility
+/// has azimuth mean `a0` and upward share `up` (`a0 + ay`).
+pub fn lid_share(a0: f64, up: f64) -> f64 {
+    let r = a0 / up.max(1e-3);
+    let t = ((r - LID_R0) / (LID_R1 - LID_R0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The exitance of a deck's underside over a street that sees `vg` of the
+/// sky, `sun_ground` the sunlit open ground's exitance from the sun
+/// (`bounce::sun_exitance` with the ground bounce, the rig's lobe's sun part
+/// without it). Beyond its edges the underside sees `vg` of its lower
+/// hemisphere in open ground (lit by the whole sky and the sun), under itself
+/// `1 - vg` of covered ground lit by the street's own sky (`vg`).
+pub fn soffit_exitance(f: &Fill, vg: f64, sun_ground: Rgb) -> Rgb {
+    let vg = vg.clamp(0.0, 1.0);
+    let ls = lobe_sky(f);
+    [0, 1, 2].map(|i| DECK_ALBEDO * (vg * (ls[i] + sun_ground[i]) + (1.0 - vg) * vg * ls[i]))
+}
+
+/// What hides the sky's exitance: the shaded walls' and the decks' undersides'
+/// by the lid's share `lid`.
+pub fn occluder_exitance(f: &Fill, vg: f64, lid: f64, sun_ground: Rgb) -> Rgb {
+    let w = shaded_exitance(f, vg);
+    let s = soffit_exitance(f, vg, sun_ground);
+    let lid = lid.clamp(0.0, 1.0);
+    [0, 1, 2].map(|i| w[i] + (s[i] - w[i]) * lid)
+}
+
+/// `irradiance` with what hides the sky at the exitance `m` (`occluder_exitance`).
+pub fn irradiance_with(f: &Fill, t: f64, vs: f64, vg: f64, m: Rgb, env: Rgb) -> Rgb {
+    let vs = vs.min(t);
+    let lower = 1.0 - t;
+    let vg = vg.clamp(0.0, 1.0);
+    let g = ground_lobe(f, vg);
+    [0, 1, 2].map(|i| f.hemi_sky[i] * vs + g[i] * lower + m[i] * (t - vs) + (f.ambient[i] + env[i]) * (vs + lower * vg))
 }
 
 /// The same with the rig's stand-in (`AMB_OCCLUDER` = 1: the blocked sky at the ground lobe), as before.
@@ -226,6 +299,71 @@ mod tests {
         }
         // half the open sky's share along it: half hidden.
         assert!((rim_hidden(0.5 * 0.735, 0.47) - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_lid_is_read_from_where_the_visible_sky_lies() {
+        // the open sky: r = 1/2, no lid.
+        assert!(lid_share(0.5, 1.0).abs() < 1e-12);
+        // a two-dimensional canyon H/W = 2 at its street's centre: the slot overhead
+        // (half angle asin(0.29) ~ 17 deg) seen facing up, little of it facing the walls.
+        assert!(lid_share(0.06, 0.29).abs() < 1e-12);
+        // a deck as high as half its width over the point: the sky at the sides
+        // below 45 deg; facing up 1 - sin 45 deg, facing across (sin 45 deg) / 2
+        // on the open sides, about nothing along the deck.
+        let up = 1.0 - 0.5f64.sqrt();
+        let a0 = 0.5 * (0.5 * 0.5f64.sqrt());
+        assert!(a0 / up > 0.6 && lid_share(a0, up) > 0.25, "{} {}", a0 / up, lid_share(a0, up));
+        // a deck three times wider than high: the sky below 18 deg, all lid.
+        let e = 18f64.to_radians();
+        assert!(lid_share(0.5 * 0.5 * e.sin(), 1.0 - e.cos()) > 0.99);
+        // nothing seen at all (a bore): a lid.
+        assert!((lid_share(0.0, 0.0) - 0.0).abs() < 1e-12 || lid_share(0.0, 0.0) <= 1.0);
+    }
+
+    #[test]
+    fn under_a_deck_the_ground_lights_what_hides_the_sky() {
+        for h in [12.0, 18.5] {
+            let lf = crate::LookFrame::new(h);
+            let f = fill(h);
+            let sun = crate::bounce::sun_exitance(&lf);
+            // the road under a viaduct: a fifth of the sky at the sides, the street a quarter.
+            let (vs, vg) = (0.15, 0.25);
+            let walls = irradiance(&f, 1.0, vs, vg, [0.0; 3]);
+            let deck = irradiance_with(&f, 1.0, vs, vg, occluder_exitance(&f, vg, 1.0, sun), [0.0; 3]);
+            let br = |e: Rgb| e[2] / e[0];
+            let (m_w, m_s) = (shaded_exitance(&f, vg), soffit_exitance(&f, vg, sun));
+            println!("{h} h: walls {m_w:?} deck {m_s:?}; road under walls {walls:?} under the deck {deck:?}");
+            // the deck's underside is never bluer than the ground it sees reflects the sky.
+            let ls = lobe_sky(&f);
+            assert!(br(m_s) <= br(ls) + 1e-9, "{h}: {m_s:?} vs the ground's sky {ls:?}");
+            if h < 15.0 {
+                // under a high sun the sunlit ground beyond its edges makes it warmer and
+                // brighter than walls lit by the sky they see, and the road under it too.
+                assert!(br(m_s) < br(m_w) && m_s[1] > m_w[1], "{h}: {m_s:?} vs {m_w:?}");
+                assert!(br(deck) < br(walls), "{h}: {deck:?} vs {walls:?}");
+            } else {
+                // under a low sun the ground is dim (the sun grazes it): the deck sees no
+                // sky and is darker than walls that do.
+                assert!(m_s[1] < m_w[1], "{h}: {m_s:?} vs {m_w:?}");
+            }
+            // never more than the sunlit open ground itself bounces.
+            for c in 0..3 {
+                assert!(m_s[c] <= DECK_ALBEDO * (lobe_sky(&f)[c] + sun[c]) + 1e-12);
+            }
+        }
+        // no lid: the walls as before; the open sky: nothing hidden, the rig as before.
+        let f = fill(12.0);
+        let sun = crate::bounce::sun_exitance(&crate::LookFrame::new(12.0));
+        let (a, b) = (occluder_exitance(&f, 0.3, 0.0, sun), shaded_exitance(&f, 0.3));
+        for c in 0..3 {
+            assert!((a[c] - b[c]).abs() < 1e-12);
+        }
+        let open = irradiance_with(&f, 1.0, 1.0, 1.0, occluder_exitance(&f, 1.0, 1.0, sun), [0.0; 3]);
+        let rig = irradiance_stand_in(&f, 1.0, 1.0, [0.0; 3]);
+        for c in 0..3 {
+            assert!((open[c] - rig[c]).abs() < 1e-12);
+        }
     }
 
     #[test]
