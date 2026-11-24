@@ -254,7 +254,9 @@ impl Walker {
         }
         self.ambulatory = None;
         // (`--crowd`) at a nightlife front in its hours, a walk often ends at
-        // the doors: a group stands talking, one alone stands or takes a call
+        // the doors: a group stands talking, facing each other; one alone
+        // stands or takes a call with their back to the front, looking out
+        // at the street, as people outside a bar do (not at its door)
         // (zero without the frontage survey: no draw, the JS pause below).
         let night = net.footways[self.footway as usize].activity.night as f64 * night_footfall(hour);
         if night > 0.0 && walker_draw(self.key, "door-", leg) < night * DOOR_GATHER_SHARE {
@@ -265,7 +267,7 @@ impl Walker {
             } else {
                 Activity::Stand
             };
-            self.facing = if self.group { Facing::Partner } else { Facing::Inward };
+            self.facing = if self.group { Facing::Partner } else { Facing::Across };
             let [lo, hi] = DOOR_GATHER_SECONDS;
             self.activity_timer = lo + walker_draw(self.key, "door-dur-", leg) * (hi - lo);
             return false;
