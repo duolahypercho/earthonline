@@ -224,7 +224,7 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     }
     // (`--car-materials`) the cars' own materials and lamps: the surface and
     // its coat set before the one look_light, the glass's reflection after.
-    var car = AgCar(0u, false, vec3<f32>(0.0), 0u);
+    var car = AgCar(0u, false, vec3<f32>(0.0), 0u, 0.0);
     let car_on = ag_car_on();
     if (car_on) {
         car = ag_car_prepare(&g, in, cd);
@@ -285,6 +285,10 @@ const AG_CAR_AA_CLAMP: f32 = 0.2;
 // toward a dull film as the cinematic coat's grime does.
 const AG_CAR_COAT_NEW: f32 = 0.04;
 const AG_CAR_COAT_OLD: f32 = 0.12;
+// Road grime over the lacquer: the share of it a dense film covers, and the
+// lacquer's roughness between the film's particles.
+const AG_CAR_FILM_COVER: f32 = 0.85;
+const AG_CAR_COAT_FILMED: f32 = 0.16;
 // A metallic base coat is flake in a binder, not bare metal: its metalness.
 // Which cars are metallic goes by the paint (the instance colour; the
 // body's own paint material says nothing of it): silvers and greys always,
@@ -361,12 +365,15 @@ struct AgCarD {
 // (its reflection over its opacity), its own glow (a lit lamp cover), and
 // (`--car-reflections`) which layer mirrors the street's far lights: 0 none,
 // 1 the lacquer or the glass (sky_coat), 2 bare metal (chrome, a reflector
-// bowl, a wheel).
+// bowl, a wheel), and the lacquer's lobe for them (paint: widened further
+// where the body's normals bend fast, so a lamp's mirror image does not
+// break into glitter on a dimpled panel).
 struct AgCar {
     role: u32,
     glass: bool,
     emit: vec3<f32>,
     far: u32,
+    far_rough: f32,
 };
 
 // Whether the cars' materials draw (agents.rs `AgParams::misc.y`).
@@ -561,7 +568,7 @@ fn ag_car_plate(uv: vec2<f32>, duv: vec2<f32>, h: f32, dirt: f32, rear: bool) ->
 // The surface and material of a car's fragment by its role, and the lacquer
 // (sky_coat) for look_light; what `ag_car_finish` needs after it.
 fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
-    var k = AgCar(0u, false, vec3<f32>(0.0), 0u);
+    var k = AgCar(0u, false, vec3<f32>(0.0), 0u, 0.0);
     let a = ag_agents[in.agent];
     let md = ag_models[a.model];
     if (md.model_class == AG_PERSON) {
@@ -651,10 +658,16 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
         // the base coat's diffuse at the facades' class (as the street round it
         // is lit), its reflections and the lacquer's at the painted-metal class.
         sky_coat_env = ST_ENV_PAINTED_METAL;
-        sky_coat = 1.0;
-        let coat = mix(mix(AG_CAR_COAT_NEW, AG_CAR_COAT_OLD, age), AG_CINE_COAT_GRIME_ROUGH, grime);
+        // grime lies on the lacquer as a film of matte particles: where it
+        // covers, the lacquer's reflection is gone (the film's own diffuse is
+        // the base's); between the particles the lacquer stays a lacquer,
+        // only a little hazier (not a glossy 0.35 lobe a lamp's highlight
+        // would spread across the film).
+        sky_coat = 1.0 - AG_CAR_FILM_COVER * grime;
+        let coat = mix(mix(AG_CAR_COAT_NEW, AG_CAR_COAT_OLD, age), AG_CAR_COAT_FILMED, grime);
         sky_coat_rough = ag_car_aa(mix(coat, AG_CAR_GLASS_COAT_ROUGH, wet * smoothstep(0.3, 0.8, nb.y)), d.dn);
         k.far = 1u;
+        k.far_rough = ag_car_aa(sky_coat_rough, AG_CAR_FAR_AA * d.dn);
         return k;
     }
     switch role {
@@ -684,6 +697,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
                     sky_coat = 1.0;
                     sky_coat_rough = ag_car_aa(AG_CAR_GLASS_COAT_ROUGH + 0.04 * dirt * age, d.dn);
                     k.far = 1u;
+                    k.far_rough = sky_coat_rough;
                     return k;
                 }
                 k.emit = fill;
@@ -697,6 +711,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
             sky_coat_rough = ag_car_aa(AG_CAR_GLASS_COAT_ROUGH + 0.04 * dirt * age, d.dn);
             k.glass = true;
             k.far = 1u;
+            k.far_rough = sky_coat_rough;
         }
         case 3u: {
             // Rubber: the sidewall's raised lettering on the outer face, road
@@ -877,7 +892,7 @@ fn ag_car_finish(c: vec4<f32>, k: AgCar, world: vec3<f32>, g: AgSurf) -> vec4<f3
     var far = vec3<f32>(0.0);
     if (SF_CAR_REFLECTIONS && k.far != 0u) {
         if (k.far == 1u) {
-            far = sky_coat * ag_car_far_lights(world, g.n, g.v, vec3<f32>(0.04), sky_coat_rough);
+            far = sky_coat * ag_car_far_lights(world, g.n, g.v, vec3<f32>(0.04), k.far_rough);
         } else {
             far = ag_car_far_lights(world, g.s.n, g.v, mix(vec3<f32>(0.04), g.s.albedo, g.s.metal), g.s.rough);
         }
@@ -925,6 +940,8 @@ fn ag_car_fog(world: vec3<f32>, m: Material) -> f32 {
 // is hidden where its map says the point does not see it (read 15 cm off
 // the body, `AG_CAR_FAR_MAP_OFFSET`).
 const AG_CAR_FAR_MAP_OFFSET: f32 = 0.15;
+// The specular anti-aliasing's variance for the far lights' lobe on paint, x AG_CAR_AA_VARIANCE.
+const AG_CAR_FAR_AA: f32 = 4.0;
 fn ag_car_far_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
     if (!SF_CAR_REFLECTIONS || !SKY_CINE_FULL || !sky_on(skyu.flags.x, SKY_LIGHTS) || !sky_on(skyu.flags.x, SKY_CINEMATIC) || skyu.lights.x == 0u || frame.copy_step.z > 0.5) {
         return vec3<f32>(0.0);
