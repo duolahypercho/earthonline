@@ -450,6 +450,102 @@ pub fn far_floor_estimate(sw: &eo_street::StreetWorld, ring: &[[f64; 2]]) -> f64
     best.map(|b| b.1).unwrap_or(lowest)
 }
 
+/// (`--facade-weather`, `facade::weather_from_args`) Where the rain runs
+/// down a kit wall from a window: every wall piece in a window's column (the
+/// band below a window, from the floor up to its sill, and the band above the
+/// one below, up to the floor; merged into one piece on the mid rung) marks
+/// its front face's vertices with its place across the window and its depth
+/// under the sill above it. Both are linear over the face, so they
+/// interpolate exactly (draw.wgsl, facade_age.wgsl `fw_apply`). Packed per
+/// vertex as the normal's y byte (the depth, `WEATHER_DEPTH_STEP_M` a step,
+/// 0-127) in bits 0..8 and its w byte (1 + 61 u, u 0 at the piece's start and
+/// 1 at its end along the edge) in bits 8..16; 0 is a vertex with no mark. The
+/// w byte stays under the facade clutter's glow codes (63 and up) and above
+/// the lettered faces' (negative), and no glass, sign or glowing face is
+/// marked. The parts are walked as eo-kit's `build_rung_with` emits them (a
+/// part the clutter draws in its place is not in the sink); a group whose
+/// vertices do not line up with the walk keeps no marks.
+pub fn weather_marks(planned: &eo_kit::pipeline::Planned, rung: u32, mesh: &eo_kit::pipeline::RungMesh) -> Vec<Vec<u16>> {
+    let mut marks: Vec<Vec<u16>> = mesh.groups.iter().map(|g| vec![0u16; g.2.positions.len()]).collect();
+    let drawn = eo_kit::pipeline::drawn_materials(planned, rung);
+    let parts = eo_kit::pipeline::rung_parts(planned, rung);
+    let wall = drawn.materials.get("wall").cloned().unwrap_or_else(|| "brick-running-bond".into());
+    let mut at = vec![0usize; mesh.groups.len()];
+    let mut broken = vec![false; mesh.groups.len()];
+    let mut clamp = eo_kit::mesh::Clamp::new(&planned.plan, &planned.frame);
+    let mut scratch = eo_kit::mesh::Sink::default();
+    for part in &parts {
+        let name = drawn.materials.get(&part.slot).cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| wall.clone());
+        let Some(k) = mesh.groups.iter().position(|g| g.0 == name) else {
+            continue;
+        };
+        scratch.positions.clear();
+        scratch.normals.clear();
+        scratch.indices.clear();
+        eo_kit::mesh::emit_part(&mut scratch, part, &mut clamp);
+        let n = scratch.positions.len();
+        if n == 0 || broken[k] {
+            continue;
+        }
+        let sink = &mesh.groups[k].2;
+        let o = at[k];
+        if o + n > sink.positions.len() || sink.positions[o] != scratch.positions[0] || sink.positions[o + n - 1] != scratch.positions[n - 1] {
+            if part.kind.starts_with("fire-escape") {
+                continue; // drawn by the clutter in its place
+            }
+            broken[k] = true;
+            continue;
+        }
+        at[k] = o + n;
+        if let Some(m) = column_marks(&planned.plan, part, &scratch) {
+            marks[k][o..o + 4].copy_from_slice(&m);
+        }
+    }
+    for (k, b) in broken.iter().enumerate() {
+        if *b {
+            marks[k].iter_mut().for_each(|v| *v = 0);
+        }
+    }
+    marks
+}
+
+/// The depth under the sill a step of the normal's y byte stands for (127 steps: 6.35 m).
+pub const WEATHER_DEPTH_STEP_M: f64 = 0.05;
+
+/// A wall piece's front-face marks (`weather_marks`), if it stands in a
+/// window's column with a window's sill above it within the y byte's reach.
+fn column_marks(plan: &eo_kit::elevation::Plan, part: &eo_kit::elevation::Part, sink: &eo_kit::mesh::Sink) -> Option<[u16; 4]> {
+    if !part.is_box() || !matches!(part.kind.as_str(), "wall" | "spandrel" | "bulkhead") || sink.positions.len() < 4 {
+        return None;
+    }
+    let e = part.edge?;
+    let rec = plan.edges.iter().find(|r| r.index == e)?;
+    const EPS: f64 = 2e-3;
+    // the lowest window bottom at or over the piece's top, in its column (a piece never spans a window)
+    let sill = rec
+        .openings
+        .iter()
+        .filter(|o| (o.s0 - part.s0).abs() < EPS && (o.s1 - part.s1).abs() < EPS && o.y0 >= part.y1 - EPS)
+        .map(|o| o.y0)
+        .fold(f64::INFINITY, f64::min);
+    let reach = 127.0 * WEATHER_DEPTH_STEP_M;
+    if !sill.is_finite() || sill - part.y0 > reach || part.s1 - part.s0 < 0.2 {
+        return None;
+    }
+    let [ux, uz] = part.basis.u;
+    let origin = part.basis.origin;
+    let mut out = [0u16; 4];
+    // the front face is the box's first quad (eo-kit mesh.rs `emit_box`)
+    for (i, p) in sink.positions.iter().take(4).enumerate() {
+        let along = (p[0] - origin[0]) * ux + (p[2] - origin[1]) * uz;
+        let u = ((along - part.s0) / (part.s1 - part.s0)).clamp(0.0, 1.0);
+        let depth = ((sill - p[1]) / WEATHER_DEPTH_STEP_M).round().clamp(0.0, 127.0) as u16;
+        let w = (1.0 + 61.0 * u).round() as u16;
+        out[i] = depth | (w << 8);
+    }
+    Some(out)
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct CookStats {
     pub buildings: usize,
@@ -486,6 +582,8 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
         let ft = FACADE_TEST.load(Ordering::Relaxed);
         for (k, rung) in [if ft != 0 { 3u32 } else { 0 }, 2].into_iter().enumerate() {
             let mesh = eo_kit::pipeline::build_rung(&planned, rung);
+            // (`--facade-weather`) the wall pieces under the windows (none without it: the packs as before).
+            let weather = (crate::facade::weather_from_args() && (rung == 0 || rung == 2)).then(|| weather_marks(&planned, rung, &mesh));
             let pack = &mut packs[k];
             let mut ft_top: Option<f32> = None; // the envelope walls' top
             let vertex_start = pack.vertices.len() as u32;
@@ -533,6 +631,9 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
                         normal = (normal & 0x00ff_00ff) | ((b[3] as u32) << 8) | ((b[4] as u32) << 24);
                     } else if glow != 0 {
                         normal |= glow << 24; // draw.wgsl `fc_glow` (the w byte is free on every other kit surface)
+                    } else if let Some(mk) = weather.as_ref().map(|w| w[gi][k]).filter(|v| *v != 0) {
+                        // (`--facade-weather`) the depth under the sill in the y byte (the face is upright), the place across in the w byte.
+                        normal = (normal & 0x00ff_00ff) | (((mk & 255) as u32) << 8) | (((mk >> 8) as u32) << 24);
                     }
                     pack.vertices.push(Vertex { pos, normal, color: c });
                 }
@@ -665,12 +766,18 @@ pub fn inputs_key_with(repo_root: &Path, palette: &[String], streets: bool, stre
     d.iter().take(8).map(|b| format!("{b:02x}")).collect()
 }
 
+/// What `--facade-weather` adds to the kit tile cache key (`weather_marks`; off: the key is unchanged).
+pub const WEATHER_CACHE_TAG: &str = "|facade-weather-v1";
+
 /// The kit tile cache folder for the planner's inputs key: the key itself,
 /// or with the facade clutter on (`eo_kit::clutter::cache_tag`, `--facade-clutter`)
 /// a key over it and the tag. Not in `inputs_key`, which the far layer's
 /// bake key also reads: the far cells do not draw the clutter.
 pub fn tile_cache_key(inputs_key: &str) -> String {
-    let tag = eo_kit::clutter::cache_tag();
+    let mut tag = eo_kit::clutter::cache_tag();
+    if crate::facade::weather_from_args() {
+        tag.push_str(WEATHER_CACHE_TAG); // (`--facade-weather`) the marked wall pieces cook into their own folder
+    }
     if tag.is_empty() {
         return inputs_key.to_string();
     }

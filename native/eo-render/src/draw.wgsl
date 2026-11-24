@@ -938,8 +938,14 @@ fn shade(in: VOut) -> vec4<f32> {
     cc0_reset_post(); // cc0
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = face;
-    if (dot(in.normal, in.normal) > 0.25) {
-        n = normalize(in.normal);
+    var n_in = in.normal;
+    // (`--facade-weather`) a marked kit wall piece's normal y byte is its depth under the sill (kit.rs `weather_marks`; the face is upright).
+    let fw_mark = SF_FACADE_WEATHER && (objects[in.object].kind & 255u) == 5u && (m.flags & F_GLASS) == 0u && (u32(frame.copy_step.y) & 256u) == 0u && fw_marked(in.aux.y);
+    if (fw_mark) {
+        n_in.y = 0.0;
+    }
+    if (dot(n_in, n_in) > 0.25) {
+        n = normalize(n_in);
     }
     // Solid sand and shells keep their outward normal across a grazing crest.
     // A ribbon of eelgrass, like the other thin geometry, shades both sides.
@@ -1209,6 +1215,10 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);
+    if (SF_FACADE_WEATHER && kit_object && (m.flags & F_GLASS) == 0u && !fc_on && !sgn_on && fw_on()) {
+        // (`--facade-weather`) the run-off under each window, the soiled foot (facade_age.wgsl)
+        fw_apply(&s, m, in.world, n, in.object, select(-1.0, in.aux.y * 127.0, fw_mark), cc0_daux * 127.0, in.normal.y * 6.35, dpx, dpy);
+    }
     if (sl_level() != 0u && kit_object && (m.flags & F_GLASS) == 0u) {
         sl_kit_wall(&s, in.world, n, in.object, dpx, dpy); // street life (`--street-life`): graffiti, buffs, posters at the building line
     }

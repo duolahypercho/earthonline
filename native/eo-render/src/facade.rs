@@ -479,6 +479,21 @@ pub fn far_from_args() -> bool {
     last_switch(&args, "--far-facades", "--no-far-facades")
 }
 
+/// `--facade-weather` (`--no-facade-weather`; off by default): the kit walls'
+/// run-off under each window (the near and mid rungs mark the wall pieces
+/// below and above a window with their place across it and their distance
+/// under the sill above, kit.rs `weather_marks`, cooked into their own cache
+/// folder) and the soiled foot of every kit wall (draw.wgsl, facade_age.wgsl
+/// `fw_apply` behind `SF_FACADE_WEATHER`). Off, the code is compiled out, the
+/// kit packs and their cache key are as before and the frame is as before.
+pub fn weather_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--facade-weather", "--no-facade-weather")
+    })
+}
+
 /// The facades track's runtime bits in the frame switches (`fa_run()`), high
 /// enough to stay clear of the others: with a feature's code compiled in
 /// (`ShaderFeatures`) it draws only with its bit set, so a renderer with every
@@ -486,11 +501,17 @@ pub fn far_from_args() -> bool {
 /// switch off draws the frame as before.
 pub const RUN_FACADE_GLASS: u32 = 1 << 20;
 pub const RUN_FAR_FACADES: u32 = 1 << 21;
+pub const RUN_FACADE_WEATHER: u32 = 1 << 22;
 
-/// `RUN_FACADE_GLASS` and `RUN_FAR_FACADES` as the command line sets them (read once).
+/// `RUN_FACADE_GLASS`, `RUN_FAR_FACADES` and `RUN_FACADE_WEATHER` as the command line sets them (read once).
 pub fn track_run_bits() -> u32 {
     static BITS: OnceLock<u32> = OnceLock::new();
-    *BITS.get_or_init(|| if glass_from_args() { RUN_FACADE_GLASS } else { 0 } | if far_from_args() { RUN_FAR_FACADES } else { 0 })
+    *BITS.get_or_init(|| {
+        let glass = if glass_from_args() { RUN_FACADE_GLASS } else { 0 };
+        let far = if far_from_args() { RUN_FAR_FACADES } else { 0 };
+        let weather = if weather_from_args() { RUN_FACADE_WEATHER } else { 0 };
+        glass | far | weather
+    })
 }
 
 #[cfg(test)]
@@ -511,10 +532,11 @@ mod switch_tests {
     fn the_track_bits_stay_clear_of_the_other_switches_and_exact_in_f32() {
         use super::*;
         let others = RUN_AGE | RUN_DETAIL | RUN_ATLAS2 | RUN_PROBE | RUN_PROBE_YIELD | RUN_ROOMS | RUN_FACADE_TEST | RUN_AGENT_HZB | RUN_PROBE_DEFER | RUN_GRIME_MASK | RUN_STREET_LIFE_MASK;
-        for b in [RUN_FACADE_GLASS, RUN_FAR_FACADES] {
+        for b in [RUN_FACADE_GLASS, RUN_FAR_FACADES, RUN_FACADE_WEATHER] {
             assert_eq!(b & others, 0);
             assert!(b < (1 << 24), "the frame carries the switches in an f32");
         }
         assert_eq!(RUN_FACADE_GLASS & RUN_FAR_FACADES, 0);
+        assert_eq!((RUN_FACADE_GLASS | RUN_FAR_FACADES) & RUN_FACADE_WEATHER, 0);
     }
 }

@@ -588,3 +588,200 @@ fn fa_probe_irradiance(n: vec3<f32>) -> vec3<f32> {
     e = e + fa_probe_sh[8].xyz * (1.092548 * x * z) + fa_probe_sh[9].xyz * (0.546274 * (x * x - y * y));
     return max(e, vec3<f32>(0.0));
 }
+
+// ---- (`--facade-weather`, facade.rs `weather_from_args`) the kit walls' run-off and foot ----
+// Dust and soot settle on a window's sill; the rain washes them off its two
+// ends and, where it has no drip groove, over its front edge, and the dirty
+// water leaves dark streaks down the wall under it that widen as they fall
+// and fade over a metre or two, more and longer on an old building. Right
+// under the sill, sheltered from the rain, the dirt settles and stays. The
+// kit marks every wall piece in a window's column with its place across the
+// window and its depth under the sill above (kit.rs `weather_marks`): the
+// band under a window and the band over the window below, one piece on the
+// mid rung; the window's width comes from how fast the place changes over
+// the wall. At every wall's foot: the splash-back the rain throws up off the
+// walk (a ragged band of mud specks), on render and masonry rising damp with
+// a pale salt tide line at its top, and the grime of the street's hands,
+// bags and bins fading up the ground floor. Every detail gives way to its
+// mean as it shrinks under a pixel (a streak widens and pales as its share
+// of the pixel falls), so it holds its tone from 2 m to a block away.
+// INFERRED sizes and strengths (FW_*), from photographs of aged sills.
+// a streak's centre in from the window's jamb, m
+const FW_END_IN: vec2<f32> = vec2<f32>(0.035, 0.11);
+// its e-folding length down the wall, m (times 0.6-1.4 by the building's wear)
+const FW_LEN: vec2<f32> = vec2<f32>(0.5, 3.0);
+// its half-width under the sill and how much it widens a metre down, m
+const FW_W0: vec2<f32> = vec2<f32>(0.022, 0.055);
+const FW_SPREAD: vec2<f32> = vec2<f32>(0.012, 0.045);
+// the share of sill ends that streak (new .. old) and of front-edge drips per FW_DRIP_PITCH
+const FW_END_SHARE: vec2<f32> = vec2<f32>(0.45, 0.95);
+const FW_DRIP_SHARE: vec2<f32> = vec2<f32>(0.12, 0.5);
+const FW_DRIP_PITCH: f32 = 0.55;
+// the dirt's colour as a multiplier of the wall's at full soiling (soot and dust: darker, a little warm)
+const FW_DIRT: vec3<f32> = vec3<f32>(0.40, 0.38, 0.345);
+// a wet wall's albedo multiplier and roughness (x, y): a porous finish (render, masonry: the water
+// fills its pores) and a paint film; the run-off's sheet of water
+const FW_WET_POROUS: vec2<f32> = vec2<f32>(0.6, 0.48);
+const FW_WET_PAINT: vec2<f32> = vec2<f32>(0.84, 0.22);
+const FW_FILM_ROUGH: f32 = 0.1;
+// the salt's tone (efflorescence) at the damp's tide line
+const FW_SALT: vec3<f32> = vec3<f32>(0.66, 0.65, 0.62);
+
+fn fw_on() -> bool {
+    return SF_FACADE_WEATHER && (fa_run() & 4194304u) != 0u;
+}
+
+// a kit wall piece kit.rs `weather_marks` marked (its w byte 1 + 61 u; 0 none, 63 and up a sign's glow code).
+fn fw_marked(aux_y: f32) -> bool {
+    let q = aux_y * 127.0;
+    return q > 0.5 && q < 62.5;
+}
+
+fn fw_u(x: u32) -> u32 {
+    let s = x * 747796405u + 2891336453u;
+    let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+fn fw_h(k: vec3<i32>, salt: u32) -> f32 {
+    let b = bitcast<vec3<u32>>(k);
+    return f32(fw_u(b.x ^ fw_u(b.y ^ fw_u(b.z ^ (salt * 2654435769u)))) >> 8u) / 16777216.0;
+}
+
+// value noise along one axis, keyed.
+fn fw_n1(x: f32, k: vec3<i32>, salt: u32) -> f32 {
+    let i = floor(x);
+    let f = x - i;
+    let a = fw_h(k + vec3<i32>(i32(i), 0, 0), salt);
+    let b = fw_h(k + vec3<i32>(i32(i) + 1, 0, 0), salt);
+    return mix(a, b, f * f * (3.0 - 2.0 * f));
+}
+
+// one streak's soiling at `x` across the window and `depth` under its sill,
+// centred at `xc`; `scale` shrinks a front-edge drip; `fw` the pixel's footprint.
+fn fw_streak(x: f32, depth: f32, xc: f32, key: vec3<i32>, salt: u32, wear: f32, fw: f32, scale: f32) -> f32 {
+    let len = mix(FW_LEN.x, FW_LEN.y, fw_h(key, salt + 1u)) * mix(0.6, 1.4, wear) * scale;
+    if (depth > len * 4.0) {
+        return 0.0;
+    }
+    let w = (mix(FW_W0.x, FW_W0.y, fw_h(key, salt + 2u)) + depth * mix(FW_SPREAD.x, FW_SPREAD.y, fw_h(key, salt + 3u))) * mix(1.0, scale, 0.6);
+    // under a pixel the streak widens to the footprint and pales by as much (its share of the pixel)
+    let wf = sqrt(w * w + 0.3 * fw * fw);
+    let keep = 1.0 - smoothstep(0.015, 0.05, fw);
+    let wig = 0.012 * sin(depth * mix(4.0, 9.0, fw_h(key, salt + 4u)) + fw_h(key, salt + 5u) * 6.2832) * min(depth * 2.0, 1.0) * keep;
+    let dx = (x - xc - wig) / wf;
+    let across = exp(-dx * dx * 1.4) * (w / wf);
+    let along = smoothstep(0.0, 0.04, depth) * exp(-depth / len);
+    // the deposit lies unevenly down the streak
+    let blot = mix(0.5 + 0.5 * fw_n1(depth / 0.2 + fw_h(key, salt + 6u) * 31.0, key, salt + 7u), 0.75, smoothstep(0.06, 0.25, fw));
+    return across * along * blot;
+}
+
+fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f32>, object: u32, code: f32, dcode: vec2<f32>, depth: f32, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let cls = (m.flags >> 8u) & 7u;
+    if (cls == FA_AGE_ROOF || cls == FA_AGE_METAL || abs(ng.y) > 0.3) {
+        return;
+    }
+    let ob = objects[object];
+    let d = fa_drivers(fa_ages[ob.lod_group]);
+    let wear = clamp(d.wear, 0.0, 1.0);
+    let fw = max(length(dpx), length(dpy));
+    let t = normalize(vec3<f32>(-ng.z, 0.0, ng.x));
+    var dirt = 0.0;
+    var run = 0.0;
+    if (code > 0.0) {
+        // the window's width from how fast the place across it changes along the wall
+        let sx = dot(dpx, t);
+        let sy = dot(dpy, t);
+        let g = (dcode.x * sx + dcode.y * sy) / max(sx * sx + sy * sy, 1e-12);
+        let width = 61.0 / max(abs(g), 1e-4);
+        if (width > 0.2 && width < 60.0) {
+            let x = clamp((code - 1.0) / 61.0, 0.0, 1.0) * width;
+            let td = t * sign(g);
+            let left = world - td * x;
+            let right = left + td * width;
+            let ky = i32(floor((world.y + depth) * 4.0 + 0.5));
+            let kl = vec3<i32>(vec2<i32>(floor(left.xz * 4.0 + 0.5)), ky);
+            let kr = vec3<i32>(vec2<i32>(floor(right.xz * 4.0 + 0.5)), ky);
+            let k = mix(0.55, 1.05, wear);
+            let share = mix(FW_END_SHARE.x, FW_END_SHARE.y, wear);
+            // the sill's two ends
+            for (var e = 0; e < 2; e = e + 1) {
+                let key = select(kl, kr, e == 1);
+                if (fw_h(key, 1u) < share) {
+                    let inset = min(mix(FW_END_IN.x, FW_END_IN.y, fw_h(key, 2u)), 0.3 * width);
+                    let xc = select(inset, width - inset, e == 1);
+                    let st = fw_streak(x, depth, xc, key, 10u, wear, fw, 1.0);
+                    dirt = dirt + st * k * mix(0.65, 1.0, fw_h(key, 9u));
+                    run = max(run, st);
+                }
+            }
+            // drips off the sill's front edge
+            if (width > 0.6) {
+                let cell = floor(x / FW_DRIP_PITCH);
+                let dshare = mix(FW_DRIP_SHARE.x, FW_DRIP_SHARE.y, wear);
+                for (var c = -1; c <= 1; c = c + 1) {
+                    let ci = cell + f32(c);
+                    let kd = vec3<i32>(kl.x + i32(ci) * 7 + 3, kl.y + 11, kl.z);
+                    if (fw_h(kd, 4u) < dshare) {
+                        let xc = (ci + 0.5 + (fw_h(kd, 5u) - 0.5) * 0.7) * FW_DRIP_PITCH;
+                        if (xc > 0.15 && xc < width - 0.15) {
+                            let st = fw_streak(x, depth, xc, kd, 20u, wear, fw, 0.45);
+                            dirt = dirt + st * k * 0.6;
+                            run = max(run, st * 0.8);
+                        }
+                    }
+                }
+            }
+            // the sheltered strip right under the sill
+            dirt = dirt + 0.22 * k * (1.0 - smoothstep(0.0, 0.16, depth));
+        }
+    }
+    // the wall's foot
+    var salt = 0.0;
+    let ly = world.y - d.base_y;
+    if (ly < 3.0 && ly > -0.05) {
+        let along = dot(world.xz, t.xz);
+        let edge = max(0.025, fw);
+        let keep = 1.0 - smoothstep(0.01, 0.04, fw);
+        // the splash-back: a ragged band of mud specks
+        let top = mix(0.22, 0.45, wear) * (0.75 + 0.5 * fa_noise(vec2<f32>(along / 0.9, 1.3 + d.seed), 81.0));
+        let ragged = top + 0.06 * (fa_noise(vec2<f32>(along / 0.13, ly / 0.11), 82.0) - 0.5) * keep;
+        let splash = 1.0 - smoothstep(ragged - edge, ragged + edge, ly);
+        let speck = mix(fa_ss(0.45, 0.8, fa_noise(vec2<f32>(along / 0.025, ly / 0.025), 84.0)), 0.3, 1.0 - keep);
+        dirt = dirt + splash * (0.32 + 0.4 * speck) * mix(0.5, 1.0, wear);
+        // rising damp on render and masonry, its tide line pale with salt
+        if (cls == FA_AGE_RENDER || cls == FA_AGE_MASONRY) {
+            let damp_top = mix(0.45, 1.15, fract(d.seed * 0.618)) * mix(0.55, 1.0, wear) * (0.85 + 0.3 * fa_noise(vec2<f32>(along / 1.7, 7.7), 83.0));
+            let damp = 1.0 - smoothstep(damp_top - edge, damp_top + edge, ly);
+            dirt = dirt + damp * 0.2 * wear;
+            let tl = (ly - damp_top) / max(0.03, fw);
+            salt = exp(-tl * tl) * wear * 0.3 * (0.5 + 0.5 * fa_noise(vec2<f32>(along / 0.4, 3.3), 86.0));
+        }
+        // the street's grime over the ground floor
+        dirt = dirt + 0.14 * wear * (1.0 - smoothstep(0.3, 2.4, ly)) * (0.55 + 0.45 * fa_noise(vec2<f32>(along / 2.3, ly / 0.8), 85.0));
+    }
+    let kd = clamp(dirt, 0.0, 0.92);
+    (*s).albedo = mix((*s).albedo, (*s).albedo * FW_DIRT, kd);
+    (*s).albedo = mix((*s).albedo, FW_SALT * max(max((*s).albedo.r, (*s).albedo.g), (*s).albedo.b) * 1.15, salt);
+    (*s).rough = clamp((*s).rough + kd * 0.08, 0.03, 1.0);
+    // in the rain: the wall wet where the driven rain reaches it (more up the wall and under the
+    // roof's edge, less on the sheltered ground floor) and in the run-off's paths under each sill
+    let w = skyu.wet.x;
+    if (sky_on(skyu.flags.x, SKY_WET) && w > 0.02) {
+        let top = ob.max.y - world.y;
+        let exposed = clamp(0.35 + 0.5 * smoothstep(1.5, 10.0, ly) + 0.35 * (1.0 - smoothstep(0.0, 3.0, top)), 0.0, 1.0);
+        let ww = w * clamp(exposed + 1.4 * run, 0.0, 1.0);
+        // a porous finish (render, masonry) darkens and deepens its colour as the water fills it and
+        // stays matte; a paint film beads and sheets, darkening less and turning glossy
+        let porous = cls == FA_AGE_RENDER || cls == FA_AGE_MASONRY;
+        let dark = select(FW_WET_PAINT.x, FW_WET_POROUS.x, porous);
+        let wet_rough = select(FW_WET_PAINT.y, FW_WET_POROUS.y, porous);
+        let a = (*s).albedo;
+        let l = dot(a, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let deep = max(mix(vec3<f32>(l), a, 1.0 + 0.35 * ww), vec3<f32>(0.0));
+        (*s).albedo = deep * mix(1.0, dark, ww);
+        // the run-off's film: a sheet of water down the streaks' paths
+        (*s).rough = mix(mix((*s).rough, wet_rough, ww), FW_FILM_ROUGH, clamp(run * 1.6, 0.0, 1.0) * w);
+    }
+}

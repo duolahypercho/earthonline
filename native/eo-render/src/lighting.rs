@@ -230,6 +230,8 @@ mod tests {
         sets.push(("facade glass".into(), look::ShaderFeatures { facade_glass: true, ..none })); // (`--facade-glass`)
         sets.push(("facade glass with grime and street life".into(), look::ShaderFeatures { facade_glass: true, grime: true, street_life: true, shop_light: true, ..none }));
         sets.push(("far facades".into(), look::ShaderFeatures { far_facades: true, ..none })); // (`--far-facades`)
+        sets.push(("facade weather".into(), look::ShaderFeatures { facade_weather: true, ..none })); // (`--facade-weather`)
+        sets.push(("facade weather with grime, glass and clutter".into(), look::ShaderFeatures { facade_weather: true, facade_glass: true, grime: true, street_life: true, facade_clutter: true, ..none }));
         sets
     }
 
@@ -277,7 +279,7 @@ mod tests {
         let f = look::ShaderFeatures::of(&on, true, true, true);
         // (the look profile is its own, below; the facades track's switches are read from the
         // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options)
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, ..look::ShaderFeatures::ALL });
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, ..look::ShaderFeatures::ALL });
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));
