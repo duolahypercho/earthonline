@@ -12,6 +12,7 @@ pub mod cine_wet;
 pub mod clouds;
 pub mod frame;
 pub mod hash;
+pub mod lamp_bounce;
 pub mod lights;
 pub mod lit_fog;
 pub mod moon;
@@ -20,6 +21,7 @@ pub mod night_photometry;
 pub mod photo;
 pub mod photometry;
 pub mod shops;
+pub mod urban_sky;
 pub mod weather;
 
 pub use frame::{Conditions, SkyTerms, apply};
