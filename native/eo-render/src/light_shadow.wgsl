@@ -336,7 +336,9 @@ fn ls_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_i
             let l = ls_lights[idx];
             let v = ls_view(l.pos);
             let dd = v - clamp(v, lo, hi);
-            hit = select(0u, 1u, dot(dd, dd) <= l.range * l.range);
+            // (`--signal-spill`) a signal's lens stays out of the clusters (sky_lights.wgsl
+            // `lights_cluster`: its beam has no shadow); its light shows in the wet streaks only.
+            hit = select(0u, 1u, dot(dd, dd) <= l.range * l.range && l.kind != NT_SIGNAL_KIND);
         }
         lsc_hits[lid] = hit;
         workgroupBarrier();
