@@ -225,6 +225,8 @@ mod tests {
         sets.push(("shop light".into(), look::ShaderFeatures { shop_light: true, ..none }));
         sets.push(("facade clutter".into(), look::ShaderFeatures { facade_clutter: true, ..none }));
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
+        sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
+        sets.push(("ao albedo".into(), look::ShaderFeatures { ao_albedo: true, ..none })); // (`--ao-albedo`)
         sets
     }
 
@@ -252,6 +254,10 @@ mod tests {
                     include_str!("sky_velocity.wgsl")
                 );
                 parse(&format!("{name}: agents"), &agents);
+                // (`--sun-bounce`) the occlusion pass, with its gather or the stub.
+                let ao = look::ao_shader_source();
+                assert_eq!(ao.contains("var ao_far_map"), f.sun_bounce, "{name}: the gather's binding only with the feature");
+                parse(&format!("{name}: occlusion pass"), &ao);
             });
         }
         assert_eq!(look::shader_features(), look::ShaderFeatures::ALL, "the scope ends with its body; unset, every feature is in");
@@ -270,7 +276,7 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, sun_bounce: false, ao_albedo: false, ..look::ShaderFeatures::ALL }); // (the look profile, the sun bounce and the albedo's multi-bounce are their own, below)
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));
@@ -281,6 +287,17 @@ mod tests {
         // each lighting bit keeps only its own option.
         let blend_only = look::ShaderFeatures { lx_bits: look::LX_BIT_CASCADE_BLEND, ..look::ShaderFeatures::NONE }.limit(&on);
         assert_eq!(blend_only.lighting, LightingOptions { cascade_blend: true, ..LightingOptions::OFF });
+        // (`--sun-bounce`) compiled in with its option, left off when compiled out.
+        let sb = look::LookOptions { sun_bounce: true, ..on };
+        assert!(look::ShaderFeatures::of(&sb, false, false, false).sun_bounce);
+        assert!(!look::ShaderFeatures::NONE.limit(&sb).sun_bounce);
+        assert!(look::ShaderFeatures::ALL.limit(&sb).sun_bounce);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SUN_BOUNCE: bool = false;"));
+        // (`--ao-albedo`) the same.
+        let aa = look::LookOptions { ao_albedo: true, ..on };
+        assert!(look::ShaderFeatures::of(&aa, false, false, false).ao_albedo);
+        assert!(!look::ShaderFeatures::NONE.limit(&aa).ao_albedo);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_AO_ALBEDO: bool = false;"));
     }
 
     #[test]

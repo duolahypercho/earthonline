@@ -195,11 +195,23 @@ pub struct LookOptions {
     /// high and hyper tiers turn on. Its shader code sits behind `SF_CINEMATIC`
     /// (`ShaderFeatures::cinematic`); the sky reads `SkyOptions::cinematic`.
     pub look: eo_look::cinematic::LookProfile,
+    /// The sun's first bounce off the sunlit walls round each point
+    /// (`--sun-bounce`; surfaces_ao_sun.wgsl, eo-look `sun_bounce`): the
+    /// occlusion pass gathers it from the far sun map's ring 1 as a reflective
+    /// shadow map, each sunlit wall's radiance less the rig's stand-in for it,
+    /// into the bounce channel. Needs `lighting.far_shadows` and `ao`. Off: the
+    /// frame as before (its code is compiled out, `ShaderFeatures::sun_bounce`).
+    pub sun_bounce: bool,
+    /// The occlusion's multi-bounce at each surface's own diffuse albedo, per
+    /// channel, on the indirect diffuse (`--ao-albedo`; surfaces_ao_use.wgsl
+    /// `ao_multi_bounce_albedo`) instead of the JS's single albedo of 0.7.
+    /// Off: the frame as before (compiled out, `ShaderFeatures::ao_albedo`).
+    pub ao_albedo: bool,
 }
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -490,6 +502,8 @@ pub struct LookGpu {
     // occlusion + bounce.
     ao_pipeline: wgpu::ComputePipeline,
     ao_bgl: wgpu::BindGroupLayout,
+    /// (`--sun-bounce`) the occlusion pass has the sun bounce compiled in: its binding 5 is the far sun map.
+    ao_sun: bool,
     ao_sampler: wgpu::Sampler,
     ao_dummy: (wgpu::TextureView, wgpu::TextureView),
     ao: Mutex<Option<AoTarget>>,
@@ -628,13 +642,18 @@ pub struct ShaderFeatures {
     /// The cinematic look (`--look cinematic`; `SF_CINEMATIC`): every shader line of the
     /// cinematic look plan sits behind it, as well as behind its runtime test.
     pub cinematic: bool,
+    /// The sun bounce (`--sun-bounce`; `SF_SUN_BOUNCE`): the occlusion pass's
+    /// gather (surfaces_ao_sun.wgsl, its binding 5; `ao_shader_source`).
+    pub sun_bounce: bool,
+    /// The occlusion's multi-bounce at the surface's albedo (`--ao-albedo`; `SF_AO_ALBEDO`, look_light.wgsl).
+    pub ao_albedo: bool,
 }
 
 impl ShaderFeatures {
     /// Every feature compiled in (the shaders as before stage P1).
-    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true };
+    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true, sun_bounce: true, ao_albedo: true };
     /// No feature compiled in (the default frame's pipelines).
-    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false };
+    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false, sun_bounce: false, ao_albedo: false };
 
     /// The features the look's options ask for, with the world's (`structures`,
     /// `tunnels`, `facade_clutter`: eo-app's `--structures`, `--tunnels`,
@@ -649,6 +668,8 @@ impl ShaderFeatures {
             shop_light: o.sky.shop_light > 0,
             facade_clutter,
             cinematic: o.look.is_cinematic(),
+            sun_bounce: o.sun_bounce,
+            ao_albedo: o.ao_albedo,
         }
     }
 
@@ -699,14 +720,16 @@ impl ShaderFeatures {
             l.look = eo_look::cinematic::LookProfile::Default;
             l.sky.cinematic = false;
         }
+        l.sun_bounce &= self.sun_bounce;
+        l.ao_albedo &= self.ao_albedo;
         l
     }
 
     /// The generated constants (look_common_source; every shader on the look's common code reads them).
     pub fn wgsl(&self) -> String {
         format!(
-            "\n// generated by look.rs ShaderFeatures::wgsl (stage P1: what is off is compiled out)\nconst SF_LX_BITS: u32 = {}u;\nconst SF_GRIME: bool = {};\nconst SF_STREET_LIFE: bool = {};\nconst SF_STRUCTURES: bool = {};\nconst SF_TUNNELS: bool = {};\nconst SF_SHOP_LIGHT: bool = {};\nconst SF_FACADE_CLUTTER: bool = {};\nconst SF_CINEMATIC: bool = {};\n",
-            self.lx_bits, self.grime, self.street_life, self.structures, self.tunnels, self.shop_light, self.facade_clutter, self.cinematic
+            "\n// generated by look.rs ShaderFeatures::wgsl (stage P1: what is off is compiled out)\nconst SF_LX_BITS: u32 = {}u;\nconst SF_GRIME: bool = {};\nconst SF_STREET_LIFE: bool = {};\nconst SF_STRUCTURES: bool = {};\nconst SF_TUNNELS: bool = {};\nconst SF_SHOP_LIGHT: bool = {};\nconst SF_FACADE_CLUTTER: bool = {};\nconst SF_CINEMATIC: bool = {};\nconst SF_SUN_BOUNCE: bool = {};\nconst SF_AO_ALBEDO: bool = {};\n",
+            self.lx_bits, self.grime, self.street_life, self.structures, self.tunnels, self.shop_light, self.facade_clutter, self.cinematic, self.sun_bounce, self.ao_albedo
         )
     }
 }
@@ -784,6 +807,29 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
 /// of a pipeline on `look-bgl` composes it (the city shader above, and the
 /// far shore, water, surf and prop wire shaders, which build their own).
 pub const LOOK_EXT_WGSL: &str = include_str!("look_ext.wgsl");
+
+/// The occlusion pass's shader (surfaces_ao.wgsl on the look's common code)
+/// and, with `ShaderFeatures::sun_bounce`, the sun bounce's gather
+/// (surfaces_ao_sun.wgsl, eo-look `sun_bounce`'s constants); without it a
+/// stub that gathers nothing, compiled out with `SF_SUN_BOUNCE`.
+pub fn ao_shader_source() -> String {
+    let mut s = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
+    if shader_features().sun_bounce {
+        use eo_look::sun_bounce as sb;
+        let f = |v: f64| format!("{v:.8}");
+        let v3 = |v: [f64; 3]| format!("vec3<f32>({}, {}, {})", f(v[0]), f(v[1]), f(v[2]));
+        s.push_str("\n// generated by look.rs ao_shader_source (eo-look sun_bounce)\n");
+        s.push_str(&format!("const SB_SAMPLES: i32 = {};\n", sb::SAMPLES));
+        for (n, v) in [("SB_RADIUS_M", sb::RADIUS_M), ("SB_MIN_DIST2", sb::MIN_DIST2_M2), ("SB_GROUND_COS", sb::GROUND_COS), ("SB_MIN_SUN_COS", sb::MIN_SUN_COS), ("SB_GOLDEN_ANGLE", sb::GOLDEN_ANGLE), ("SB_MAX_SLOPE", sb::MAX_SLOPE)] {
+            s.push_str(&format!("const {n}: f32 = {};\n", f(v)));
+        }
+        s.push_str(&format!("const SB_WALL_ALBEDO: vec3<f32> = {};\n", v3(sb::WALL_ALBEDO)));
+        s.push_str(include_str!("surfaces_ao_sun.wgsl"));
+    } else {
+        s.push_str("\nfn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool) -> vec3<f32> {\n    return vec3<f32>(0.0);\n}\n");
+    }
+    s
+}
 
 /// look_common.wgsl with (surfaces) the street field's constants (GF_*), from
 /// eo-look's `GroundField` (data/ground-field.json, the JS DEFAULT_GROUND_FIELD).
@@ -1062,18 +1108,21 @@ impl LookGpu {
         );
         let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist, &lighting_stand_ins));
         // the occlusion + bounce compute.
-        let ao_src = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
+        let ao_src = ao_shader_source();
+        let ao_sun = shader_features().sun_bounce;
         let ao_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surfaces_ao.wgsl"), source: wgpu::ShaderSource::Wgsl(ao_src.into()) });
-        let ao_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ao-bgl"),
-            entries: &[
-                entry(0, cs, ubuf),
-                entry(1, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
-                entry(2, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
-                entry(3, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
-                entry(4, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_Z_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
-            ],
-        });
+        let mut ao_entries = vec![
+            entry(0, cs, ubuf),
+            entry(1, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+            entry(2, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+            entry(3, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
+            entry(4, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_Z_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
+        ];
+        if ao_sun {
+            // (`--sun-bounce`) the far sun map (ring 1's layer read with textureLoad).
+            ao_entries.push(entry(5, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }));
+        }
+        let ao_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("ao-bgl"), entries: &ao_entries });
         let ao_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("ao-layout"), bind_group_layouts: &[Some(&ao_bgl)], immediate_size: 0 });
         let ao_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("ao_main"),
@@ -1259,6 +1308,7 @@ impl LookGpu {
             shadow_array,
             ao_pipeline,
             ao_bgl,
+            ao_sun,
             ao_sampler,
             ao_dummy,
             ao: Mutex::new(None),
@@ -1389,6 +1439,11 @@ impl LookGpu {
     /// Binding 12: the far sun shadow map (a depth 2D array, a layer per ring); None the stand-in.
     pub fn set_far_shadow_map(&self, map: Option<&wgpu::TextureView>) {
         self.edit_lighting(|b, s| b.far_shadow_map = map.unwrap_or(&s.far_shadow_map).clone());
+        if self.ao_sun {
+            if let Some(t) = self.ao.lock().unwrap().as_mut() {
+                t.bind = None; // (`--sun-bounce`) the occlusion pass's group binds the map
+            }
+        }
         self.sky.set_far_shadow_map(map); // (stage L4) the golden haze's shade past the cascades
     }
 
@@ -1462,17 +1517,19 @@ impl LookGpu {
         let ht = hdr.texture();
         if t.bind.as_ref().is_none_or(|(d, h, _)| d != dt || h != ht) {
             crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 1);
-            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("ao-bg"),
-                layout: &self.ao_bgl,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: self.look_buf.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(depth) },
-                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(hdr) },
-                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&t.ao_view) },
-                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&t.z_view) },
-                ],
-            });
+            // (`--sun-bounce`) the far sun map bound now (or its stand-in); `set_far_shadow_map` drops this group.
+            let far = self.ao_sun.then(|| self.lighting_bound.lock().unwrap().far_shadow_map.clone());
+            let mut entries = vec![
+                wgpu::BindGroupEntry { binding: 0, resource: self.look_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(depth) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(hdr) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&t.ao_view) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&t.z_view) },
+            ];
+            if let Some(f) = far.as_ref() {
+                entries.push(wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(f) });
+            }
+            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("ao-bg"), layout: &self.ao_bgl, entries: &entries });
             t.bind = Some((dt.clone(), ht.clone(), bg));
         }
         {
@@ -1952,7 +2009,9 @@ impl LookGpu {
                 if ao_made.is_some() { 1.0 } else { 0.0 },
                 1.0 / focal_px,
                 std::env::var("EO_AO_DEBUG").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
-                0.0,
+                // the occlusion's additions that run: bit 0 (`--sun-bounce`) the gather (it reads
+                // ring 1 of the far sun map, in the occlusion pass), bit 1 (`--ao-albedo`) the albedo's multi-bounce.
+                (if self.ao_sun && self.options.sun_bounce && self.options.ao && self.options.lighting.far_shadows > 0 { 1.0 } else { 0.0 }) + if self.options.ao_albedo { 2.0 } else { 0.0 },
             ],
             field: {
                 // makeGroundField's practicals ramps on the sun's altitude (dry, model exposure 1).
