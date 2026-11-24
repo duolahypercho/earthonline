@@ -230,6 +230,13 @@ pub struct LookOptions {
     /// sees the sky, and the sun bounce adds a sunlit wall's sun part whole.
     /// Off: the frame as before (compiled out, `ShaderFeatures::occluder_light`).
     pub occluder_light: bool,
+    /// The environment's colour from the sky the frame paints (`--dome-env`;
+    /// eo-look `env_sh_with_dome_colour`): the environment SH every lit
+    /// surface reads for its diffuse environment and its rough reflections
+    /// (the shaders' `lk_sh`) keeps the analytic dome's light and takes the
+    /// painted dome's colour (the haze's grey low sky, not the analytic deep
+    /// blue). CPU only, nothing in the shaders; off: the frame as before.
+    pub dome_env: bool,
     /// The cars' materials and lamps (`--car-materials`; agents_draw.wgsl
     /// `ag_car_*`, eo-agents `CookOptions::car_materials`): 0 off (the frame
     /// as before), 1 on. Its shader code sits behind `SF_CAR_MATERIALS`
@@ -274,7 +281,7 @@ pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NAT
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, car_materials: 0, car_contact: 0, car_reflections: 0, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, dome_env: false, car_materials: 0, car_contact: 0, car_reflections: 0, nature: 0 } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -610,6 +617,8 @@ pub struct LookGpu {
     /// (`--look cinematic`) the cinematic post pass (cine_post.rs), made the first time the look is on.
     cine: Option<crate::cine_post::CineGpu>,
     state: Mutex<State>,
+    /// (`--dome-env`) the environment SH with the painted dome's colour, by the frame's own (hour, SH bits).
+    dome_env: Mutex<Option<((u64, [[u64; 3]; 9]), [eo_look::math::Rgb; 9])>>,
     pub(crate) cmp_sampler: wgpu::Sampler, // pub(crate)
     pub(crate) device: wgpu::Device, // pub(crate) (the probe rebinds group 0)
     /// the sky, weather, night lights and camera finish passes.
@@ -1756,6 +1765,7 @@ impl LookGpu {
             post: Mutex::new(None),
             photo: None, // (`--photo-finish`) made by `set_options`
             cine: None,  // (`--look cinematic`) made by `set_options`
+            dome_env: Mutex::new(None), // (`--dome-env`)
             state: Mutex::new(State {
                 hour: DEFAULT_HOUR,
                 transfer: None,
@@ -2258,6 +2268,31 @@ impl LookGpu {
     /// the moon key, the night exposure; eo-sky `frame::look_frame`), rebuilt
     /// when the weather moves; with every stage off, the JS clear frame as before.
     pub fn frame(&self) -> LookFrame {
+        let f = self.frame_built();
+        if self.options.dome_env {
+            return self.with_dome_env(f); // (`--dome-env`)
+        }
+        f
+    }
+
+    /// (`--dome-env`) the frame's environment SH with the painted dome's colour
+    /// (eo-look `env_sh_with_dome_colour`), integrated once per frame built.
+    fn with_dome_env(&self, mut f: LookFrame) -> LookFrame {
+        let key = (f.hour.to_bits(), f.env_sh.map(|c| c.map(f64::to_bits)));
+        let mut c = self.dome_env.lock().unwrap();
+        if let Some((k, sh)) = c.as_ref() {
+            if *k == key {
+                f.env_sh = *sh;
+                return f;
+            }
+        }
+        let sh = eo_look::env_sh_with_dome_colour(&f.model, &f.env_sh);
+        *c = Some((key, sh));
+        f.env_sh = sh;
+        f
+    }
+
+    fn frame_built(&self) -> LookFrame {
         let opts = self.sky.options(); // sky
         let legacy = opts == crate::sky::SkyOptions::off();
         let w = if legacy { None } else { Some(self.sky.weather()) };
