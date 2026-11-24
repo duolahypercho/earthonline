@@ -818,7 +818,10 @@ impl SkyGpu {
         let uniform = buffer("sky-uniform", std::mem::size_of::<SkyUniform>() as u64, uni);
         let lamps = buffer("sky-lamps", LAMP_CAP as u64 * 64, st);
         // (COPY_SRC: the light shadows' tests read the frame's lights, light_shadow.rs)
-        let frame_lights = buffer("sky-frame-lights", FRAME_LIGHT_CAP as u64 * 64, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+        // (`--lamp-streaks`, the reflect track) the cars' rear lamps' records past the cap, only with it compiled in.
+        let lamp_streaks = crate::look::shader_features().cinematic && crate::look::shader_features().lamp_streaks;
+        let rear = if lamp_streaks { crate::sky_reflect::lamp_streak_lamps() } else { 0 };
+        let frame_lights = buffer("sky-frame-lights", (FRAME_LIGHT_CAP as u64 + rear) * 64, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
         let sprites = buffer("sky-sprites", SPRITE_CAP as u64 * 64, wgpu::BufferUsages::STORAGE);
         // (COPY_SRC: the light shadows' tests read the frame's light count, light_shadow.rs)
         let counter = buffer("sky-light-counter", 32, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
@@ -826,8 +829,8 @@ impl SkyGpu {
         // (COPY_SRC: the shop lights' tests and cards read the clusters, `lights_readback`)
         // (`--look cinematic`, stage L3) the streak lights' count and indices after the clusters, only with the look compiled in.
         let streak_words = if crate::look::shader_features().cinematic { 1 + STREAK_CAP as u64 } else { 0 };
-        // (`--lamp-streaks`) the cars' rear lamps after them, only with both compiled in.
-        let streak_words = streak_words + if crate::look::shader_features().cinematic && crate::look::shader_features().lamp_streaks { crate::sky_reflect::lamp_streak_words() } else { 0 };
+        // (`--lamp-streaks`) the cars' rear lamps' indices after them, only with both compiled in.
+        let streak_words = streak_words + rear;
         let clusters = buffer("sky-clusters", (ncl * (1 + CLUSTER_CAP as u64) + streak_words) * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         let lt_params = buffer("sky-light-params", std::mem::size_of::<LtParams>() as u64, uni);
         let dummy_storage = buffer("sky-dummy-storage", 256, wgpu::BufferUsages::STORAGE);

@@ -13,10 +13,14 @@
 // Of the cars whose rear faces the eye and stands in view, the `LS_CARS`
 // brightest at the eye (intensity over the square of the distance; quarter-EV
 // bins, the bin that fills the list, then the cars over it, as the streak
-// list does) write both rear lamps' records whole after the streak list in
-// `lt_clusters`: [lamps, 16 words a lamp (a SkyLight)...]. They are not in
-// the frame list (`lt_frame`), so no cluster, sprite, fog or shadow sees them,
-// and the frame's other lights are unchanged. A stop lamp where the car
+// list does) write both rear lamps' records past the frame list's cap
+// (`lt_frame[LS_FRAME_AT..]`, which the gather never fills) and append their
+// indices to the streak list (its count raised by them; its words have room
+// for `LT_STREAK_CAP` + 2 `LS_CARS`). The frame list's count does not include
+// them, so no cluster, sprite, fog or shadow sees them, and the frame's other
+// lights are unchanged; the cars' paint, which reads the streak list's first
+// `LT_STREAK_CAP` (agents_draw.wgsl `ag_car_far_lights`), sees those of them
+// that fall there, as it sees the other streak lights. A stop lamp where the car
 // brakes (the agent's braking flag, as agents_draw.wgsl `ag_lamp` lights its
 // lens), a tail lamp elsewhere; parked cars' tails as the draw lights them.
 // None while `lt.scale.z` (units per candela, 0 with the switch off) is 0.
@@ -73,35 +77,27 @@ fn ls_bin(q: f32, qmax: f32) -> u32 {
     return min(u32(max(log2(qmax / q), 0.0) * 4.0), LS_BINS - 1u);
 }
 
-fn ls_word(o: u32, x: f32) {
-    lt_clusters[o] = bitcast<u32>(x);
-}
-
-/// Car `i`'s two rear lamps' records from word `o`.
-fn ls_write(o: u32, i: u32) {
+/// Car `i`'s two rear lamps as the `k`th car picked: their records past the
+/// frame list's cap, their indices at the streak list's word `at` on.
+fn ls_write(k: u32, i: u32, at: u32) {
     let a = lt_agents[i];
     let m = lt_models[a.model];
     let back = normalize(lt_rotate(a.rot, vec3<f32>(0.0, 0.0, -1.0)));
-    let intensity = ls_cd(a) * lt.scale.z;
     for (var s = 0u; s < 2u; s = s + 1u) {
-        let p = ls_lamp(a, m, select(-1.0, 1.0, s == 0u));
-        let w = o + 16u * s;
-        ls_word(w, p.x);
-        ls_word(w + 1u, p.y);
-        ls_word(w + 2u, p.z);
-        ls_word(w + 3u, intensity);
-        ls_word(w + 4u, LS_RED.x);
-        ls_word(w + 5u, LS_RED.y);
-        ls_word(w + 6u, LS_RED.z);
-        ls_word(w + 7u, 0.0);
-        ls_word(w + 8u, back.x);
-        ls_word(w + 9u, back.y);
-        ls_word(w + 10u, back.z);
-        ls_word(w + 11u, LS_COS.x);
-        ls_word(w + 12u, LS_COS.y);
-        lt_clusters[w + 13u] = LS_KIND;
-        ls_word(w + 14u, LS_AREA_M2);
-        ls_word(w + 15u, 0.0);
+        var l: SkyLight;
+        l.pos = ls_lamp(a, m, select(-1.0, 1.0, s == 0u));
+        l.intensity = ls_cd(a) * lt.scale.z;
+        l.color = LS_RED;
+        l.range = 0.0;
+        l.dir = back;
+        l.cos_outer = LS_COS.x;
+        l.cos_inner = LS_COS.y;
+        l.kind = LS_KIND;
+        l.size = LS_AREA_M2;
+        l.pad = 0.0;
+        let j = LS_FRAME_AT + 2u * k + s;
+        lt_frame[j] = l;
+        lt_clusters[at + 2u * k + s] = j;
     }
 }
 
@@ -145,20 +141,22 @@ fn lights_lamp_streaks(@builtin(local_invocation_index) lid: u32) {
         ls_cut = select(cut, LS_BINS, cum < LS_CARS);
     }
     let cut = workgroupUniformLoad(&ls_cut);
+    // the streak list (sky_streaks.wgsl, the dispatch before): its count, the rear lamps after its entries
     let g = skyu.lights.yzw;
-    let at = g.x * g.y * g.z * (1u + LT_CAP) + 1u + LT_STREAK_CAP;
+    let list = g.x * g.y * g.z * (1u + LT_CAP);
+    let n0 = min(lt_clusters[list], LT_STREAK_CAP);
     for (var i = lid; i < n; i = i + 256u) {
         let q = ls_q(i);
         let b = ls_bin(q, qmax);
         if (q > 0.0 && (b < cut || (cut == 0u && b == 0u))) {
             let k = atomicAdd(&ls_n, 1u);
             if (k < LS_CARS) {
-                ls_write(at + 1u + 32u * k, i);
+                ls_write(k, i, list + 1u + n0);
             }
         }
     }
     workgroupBarrier();
     if (lid == 0u) {
-        lt_clusters[at] = 2u * min(atomicLoad(&ls_n), LS_CARS);
+        lt_clusters[list] = n0 + 2u * min(atomicLoad(&ls_n), LS_CARS);
     }
 }
