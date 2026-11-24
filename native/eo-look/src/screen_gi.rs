@@ -43,8 +43,11 @@
 
 use crate::math::*;
 
-/// Slices through the view vector per pixel and frame (turned per pixel and per frame).
-pub const SLICES: u32 = 2;
+/// Slices through the view vector per pixel and frame (turned per pixel and
+/// per frame): one, the history's mean over about 19 frames takes as many
+/// slices as the frames it holds (two a frame cost 0.15 ms more at half
+/// resolution for the same converged result, r2i1).
+pub const SLICES: u32 = 1;
 /// Samples per side of a slice, at `t^2` of the reach (dense near the point).
 pub const STEPS: u32 = 12;
 /// Sectors of a slice's hemisphere (the bits of a u32).

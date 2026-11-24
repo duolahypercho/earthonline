@@ -87,6 +87,23 @@ pub fn search_radius_texels(texel_m: f64) -> f64 {
     (MAX_SPREAD_M / texel_m.max(1e-6)).clamp(1.0, MAX_RADIUS_TEXELS)
 }
 
+/// The golden angle, radians: a Vogel disc's turn from one tap to the next.
+pub const GOLDEN_ANGLE: f64 = 2.399_963_229_728_653;
+
+/// The `n` taps of a Vogel disc (uniform over the unit disc's area: tap `i`
+/// at radius sqrt((i + 0.5) / n), turned by the golden angle from the one
+/// before). The shader turns the whole disc per pixel and per frame with one
+/// rotation instead of a sine and a cosine per tap.
+pub fn vogel_disc(n: u32) -> Vec<[f64; 2]> {
+    (0..n)
+        .map(|i| {
+            let r = ((i as f64 + 0.5) / n as f64).sqrt();
+            let a = i as f64 * GOLDEN_ANGLE;
+            [r * a.cos(), r * a.sin()]
+        })
+        .collect()
+}
+
 /// The share of the sun's disc a point sees past a straight edge, `x`
 /// metres into the light from the edge's geometric shadow line, the edge
 /// `d` metres up the beam (0.5 on the line; 0 and 1 a half width either
@@ -131,6 +148,22 @@ mod tests {
         assert!((0.5 * width_m(64.0) - MAX_SPREAD_M).abs() < 0.005, "{}", width_m(64.0));
         // a contact's penumbra is under any cascade texel.
         assert!(width_m(MIN_CASTER_M) < 0.002);
+    }
+
+    #[test]
+    fn the_vogel_disc_covers_the_unit_disc_evenly() {
+        for n in [SEARCH_TAPS, FILTER_TAPS] {
+            let d = vogel_disc(n);
+            assert_eq!(d.len(), n as usize);
+            // inside the unit disc, the first tap near the centre, the last near the rim.
+            assert!(d.iter().all(|p| p[0].hypot(p[1]) < 1.0));
+            assert!(d[0][0].hypot(d[0][1]) < 0.25 && d[n as usize - 1][0].hypot(d[n as usize - 1][1]) > 0.95);
+            // uniform over the area: the mean squared radius is a half, the centroid near the centre.
+            let r2 = d.iter().map(|p| p[0] * p[0] + p[1] * p[1]).sum::<f64>() / n as f64;
+            assert!((r2 - 0.5).abs() < 1e-9, "{r2}");
+            let c = d.iter().fold([0.0, 0.0], |a, p| [a[0] + p[0] / n as f64, a[1] + p[1] / n as f64]);
+            assert!(c[0].hypot(c[1]) < 0.12, "{c:?}");
+        }
     }
 
     #[test]
