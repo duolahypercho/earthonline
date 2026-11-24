@@ -254,6 +254,7 @@ selection:
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-cloud-depth-haze`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Lighting additions (opt-in) | `--no-cascade-blend`, `--no-far-shadows`, `--no-ambient-volume`, `--no-probe-grid`, `--no-light-shadows`, `--no-light-shadow-moving`, `--no-headlight-shadows`, `--no-lit-fog`, `--no-smooth-time`, `--no-ground-bounce`, `--no-shadow-slope-bias`, `--no-grime`, `--no-street-life`, `--no-photo-finish`, `--no-facade-clutter`, `--no-shop-light`, `--no-car-detail`, `--no-look` (each wins over `--quality`) |
 | World additions (opt-in) | `--no-structures`, `--no-tunnels` (the last of a switch and its `--no-` form wins; `eo-server` takes them too) |
+| Street surface (opt-in) | `--street-pbr` draws the street's physically based surface (eo-render `street_pbr.wgsl`, `SF_STREET_PBR`): the carriageway at a weathered asphalt's albedo with one world-anchored tone field across every lane, polished wheel paths and an oil band per lane (the lane, parking lane and design vehicle widths from the standards table), the patch quilt in the road's own frame with sealed, eased edges, smooth carriageway normals (no camber or junction-fan facets), a concrete gutter pan with its cold joint, rounded kerb arrises, scored slabs each at its own settlement tilt with dark joints, cracks and broken corners, raised paint edges, and laid granite setts in segmental arcs on the grey-stone plazas. Off by default and in no tier; `--no-street-pbr` (the last of the two wins) compiles it out and gives the frame before it |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation` |
@@ -274,7 +275,7 @@ records the tier and budget under `settings` and every lighting option under
 A feature that is off at start has its shader code compiled out of every
 pipeline (eo-render `look::ShaderFeatures`, chosen from the switches before
 the renderer is made): the lighting additions, `--grime`, `--street-life`,
-`--structures`, `--tunnels`, `--shop-light`, `--facade-clutter` and `--look cinematic` (`SF_CINEMATIC`). With
+`--structures`, `--tunnels`, `--shop-light`, `--facade-clutter`, `--look cinematic` (`SF_CINEMATIC`) and `--street-pbr` (`SF_STREET_PBR`). With
 none of them the frame costs what it cost before they existed; with one on,
 its code is the code it ran before, so its output is the same.
 
