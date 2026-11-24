@@ -442,6 +442,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-signal-spill" => a.look.sky.signal_spill = false,
             "--lit-rooms" => a.look.sky.lit_rooms = true,
             "--no-lit-rooms" => a.look.sky.lit_rooms = false,
+            "--wire-light" => a.look.sky.wire_light = true,
+            "--no-wire-light" => a.look.sky.wire_light = false,
             // the natural-detail shading (eo-render look::NATURE_*; off by default, compiled out while off).
             "--foliage-light" => a.look.nature |= eo_render::look::NATURE_FOLIAGE,
             "--no-foliage-light" => a.look.nature &= !eo_render::look::NATURE_FOLIAGE,
