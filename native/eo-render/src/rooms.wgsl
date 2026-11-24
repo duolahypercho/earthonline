@@ -16,6 +16,87 @@
 // draws its shop's own room by trade instead (shop_rooms.wgsl,
 // `rm_shop_pane`). The window frame comes from the vertex (rooms.rs).
 
+// (`--facade-glass`, `fg_on()`; facade.rs) the rooms behind the glass and the
+// pane. INFERRED from office practice and glazing physics:
+// an office floor's lease depth from the glass to the core, metres;
+const FG_OFFICE_DEPTH: vec2<f32> = vec2<f32>(6.5, 11.0);
+// a suspended ceiling's white acoustic tile (reflectance ~0.8);
+const FG_OFFICE_CEILING: vec3<f32> = vec3<f32>(0.80, 0.80, 0.78);
+// the daylight thrown up onto an office ceiling near the glass (added to the room's 0.38);
+const FG_OFFICE_CEILING_DAY: f32 = 0.22;
+// by night an office's surfaces by what its downlights give them, against the work plane's: its
+// walls and its ceiling (the room's inter-reflection only; ~0.3-0.5 for recessed troffers), and
+// the gain that keeps a lit floor's mean as it was (INFERRED from office lighting practice);
+const FG_OFFICE_WALL_K: f32 = 0.7;
+const FG_OFFICE_CEILING_K: f32 = 0.4;
+const FG_OFFICE_FILL: f32 = 1.3;
+// an office's troffers by day, against the default's 1.1, and the share of offices with them on;
+const FG_TROFFER_DAY: f32 = 0.7;
+const FG_OFFICE_LIT: f32 = 0.85;
+// the share of office windows with a blind or screen, and of those a dark solar screen (its weave's openness);
+const FG_OFFICE_BLINDS: f32 = 0.62;
+const FG_SOLAR_SCREENS: f32 = 0.35;
+const FG_SCREEN_COL: vec3<f32> = vec3<f32>(0.09, 0.09, 0.10);
+const FG_SCREEN_OPEN: f32 = 0.14;
+// a pane's tilt out of the wall's plane about each axis, and an insulating
+// unit's bow at its edges, radians (~0.46 and ~0.4 degrees at most).
+const FG_TILT: f32 = 0.008;
+const FG_BOW: f32 = 0.007;
+// float glass's own roughness, before the dirt film (weathering.wgsl `wx_glass`).
+const FG_ROUGH: f32 = 0.04;
+// how much of the kit glass's colour (hue only) the room and its light take through the pane.
+const FG_GLASS_TINT: f32 = 0.25;
+// (`--facade-glass`) a lit room's lamp by its colour temperature, seen by an
+// eye adapted to the street's 3000 K lamps and the lit rooms round it (white
+// at FG_NIGHT_WHITE_K): homes mostly warm (2300-3400 K, incandescent and warm
+// LED), some cool LED (3800-4500 K) and a few daylight tubes (5000-6200 K);
+// offices 3400-4300 K. INFERRED shares: most lamps sold for homes are warm
+// (2700-3000 K), so a street's lit rooms read amber with a cool one here and
+// there (at 22 % and 8 % a street's rooms read grey and cold).
+const FG_NIGHT_WHITE_K: f32 = 4300.0;
+const FG_HOME_COOL_SHARE: f32 = 0.12;
+const FG_HOME_COLD_SHARE: f32 = 0.03;
+// glass at the packing's limit (a ribbon or curtain wall): its 1.5 m mullion
+// module (rooms of two or three modules, by building), the storeys' vision
+// glass from the floor to the ceiling and the opaque spandrel over it to the
+// next floor, and their mullions' width (m).
+const FG_MODULE_M: f32 = 1.5;
+const FG_SILL_M: f32 = 0.85;
+const FG_VISION_M: f32 = 2.8;
+const FG_MULLION_W: f32 = 0.07;
+const FG_PANEL: vec3<f32> = vec3<f32>(0.045, 0.05, 0.055);
+
+fn fg_srgb(c: f32) -> f32 {
+    return select(pow((c + 0.055) / 1.055, 2.4), c / 12.92, c <= 0.04045);
+}
+
+// a black body's colour (linear, its brightest channel 1; the same fit as rooms.rs `kelvin_to_linear`).
+fn fg_kelvin(kelvin: f32) -> vec3<f32> {
+    let t = kelvin / 100.0;
+    var r = 1.0;
+    var g = 0.0;
+    if (t <= 66.0) {
+        g = clamp((99.4708025861 * log(t) - 161.1195681661) / 255.0, 0.0, 1.0);
+    } else {
+        r = clamp(329.698727446 * pow(t - 60.0, -0.1332047592) / 255.0, 0.0, 1.0);
+        g = clamp(288.1221695283 * pow(t - 60.0, -0.0755148492) / 255.0, 0.0, 1.0);
+    }
+    var b = 1.0;
+    if (t <= 19.0) {
+        b = 0.0;
+    } else if (t < 66.0) {
+        b = clamp((138.5177312231 * log(t - 10.0) - 305.0447927307) / 255.0, 0.0, 1.0);
+    }
+    let c = vec3<f32>(fg_srgb(r), fg_srgb(g), fg_srgb(b));
+    return c / max(c.r, max(c.g, c.b));
+}
+
+// a lamp at `kelvin` as the night-adapted eye sees it (FG_NIGHT_WHITE_K white), its brightest channel 1.
+fn fg_lamp(kelvin: f32) -> vec3<f32> {
+    let c = fg_kelvin(kelvin) / fg_kelvin(FG_NIGHT_WHITE_K);
+    return c / max(c.r, max(c.g, c.b));
+}
+
 fn rm_h(seed: f32, salt: f32) -> f32 {
     return fract(sin(seed * 91.3458 + salt * 17.1373) * 43758.5453);
 }
@@ -99,7 +180,10 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     // (`--look cinematic`, stage L2: work z the screens' share, w the clock; rooms.rs `drive_look`)
     let cine = SF_CINEMATIC && work.z > 0.0;
     let tv = step(rm_h(seed, 2.0), select(0.12, work.z, cine)) * (1.0 - shop) * (1.0 - office);
-    let level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
+    var level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
+    if (fg_on()) {
+        level = mix(level, mix(0.4, 1.05, rm_h(seed, 3.0)), office); // (`--facade-glass`) offices as varied as homes
+    }
     let cool = step(rm_h(seed, 4.0), env.w - shop * 0.1);
     let temp_mix = rm_h(seed, 5.0);
     let home_color = mix(mix(RM_WARM_A, RM_WARM_B, temp_mix), mix(RM_COOL_A, RM_COOL_B, temp_mix), cool);
@@ -111,11 +195,33 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         lamp_color = mix(lamp_color, spread, (1.0 - shop) * (1.0 - office));
     }
 
+    if (fg_on()) {
+        // (`--facade-glass`) each room its own lamp's colour temperature, not a white a third desaturated.
+        let roll = rm_h(seed, 46.0);
+        let tk = rm_h(seed, 47.0);
+        var kelvin = mix(2300.0, 3400.0, tk * sqrt(tk));
+        if (roll < FG_HOME_COLD_SHARE) {
+            kelvin = mix(5000.0, 6200.0, tk);
+        } else if (roll < FG_HOME_COLD_SHARE + FG_HOME_COOL_SHARE) {
+            kelvin = mix(3800.0, 4500.0, tk);
+        }
+        // an office floor's tenant fits its own lamps (warm LED to cool fluorescent), so floors differ
+        let tenant = rm_h(fract(floor_key.x + floor((floor_key.y + (iy + 0.5) * H) / 3.6) * 0.6180339), 48.0);
+        kelvin = mix(kelvin, mix(2900.0, 4800.0, mix(tenant, tk, 0.3)), office);
+        lamp_color = mix(fg_lamp(kelvin), lamp_color, shop);
+    }
+
     // ---- the box ----
     let sill = mix(0.85, 0.35, shop);
     let ceil_y = H + mix(0.4, 0.7, shop);
     let floor_y = -sill;
-    let depth = mix(mix(2.8, 4.8, rm_h(seed, 6.0)), mix(4.5, 7.5, rm_h(seed, 6.0)), shop);
+    var depth = mix(mix(2.8, 4.8, rm_h(seed, 6.0)), mix(4.5, 7.5, rm_h(seed, 6.0)), shop);
+    // (`--facade-glass`) an office floor runs back to its core: 6.5-11 m of
+    // lease depth seen through the glass, not a 3-5 m box.
+    let fg = fg_on();
+    if (fg) {
+        depth = mix(depth, mix(FG_OFFICE_DEPTH.x, FG_OFFICE_DEPTH.y, rm_h(seed, 6.0)), office);
+    }
     let pad_x = mix(mix(clamp(W * 0.6, 0.6, 2.2), 0.45, shop), 0.2, split);
     let along = dir.x;
     let up = dir.y;
@@ -143,6 +249,14 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let to_lamp = lamp_pos - vec3<f32>(px, py, pz);
     let lamp_fall = 1.0 / (1.0 + dot(to_lamp, to_lamp) * mix(0.22, 0.06, shop));
     var illum = mix(lamp_fall * 0.9 + 0.1, lamp_fall * 0.35 + 0.55, office);
+    if (fg_on()) {
+        // (`--facade-glass`) an office's troffers throw their light down: the desks and floor take
+        // it whole, the walls about FG_OFFICE_WALL_K of it, the ceiling only what the room throws
+        // back up (FG_OFFICE_CEILING_K), so a lit floor seen from the street is an even glow under
+        // its bright fittings, not a white ceiling over a dark room (the hard wedges).
+        let face_k = floor_face + (back + side) * FG_OFFICE_WALL_K + ceiling * FG_OFFICE_CEILING_K;
+        illum = mix(illum, illum * face_k * FG_OFFICE_FILL, office);
+    }
 
     // ---- surfaces ----
     let paint = rm_h(seed, 8.0);
@@ -160,17 +274,24 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     );
     let wall = mix(mix(wall_col, shop_wall, shop), office_wall, office);
     let floor_col = mix(mix(vec3<f32>(0.36, 0.24, 0.15), vec3<f32>(0.34, 0.33, 0.31), step(0.5, rm_h(seed, 9.0))), vec3<f32>(0.17, 0.18, 0.21), office);
-    let ceil_col = mix(vec3<f32>(0.86, 0.85, 0.83), vec3<f32>(0.56, 0.56, 0.55), office);
+    var ceil_col = mix(vec3<f32>(0.86, 0.85, 0.83), vec3<f32>(0.56, 0.56, 0.55), office);
+    // (`--facade-glass`) each office its own ceiling layout (the troffers' and
+    // the T-bar grid's offset in the room), its acoustic tile a white (~0.8).
+    var t_off = vec2<f32>(0.0);
+    if (fg) {
+        t_off = vec2<f32>(rm_h(seed, 50.0) * 2.4, rm_h(seed, 51.0) * 1.8);
+        ceil_col = mix(ceil_col, FG_OFFICE_CEILING, office);
+    }
     var albedo = wall * (back + side * 0.72) + ceil_col * ceiling + floor_col * floor_face;
     let fixture_disc = rm_ss(0.32, 0.12, length(vec2<f32>(px - lamp_pos.x, pz - lamp_pos.z))) * ceiling;
     let grid_u = fract(px / 1.2);
     let grid_v = fract(pz / 1.8);
     let shop_panel = rm_filtered(step(0.32, grid_u) * step(grid_u, 0.68) * step(0.4, grid_v) * step(grid_v, 0.6), 0.072, footprint, 0.36) * ceiling;
-    let t_u = fract(px / 2.4);
-    let t_v = fract(pz / 1.8 + 0.25);
+    let t_u = fract((px + t_off.x) / 2.4);
+    let t_v = fract((pz + t_off.y) / 1.8 + 0.25);
     let troffer = rm_filtered(rm_ss(0.37, 0.385, t_u) * rm_ss(0.63, 0.615, t_u) * rm_ss(0.16, 0.18, t_v) * rm_ss(0.84, 0.82, t_v), 0.167, footprint, 0.6) * ceiling;
-    let tbar_u = abs(fract(px / 0.6 + 0.5) - 0.5);
-    let tbar_v = abs(fract(pz / 0.6 + 0.5) - 0.5);
+    let tbar_u = abs(fract((px + t_off.x) / 0.6 + 0.5) - 0.5);
+    let tbar_v = abs(fract((pz + t_off.y) / 0.6 + 0.5) - 0.5);
     let tbar = rm_filtered(1.0 - rm_ss(0.02, 0.035, tbar_u) * rm_ss(0.02, 0.035, tbar_v), 0.1, footprint, 0.12) * ceiling * office;
     albedo = albedo * (1.0 - tbar * 0.45);
     let fixture = mix(mix(fixture_disc, shop_panel, shop), troffer, office);
@@ -238,6 +359,16 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let day_illum = day_face * day_fall;
     // the room is lit by the daylight that reaches into it (RM_DAY_DEPTH of the facade's).
     var day_room = (albedo * day_illum + glow * max(shop, office) * 1.1) * RM_DAY_DEPTH;
+    if (fg) {
+        // (`--facade-glass`) an office ceiling near the glass takes the light
+        // the floor and desks throw up; its troffers are on in most rooms
+        // (FG_OFFICE_LIT) and read by day as a lit diffuser does against the
+        // daylight, a few times the tile round it, not as a lamp (the
+        // default's gain drew every office's troffers as white shards).
+        let fg_illum = (day_face + ceiling * office * FG_OFFICE_CEILING_DAY) * day_fall;
+        let fg_glow = shop * 1.1 + office * FG_TROFFER_DAY * step(rm_h(seed, 52.0), FG_OFFICE_LIT);
+        day_room = (albedo * fg_illum + glow * fg_glow) * RM_DAY_DEPTH;
+    }
 
     // ---- at the glass: curtains, blinds, sheers ----
     var light_radiance = lamp_color * level * 0.3 * mix(1.0, 0.72, office);
@@ -265,14 +396,44 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         let curtain = curtain_col * folds * 0.5 * light_radiance * max(illum, 0.5);
         radiance = mix(radiance, curtain, in_curtain);
         day_room = mix(day_room, curtain_col * folds * 0.62, in_curtain);
-        let blind_style = max(step(0.26, style) * step(style, 0.46) * (1.0 - shop), step(style, 0.3) * office);
-        let blind_to = mix(0.2, 0.95, rm_h(seed, 34.0));
+        var blind_style = max(step(0.26, style) * step(style, 0.46) * (1.0 - shop), step(style, 0.3) * office);
+        var blind_to = mix(0.2, 0.95, rm_h(seed, 34.0));
+        var blind_col = vec3<f32>(0.82, 0.8, 0.76);
+        var screen = 0.0;
+        if (fg) {
+            // (`--facade-glass`) most office windows carry a blind or a solar
+            // screen, each at its own height, some all the way down: the
+            // grid of a tower's windows broken window by window, as a street
+            // sees it.
+            blind_style = max(blind_style, step(style, FG_OFFICE_BLINDS) * office);
+            let b = rm_h(seed, 34.0);
+            blind_to = select(mix(0.1, 0.85, b / 0.8), 1.0, b > 0.8);
+            screen = step(rm_h(seed, 35.0), FG_SOLAR_SCREENS) * office;
+            blind_col = mix(mix(blind_col, vec3<f32>(0.66, 0.66, 0.64), step(0.6, rm_h(seed, 36.0))), FG_SCREEN_COL, screen);
+        }
         let covered = step(1.0 - blind_to, uy) * blind_style;
         let slat = fract(local.y / 0.045);
-        let gap = rm_filtered(rm_ss(0.78, 0.86, slat), 0.17, glass_footprint, 0.045) * detail;
-        let blind = mix(vec3<f32>(0.82, 0.8, 0.76) * 0.42 * light_radiance, radiance * 0.7, gap);
+        // a solar screen's open weave lets FG_SCREEN_OPEN of the room through, with no slats.
+        let gap = mix(rm_filtered(rm_ss(0.78, 0.86, slat), 0.17, glass_footprint, 0.045) * detail, FG_SCREEN_OPEN, screen);
+        let blind = mix(blind_col * 0.42 * light_radiance, radiance * 0.7, gap);
         radiance = mix(radiance, blind, covered);
-        day_room = mix(day_room, mix(vec3<f32>(0.82, 0.8, 0.76) * 0.7, day_room * 0.7, gap), covered);
+        day_room = mix(day_room, mix(blind_col * 0.7, day_room * 0.7, gap), covered);
+        if (fg) {
+            // (`--facade-glass`) a home's roller shade: an opaque fabric pulled
+            // part way down, pale by day, glowing in its lamp's colour by night.
+            let shade_style = step(0.58, style) * step(style, 0.72) * (1.0 - shop) * (1.0 - office);
+            let shade_to = mix(0.15, 0.9, rm_h(seed, 37.0));
+            let hem = step(1.0 - shade_to, uy);
+            let shade_col = mix(mix(vec3<f32>(0.86, 0.82, 0.72), vec3<f32>(0.78, 0.78, 0.76), step(0.5, rm_h(seed, 38.0))), vec3<f32>(0.42, 0.46, 0.52), step(0.85, rm_h(seed, 38.0)));
+            let shaded = hem * shade_style;
+            // lit from behind by the room's lamp: brightest across from it, falling off to the edges,
+            // the light leaking past the fabric's edges in a thin bright line
+            let lamp_u = clamp(lamp_x / W, 0.15, 0.85);
+            let glow_at = exp(-pow((ux - lamp_u) / 0.55, 2.0) - pow((uy - 0.75) / 0.9, 2.0));
+            let leak = rm_filtered(1.0 - rm_ss(0.012, 0.03, min(local.x, W - local.x)), 0.05, glass_footprint, 0.06);
+            radiance = mix(radiance, shade_col * light_radiance * 0.34 * max(illum, 0.6) * (0.55 + 0.75 * glow_at) + light_radiance * leak * 0.25, shaded);
+            day_room = mix(day_room, shade_col * 0.72, shaded);
+        }
         let sheer_style = step(0.46, style) * step(style, 0.58) * (1.0 - shop) * (1.0 - office);
         radiance = mix(radiance, radiance * 0.45 + light_radiance * 0.18, sheer_style);
         day_room = mix(day_room, day_room * 0.5 + vec3<f32>(0.25), sheer_style);
@@ -395,14 +556,40 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
     // a frame at the packing's limit (127 steps) does not locate its
     // window: that axis takes 3.6 m room cells anchored in the world, so the
     // seed below holds over each cell (rooms.rs RoomFixes).
+    let fg = fg_on();
+    let pix = length(pos - cam) * work.y;
+    var fg_block = 0.0;
     if (RM_FRAMES && qw >= 127.0) {
         let a = dot(pos, tangent);
-        local.x = a - floor(a / 3.6) * 3.6;
-        size.x = 3.6;
+        if (fg) {
+            // (`--facade-glass`) rooms of two or three mullion modules (by building),
+            // the mullions at the modules' joints, filtered to their share under a pixel
+            let rw = FG_MODULE_M * select(2.0, 3.0, fract(f32(group) * 0.6180339) > 0.5);
+            local.x = a - floor(a / rw) * rw;
+            size.x = rw;
+            let mm = abs(fract(a / FG_MODULE_M + 0.5) - 0.5) * FG_MODULE_M;
+            fg_block = rm_filtered(1.0 - rm_ss(0.5 * FG_MULLION_W - 0.01, 0.5 * FG_MULLION_W + 0.01, mm), FG_MULLION_W / FG_MODULE_M, pix, FG_MODULE_M * 0.25);
+        } else {
+            local.x = a - floor(a / 3.6) * 3.6;
+            size.x = 3.6;
+        }
     }
     if (RM_FRAMES && abs(nwq) >= 127.0) {
-        local.y = pos.y - floor(pos.y / 3.6) * 3.6;
-        size.y = 3.6;
+        if (fg) {
+            // (`--facade-glass`) the building's storeys (its sill rhythm, facade_age.wgsl
+            // `fa_drivers`): each storey's room behind its vision glass, floor to ceiling, and
+            // the opaque spandrel over it to the next floor, not 3.6 m cells of the world
+            let dd = fa_drivers(fa_ages[group]);
+            let floor0 = dd.base_y + dd.first_sill - FG_SILL_M;
+            let yin = pos.y - floor0 - floor((pos.y - floor0) / dd.pitch) * dd.pitch;
+            local.y = yin - FG_SILL_M;
+            size.y = max(FG_VISION_M - FG_SILL_M - 0.4, 0.5);
+            let span = rm_filtered(rm_ss(FG_VISION_M - 0.02, FG_VISION_M + 0.02, yin), (dd.pitch - FG_VISION_M) / dd.pitch, pix, dd.pitch * 0.5);
+            fg_block = max(fg_block, span);
+        } else {
+            local.y = pos.y - floor(pos.y / 3.6) * 3.6;
+            size.y = 3.6;
+        }
     }
     let view = normalize(pos - cam);
     let dir = vec3<f32>(dot(view, tangent), view.y, -dot(view, n));
@@ -456,9 +643,236 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
         r = rm_room(local, size, dir, vec4<f32>(seed, shop, office, distance), vec2<f32>(shop_key, pane_bottom), env, work, true, true);
     }
     rm_shop_override = vec4<f32>(0.0);
+    if (fg && fg_block > 0.0) {
+        // (`--facade-glass`) the mullions and the spandrels' opaque panels behind the glass
+        r.night = r.night * (1.0 - fg_block);
+        r.day = vec4<f32>(mix(r.day.xyz, FG_PANEL, fg_block), mix(r.day.w, 0.95, fg_block));
+    }
     if (rm_w5.x > 0.5) {
         // stage W5 (`--street-life`, weathering.wgsl): plants on a flat's sill, a vacant shop's taped paper
         wx_room_life(&r, local, max(size, vec2<f32>(0.05)), dir, seed, shop, office * (1.0 - shop), work.y, distance);
     }
     return r;
+}
+
+// (`--facade-glass`) a kit pane's own normal. A pane of glass is never quite
+// in the wall's plane: glazed in putty or a gasket it sits a fraction of a
+// degree off (FG_TILT about each axis), and a sealed unit bows in or out with
+// the air in it, a few millimetres at its centre over a metre or so, so its
+// slope grows from the centre to about FG_BOW at the edges. The reflections
+// break pane by pane and curve within each pane, as a street of real windows
+// does. A window wider or taller than a pane is cut into panes of about
+// 1.25 x 1.7 m (its sashes or lights); a ribbon (the frame at the packing's
+// limit) into panes anchored in the world.
+fn rm_pane_normal(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>) -> vec3<f32> {
+    let b = u32(round(pane.z * 255.0));
+    let qw = f32(b & 127u);
+    let nwq = round(pane.w * 127.0);
+    var size = max(vec2<f32>(qw, abs(nwq)) / 8.0, vec2<f32>(0.05));
+    var local = pane.xy * size;
+    let n = normalize(ng + vec3<f32>(0.0, 0.0, 1e-5));
+    let tangent = normalize(vec3<f32>(-n.z, 0.0, n.x) + vec3<f32>(1e-5, 0.0, 0.0));
+    if (qw >= 127.0) {
+        let a = dot(pos, tangent);
+        local.x = a - floor(a / 1.5) * 1.5;
+        size.x = 1.5;
+    }
+    if (abs(nwq) >= 127.0) {
+        local.y = pos.y - floor(pos.y / 1.8) * 1.8;
+        size.y = 1.8;
+    }
+    let cells = max(vec2<f32>(1.0), floor(size / vec2<f32>(1.25, 1.7) + 0.5));
+    let cs = size / cells;
+    let ci = min(floor(local / cs), cells - 1.0);
+    let q = clamp((local - (ci + 0.5) * cs) / (0.5 * cs), vec2<f32>(-1.0), vec2<f32>(1.0));
+    let corner = pos - tangent * local.x - vec3<f32>(0.0, local.y, 0.0);
+    let key = floor(corner * 2.0 + 0.5) + vec3<f32>(ci.x * 7.0, ci.y * 13.0, 0.0);
+    let h1 = fract(sin(dot(key, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
+    let h2 = fract(h1 * 31.7 + 0.13);
+    let h3 = fract(h1 * 57.3 + 0.71);
+    let tilt = (vec2<f32>(h1, h2) - 0.5) * (2.0 * FG_TILT);
+    let bow = (h3 - 0.5) * (2.0 * FG_BOW);
+    let d = tilt + q * bow;
+    return normalize(n + tangent * d.x + vec3<f32>(0.0, d.y, 0.0));
+}
+
+// ---- (`--canyon-glass`, `cg_on()`; facade.rs `canyon_from_args`) the street canyon in kit glass ----
+// A window reflects what stands across its street: the sky over the
+// opposite roofline, the opposite facades below it (sunlit or in shade,
+// their own windows in rows, lit rooms by night) and the street under them.
+// The probe grid sees from the street floor, so a pane 20 m up read the
+// probe's dark lower street where it faces the opposite upper floors and the
+// sky. The canyon is the ambient volume's (the city's own prisms): its height
+// the plane's reach (where the sky opens over the street), its width from
+// the sky the street floor sees (a long canyon of aspect A = H / W shows its
+// floor 1 / sqrt(1 + 4 A^2) of the sky), and the roofline's elevation e from
+// the sky the window sees straight out (a wall facing a long wall across a
+// street sees (1 - sin e) / 2 of the sky). The reflected ray is cast against
+// that canyon and what it meets is shaded as the frame shades it: the sky
+// (the dome, as bright as the probe grid sees the sky straight up and greyed
+// by the cloud deck's cover; the probe itself where it sees open sky along
+// the ray), the
+// opposite wall (the sun by the shadow maps a step in front of it, the sky
+// and street light by the ambient volume there, an albedo by building, its
+// storeys of windows and its cornice), the street (the same at its floor).
+// A pane at the street keeps half the probe, which sees the street's own
+// cars, kerbs and shop fronts. INFERRED: the facades' and the street's mean
+// albedos, the window share, storey and bay; the width's clamp is a guard on
+// the estimate, not a street dimension.
+const CG_STREET_ALBEDO: f32 = 0.13;
+const CG_ROOF_ALBEDO: f32 = 0.22;
+const CG_STOREY_M: f32 = 3.7;
+const CG_BAY_M: vec2<f32> = vec2<f32>(2.6, 4.4);
+const CG_LOT_M: f32 = 19.0;
+const CG_AIR_M: f32 = 1.5;
+const CG_WIDTH_GUARD_M: vec2<f32> = vec2<f32>(6.0, 160.0);
+const CG_CORNICE_M: f32 = 0.9;
+// the opposite glass: a dark room behind (its albedo-like share of the light on the wall) and the sky it reflects
+const CG_GLASS_ROOM: f32 = 0.05;
+const CG_GLASS_SKY: f32 = 0.09;
+// the probe's zenith read as broad as a cloud deck's patches (a rough lobe), the brightness it
+// may set the dome to (a guard), and how far the deck's cover greys the reflected sky
+const CG_ZENITH_ROUGH: f32 = 0.6;
+const CG_ZENITH_GAIN: vec2<f32> = vec2<f32>(0.5, 2.0);
+const CG_CLOUD_GREY: f32 = 0.6;
+
+// (rgb, cover): the opposite wall or street the pane's ray meets, and how much of the pixel it covers
+var<private> cg_env: vec4<f32>;
+// (rgb, weight): the sky along the ray, and the canyon's weight over the probe (0: the frame as before)
+var<private> cg_sky: vec4<f32>;
+
+// a facade's palette by building: weathered concrete, limestone, render, brick, dark granite and tinted glass
+fn cg_facade(k: f32) -> vec3<f32> {
+    if (k < 0.24) {
+        return vec3<f32>(0.30, 0.29, 0.27);
+    } else if (k < 0.44) {
+        return vec3<f32>(0.40, 0.36, 0.29);
+    } else if (k < 0.62) {
+        return vec3<f32>(0.46, 0.41, 0.33);
+    } else if (k < 0.80) {
+        return vec3<f32>(0.27, 0.15, 0.10);
+    }
+    return vec3<f32>(0.11, 0.12, 0.13);
+}
+
+// the light on a surface with normal n at p (in front of it, in the air):
+// the sun by the shadow maps and the clouds, the sky and the street by the
+// ambient volume there; `env_w` its environment class.
+fn cg_light(p: vec3<f32>, n: vec3<f32>, env_w: f32) -> vec3<f32> {
+    let l = look.key_dir.xyz;
+    var sun = vec3<f32>(0.0);
+    let nl = dot(n, l);
+    if (nl > 0.0) {
+        sun = look.key.xyz * nl * lk_shadow(p, n) * sky_cloud_transmittance(p);
+    }
+    return sun + amb_irradiance(amb_sample(p, n), n, lk_sh(n) * env_w);
+}
+
+// the canyon a pane at `world` (outward normal `ng`) sees along `r`, seen from `cam_d` metres; sets `cg_env`, `cg_sky`.
+fn cg_canyon(world: vec3<f32>, ng: vec3<f32>, r: vec3<f32>, cam_d: f32) {
+    cg_env = vec4<f32>(0.0);
+    cg_sky = vec4<f32>(0.0);
+    let nh = vec3<f32>(ng.x, 0.0, ng.z);
+    if (!amb_on() || dot(nh, nh) < 0.25) {
+        return; // no volume, or not an upright pane: the frame as before
+    }
+    let nf = normalize(nh);
+    let tf = vec3<f32>(-nf.z, 0.0, nf.x);
+    let pl = amb_plane(world.xz + nf.xz * 2.0);
+    let h = max(world.y - pl.z, 0.3);
+    let reach = max(pl.w, 1.0);
+    // the canyon's width from the sky its floor sees, and the opposite roofline from the sky the pane sees straight out
+    let svf = clamp(pl.x + pl.y, 0.04, 1.0);
+    let aspect = 0.5 * sqrt(max(1.0 / (svf * svf) - 1.0, 0.0));
+    let width = clamp(reach / max(aspect, 1e-3), CG_WIDTH_GUARD_M.x, CG_WIDTH_GUARD_M.y);
+    let sin_e = clamp(1.0 - 2.0 * amb_vis(amb_sample(world, nf), nf), 0.0, 0.995);
+    let roof = h + width * sin_e / sqrt(1.0 - sin_e * sin_e);
+    let paint_w = look.ambient.w * look.env_class.x;
+    var sky = lk_sky_sample(r);
+    if (pg_live()) {
+        // the dome has no clouds: the sky the probe grid sees straight up (open even in a
+        // narrow street) against the dome's there sets its brightness (its luminance only: the
+        // dome's and the sky pass's colours differ, so a ratio by channel would tint it), and
+        // the cloud deck's cover greys it
+        let sel = pg_select(world);
+        if (sel.cover > 0.0) {
+            let up = vec3<f32>(0.0, 1.0, 0.0);
+            let k = clamp(lk_luma(pg_sample(sel, up, pg_lod(CG_ZENITH_ROUGH))) / max(lk_luma(lk_sky_sample(up)), 1e-5), CG_ZENITH_GAIN.x, CG_ZENITH_GAIN.y);
+            sky = mix(sky, sky * k, sel.cover);
+        }
+    }
+    sky = mix(sky, vec3<f32>(lk_luma(sky)), clamp(skyu.cloud0.z, 0.0, 1.0) * CG_CLOUD_GREY);
+    cg_sky = vec4<f32>(sky, mix(0.5, 1.0, rm_ss(2.5, 7.0, h)));
+    let rn = dot(r, nf);
+    let t_wall = select(1e6, width / rn, rn > 1e-3);
+    let t_ground = select(1e6, h / -r.y, r.y < -1e-4);
+    if (t_ground < t_wall && t_ground < 1e5) {
+        // the street under the opposite wall
+        let p = world + r * t_ground;
+        let lg = cg_light(p + vec3<f32>(0.0, 0.2, 0.0), vec3<f32>(0.0, 1.0, 0.0), look.ambient.w * look.env_class.z);
+        cg_env = vec4<f32>(CG_STREET_ALBEDO / LK_PI * lg, 1.0);
+        return;
+    }
+    if (t_wall >= 1e5) {
+        return; // along the street or up: the sky
+    }
+    let p = world + r * t_wall;
+    let y = h + r.y * t_wall;
+    // the reflection's footprint there: the pixel's cone through the mirror, the panes' waviness and the glass's own blur
+    let f = look.rooms_work.y * (cam_d + t_wall) + t_wall * 2.0 * (FG_TILT + FG_BOW + FG_ROUGH * FG_ROUGH) + 0.02;
+    // the building across, by its lot: its height about the roofline, its palette and its bays
+    let plane_key = floor((dot(world, nf) + width) / 7.0);
+    let along = dot(p, tf);
+    let lot = floor(along / CG_LOT_M + rm_h(plane_key * 0.0731, 60.0));
+    let seed = fract(lot * 0.6180339 + plane_key * 0.4142136);
+    let top = max(roof * mix(0.72, 1.14, rm_h(seed, 61.0)), 1.0);
+    let cover = 1.0 - rm_ss(top - f - 0.1, top + f + 0.1, y);
+    let n_o = -nf;
+    // the opposite wall's light, a step in front of it (in the street's air: a wall the shadow maps may place a little nearer or further)
+    let p_air = world + r * max(t_wall - CG_AIR_M / max(rn, 0.05), 0.0);
+    let e_wall = cg_light(p_air, n_o, paint_w);
+    let k = rm_h(seed, 62.0);
+    let albedo = cg_facade(k) * mix(0.8, 1.15, rm_h(seed, 63.0));
+    let glazed = step(0.8, k);
+    // its storeys of windows (a curtain wall nearly all glass), the ground storey a shop front
+    let bay = mix(CG_BAY_M.x, CG_BAY_M.y, rm_h(seed, 64.0));
+    let u = fract(along / bay + rm_h(seed, 65.0));
+    let storey = mix(CG_STOREY_M, CG_STOREY_M * 1.2, rm_h(seed, 66.0));
+    let vy = fract(y / storey);
+    let ground_floor = step(y, 4.5);
+    let pane_u = mix(rm_ss(0.16, 0.2, u) * rm_ss(0.84, 0.8, u), rm_ss(0.02, 0.04, u) * rm_ss(0.98, 0.96, u), max(glazed, ground_floor));
+    let pane_v = mix(rm_ss(0.26, 0.3, vy) * rm_ss(0.9, 0.86, vy), rm_ss(0.05, 0.08, vy) * rm_ss(0.97, 0.94, vy), glazed);
+    let share = mix(0.38, 0.85, glazed);
+    let win = rm_filtered(pane_u * mix(pane_v, step(0.6, y), ground_floor), share, f, min(bay, storey));
+    let r_o = reflect(r, n_o);
+    let glass = CG_GLASS_ROOM / LK_PI * e_wall + CG_GLASS_SKY * lk_sky_sample(r_o);
+    // by night its rooms lit by the rooms' own occupancy, each its lamp
+    let cell = vec2<f32>(floor(along / bay), floor(y / storey));
+    let ch = rm_h(fract(seed + cell.x * 0.0137 + cell.y * 0.1173), 67.0);
+    let lit = step(ch, look.rooms_env.y * 0.8) * look.rooms_env.x;
+    let lamp = fg_lamp(mix(2400.0, 3800.0, rm_h(ch, 68.0))) * mix(0.04, 0.11, rm_h(ch, 69.0));
+    let night = rm_filtered3(lamp * lit, lamp * look.rooms_env.y * 0.8 * look.rooms_env.x, f, min(bay, storey));
+    // the cornice's shadow along each roofline, and grime darkening toward the street
+    let under_cornice = 1.0 - 0.45 * rm_ss(top - CG_CORNICE_M - f, top - CG_CORNICE_M * 0.4, y) * (1.0 - rm_ss(top - 0.15, top, y));
+    let wall = albedo / LK_PI * e_wall * under_cornice * mix(0.85, 1.0, rm_ss(0.0, 6.0, y));
+    let opposite = mix(wall, glass + night, win);
+    if (r.y < 0.0) {
+        // a falling ray past the roofline meets the roofs beyond
+        let roofs = CG_ROOF_ALBEDO / LK_PI * cg_light(p + vec3<f32>(0.0, top - y + 0.5, 0.0), vec3<f32>(0.0, 1.0, 0.0), paint_w);
+        cg_env = vec4<f32>(mix(roofs, opposite, cover), 1.0);
+    } else {
+        cg_env = vec4<f32>(opposite, cover); // past the roofline, the sky
+    }
+}
+
+// the canyon over the reflection `probe` the lighting read along the same ray
+// (look_light.wgsl): the opposite wall or street where the ray meets one, the
+// sky past them (the probe's own where it sees open sky, with its clouds),
+// the probe kept by the canyon's weight (half at the street floor).
+fn cg_apply(probe: vec3<f32>) -> vec3<f32> {
+    let lp = lk_luma(probe);
+    let ls = lk_luma(cg_sky.rgb);
+    let sky_like = rm_ss(0.55, 0.85, min(lp, ls) / max(max(lp, ls), 1e-6));
+    let open = mix(cg_sky.rgb, probe, sky_like);
+    return mix(probe, mix(open, cg_env.rgb, cg_env.w), cg_sky.w);
 }

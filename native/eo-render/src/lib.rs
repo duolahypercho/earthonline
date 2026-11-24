@@ -1731,7 +1731,7 @@ impl Renderer {
                 (Some(p), true) => [p.x, p.y, p.z, 1.0],
                 _ => [0.0; 4],
             },
-            copy_step: [if self.multiplier > 1 { scene::COPY_STEP_M } else { 0.0 }, (self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) | facade::grime_bits(self.look.options.grime) | facade::street_life_bits(self.look.options.street_life)) as f32, 0.0, self.cc0.run_bits() as f32], // y = switches (+ the weathering and street-life levels, none by default); w = its switches
+            copy_step: [if self.multiplier > 1 { scene::COPY_STEP_M } else { 0.0 }, (self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) | facade::grime_bits(self.look.options.grime) | facade::street_life_bits(self.look.options.street_life) | facade::track_run_bits()) as f32, 0.0, self.cc0.run_bits() as f32], // y = switches (+ the weathering and street-life levels, none by default); w = its switches
         };
         queue.write_buffer(&self.frame_buf, 0, bytemuck::bytes_of(&frame));
         // the probe's face for this frame (compacted lists only).

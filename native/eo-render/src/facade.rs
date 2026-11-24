@@ -451,3 +451,113 @@ impl FacadeGpu {
         }
     }
 }
+
+// ---- the facades track's opt-in switches (read from the command line, as
+// `rooms::RoomFixes::from_args` and the far layer's switches are) ----
+
+/// Whether `on` is set on `args`: the last of `on` and `off` given wins; neither, off.
+pub fn last_switch(args: &[String], on: &str, off: &str) -> bool {
+    args.iter().rev().find(|a| *a == on || *a == off).is_some_and(|a| a == on)
+}
+
+/// `--facade-glass` (`--no-facade-glass`; off by default): the kit glazing
+/// drawn as a two-surface dielectric pane over its room (opaque, F0 0.04 a
+/// surface, Schlick; each pane bowed and tilted on its own), with the rooms'
+/// office depth, lit ceilings and window coverings (draw.wgsl, rooms.wgsl
+/// behind `SF_FACADE_GLASS`). Off, the code is compiled out and the frame is
+/// as before.
+pub fn glass_from_args() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    last_switch(&args, "--facade-glass", "--no-facade-glass")
+}
+
+/// `--far-facades` (`--no-far-facades`; off by default): the far layer's
+/// facades and roofs (hlod_draw.wgsl behind `SF_FAR_FACADES`). Off, the code
+/// is compiled out and the frame is as before.
+pub fn far_from_args() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    last_switch(&args, "--far-facades", "--no-far-facades")
+}
+
+/// `--facade-weather` (`--no-facade-weather`; off by default): the kit walls'
+/// run-off under each window (the near and mid rungs mark the wall pieces
+/// below and above a window with their place across it and their distance
+/// under the sill above, kit.rs `weather_marks`, cooked into their own cache
+/// folder) and the soiled foot of every kit wall (draw.wgsl, facade_age.wgsl
+/// `fw_apply` behind `SF_FACADE_WEATHER`). Off, the code is compiled out, the
+/// kit packs and their cache key are as before and the frame is as before.
+pub fn weather_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--facade-weather", "--no-facade-weather")
+    })
+}
+
+/// `--canyon-glass` (`--no-canyon-glass`; off by default): the kit glass
+/// reflects the street canyon it stands in, not the street-level probe's
+/// lower street: the sky over the opposite roofline, the opposite facades
+/// (sunlit or shaded by the shadow maps, lit by the ambient volume there,
+/// with their storeys of windows and lit rooms by night) and the street, the
+/// canyon's width and roofline taken from the ambient volume (rooms.wgsl
+/// `cg_canyon`, look_light.wgsl behind `SF_CANYON_GLASS`). Off, the code is
+/// compiled out and the frame is as before.
+pub fn canyon_from_args() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    last_switch(&args, "--canyon-glass", "--no-canyon-glass")
+}
+
+/// The facades track's runtime bits in the frame switches (`fa_run()`), high
+/// enough to stay clear of the others: with a feature's code compiled in
+/// (`ShaderFeatures`) it draws only with its bit set, so a renderer with every
+/// feature compiled in (`ShaderFeatures::ALL`, the renderer's tests) and the
+/// switch off draws the frame as before.
+pub const RUN_FACADE_GLASS: u32 = 1 << 20;
+pub const RUN_FAR_FACADES: u32 = 1 << 21;
+pub const RUN_FACADE_WEATHER: u32 = 1 << 22;
+/// (the last bit an f32 carries exactly, 2^23)
+pub const RUN_CANYON_GLASS: u32 = 1 << 23;
+
+/// `RUN_FACADE_GLASS`, `RUN_FAR_FACADES`, `RUN_FACADE_WEATHER` and `RUN_CANYON_GLASS` as the command line sets them (read once).
+pub fn track_run_bits() -> u32 {
+    static BITS: OnceLock<u32> = OnceLock::new();
+    *BITS.get_or_init(|| {
+        let glass = if glass_from_args() { RUN_FACADE_GLASS } else { 0 };
+        let far = if far_from_args() { RUN_FAR_FACADES } else { 0 };
+        let weather = if weather_from_args() { RUN_FACADE_WEATHER } else { 0 };
+        let canyon = if canyon_from_args() { RUN_CANYON_GLASS } else { 0 };
+        glass | far | weather | canyon
+    })
+}
+
+#[cfg(test)]
+mod switch_tests {
+    use super::last_switch;
+
+    #[test]
+    fn the_last_of_a_switch_and_its_no_form_wins() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(!last_switch(&a(&[]), "--facade-glass", "--no-facade-glass"), "off by default");
+        assert!(last_switch(&a(&["--bench", "--facade-glass"]), "--facade-glass", "--no-facade-glass"));
+        assert!(!last_switch(&a(&["--facade-glass", "--no-facade-glass"]), "--facade-glass", "--no-facade-glass"));
+        assert!(last_switch(&a(&["--no-facade-glass", "--facade-glass"]), "--facade-glass", "--no-facade-glass"));
+        assert!(!last_switch(&a(&["--facade-glassy"]), "--facade-glass", "--no-facade-glass"), "exact names only");
+    }
+
+    #[test]
+    fn the_track_bits_stay_clear_of_the_other_switches_and_exact_in_f32() {
+        use super::*;
+        let others = RUN_AGE | RUN_DETAIL | RUN_ATLAS2 | RUN_PROBE | RUN_PROBE_YIELD | RUN_ROOMS | RUN_FACADE_TEST | RUN_AGENT_HZB | RUN_PROBE_DEFER | RUN_GRIME_MASK | RUN_STREET_LIFE_MASK;
+        for b in [RUN_FACADE_GLASS, RUN_FAR_FACADES, RUN_FACADE_WEATHER, RUN_CANYON_GLASS] {
+            assert_eq!(b & others, 0);
+            assert!(b < (1 << 24), "the frame carries the switches in an f32");
+            assert_eq!((b as f32) as u32, b, "exact in an f32");
+        }
+        assert_eq!(RUN_FACADE_GLASS & RUN_FAR_FACADES, 0);
+        assert_eq!((RUN_FACADE_GLASS | RUN_FAR_FACADES) & RUN_FACADE_WEATHER, 0);
+        assert_eq!((RUN_FACADE_GLASS | RUN_FAR_FACADES | RUN_FACADE_WEATHER) & RUN_CANYON_GLASS, 0);
+        // every switch bit together still round-trips through the frame's f32
+        let all = others | RUN_FACADE_GLASS | RUN_FAR_FACADES | RUN_FACADE_WEATHER | RUN_CANYON_GLASS;
+        assert_eq!((all as f32) as u32, all);
+    }
+}
