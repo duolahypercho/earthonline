@@ -99,6 +99,22 @@ pub fn people_contact_wgsl() -> &'static str {
     if people_contact() { include_str!("people_contact.wgsl") } else { "" }
 }
 
+/// The city's shader source the agents' module is made on: the full set but the
+/// single probe's lookups. With the cars' materials compiled in (`--car-materials`)
+/// the sun's penumbra (`--soft-shadows`, look.rs `shadow_wgsl` `LK_SHADOW_SOFT`) is
+/// left out of it: the two together are more than Apple's compiler takes (the
+/// agents' opaque pipeline failed, XPC_ERROR_CONNECTION_INTERRUPTED, measured in the
+/// round 1 integration), as the props' cut-out pipeline was. The cars and people
+/// then keep the tent filter; the street and the buildings keep the penumbra.
+fn agents_city_source() -> String {
+    let src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
+    let f = crate::look::shader_features();
+    if f.car_materials && f.soft_shadows {
+        return src.replacen("const LK_SHADOW_SOFT: bool = true;", "const LK_SHADOW_SOFT: bool = false;", 1);
+    }
+    src
+}
+
 /// Distance tiers and caps (`HERO_OVERLAY` / the crowd's bands and budget), metres.
 #[derive(Clone, Copy, Debug)]
 pub struct Tiers {
@@ -545,7 +561,7 @@ impl AgentsGpu {
         let draw_src = format!(
             "{}\n{}\n{}\n{}\n{}\n{}{}\n{}",
             // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
-            crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
+            agents_city_source(),
             people_shading_wgsl(), // (`--people-shading`, `--people-bounce`) compiled out without them
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
@@ -1127,6 +1143,17 @@ mod tests {
         super::set_people_shading(false);
         super::set_people_bounce(false);
         super::set_people_contact(false);
+    }
+
+    /// (`--soft-shadows` with `--car-materials`) the agents' module takes the tent, not the penumbra
+    /// (Apple's compiler fails the two together); either alone keeps its code as it was.
+    #[test]
+    fn the_agents_keep_the_tent_with_the_cars_materials() {
+        let none = crate::look::ShaderFeatures::NONE;
+        let soft = |f: crate::look::ShaderFeatures| crate::look::with_shader_features(f, || super::agents_city_source().contains("const LK_SHADOW_SOFT: bool = true;"));
+        assert!(soft(crate::look::ShaderFeatures { soft_shadows: true, ..none }), "the penumbra alone");
+        assert!(soft(crate::look::ShaderFeatures { car_materials: true, ..none }), "(the constant is declared either way)");
+        assert!(!soft(crate::look::ShaderFeatures { soft_shadows: true, car_materials: true, ..none }), "the two together: the tent");
     }
 
     /// (`--people-contact`) the shader's joints are eo-agents' contact joints, in order.
