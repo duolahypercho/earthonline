@@ -72,6 +72,295 @@ pub struct NativeSource {
     /// a plaza's, a promenade's and a park's paths, by tile. Empty: none, as before.
     paths: Vec<PathWay>,
     path_tiles: HashMap<TileKey, Vec<u32>>,
+    /// The drawn street's cross-sections (`--crowd`; `with_sections`): the
+    /// footways stand on the drawn walks and stop at the drawn kerbs. None:
+    /// the class model's, as before.
+    sections: Option<std::sync::Arc<SectionIndex>>,
+    /// The mapped crosswalks (`--crowd`; `with_crossings`): an unsignalled
+    /// street is crossed only where one is mapped. None: wherever the JS
+    /// crosses (every junction), as before.
+    crossings: Option<std::sync::Arc<CrossingIndex>>,
+}
+
+/// One straight piece of a drawn carriageway's centreline (`--crowd`;
+/// `NativeSource::with_sections`, eo-app from eo-street's plan): its ends,
+/// its half width and the drawn walks either side, `walks[0]` on the left of
+/// a -> b ((-dz, dx), eo-street's `frame_at` normal), world metres on the
+/// plan the roads are on.
+#[derive(Clone, Copy, Debug)]
+pub struct DrawnSection {
+    pub a: P2,
+    pub b: P2,
+    pub half: f64,
+    pub walks: [f64; 2],
+}
+
+/// The drawn pieces on a grid of `FRONT_CELL_M` cells.
+struct SectionIndex {
+    pieces: Vec<DrawnSection>,
+    cells: HashMap<(i32, i32), Vec<u32>>,
+}
+
+/// How far a drawn centreline may stand from the simulation's (the same OSM
+/// line, merged and re-split by the street planner), and how parallel it
+/// must run (cos of 20 degrees), to stand for it.
+const SECTION_MATCH_M: f64 = 3.0;
+const SECTION_MATCH_COS: f64 = 0.94;
+/// A walk's sample spacing against the drawn carriageways (m).
+const PATH_SAMPLE_M: f64 = 1.0;
+
+impl SectionIndex {
+    fn new(pieces: Vec<DrawnSection>) -> Self {
+        let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+        for (i, p) in pieces.iter().enumerate() {
+            let r = SECTION_MATCH_M.max(p.half);
+            let lo = front_cell(p.a[0].min(p.b[0]) - r, p.a[1].min(p.b[1]) - r);
+            let hi = front_cell(p.a[0].max(p.b[0]) + r, p.a[1].max(p.b[1]) + r);
+            for cx in lo.0..=hi.0 {
+                for cz in lo.1..=hi.1 {
+                    cells.entry((cx, cz)).or_default().push(i as u32);
+                }
+            }
+        }
+        SectionIndex { pieces, cells }
+    }
+
+    /// The drawn cross-section of a simulated street piece: its half width and
+    /// walks as the simulation sides them (`[side +1, side -1]`: the +offset
+    /// side is (dz, -dx) of its direction), read at the quarter points of its
+    /// polyline (the median half of the matches), or None where nothing drawn
+    /// runs along it.
+    fn of(&self, pts: &[P2]) -> Option<(f64, [f64; 2])> {
+        let cum = geom::cumulative(pts);
+        let len = *cum.last()?;
+        if len <= 0.0 {
+            return None;
+        }
+        let mut found: Vec<(f64, [f64; 2])> = vec![];
+        for f in [0.25, 0.5, 0.75] {
+            let (x, z, dx, dz, _) = geom::at_arc(pts, &cum, f * len);
+            let Some(list) = self.cells.get(&front_cell(x, z)) else { continue };
+            let mut best: Option<(f64, f64, [f64; 2])> = None;
+            for &k in list {
+                let p = &self.pieces[k as usize];
+                let (ux, uz) = (p.b[0] - p.a[0], p.b[1] - p.a[1]);
+                let ul = geom::hypot(ux, uz);
+                if ul < 1e-6 {
+                    continue;
+                }
+                let c = (ux * dx + uz * dz) / ul;
+                if c.abs() < SECTION_MATCH_COS {
+                    continue;
+                }
+                let (d, _) = seg_nearest(p.a, p.b, x, z);
+                if d > SECTION_MATCH_M || best.is_some_and(|(bd, _, _)| bd <= d) {
+                    continue;
+                }
+                // The drawn left (-dz, dx) is the simulation's -1 side when the
+                // two run the same way, its +1 side when they run opposite.
+                let walks = if c > 0.0 { [p.walks[1], p.walks[0]] } else { [p.walks[0], p.walks[1]] };
+                best = Some((d, p.half, walks));
+            }
+            if let Some((_, h, w)) = best {
+                found.push((h, w));
+            }
+        }
+        if found.is_empty() {
+            return None;
+        }
+        found.sort_by(|a, b| a.0.total_cmp(&b.0));
+        Some(found[found.len() / 2])
+    }
+
+    /// Whether (x, z) lies on a drawn carriageway (within a piece's half width).
+    fn on_carriageway(&self, x: f64, z: f64) -> bool {
+        self.cells.get(&front_cell(x, z)).is_some_and(|list| {
+            list.iter().any(|&k| {
+                let p = &self.pieces[k as usize];
+                let (dx, dz) = (p.b[0] - p.a[0], p.b[1] - p.a[1]);
+                let l2 = dx * dx + dz * dz;
+                if l2 < 1e-12 {
+                    return false;
+                }
+                let t = ((x - p.a[0]) * dx + (z - p.a[1]) * dz) / l2;
+                (0.0..=1.0).contains(&t) && geom::hypot(p.a[0] + dx * t - x, p.a[1] + dz * t - z) < p.half
+            })
+        })
+    }
+
+    /// A polyline's runs off the drawn carriageways, in order (sampled every
+    /// `PATH_SAMPLE_M`: each run keeps the polyline's vertices off them and
+    /// ends at its last sample before one).
+    fn off_carriageway(&self, pts: &[P2]) -> Vec<Vec<P2>> {
+        let mut runs: Vec<Vec<P2>> = vec![];
+        let mut cur: Vec<P2> = vec![];
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let l = geom::hypot(b[0] - a[0], b[1] - a[1]);
+            let n = (l / PATH_SAMPLE_M).ceil().max(1.0) as usize;
+            let at = |k: usize| {
+                let t = k as f64 / n as f64;
+                [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+            };
+            for k in 0..=n {
+                let q = at(k);
+                if self.on_carriageway(q[0], q[1]) {
+                    if cur.len() >= 2 {
+                        runs.push(std::mem::take(&mut cur));
+                    } else {
+                        cur.clear();
+                    }
+                    continue;
+                }
+                let last = cur.last().copied();
+                let fresh = last.is_none_or(|p| geom::hypot(p[0] - q[0], p[1] - q[1]) > 1e-6);
+                let edge = k == 0 || k == n || cur.is_empty() || (k < n && { let r = at(k + 1); self.on_carriageway(r[0], r[1]) });
+                if fresh && edge {
+                    cur.push(q);
+                }
+            }
+        }
+        if cur.len() >= 2 {
+            runs.push(cur);
+        }
+        runs
+    }
+}
+
+/// The mapped crosswalks' middles on a grid of `FRONT_CELL_M` cells.
+struct CrossingIndex {
+    cells: HashMap<(i32, i32), Vec<P2>>,
+}
+
+impl CrossingIndex {
+    fn new(points: Vec<P2>) -> Self {
+        let mut cells: HashMap<(i32, i32), Vec<P2>> = HashMap::new();
+        for p in points {
+            cells.entry(front_cell(p[0], p[1])).or_default().push(p);
+        }
+        CrossingIndex { cells }
+    }
+
+    /// Whether a mapped crosswalk's middle lies within `r` of (x, z).
+    fn near(&self, x: f64, z: f64, r: f64) -> bool {
+        let lo = front_cell(x - r, z - r);
+        let hi = front_cell(x + r, z + r);
+        (lo.0..=hi.0).any(|cx| (lo.1..=hi.1).any(|cz| self.cells.get(&(cx, cz)).is_some_and(|v| v.iter().any(|p| geom::hypot(p[0] - x, p[1] - z) <= r))))
+    }
+}
+
+/// A plaza too small to cross (m2), the outline's station spacing, a walk's
+/// least length (m), one walk to this much of the plaza's mean width (m), at
+/// most this many walks.
+const PLAZA_MIN_AREA_M2: f64 = 400.0;
+const PLAZA_STATION_M: f64 = 6.0;
+const PLAZA_WALK_MIN_M: f64 = 12.0;
+const PLAZA_WALK_SPACING_M: f64 = 18.0;
+const PLAZA_WALKS_MAX: usize = 48;
+
+/// A paved plaza's walks (`--crowd`; eo-app from the landmarks' plaza plan):
+/// people cross an open plaza from edge to edge rather than along one line,
+/// so a plaza holds straight walks between points of its outline (`ring`: its
+/// outer ring, resampled every `PLAZA_STATION_M`), each wholly inside it,
+/// about one to every `PLAZA_WALK_SPACING_M` of the plaza's mean width, no
+/// two from neighbouring stations, and its outline cut at their ends: a
+/// network the walkers route through at every end. Deterministic in `id` and
+/// the ring; the walks avoid nothing inside the plaza.
+pub fn plaza_walks(id: &str, ring: &[P2]) -> Vec<PathWay> {
+    let mut r: Vec<P2> = ring.to_vec();
+    if r.len() >= 2 && geom::hypot(r[0][0] - r[r.len() - 1][0], r[0][1] - r[r.len() - 1][1]) < 0.01 {
+        r.pop();
+    }
+    if r.len() < 3 {
+        return vec![];
+    }
+    let area = (0..r.len()).map(|i| {
+        let (p, q) = (r[i], r[(i + 1) % r.len()]);
+        p[0] * q[1] - q[0] * p[1]
+    }).sum::<f64>().abs() / 2.0;
+    if area < PLAZA_MIN_AREA_M2 {
+        return vec![];
+    }
+    let mut st: Vec<P2> = vec![];
+    for i in 0..r.len() {
+        let (p, q) = (r[i], r[(i + 1) % r.len()]);
+        let l = geom::hypot(q[0] - p[0], q[1] - p[1]);
+        let n = (l / PLAZA_STATION_M).ceil().max(1.0) as usize;
+        for k in 0..n {
+            let t = k as f64 / n as f64;
+            st.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+        }
+    }
+    let inside = |x: f64, z: f64| {
+        let mut c = false;
+        let mut j = r.len() - 1;
+        for i in 0..r.len() {
+            let (a, b) = (r[i], r[j]);
+            if (a[1] > z) != (b[1] > z) && x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0] {
+                c = !c;
+            }
+            j = i;
+        }
+        c
+    };
+    // Station pairs whose chord stays inside (sampled every station spacing).
+    let mut cands: Vec<(f64, usize, usize, f64)> = vec![];
+    for i in 0..st.len() {
+        for j in i + 2..st.len() {
+            if i == 0 && j == st.len() - 1 {
+                continue;
+            }
+            let (a, b) = (st[i], st[j]);
+            let l = geom::hypot(b[0] - a[0], b[1] - a[1]);
+            if l < PLAZA_WALK_MIN_M {
+                continue;
+            }
+            let n = (l / PLAZA_STATION_M).ceil() as usize;
+            if (1..n).all(|k| {
+                let t = k as f64 / n as f64;
+                inside(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+            }) {
+                cands.push((crate::rng::keyed_random(&format!("plaza-{id}"), &format!("{i}-{j}")), i, j, l));
+            }
+        }
+    }
+    if cands.is_empty() {
+        return vec![];
+    }
+    cands.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mean = cands.iter().map(|c| c.3).sum::<f64>() / cands.len() as f64;
+    let want = ((area / (PLAZA_WALK_SPACING_M * mean)).round() as usize).clamp(1, PLAZA_WALKS_MAX);
+    let mut used: Vec<usize> = vec![];
+    let mut chosen: Vec<(usize, usize)> = vec![];
+    for &(_, i, j, _) in &cands {
+        if chosen.len() >= want {
+            break;
+        }
+        if used.iter().any(|&u| u.abs_diff(i) <= 1 || u.abs_diff(j) <= 1) {
+            continue;
+        }
+        used.push(i);
+        used.push(j);
+        chosen.push((i, j));
+    }
+    let mut out: Vec<PathWay> = chosen.iter().enumerate().map(|(k, &(i, j))| PathWay { id: format!("{id}w{k}"), highway: "pedestrian".into(), points: vec![st[i], st[j]] }).collect();
+    // The outline, cut at the walks' ends.
+    used.sort_unstable();
+    used.dedup();
+    for k in 0..used.len() {
+        let (s0, e) = (used[k], used[(k + 1) % used.len()]);
+        let mut pts = vec![st[s0]];
+        let mut i = s0;
+        loop {
+            i = (i + 1) % st.len();
+            pts.push(st[i]);
+            if i == e || pts.len() > st.len() {
+                break;
+            }
+        }
+        out.push(PathWay { id: format!("{id}e{k}"), highway: "pedestrian".into(), points: pts });
+    }
+    out
 }
 
 /// A walk of its own (`NativeSource::with_paths`, eo-app `--crowd`): an OSM
@@ -238,7 +527,31 @@ impl NativeSource {
         for (i, s) in source.signals.iter().enumerate() {
             signal_tiles.entry(TileKey::of(s[0], s[1])).or_default().push(i as u32);
         }
-        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new(), frontage: None, paths: vec![], path_tiles: HashMap::new() }
+        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new(), frontage: None, paths: vec![], path_tiles: HashMap::new(), sections: None, crossings: None }
+    }
+
+    /// The same source with the drawn street's cross-sections (`--crowd`):
+    /// each street's footways stand on its drawn walks (their walking line
+    /// half a throughway in from the walk's frontage zone, or the walk's middle
+    /// on a narrow one) and stop, and cross, at the drawn kerbs of the streets
+    /// they meet, so the walkers walk where the walks are drawn; a walk of its
+    /// own is cut where it runs over a drawn carriageway. A street nothing
+    /// drawn runs along (or a side drawn without a walk) keeps the class
+    /// model. The lanes and the stop bars are not touched. Empty: the class
+    /// model everywhere, as before.
+    pub fn with_sections(mut self, pieces: Vec<DrawnSection>) -> Self {
+        self.sections = (!pieces.is_empty()).then(|| std::sync::Arc::new(SectionIndex::new(pieces)));
+        self
+    }
+
+    /// The same source with the mapped crosswalks' middles (`--crowd`): a
+    /// walker crosses a street at an unsignalled junction only where a
+    /// crosswalk is mapped within two crosswalk widths of its crossing band
+    /// (a signal's crossings always: its heads serve them). Empty: at every
+    /// junction, as before.
+    pub fn with_crossings(mut self, points: Vec<P2>) -> Self {
+        self.crossings = (!points.is_empty()).then(|| std::sync::Arc::new(CrossingIndex::new(points)));
+        self
     }
 
     /// The same source with walks of their own (`--crowd`): each becomes a
@@ -580,10 +893,17 @@ impl NativeSource {
             build.junctions.push(input);
         }
         // Footways, kept when their midpoint lies in the delivered tiles.
+        // (`--crowd`) each street's drawn cross-section, where one is drawn
+        // along it: the footways' kerbs are the drawn ones.
+        let drawn: Vec<Option<(f64, [f64; 2])>> = match &self.sections {
+            Some(ix) => segs.iter().map(|s| ix.of(&s.pts)).collect(),
+            None => vec![None; segs.len()],
+        };
+        let kerb_half = |si: usize| drawn[si].map_or(segs[si].half, |d| d.0);
         let mut node_half: HashMap<(i64, i64), Vec<(usize, f64)>> = HashMap::new();
         for (si, s) in segs.iter().enumerate() {
-            node_half.entry(qkey(s.pts[0])).or_default().push((si, s.half));
-            node_half.entry(qkey(s.pts[s.pts.len() - 1])).or_default().push((si, s.half));
+            node_half.entry(qkey(s.pts[0])).or_default().push((si, kerb_half(si)));
+            node_half.entry(qkey(s.pts[s.pts.len() - 1])).or_default().push((si, kerb_half(si)));
         }
         let mut foot_nodes: HashMap<String, FootNodeBuild> = HashMap::new();
         for (si, s) in segs.iter().enumerate() {
@@ -612,6 +932,22 @@ impl NativeSource {
             }
             let walk_line =
                 s.half + self.sidewalk_width(hw) - self.dims.frontage_zone_m - self.dims.throughway_m / 2.0;
+            // (`--crowd`) on the drawn walk: half a throughway in from its
+            // frontage zone, or its middle where it is narrower than that; a
+            // side drawn without a walk keeps the class model's line.
+            let line_on = |side: i8| -> f64 {
+                match drawn[si] {
+                    Some((h, w)) => {
+                        let walk = w[if side > 0 { 0 } else { 1 }];
+                        if walk >= self.dims.throughway_m / 2.0 {
+                            h + (walk - self.dims.frontage_zone_m - self.dims.throughway_m / 2.0).max(walk / 2.0)
+                        } else {
+                            walk_line
+                        }
+                    }
+                    None => walk_line,
+                }
+            };
             let ends_info = |p: P2| -> (f64, bool) {
                 let others = node_half.get(&qkey(p)).map(|v| v.iter().filter(|(k, _)| *k != si).map(|(_, h)| *h).fold(0.0f64, f64::max));
                 let degree = node_half.get(&qkey(p)).map_or(1, |v| v.len());
@@ -623,16 +959,26 @@ impl NativeSource {
             let (hb, jb) = ends_info(b);
             let base = build.footways.len() as u32;
             for (k, side) in [1i8, -1i8].iter().enumerate() {
-                let offset = walk_line * *side as f64;
+                let offset = line_on(*side) * *side as f64;
                 let points = geom::junction_lane_points(&s.pts, offset, false);
                 let d = [b[0] - a[0], b[1] - a[1]];
                 let dl = geom::hypot(d[0], d[1]).max(1e-9);
                 // Same normal convention as the lane offsets: +offset moves along (dz, -dx).
                 let normal = [d[1] / dl, -d[0] / dl];
                 let trim = |h: f64, junction: bool| if junction || h > 0.0 { h } else { 0.0 };
-                let end = |h: f64, junction: bool| FootEndBuild {
-                    kerb_trim: trim(h, junction),
-                    crossing_arc: trim(h, junction) + self.dims.crosswalk_m / 2.0,
+                // (`--crowd`) whether a crosswalk is mapped across this street at
+                // an end's crossing band (its centreline there: `arc` from the
+                // node `p` toward `toward`), within two crosswalk widths.
+                let mapped = |p: P2, toward: P2, arc: f64| -> bool {
+                    let Some(cx) = &self.crossings else { return true };
+                    let (dx, dz) = (toward[0] - p[0], toward[1] - p[1]);
+                    let l = geom::hypot(dx, dz).max(1e-9);
+                    let t = arc.min(l);
+                    cx.near(p[0] + dx / l * t, p[1] + dz / l * t, self.dims.crosswalk_m * 2.0)
+                };
+                let end = |h: f64, junction: bool, p: P2, toward: P2| {
+                    let arc = trim(h, junction) + self.dims.crosswalk_m / 2.0;
+                    FootEndBuild { kerb_trim: trim(h, junction), crossing_arc: arc, no_crossing: !mapped(p, toward, arc) }
                 };
                 build.footways.push(FootwayBuild {
                     points,
@@ -642,7 +988,7 @@ impl NativeSource {
                     node_keys: Some([node_text(a), node_text(b)]),
                     normal,
                     cross_index: Some(base + 1 - k as u32),
-                    ends: [end(ha, ja), end(hb, jb)],
+                    ends: [end(ha, ja, a, s.pts[1]), end(hb, jb, b, s.pts[s.pts.len() - 2])],
                     tile: Some(seg_tile),
                 });
             }
@@ -660,29 +1006,37 @@ impl NativeSource {
         path_ids.dedup();
         for i in path_ids {
             let p = &self.paths[i as usize];
-            let (a, b) = (p.points[0], p.points[p.points.len() - 1]);
-            let d = [b[0] - a[0], b[1] - a[1]];
-            let dl = geom::hypot(d[0], d[1]);
-            let len: f64 = p.points.windows(2).map(|w| geom::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
-            if len < 4.0 || dl < 1e-6 {
-                continue;
-            }
-            let mid = p.points[p.points.len() / 2];
-            build.footways.push(FootwayBuild {
-                points: p.points.clone(),
-                highway: p.highway.clone(),
-                segment: format!("p{}", p.id),
-                road_side: 1,
-                node_keys: Some([node_text(a), node_text(b)]),
-                normal: [d[1] / dl, -d[0] / dl],
-                cross_index: None,
-                ends: [FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0 }, FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0 }],
-                tile: Some(TileKey::of(mid[0], mid[1])),
-            });
-            path_place.push(if p.highway == "pedestrian" { crate::consts::PLACE_PEDESTRIAN } else { crate::consts::PLACE_FOOTPATH });
-            for q in [a, b] {
-                let key = node_text(q);
-                foot_nodes.entry(key.clone()).or_insert(FootNodeBuild { key, pos: q, signal: None });
+            // (with the drawn sections) a walk is cut where it runs over a drawn
+            // carriageway: its walkers keep to the paving either side.
+            let runs: Vec<Vec<P2>> = match &self.sections {
+                Some(ix) => ix.off_carriageway(&p.points),
+                None => vec![p.points.clone()],
+            };
+            for (ri, run) in runs.into_iter().enumerate() {
+                let (a, b) = (run[0], run[run.len() - 1]);
+                let d = [b[0] - a[0], b[1] - a[1]];
+                let dl = geom::hypot(d[0], d[1]);
+                let len: f64 = run.windows(2).map(|w| geom::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+                if len < 4.0 || dl < 1e-6 {
+                    continue;
+                }
+                let mid = run[run.len() / 2];
+                build.footways.push(FootwayBuild {
+                    points: run,
+                    highway: p.highway.clone(),
+                    segment: if ri == 0 { format!("p{}", p.id) } else { format!("p{}r{ri}", p.id) },
+                    road_side: 1,
+                    node_keys: Some([node_text(a), node_text(b)]),
+                    normal: [d[1] / dl, -d[0] / dl],
+                    cross_index: None,
+                    ends: [FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false }, FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false }],
+                    tile: Some(TileKey::of(mid[0], mid[1])),
+                });
+                path_place.push(if p.highway == "pedestrian" { crate::consts::PLACE_PEDESTRIAN } else { crate::consts::PLACE_FOOTPATH });
+                for q in [a, b] {
+                    let key = node_text(q);
+                    foot_nodes.entry(key.clone()).or_insert(FootNodeBuild { key, pos: q, signal: None });
+                }
             }
         }
         let mut nodes: Vec<FootNodeBuild> = foot_nodes.into_values().collect();

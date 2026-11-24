@@ -159,3 +159,151 @@ fn nightlife_fronts_gather_people_at_their_doors() {
     let shops = standing(false, 21.0);
     assert!(bars > shops + 0.15, "standing share: bars {bars:.2}, shops {shops:.2}");
 }
+
+/// (`with_sections`) The footways stand on the drawn walks: each street drawn
+/// wider than the class model (here every street's carriageway 3 m wider a
+/// side, its walks 4 m) moves its walking lines out onto the drawn walk, a
+/// line half a throughway in from the frontage zone, and its kerb trims to
+/// the drawn kerbs; a walk of its own over a drawn carriageway is cut there.
+#[test]
+fn the_footways_stand_on_the_drawn_walks() {
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let tiles = native::tiles_around(SOMA[0], SOMA[1], 600.0);
+    let plain = base.build(&tiles);
+    // the drawn street: every built carriageway, 3 m wider a side, walks of 4 m.
+    let pieces: Vec<native::DrawnSection> = plain
+        .segments
+        .iter()
+        .flat_map(|s| s.points.windows(2).map(move |w| native::DrawnSection { a: w[0], b: w[1], half: s.half + 3.0, walks: [4.0, 4.0] }))
+        .collect();
+    let dims = base.dims.clone();
+    let path = vec![[SOMA[0] - 60.0, SOMA[1] - 60.0], [SOMA[0] + 60.0, SOMA[1] + 60.0]];
+    let drawn = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap().with_sections(pieces.clone()).with_paths(vec![PathWay { id: "diag".into(), highway: "footway".into(), points: path }]).build(&tiles);
+    // each street's pair of footways (each the other's far kerb): half their
+    // separation at their middles is the drawn kerb (the class half + 3 m)
+    // plus the walking line's place on the 4 m walk.
+    let line = (4.0 - dims.frontage_zone_m - dims.throughway_m / 2.0).max(2.0);
+    let mid = |f: &eo_sim::network::FootwayBuild| {
+        let cum = eo_sim::geom::cumulative(&f.points);
+        let (x, z, _, _, _) = eo_sim::geom::at_arc(&f.points, &cum, cum[cum.len() - 1] / 2.0);
+        [x, z]
+    };
+    let (mut on, mut all) = (0, 0);
+    for (i, f) in drawn.footways.iter().enumerate() {
+        let Some(j) = f.cross_index.map(|j| j as usize).filter(|&j| j > i) else { continue };
+        let (p, q) = (mid(f), mid(&drawn.footways[j]));
+        let c = [(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0];
+        let Some(seg) = plain.segments.iter().find(|s| eo_sim::geom::dist_to_polyline(&s.points, c[0], c[1]) < 0.3) else { continue };
+        all += 1;
+        let half_sep = (p[0] - q[0]).hypot(p[1] - q[1]) / 2.0;
+        if (half_sep - (seg.half + 3.0 + line)).abs() < 0.3 {
+            on += 1;
+        }
+    }
+    assert!(all > 100 && on * 10 > all * 8, "{on} of {all} street pairs on the drawn walks' walking line");
+    let on_walk = |p: [f64; 2]| {
+        // the distance from the nearest drawn centreline past its kerb, as a share of the 4 m walk
+        let mut best = f64::INFINITY;
+        let mut half = 0.0;
+        for s in &pieces {
+            let (dx, dz) = (s.b[0] - s.a[0], s.b[1] - s.a[1]);
+            let l2 = dx * dx + dz * dz;
+            if l2 < 1e-9 {
+                continue;
+            }
+            let t = (((p[0] - s.a[0]) * dx + (p[1] - s.a[1]) * dz) / l2).clamp(0.0, 1.0);
+            let d = (s.a[0] + dx * t - p[0]).hypot(s.a[1] + dz * t - p[1]);
+            if d < best {
+                best = d;
+                half = s.half;
+            }
+        }
+        (best - half) / 4.0
+    };
+    // the kerb trims are the drawn kerbs: the class model's plus the drawn street's 3 m.
+    let mut more: Vec<f64> = vec![];
+    for (a, b) in plain.footways.iter().zip(drawn.footways.iter()).filter(|(a, _)| !a.segment.starts_with('p')) {
+        for e in 0..2 {
+            if a.ends[e].kerb_trim > 0.0 {
+                more.push(b.ends[e].kerb_trim - a.ends[e].kerb_trim);
+            }
+        }
+    }
+    more.sort_by(|a, b| a.total_cmp(b));
+    assert!(!more.is_empty() && (more[more.len() / 2] - 3.0).abs() < 0.5, "kerb trims {} more", more.get(more.len() / 2).copied().unwrap_or(f64::NAN));
+    // the diagonal walk across the blocks is cut at every carriageway it crosses: no piece on one.
+    let walks: Vec<_> = drawn.footways.iter().filter(|f| f.segment.starts_with("pdiag")).collect();
+    assert!(walks.len() >= 2, "{} pieces", walks.len());
+    for w in walks {
+        for p in &w.points {
+            assert!(on_walk(*p) > -0.75 / 4.0 - 1e-6, "a walk's point on a carriageway");
+        }
+    }
+}
+
+/// (`with_crossings`) With the crosswalks known, a walker crosses an
+/// unsignalled junction's street only where one is mapped: none mapped, no
+/// footway end may be crossed but at a signal; every band mapped, all may.
+#[test]
+fn walkers_cross_where_a_crosswalk_is_mapped() {
+    let tiles = native::tiles_around(SOMA[0], SOMA[1], 600.0);
+    let load = || native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let plain = load().build(&tiles);
+    assert!(plain.footways.iter().all(|f| !f.ends[0].no_crossing && !f.ends[1].no_crossing), "as before without the survey");
+    let far = load().with_crossings(vec![[1.0e7, 1.0e7]]).build(&tiles);
+    let street_ends = far.footways.iter().filter(|f| !f.segment.starts_with('p')).count() * 2;
+    let refused = far.footways.iter().map(|f| f.ends.iter().filter(|e| e.no_crossing).count()).sum::<usize>();
+    assert_eq!(refused, street_ends, "nothing mapped near: every band refused");
+    // a crosswalk mapped across every street's end at its band (the middle of
+    // the band's two kerbs): nearly every end may be crossed.
+    let band = |f: &eo_sim::network::FootwayBuild, e: usize| {
+        let cum = eo_sim::geom::cumulative(&f.points);
+        let len = cum[cum.len() - 1];
+        let s = if e == 0 { f.ends[0].crossing_arc } else { len - f.ends[1].crossing_arc };
+        let (x, z, _, _, _) = eo_sim::geom::at_arc(&f.points, &cum, s.clamp(0.0, len));
+        [x, z]
+    };
+    let mut mapped = vec![];
+    for f in &plain.footways {
+        let Some(j) = f.cross_index else { continue };
+        for e in 0..2 {
+            let (p, q) = (band(f, e), band(&plain.footways[j as usize], e));
+            mapped.push([(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0]);
+        }
+    }
+    let all = load().with_crossings(mapped).build(&tiles);
+    let near = all.footways.iter().filter(|f| !f.segment.starts_with('p')).map(|f| f.ends.iter().filter(|e| !e.no_crossing).count()).sum::<usize>();
+    assert!(near * 10 > street_ends * 9, "{near} of {street_ends} bands near their crosswalk");
+}
+
+/// (`plaza_walks`) A plaza is crossed by straight walks wholly inside it,
+/// joined at their ends to its outline cut there: one routable network.
+#[test]
+fn a_plaza_is_crossed_by_walks_inside_it() {
+    // an L-shaped plaza, 120 x 80 m less a 60 x 40 m corner
+    let ring = vec![[0.0, 0.0], [120.0, 0.0], [120.0, 40.0], [60.0, 40.0], [60.0, 80.0], [0.0, 80.0], [0.0, 0.0]];
+    let walks = native::plaza_walks("t", &ring);
+    let chords: Vec<_> = walks.iter().filter(|w| w.id.starts_with("tw")).collect();
+    let edges: Vec<_> = walks.iter().filter(|w| w.id.starts_with("te")).collect();
+    assert!(chords.len() >= 3, "{} walks across", chords.len());
+    assert_eq!(edges.len(), chords.len() * 2, "the outline cut at each walk's two ends");
+    let inside = |x: f64, z: f64| !(x > 60.0 + 1e-6 && z > 40.0 + 1e-6) && (-1e-6..=120.0 + 1e-6).contains(&x) && (-1e-6..=80.0 + 1e-6).contains(&z);
+    for c in &chords {
+        let (a, b) = (c.points[0], c.points[1]);
+        for k in 0..=20 {
+            let t = k as f64 / 20.0;
+            assert!(inside(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), "{} leaves the plaza", c.id);
+        }
+    }
+    // every walk's ends are an outline piece's ends (shared nodes), and the pieces close the ring.
+    let key = |p: [f64; 2]| ((p[0] * 100.0).round() as i64, (p[1] * 100.0).round() as i64);
+    let ends: std::collections::HashSet<_> = edges.iter().flat_map(|e| [key(e.points[0]), key(e.points[e.points.len() - 1])]).collect();
+    for c in &chords {
+        assert!(ends.contains(&key(c.points[0])) && ends.contains(&key(c.points[1])));
+    }
+    let around: f64 = edges.iter().map(|e| e.points.windows(2).map(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1])).sum::<f64>()).sum();
+    assert!((around - 400.0).abs() < 1.0, "the outline's pieces are its 400 m: {around}");
+    // deterministic, and nothing for a plaza too small to cross.
+    assert_eq!(native::plaza_walks("t", &ring).len(), walks.len());
+    assert!(native::plaza_walks("s", &[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]).is_empty());
+}

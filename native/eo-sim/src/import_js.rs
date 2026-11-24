@@ -332,6 +332,7 @@ impl Oracle {
                         .and_then(|e| e.crossing_arc)
                         .filter(|v| *v > 0.0)
                         .unwrap_or(crate::consts::CROSSING_SETBACK_M),
+                    no_crossing: false,
                 };
                 FootwayBuild {
                     points: pts(&f.points),

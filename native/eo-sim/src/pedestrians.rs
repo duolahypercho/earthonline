@@ -536,6 +536,10 @@ fn consider_crossing(net: &Network, w: &mut Walker, end: usize, stats: &mut Crow
     if signal == NONE && !junction {
         return;
     }
+    // (`--crowd`) no crosswalk mapped at this band: crossed only on a signal.
+    if signal == NONE && f.ends[end].no_crossing {
+        return;
+    }
     w.cross_leg += 1;
     let share = if signal != NONE { CROSSING_SHARE } else { UNSIGNALLED_CROSSING_SHARE };
     if walker_draw(w.key, "cross-", w.cross_leg) >= share {

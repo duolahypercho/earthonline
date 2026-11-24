@@ -100,6 +100,10 @@ pub struct LaneBuild {
 pub struct FootEndBuild {
     pub kerb_trim: f64,
     pub crossing_arc: f64,
+    /// (`--crowd`, `NativeSource::with_crossings`) no crosswalk is mapped at
+    /// this end's crossing band: the street is crossed here only on a signal.
+    /// False (crossed as the JS crosses) unless the crosswalks are known.
+    pub no_crossing: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -213,6 +217,8 @@ pub struct FootEnd {
     pub node: u32,
     pub kerb_trim: f64,
     pub crossing_arc: f64,
+    /// `FootEndBuild::no_crossing`.
+    pub no_crossing: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -472,8 +478,8 @@ impl Network {
             let tile = fb.tile.unwrap_or_else(|| TileKey::of(mid[0], mid[1]));
             let segment = self.intern(&fb.segment);
             let mut ends = [
-                FootEnd { node: NONE, kerb_trim: fb.ends[0].kerb_trim, crossing_arc: fb.ends[0].crossing_arc },
-                FootEnd { node: NONE, kerb_trim: fb.ends[1].kerb_trim, crossing_arc: fb.ends[1].crossing_arc },
+                FootEnd { node: NONE, kerb_trim: fb.ends[0].kerb_trim, crossing_arc: fb.ends[0].crossing_arc, no_crossing: fb.ends[0].no_crossing },
+                FootEnd { node: NONE, kerb_trim: fb.ends[1].kerb_trim, crossing_arc: fb.ends[1].crossing_arc, no_crossing: fb.ends[1].no_crossing },
             ];
             if let Some(keys) = &fb.node_keys {
                 for (e, end) in ends.iter_mut().enumerate() {
