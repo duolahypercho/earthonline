@@ -401,6 +401,9 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-taa" => a.look.sky.taa = false,
             "--no-bloom" => a.look.sky.bloom = false,
             "--no-adaptation" => a.look.sky.adaptation = false,
+            // (camera track) the camera model under `--look cinematic` (eo-render cine_post.rs); off by default
+            "--cine-camera" => a.look.sky.cine_camera = true,
+            "--no-cine-camera" => a.look.sky.cine_camera = false,
             "--no-meter" => a.look.sky.meter = false, // the camera meter off (the hour's exposure curve alone)
             "--no-atmosphere" => a.look.sky.atmosphere = false, // the JS analytic dome instead of the atmosphere tables
             "--no-contact-shadows" => a.look.sky.contact = false,
