@@ -28,8 +28,17 @@ fn roles_and_plate_coordinates_come_with_the_option_only() {
         assert_eq!(on.opaque, off.opaque, "{id}");
         assert_eq!(on.glass, off.glass, "{id}");
         for (a, c) in on.vertices.iter().zip(&off.vertices) {
-            assert_eq!((a.pos, a.normal, a.tag), (c.pos, c.normal, c.tag), "{id}: a vertex moved");
+            // the 8-bit normal as before; the spare byte (0 without the option) refines it.
+            assert_eq!((a.pos, &a.normal[..3], a.tag), (c.pos, &c.normal[..3], c.tag), "{id}: a vertex moved");
+            assert_eq!(c.normal[3], 0, "{id}: a refinement without the option");
+            assert!(a.normal[3] != -128 && a.normal[3] != 0, "{id}: the refinement's code is never -128 nor 0 (the people's)");
         }
+        // The cars' occluder boxes (`--car-contact`) stand inside the body's bounds, in order.
+        let s = v::contact_shape(&on);
+        assert!(s.clearance > 0.05 && s.clearance < s.belt && s.belt < s.top && s.top <= on.max[1] + 1e-3, "{id}: heights {s:?}");
+        assert!(s.lower_half_w > 0.5 && s.lower_half_w <= on.max[0].abs().max(on.min[0].abs()) + 1e-3 && s.upper_half_w <= s.lower_half_w, "{id}: widths {s:?}");
+        assert!(s.uz0 >= s.z0 - 0.1 && s.uz0 < s.uz1 && s.uz1 <= s.z1 + 0.1 && s.z0 >= on.min[2] - 1e-3 && s.z1 <= on.max[2] + 1e-3, "{id}: lengths {s:?}");
+        assert!(s.tyre_half_w > 0.05 && s.tyre_half_w <= 0.25, "{id}: tyres {s:?}"); // (a truck's rear duals are the widest)
         for ((a, c), name) in on.materials.iter().zip(&off.materials).zip(&on.material_names) {
             assert_eq!(a.flags & !v::M_ROLE_MASK, c.flags, "{id} {name}: only the role is added");
             assert_eq!((a.base, a.emissive, a.params), (c.base, c.emissive, c.params), "{id} {name}");
@@ -54,4 +63,43 @@ fn roles_and_plate_coordinates_come_with_the_option_only() {
         }
     }
     assert!(bodies > 0, "no traffic body's LOD 0 is in this checkout");
+}
+
+/// (`--car-materials`) The refined normal (`pack_normal_fine`) keeps
+/// `pack_normal`'s bytes and reads back about ten times closer to the
+/// source than the 8-bit normal (whose error a lacquer's reflection doubles
+/// into ripples), every way round: at worst ~0.04 degrees against ~0.37; a
+/// zero spare byte reads as the 8-bit normal (the people's).
+#[test]
+fn refined_normals_read_back_ten_times_closer() {
+    use glam::Vec3;
+    let (mut worst8, mut worst_fine) = (0f32, 0f32);
+    let mut seed = 12345u64;
+    let mut rnd = || {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((seed >> 33) as f32 / (1u64 << 31) as f32) * 2.0 - 1.0
+    };
+    for _ in 0..20000 {
+        let n = Vec3::new(rnd(), rnd(), rnd());
+        if n.length() < 0.1 {
+            continue;
+        }
+        let n = n.normalize();
+        let p8 = v::pack_normal(n);
+        let pf = v::pack_normal_fine(n);
+        assert_eq!(&p8[..3], &pf[..3]);
+        let n8 = Vec3::new(p8[0] as f32, p8[1] as f32, p8[2] as f32).normalize();
+        let nf = v::unpack_normal_fine(pf);
+        worst8 = worst8.max(n8.dot(n).clamp(-1.0, 1.0).acos().to_degrees());
+        worst_fine = worst_fine.max(nf.dot(n).clamp(-1.0, 1.0).acos().to_degrees());
+    }
+    assert!(worst8 > 0.2, "the 8-bit normal's worst error {worst8} deg");
+    assert!(worst_fine < worst8 / 8.0 && worst_fine < 0.05, "refined {worst_fine} deg against 8-bit {worst8} deg");
+    // the people's normals (no refinement) read as the 8-bit normal.
+    for n in [Vec3::X, Vec3::new(0.3, -0.8, 0.52).normalize(), Vec3::new(-0.577, 0.577, -0.577)] {
+        let p = v::pack_normal(n);
+        let back = v::unpack_normal_fine(p);
+        let n8 = Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32).normalize();
+        assert!(back.dot(n8) > 0.99999, "{n}: {back} vs {n8}");
+    }
 }
