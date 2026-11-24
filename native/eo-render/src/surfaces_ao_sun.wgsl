@@ -49,7 +49,9 @@ fn sb_cover_at(world: vec3<f32>) -> f32 {
 
 // The sun's bounce at a world point with normal n, as E / pi. `rot` turns the
 // spiral (radians), `jit` the strata (0..1). `near` 1 where the screen-space
-// bounce gathers the near field (its share, d^2 / R^2, is left to it).
+// bounce gathers the near field (its share, d^2 / R^2, is left to it; R
+// `sb_near_m`, the 4 m search's, or `--screen-gi`'s reach where it gathers).
+var<private> sb_near_m: f32 = AO_RADIUS_M;
 fn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool) -> vec3<f32> {
     if ((u32(look.ao_params.w + 0.5) & 1u) == 0u || look.key_dir.w <= 0.0) {
         return vec3<f32>(0.0);
@@ -127,7 +129,7 @@ fn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool)
         let area = 4.0 * LK_PI * r * sqrt(r) * sq_r / n_s;
         var w = cp * cx * area / max(max(d2, area), SB_MIN_DIST2);
         if (near) {
-            w = w * min(d2 / (AO_RADIUS_M * AO_RADIUS_M), 1.0);
+            w = w * min(d2 / (sb_near_m * sb_near_m), 1.0);
         }
         // the wall's radiance less the stand-in's (x pi), at least 0.
         e = e + max(wall - stand_in / cs, vec3<f32>(0.0)) * w;
