@@ -873,7 +873,11 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         if (dot(-n, look.key_dir.xyz) > 0.0) {
             leaf_sh = lk_shadow(in.world, -n);
         }
-        m.emissive = vec4<f32>(m.emissive.rgb + pr_foliage(s.albedo, n, v, in.world, leaf_sh) * leaf, m.emissive.w);
+        // (the light through the leaf rides on the emission, which look_light takes at the
+        // practicals' gain with `--night-photometry`: it is light, not a practical, so it
+        // is carried over that gain, as the lenses' radiance is above)
+        let leaf_g = leaf / lk_practical_gain();
+        m.emissive = vec4<f32>(m.emissive.rgb + pr_foliage(s.albedo, n, v, in.world, leaf_sh) * leaf_g, m.emissive.w);
         // The street's lamps light the leaves from every side: what falls on
         // the far face passes through as the sun's does (T = R x T/R), so a
         // crown over a lamp glows a warm green from below. The same lights'
@@ -881,7 +885,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         // diffuse; no specular there (f0 0, the eye on that face's normal).
         if (skyu.lights.x != 0u) {
             let tl = s.albedo * PR_LEAF_T_OVER_R;
-            m.emissive = vec4<f32>(m.emissive.rgb + sky_local_lights_ao(in.world, -n, -n, tl, vec3<f32>(0.0), 1.0, 1.0) * leaf, m.emissive.w);
+            m.emissive = vec4<f32>(m.emissive.rgb + sky_local_lights_ao(in.world, -n, -n, tl, vec3<f32>(0.0), 1.0, 1.0) * leaf_g, m.emissive.w);
         }
     }
 // sf:end
