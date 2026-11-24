@@ -494,6 +494,19 @@ pub fn weather_from_args() -> bool {
     })
 }
 
+/// `--canyon-glass` (`--no-canyon-glass`; off by default): the kit glass
+/// reflects the street canyon it stands in, not the street-level probe's
+/// lower street: the sky over the opposite roofline, the opposite facades
+/// (sunlit or shaded by the shadow maps, lit by the ambient volume there,
+/// with their storeys of windows and lit rooms by night) and the street, the
+/// canyon's width and roofline taken from the ambient volume (rooms.wgsl
+/// `cg_canyon`, look_light.wgsl behind `SF_CANYON_GLASS`). Off, the code is
+/// compiled out and the frame is as before.
+pub fn canyon_from_args() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    last_switch(&args, "--canyon-glass", "--no-canyon-glass")
+}
+
 /// The facades track's runtime bits in the frame switches (`fa_run()`), high
 /// enough to stay clear of the others: with a feature's code compiled in
 /// (`ShaderFeatures`) it draws only with its bit set, so a renderer with every
@@ -502,15 +515,18 @@ pub fn weather_from_args() -> bool {
 pub const RUN_FACADE_GLASS: u32 = 1 << 20;
 pub const RUN_FAR_FACADES: u32 = 1 << 21;
 pub const RUN_FACADE_WEATHER: u32 = 1 << 22;
+/// (the last bit an f32 carries exactly, 2^23)
+pub const RUN_CANYON_GLASS: u32 = 1 << 23;
 
-/// `RUN_FACADE_GLASS`, `RUN_FAR_FACADES` and `RUN_FACADE_WEATHER` as the command line sets them (read once).
+/// `RUN_FACADE_GLASS`, `RUN_FAR_FACADES`, `RUN_FACADE_WEATHER` and `RUN_CANYON_GLASS` as the command line sets them (read once).
 pub fn track_run_bits() -> u32 {
     static BITS: OnceLock<u32> = OnceLock::new();
     *BITS.get_or_init(|| {
         let glass = if glass_from_args() { RUN_FACADE_GLASS } else { 0 };
         let far = if far_from_args() { RUN_FAR_FACADES } else { 0 };
         let weather = if weather_from_args() { RUN_FACADE_WEATHER } else { 0 };
-        glass | far | weather
+        let canyon = if canyon_from_args() { RUN_CANYON_GLASS } else { 0 };
+        glass | far | weather | canyon
     })
 }
 
@@ -532,11 +548,16 @@ mod switch_tests {
     fn the_track_bits_stay_clear_of_the_other_switches_and_exact_in_f32() {
         use super::*;
         let others = RUN_AGE | RUN_DETAIL | RUN_ATLAS2 | RUN_PROBE | RUN_PROBE_YIELD | RUN_ROOMS | RUN_FACADE_TEST | RUN_AGENT_HZB | RUN_PROBE_DEFER | RUN_GRIME_MASK | RUN_STREET_LIFE_MASK;
-        for b in [RUN_FACADE_GLASS, RUN_FAR_FACADES, RUN_FACADE_WEATHER] {
+        for b in [RUN_FACADE_GLASS, RUN_FAR_FACADES, RUN_FACADE_WEATHER, RUN_CANYON_GLASS] {
             assert_eq!(b & others, 0);
             assert!(b < (1 << 24), "the frame carries the switches in an f32");
+            assert_eq!((b as f32) as u32, b, "exact in an f32");
         }
         assert_eq!(RUN_FACADE_GLASS & RUN_FAR_FACADES, 0);
         assert_eq!((RUN_FACADE_GLASS | RUN_FAR_FACADES) & RUN_FACADE_WEATHER, 0);
+        assert_eq!((RUN_FACADE_GLASS | RUN_FAR_FACADES | RUN_FACADE_WEATHER) & RUN_CANYON_GLASS, 0);
+        // every switch bit together still round-trips through the frame's f32
+        let all = others | RUN_FACADE_GLASS | RUN_FAR_FACADES | RUN_FACADE_WEATHER | RUN_CANYON_GLASS;
+        assert_eq!((all as f32) as u32, all);
     }
 }

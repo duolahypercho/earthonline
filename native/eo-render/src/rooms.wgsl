@@ -679,3 +679,164 @@ fn rm_pane_normal(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>) -> vec3<f32> {
     let d = tilt + q * bow;
     return normalize(n + tangent * d.x + vec3<f32>(0.0, d.y, 0.0));
 }
+
+// ---- (`--canyon-glass`, `cg_on()`; facade.rs `canyon_from_args`) the street canyon in kit glass ----
+// A window reflects what stands across its street: the sky over the
+// opposite roofline, the opposite facades below it (sunlit or in shade,
+// their own windows in rows, lit rooms by night) and the street under them.
+// The probe grid sees from the street floor, so a pane 20 m up read the
+// probe's dark lower street where it faces the opposite upper floors and the
+// sky. The canyon is the ambient volume's (the city's own prisms): its height
+// the plane's reach (where the sky opens over the street), its width from
+// the sky the street floor sees (a long canyon of aspect A = H / W shows its
+// floor 1 / sqrt(1 + 4 A^2) of the sky), and the roofline's elevation e from
+// the sky the window sees straight out (a wall facing a long wall across a
+// street sees (1 - sin e) / 2 of the sky). The reflected ray is cast against
+// that canyon and what it meets is shaded as the frame shades it: the sky
+// (the dome; the probe where it sees open sky, with its clouds), the
+// opposite wall (the sun by the shadow maps a step in front of it, the sky
+// and street light by the ambient volume there, an albedo by building, its
+// storeys of windows and its cornice), the street (the same at its floor).
+// A pane at the street keeps half the probe, which sees the street's own
+// cars, kerbs and shop fronts. INFERRED: the facades' and the street's mean
+// albedos, the window share, storey and bay; the width's clamp is a guard on
+// the estimate, not a street dimension.
+const CG_STREET_ALBEDO: f32 = 0.13;
+const CG_ROOF_ALBEDO: f32 = 0.22;
+const CG_STOREY_M: f32 = 3.7;
+const CG_BAY_M: vec2<f32> = vec2<f32>(2.6, 4.4);
+const CG_LOT_M: f32 = 19.0;
+const CG_AIR_M: f32 = 1.5;
+const CG_WIDTH_GUARD_M: vec2<f32> = vec2<f32>(6.0, 160.0);
+const CG_CORNICE_M: f32 = 0.9;
+// the opposite glass: a dark room behind (its albedo-like share of the light on the wall) and the sky it reflects
+const CG_GLASS_ROOM: f32 = 0.05;
+const CG_GLASS_SKY: f32 = 0.09;
+
+// (rgb, cover): the opposite wall or street the pane's ray meets, and how much of the pixel it covers
+var<private> cg_env: vec4<f32>;
+// (rgb, weight): the sky along the ray, and the canyon's weight over the probe (0: the frame as before)
+var<private> cg_sky: vec4<f32>;
+
+// a facade's palette by building: weathered concrete, limestone, render, brick, dark granite and tinted glass
+fn cg_facade(k: f32) -> vec3<f32> {
+    if (k < 0.24) {
+        return vec3<f32>(0.30, 0.29, 0.27);
+    } else if (k < 0.44) {
+        return vec3<f32>(0.40, 0.36, 0.29);
+    } else if (k < 0.62) {
+        return vec3<f32>(0.46, 0.41, 0.33);
+    } else if (k < 0.80) {
+        return vec3<f32>(0.27, 0.15, 0.10);
+    }
+    return vec3<f32>(0.11, 0.12, 0.13);
+}
+
+// the light on a surface with normal n at p (in front of it, in the air):
+// the sun by the shadow maps and the clouds, the sky and the street by the
+// ambient volume there; `env_w` its environment class.
+fn cg_light(p: vec3<f32>, n: vec3<f32>, env_w: f32) -> vec3<f32> {
+    let l = look.key_dir.xyz;
+    var sun = vec3<f32>(0.0);
+    let nl = dot(n, l);
+    if (nl > 0.0) {
+        sun = look.key.xyz * nl * lk_shadow(p, n) * sky_cloud_transmittance(p);
+    }
+    return sun + amb_irradiance(amb_sample(p, n), n, lk_sh(n) * env_w);
+}
+
+// the canyon a pane at `world` (outward normal `ng`) sees along `r`, seen from `cam_d` metres; sets `cg_env`, `cg_sky`.
+fn cg_canyon(world: vec3<f32>, ng: vec3<f32>, r: vec3<f32>, cam_d: f32) {
+    cg_env = vec4<f32>(0.0);
+    cg_sky = vec4<f32>(0.0);
+    let nh = vec3<f32>(ng.x, 0.0, ng.z);
+    if (!amb_on() || dot(nh, nh) < 0.25) {
+        return; // no volume, or not an upright pane: the frame as before
+    }
+    let nf = normalize(nh);
+    let tf = vec3<f32>(-nf.z, 0.0, nf.x);
+    let pl = amb_plane(world.xz + nf.xz * 2.0);
+    let h = max(world.y - pl.z, 0.3);
+    let reach = max(pl.w, 1.0);
+    // the canyon's width from the sky its floor sees, and the opposite roofline from the sky the pane sees straight out
+    let svf = clamp(pl.x + pl.y, 0.04, 1.0);
+    let aspect = 0.5 * sqrt(max(1.0 / (svf * svf) - 1.0, 0.0));
+    let width = clamp(reach / max(aspect, 1e-3), CG_WIDTH_GUARD_M.x, CG_WIDTH_GUARD_M.y);
+    let sin_e = clamp(1.0 - 2.0 * amb_vis(amb_sample(world, nf), nf), 0.0, 0.995);
+    let roof = h + width * sin_e / sqrt(1.0 - sin_e * sin_e);
+    let paint_w = look.ambient.w * look.env_class.x;
+    let sky = lk_sky_sample(r);
+    cg_sky = vec4<f32>(sky, mix(0.5, 1.0, rm_ss(2.5, 7.0, h)));
+    let rn = dot(r, nf);
+    let t_wall = select(1e6, width / rn, rn > 1e-3);
+    let t_ground = select(1e6, h / -r.y, r.y < -1e-4);
+    if (t_ground < t_wall && t_ground < 1e5) {
+        // the street under the opposite wall
+        let p = world + r * t_ground;
+        let lg = cg_light(p + vec3<f32>(0.0, 0.2, 0.0), vec3<f32>(0.0, 1.0, 0.0), look.ambient.w * look.env_class.z);
+        cg_env = vec4<f32>(CG_STREET_ALBEDO / LK_PI * lg, 1.0);
+        return;
+    }
+    if (t_wall >= 1e5) {
+        return; // along the street or up: the sky
+    }
+    let p = world + r * t_wall;
+    let y = h + r.y * t_wall;
+    // the reflection's footprint there: the pixel's cone through the mirror, the panes' waviness and the glass's own blur
+    let f = look.rooms_work.y * (cam_d + t_wall) + t_wall * 2.0 * (FG_TILT + FG_BOW + FG_ROUGH * FG_ROUGH) + 0.02;
+    // the building across, by its lot: its height about the roofline, its palette and its bays
+    let plane_key = floor((dot(world, nf) + width) / 7.0);
+    let along = dot(p, tf);
+    let lot = floor(along / CG_LOT_M + rm_h(plane_key * 0.0731, 60.0));
+    let seed = fract(lot * 0.6180339 + plane_key * 0.4142136);
+    let top = max(roof * mix(0.72, 1.14, rm_h(seed, 61.0)), 1.0);
+    let cover = 1.0 - rm_ss(top - f - 0.1, top + f + 0.1, y);
+    let n_o = -nf;
+    // the opposite wall's light, a step in front of it (in the street's air: a wall the shadow maps may place a little nearer or further)
+    let p_air = world + r * max(t_wall - CG_AIR_M / max(rn, 0.05), 0.0);
+    let e_wall = cg_light(p_air, n_o, paint_w);
+    let k = rm_h(seed, 62.0);
+    let albedo = cg_facade(k) * mix(0.8, 1.15, rm_h(seed, 63.0));
+    let glazed = step(0.8, k);
+    // its storeys of windows (a curtain wall nearly all glass), the ground storey a shop front
+    let bay = mix(CG_BAY_M.x, CG_BAY_M.y, rm_h(seed, 64.0));
+    let u = fract(along / bay + rm_h(seed, 65.0));
+    let storey = mix(CG_STOREY_M, CG_STOREY_M * 1.2, rm_h(seed, 66.0));
+    let vy = fract(y / storey);
+    let ground_floor = step(y, 4.5);
+    let pane_u = mix(rm_ss(0.16, 0.2, u) * rm_ss(0.84, 0.8, u), rm_ss(0.02, 0.04, u) * rm_ss(0.98, 0.96, u), max(glazed, ground_floor));
+    let pane_v = mix(rm_ss(0.26, 0.3, vy) * rm_ss(0.9, 0.86, vy), rm_ss(0.05, 0.08, vy) * rm_ss(0.97, 0.94, vy), glazed);
+    let share = mix(0.38, 0.85, glazed);
+    let win = rm_filtered(pane_u * mix(pane_v, step(0.6, y), ground_floor), share, f, min(bay, storey));
+    let r_o = reflect(r, n_o);
+    let glass = CG_GLASS_ROOM / LK_PI * e_wall + CG_GLASS_SKY * lk_sky_sample(r_o);
+    // by night its rooms lit by the rooms' own occupancy, each its lamp
+    let cell = vec2<f32>(floor(along / bay), floor(y / storey));
+    let ch = rm_h(fract(seed + cell.x * 0.0137 + cell.y * 0.1173), 67.0);
+    let lit = step(ch, look.rooms_env.y * 0.8) * look.rooms_env.x;
+    let lamp = fg_lamp(mix(2400.0, 3800.0, rm_h(ch, 68.0))) * mix(0.04, 0.11, rm_h(ch, 69.0));
+    let night = rm_filtered3(lamp * lit, lamp * look.rooms_env.y * 0.8 * look.rooms_env.x, f, min(bay, storey));
+    // the cornice's shadow along each roofline, and grime darkening toward the street
+    let under_cornice = 1.0 - 0.45 * rm_ss(top - CG_CORNICE_M - f, top - CG_CORNICE_M * 0.4, y) * (1.0 - rm_ss(top - 0.15, top, y));
+    let wall = albedo / LK_PI * e_wall * under_cornice * mix(0.85, 1.0, rm_ss(0.0, 6.0, y));
+    let opposite = mix(wall, glass + night, win);
+    if (r.y < 0.0) {
+        // a falling ray past the roofline meets the roofs beyond
+        let roofs = CG_ROOF_ALBEDO / LK_PI * cg_light(p + vec3<f32>(0.0, top - y + 0.5, 0.0), vec3<f32>(0.0, 1.0, 0.0), paint_w);
+        cg_env = vec4<f32>(mix(roofs, opposite, cover), 1.0);
+    } else {
+        cg_env = vec4<f32>(opposite, cover); // past the roofline, the sky
+    }
+}
+
+// the canyon over the reflection `probe` the lighting read along the same ray
+// (look_light.wgsl): the opposite wall or street where the ray meets one, the
+// sky past them (the probe's own where it sees open sky, with its clouds),
+// the probe kept by the canyon's weight (half at the street floor).
+fn cg_apply(probe: vec3<f32>) -> vec3<f32> {
+    let lp = lk_luma(probe);
+    let ls = lk_luma(cg_sky.rgb);
+    let sky_like = rm_ss(0.55, 0.85, min(lp, ls) / max(max(lp, ls), 1e-6));
+    let open = mix(cg_sky.rgb, probe, sky_like);
+    return mix(probe, mix(open, cg_env.rgb, cg_env.w), cg_sky.w);
+}

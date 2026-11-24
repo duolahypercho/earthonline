@@ -274,6 +274,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         let aw = amb_reflection(av, r);
         rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_i * aw.y / LK_PI);
     }
+    if (SF_CANYON_GLASS && glass && cg_sky.w > 0.0) {
+        rad_e = cg_apply(rad) * env_i; // (`--canyon-glass`, rooms.wgsl) the street canyon in kit glass, the volume's occlusion in it
+    }
     let indirect_s = mix(rad_e, ssr.rgb, ssr.a) * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
@@ -306,6 +309,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             rad_c = fa_glazing(rc, world, ccr); // facade
         } else if (pg && pgs.cover > 0.0) {
             rad_c = mix(rad_c, pg_reflect(pgs, rc, world, ccr, true), pgs.cover); // the probe grid
+        }
+        if (SF_CANYON_GLASS && cg_sky.w > 0.0) {
+            rad_c = cg_apply(rad_c); // (`--canyon-glass`, rooms.wgsl) the street canyon in kit glass
         }
         let dfg_c = lk_dfg(nvc, ccr);
         let cc_ind = rad_c * env_i * (0.04 * dfg_c.x + dfg_c.y);

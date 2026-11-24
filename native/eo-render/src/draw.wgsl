@@ -1193,6 +1193,10 @@ fn shade(in: VOut) -> vec4<f32> {
             }
             s.n = n_light;
         }
+        if (SF_CANYON_GLASS && cg_on()) {
+            // (`--canyon-glass`) the street canyon the pane reflects (rooms.wgsl `cg_canyon`; look_light.wgsl reads it)
+            cg_canyon(in.world, ng_out, reflect(-v, n_light), distance(frame.cam_pos.xyz, in.world));
+        }
         if (wx_level() != 0u || sl_level() != 0u) {
             wx_window(&s, &m, vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room, dpx, dpy); // stage W5: dirty glass (`--grime`); stickers, scratched tags (`--street-life`)
         }
