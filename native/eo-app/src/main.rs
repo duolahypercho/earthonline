@@ -355,8 +355,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-probe" => a.look.facade &= !eo_render::facade::RUN_PROBE, // facade
             "--no-rooms" => a.look.facade &= !eo_render::facade::RUN_ROOMS, // no room behind kit glazing
             "--no-room-frames" | "--no-room-dim" => {} // read by eo_render::rooms::wgsl_constants
-            // the facades track: read by eo_render::facade::{glass_from_args, far_from_args} (models.rs: the shader features)
-            "--facade-glass" | "--no-facade-glass" | "--far-facades" | "--no-far-facades" => {}
+            // the facades track: read by eo_render::facade::{glass_from_args, far_from_args, weather_from_args} (models.rs: the shader features; kit.rs: the weather marks)
+            "--facade-glass" | "--no-facade-glass" | "--far-facades" | "--no-far-facades" | "--facade-weather" | "--no-facade-weather" => {}
             // near kit buildings as their envelope box ("box"), or the box with the shader-only facade ("shader").
             "--facade-test" => match val()?.as_str() {
                 "box" => eo_render::kit::FACADE_TEST.store(1, std::sync::atomic::Ordering::Relaxed),
