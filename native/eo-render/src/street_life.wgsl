@@ -370,7 +370,7 @@ fn sl_small(p: vec2<f32>, fw: f32, pl: f32, pb: f32, pg: f32, pf: f32, own: vec4
         let pick = fract(hc * 5.3);
         var fc = vec3<f32>(0.5, 0.49, 0.46);
         if (pick > 0.93) {
-            fc = mix(sl_spray(0.6 + 0.4 * fract(hc * 11.0)).rgb, vec3<f32>(0.3), 0.55);
+            fc = mix(sl_spray(0.6 + 0.4 * fract(hc * 11.0)).rgb, vec3<f32>(0.3), select(0.55, 0.85, SF_STREET_WEAR)); // (`--street-wear`: dulled, no confetti)
         } else if (pick > 0.85) {
             fc = vec3<f32>(0.36, 0.38, 0.38);
         } else if (pick > 0.7) {
@@ -378,7 +378,7 @@ fn sl_small(p: vec2<f32>, fw: f32, pl: f32, pb: f32, pg: f32, pf: f32, own: vec4
         } else if (pick > 0.4) {
             fc = vec3<f32>(0.4, 0.39, 0.37);
         }
-        it.c = fc * (0.8 + 0.2 * st_noise(q * 400.0));
+        it.c = fc * (0.8 + 0.2 * st_noise(q * 400.0)) * select(1.0, 0.75, SF_STREET_WEAR); // (`--street-wear`) trodden, not fresh white
         it.rough = select(0.85, 0.2, pick > 0.85);
     } else if (h0 < pl + pb) {
         // a cigarette butt: the filter (tan or white), the paper, the burnt end
@@ -718,7 +718,13 @@ fn sl_street(world: vec3<f32>, cls: u32, along: f32, across: f32, d0: vec4<f32>,
             let paper = smoothstep(0.55, 0.66, n1 * 0.55 + n3 * 0.45) * (1.0 - 0.7 * lf);
             bc = mix(bc, vec3<f32>(0.56, 0.54, 0.49) * (0.8 + 0.4 * n3), paper);
             let fleck = step(0.9, n3) * step(0.5, n2) * sl_keep(0.05, fwc);
-            bc = mix(bc, sl_spray(0.64 + 0.36 * fract(n1 * 7.3)).rgb, fleck * 0.8);
+            var fc = sl_spray(0.64 + 0.36 * fract(n1 * 7.3)).rgb;
+            if (SF_STREET_WEAR) {
+                // (`--street-wear`) a wrapper's colour under the grime it lies in: no confetti
+                fc = mix(fc, vec3<f32>(0.2, 0.19, 0.17), 0.75);
+                bc = mix(bc, bc * 0.72, paper); // the paper in a bed is wet and dirty, not white
+            }
+            bc = mix(bc, fc, fleck * 0.8);
             var b = sl_none();
             b.c = bc;
             // the walk shows through the thin of it (the scatter's items stand on it near)
@@ -732,11 +738,14 @@ fn sl_street(world: vec3<f32>, cls: u32, along: f32, across: f32, d0: vec4<f32>,
     if (p_leaf + p_butt + p_grit > 0.0) {
         lit_p = sl_over(lit_p, sl_small(p, fw, min(p_leaf, 0.85), min(p_butt, 0.7), min(p_grit, 0.6), frag, own, oh));
     }
+    // (`--street-wear`) fewer of the large pieces out on the open walk: the set
+    // repeated block after block read as one decal sheet; they stay in the clusters
+    let big_k = select(1.0, 0.5 + 0.5 * core, SF_STREET_WEAR);
     if (p_big > 0.0) {
-        lit_p = sl_over(lit_p, sl_big(p, fw, min(p_big, 0.8), deck, own, oh));
+        lit_p = sl_over(lit_p, sl_big(p, fw, min(p_big * big_k, 0.8), deck, own, oh));
     }
     // cardboard, newspapers and bags: neglected stretches, under the decks, in the clusters
-    let p_coarse = select(0.0, 0.05 * (litter - 2.0) * acc, litter > 2.0) + select(0.0, 0.08, deck) + 0.3 * core;
+    let p_coarse = (select(0.0, 0.05 * (litter - 2.0) * acc, litter > 2.0) + select(0.0, 0.08, deck)) * select(1.0, 0.4, SF_STREET_WEAR) + 0.3 * core;
     if (p_coarse > 0.0 && !road) {
         lit_p = sl_over(lit_p, sl_coarse(p, fw, min(p_coarse, 0.55), own, oh));
     }

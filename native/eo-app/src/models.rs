@@ -228,6 +228,22 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         }
     }
     features.street_pbr |= crate::street_pbr(); // the street's physically based surface (`--street-pbr`; no runtime gate, so only with its switch)
+    // the street track's round-2 passes (`--street-wear`, `--street-glare`, `--street-aggregate`, `--plaza-setts`, `--walk-relief`; no runtime gate, so only with their switches)
+    if crate::street_wear() {
+        features.street |= eo_render::look::STREET_WEAR;
+    }
+    if crate::street_glare() {
+        features.street |= eo_render::look::STREET_GLARE;
+    }
+    if crate::street_aggregate() {
+        features.street |= eo_render::look::STREET_AGGREGATE;
+    }
+    if crate::plaza_setts() {
+        features.street |= eo_render::look::PLAZA_SETTS;
+    }
+    if crate::walk_relief() {
+        features.street |= eo_render::look::WALK_RELIEF; // (`--walk-relief`)
+    }
     eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(
         ctx,

@@ -7,7 +7,7 @@
 //! skirt shown with the near meshes).
 
 use crate::data::{LandmarksJs, Material};
-use crate::geometry::{Frozen, GroundGrid};
+use crate::geometry::{Frozen, GroundGrid, MeshArrays};
 use crate::suspension::DeckStandards;
 use crate::{Built, Collider, LandmarkLight, bay_bridge, golden_gate};
 use anyhow::Result;
@@ -407,7 +407,7 @@ impl LandmarkSet {
             // promenade is Herb Caen Way's paving), the piers in the JS pier deck's.
             let hex = |s: &str| crate::geometry::srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080));
             let apron = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
-            let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
+            let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, wf::COPING_LAND_M, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
             let mut inner_feet = wf::PileFeet::default();
             if opts.cove_detail && let Some(mesh) = wf::municipal_parapet_with_feet(&piers, &mut inner_feet) {
                 municipal_feet.push((structures.len(), inner_feet));
@@ -610,6 +610,131 @@ impl LandmarkSet {
             self.structures.push(Structure { cast: false, footway: true, kit: None, name: "plaza-paving".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh });
         }
         Ok(report)
+    }
+
+    /// (`--quay-fill`) The promenade paved on from the quay apron (waterfront.rs,
+    /// `CAP_W_M` behind the wall) to the street's walk where the ground between
+    /// them stands lower than both: at every `FILL_STATION_M` along each quay
+    /// wall edge, the first walk `walk_at` finds within `FILL_REACH_M` (no
+    /// building on the way, `blocked`) is joined to the apron by a ramp at no
+    /// more than `max_slope`: from the apron's inner edge, or, for a walk
+    /// higher than the crest, from as far out on the apron as that slope needs
+    /// (leaving `FILL_EDGE_CLEAR_M` of it at the coping), to just under the
+    /// walk's edge. Where no such ramp fits (a difference up to
+    /// `FILL_STEP_MAX_M`) the paving is a terrace at the higher of the two and
+    /// a cast concrete step face closes it down to the lower. Where the ground (`ground_at`, under the
+    /// shore press) is not sunken, or no walk is near, nothing is added.
+    /// Returns (stations filled, stations tried).
+    pub fn add_quay_fill(
+        &mut self,
+        height_at: &dyn Fn(f64, f64) -> Option<f64>,
+        walk_at: &dyn Fn(f64, f64) -> Option<f64>,
+        blocked: &dyn Fn(f64, f64) -> bool,
+        ground_at: &dyn Fn(f64, f64) -> f64,
+        max_slope: f64,
+    ) -> (usize, usize) {
+        use crate::waterfront as wf;
+        let Some(press) = self.press.clone() else { return (0, 0) };
+        let js = LandmarksJs::get();
+        let sh = &js.shore;
+        let crest_at = |x: f64, z: f64| wf::crest_ground(height_at, x, z) + sh.road_lift + sh.crest_above_road_m;
+        let hex = |s: &str| crate::geometry::srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080));
+        let tone = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
+        let concrete = crate::geometry::srgb_hex(sh.wall_srgb);
+        let w0 = wf::CAP_W_M + wf::COPING_LAND_M;
+        let mut paving = MeshArrays::new("waterfront:quay-fill");
+        let mut faces = MeshArrays::new("waterfront:quay-fill-steps");
+        let (mut filled, mut tried) = (0usize, 0usize);
+        // a quad facing `want` (its normal turned to it)
+        let facing = |m: &mut MeshArrays, q: [[f64; 3]; 4], want: [f64; 3], c: crate::geometry::Rgb| {
+            let (u, v) = ([q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]], [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]]);
+            let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+            if n[0] * want[0] + n[1] * want[1] + n[2] * want[2] >= 0.0 { m.quad(q[0], q[1], q[2], q[3], c) } else { m.quad(q[3], q[2], q[1], q[0], c) }
+        };
+        for e in press.edges().iter().filter(|e| e.pier.is_none()) {
+            let (a, b, n) = (e.a, e.b, e.land);
+            let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+            if len < 0.5 {
+                continue;
+            }
+            let (ya, yb) = (crest_at(a[0], a[1]), crest_at(b[0], b[1]));
+            let k = (len / wf::FILL_STATION_M).ceil().max(1.0) as usize;
+            // each station: its point on the wall line, the apron's crest there, and the walk found (reach, level)
+            let stations: Vec<([f64; 2], f64, Option<(f64, f64)>)> = (0..=k)
+                .map(|i| {
+                    let f = i as f64 / k as f64;
+                    let p = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+                    let y0 = ya + (yb - ya) * f;
+                    let at = |s: f64| [p[0] + n[0] * s, p[1] + n[1] * s];
+                    let mut s = w0 + 0.25;
+                    let mut found = None;
+                    while s <= w0 + wf::FILL_REACH_M {
+                        let q = at(s);
+                        if blocked(q[0], q[1]) {
+                            break;
+                        }
+                        if let Some(level) = walk_at(q[0], q[1]) {
+                            found = Some((s, level));
+                            break;
+                        }
+                        s += 0.25;
+                    }
+                    let found = found.filter(|&(d, level)| {
+                        let m = at(0.5 * (w0 + d));
+                        let sunk = press.press(m[0], m[1], ground_at(m[0], m[1]));
+                        d - w0 > 0.3 && (level - y0).abs() <= wf::FILL_STEP_MAX_M && sunk < y0.max(level) - wf::FILL_SUNKEN_M
+                    });
+                    (p, y0, found)
+                })
+                .collect();
+            tried += stations.len();
+            filled += stations.iter().filter(|s| s.2.is_some()).count();
+            // where a ramp from the apron's edge would be too steep for a walk higher than the
+            // crest, it starts further out on the apron (a run long enough for `max_slope`),
+            // keeping `FILL_EDGE_CLEAR_M` of the apron at the coping
+            let start = |y0: f64, d: f64, l: f64| -> Option<f64> {
+                let rise = l - 0.02 - y0;
+                if rise.abs() / (d - w0) <= max_slope {
+                    return Some(w0);
+                }
+                let s0 = d - rise / max_slope;
+                (rise > 0.0 && s0 >= wf::COPING_LAND_M + wf::FILL_EDGE_CLEAR_M).then_some(s0)
+            };
+            for w in stations.windows(2) {
+                let ((p0, y0, Some((d0, l0))), (p1, y1, Some((d1, l1)))) = (w[0], w[1]) else { continue };
+                let at = |p: [f64; 2], s: f64, y: f64| [p[0] + n[0] * s, y, p[1] + n[1] * s];
+                let up = [0.0, 1.0, 0.0];
+                if let (Some(s0), Some(s1)) = (start(y0, d0, l0), start(y1, d1, l1)) {
+                    // a ramp: from the apron (a centimetre over it where it starts on it) to just under the walk's edge
+                    let lift = |s: f64| if s < w0 { 0.01 } else { 0.0 };
+                    facing(&mut paving, [at(p0, s0, y0 + lift(s0)), at(p1, s1, y1 + lift(s1)), at(p1, d1, l1 - 0.02), at(p0, d0, l0 - 0.02)], up, tone);
+                    continue;
+                }
+                // the walk's edge stands over the fill by a tuck (the street draws its own edge)
+                let (l0, l1) = (l0 - 0.02, l1 - 0.02);
+                // a terrace at the higher level, the step face down to the lower
+                let (t0, t1) = (y0.max(l0), y1.max(l1));
+                facing(&mut paving, [at(p0, w0, t0), at(p1, w0, t1), at(p1, d1, t1), at(p0, d0, t0)], up, tone);
+                if l0 > y0 || l1 > y1 {
+                    // the walk higher: the face over the apron, toward the water
+                    facing(&mut faces, [at(p0, w0, y0.min(t0) - 0.05), at(p1, w0, y1.min(t1) - 0.05), at(p1, w0, t1), at(p0, w0, t0)], [-n[0], 0.0, -n[1]], concrete);
+                }
+                if l0 < y0 || l1 < y1 {
+                    // the apron higher: the face over the walk's edge, toward the street
+                    facing(&mut faces, [at(p0, d0, l0.min(t0) - 0.05), at(p1, d1, l1.min(t1) - 0.05), at(p1, d1, t1), at(p0, d0, t0)], [n[0], 0.0, n[1]], concrete);
+                }
+            }
+        }
+        let (paving, faces) = (paving.freeze(), faces.freeze());
+        if !paving.is_empty() {
+            // as the apron: the street's footway paving, matte
+            self.structures.push(Structure { cast: false, footway: true, kit: None, name: "waterfront:quay-fill".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: paving });
+        }
+        if !faces.is_empty() {
+            // as the apron's skirt and the pier fascias: cast concrete
+            self.structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:quay-fill-steps".into(), material: Material { surface: Some("concrete".into()), ..plain_material(0.92, 0.0, "facade-masonry") }, mesh: faces });
+        }
+        (filled, tried)
     }
 
     /// The Ocean Beach and Sunset Dunes seawalls (promenade.rs) on the drawn

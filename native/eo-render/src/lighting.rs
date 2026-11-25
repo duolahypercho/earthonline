@@ -242,6 +242,14 @@ mod tests {
         sets.push(("window depth with the glass, canyon, far relief and every lighting part".into(), look::ShaderFeatures { window_depth: true, facade_glass: true, canyon_glass: true, far_relief: true, far_facades: true, soft_shadows: true, lx_bits: u32::MAX, cinematic: true, ..none }));
         sets.push(("street pbr".into(), look::ShaderFeatures { grime: true, street_pbr: true, ..none })); // (`--street-pbr`)
         sets.push(("street pbr alone".into(), look::ShaderFeatures { street_pbr: true, ..none }));
+        // (`--street-wear`, `--street-glare`) the street track's round-2 passes, alone, with the street pass and the cinematic look's coat
+        sets.push(("street wear and glare".into(), look::ShaderFeatures { street: look::STREET_WEAR | look::STREET_GLARE, ..none }));
+        sets.push(("street wear and glare over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE, cinematic: true, lx_bits: u32::MAX, ..none }));
+        sets.push(("street aggregate and plaza setts".into(), look::ShaderFeatures { street: look::STREET_AGGREGATE | look::PLAZA_SETTS, ..none }));
+        sets.push(("street aggregate, setts, wear and glare over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS, cinematic: true, lx_bits: u32::MAX, ..none }));
+        // (`--walk-relief`) alone, and over the street pass with every street bit and the cinematic look
+        sets.push(("walk relief".into(), look::ShaderFeatures { street: look::WALK_RELIEF, ..none }));
+        sets.push(("walk relief with every street bit over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF, cinematic: true, lx_bits: u32::MAX, ..none }));
         sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
         sets.push(("ao albedo".into(), look::ShaderFeatures { ao_albedo: true, ..none })); // (`--ao-albedo`)
         sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)
@@ -348,6 +356,7 @@ mod tests {
         // the reflect track's switches, the camera model and the cars' materials are their own, below)
         assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, wet_surfaces: false, screen_reflect: false, camera: false, car_materials: false, car_reflections: false, ..look::ShaderFeatures::ALL });
         assert!(!f.street_pbr && !look::ShaderFeatures::ALL.street_pbr, "the street pass comes in with its switch only (eo-app)");
+        assert!(f.street == 0 && look::ShaderFeatures::ALL.street == 0, "the street track's round-2 passes come in with their switches only (eo-app)");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));
