@@ -216,7 +216,12 @@ Two measured tables derived from USDA NAIP aerial imagery (public domain)
 ship in `native/assets/`: `roof-colours-v1.bin.gz` and
 `ground-green-v1.bin.gz`. The imagery itself stays outside the repository;
 `native/tools/fetch-aerial.mjs` fetches it and `eo-kit`'s `roof_survey`
-example measures it.
+example measures it. The tiles are requested with pixels square in
+degrees, because the image service widens any other longitude/latitude box
+north and south about its centre, which leaves the tile's content up to
+154 m from the box the manifest records. Tables measured before 2026-11-23
+had that error. `roof_survey register` measures how far the tiles sit from
+the footprints, and `survey` refuses tiles more than 4 m off.
 
 The NOTICE files name the scripts that produced each file. Those scripts
 belonged to the earlier browser toolchain and are not in this repository;

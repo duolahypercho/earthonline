@@ -11,8 +11,16 @@
 //!   cargo run --release -p eo-kit --example roof_survey -- survey   # measure: writes native/assets/roof-colours-v1.bin.gz
 //!                                                                   #   and native/assets/ground-green-v1.bin.gz
 //!   cargo run --release -p eo-kit --example roof_survey -- overlay <out dir>   # footprints over the imagery, swatches
+//!   cargo run --release -p eo-kit --example roof_survey -- register  # how far the tiles sit from the footprints
 //!
 //! `EO_ROOF_SURVEY_OUT=<dir>` writes the two tables there instead of `native/assets`.
+//!
+//! The tiles' pixels are square in degrees (`Grid::new`), so each tile is
+//! served exactly over the box the manifest records. `survey`, `overlay` and
+//! `register` take the grids from the manifest and refuse tiles whose grid
+//! is not square or whose recorded box is not their tile's, and `survey`
+//! refuses tiles that `register` finds more than `REG_MAX_M` off the
+//! footprints.
 //!
 //! The mapping: footprints are loaded on the surveyed 1:1 plan
 //! (`City::load_at(paths, 1.0)`) and unprojected with the city's own frame
@@ -48,12 +56,43 @@ struct Grid {
 }
 
 impl Grid {
+    /// Pixels square in degrees: `m` metres north-south and `m` x cos(latitude)
+    /// east-west (finer). The image service serves an EPSG:4326 request with
+    /// pixels square in degrees: asked for 2000 x 2000 pixels of a box that is
+    /// not square in degrees, it widens the box north and south about its
+    /// centre until it is. The old grid's pixels were `m` metres each way
+    /// (1.257 times wider than tall in degrees), so each tile came back
+    /// stretched 1.257 times north-south about its centre: at its top and
+    /// bottom the content lay a quarter of the tile's half-height off in
+    /// latitude (77 m on the 0.3 m set, 154 m on the 0.6 m one) from where
+    /// the manifest recorded it.
     fn new(frame: &PlanFrame, west: f64, north: f64, east: f64, south: f64, m: f64) -> Grid {
-        let dlon = m / frame.m_per_deg_lon;
-        let dlat = m / frame.m_per_deg_lat;
-        let cols = (((east - west) / dlon) / TILE as f64).ceil() as usize;
-        let rows = (((north - south) / dlat) / TILE as f64).ceil() as usize;
-        Grid { west, north, dlon, dlat, cols, rows }
+        let d = m / frame.m_per_deg_lat;
+        let cols = (((east - west) / d) / TILE as f64).ceil() as usize;
+        let rows = (((north - south) / d) / TILE as f64).ceil() as usize;
+        Grid { west, north, dlon: d, dlat: d, cols, rows }
+    }
+    /// A grid as `plan` records it (`tiles.json` `rgb`/`cir`, manifest `grids`).
+    fn to_json(self, m: f64) -> serde_json::Value {
+        serde_json::json!({ "west": self.west, "north": self.north, "dlon": self.dlon, "dlat": self.dlat, "cols": self.cols, "rows": self.rows, "metres": m, "tile": TILE })
+    }
+    fn from_json(v: &serde_json::Value) -> Option<Grid> {
+        let f = |k: &str| v[k].as_f64();
+        let u = |k: &str| v[k].as_u64().map(|n| n as usize);
+        (u("tile")? == TILE).then_some(())?;
+        Some(Grid { west: f("west")?, north: f("north")?, dlon: f("dlon")?, dlat: f("dlat")?, cols: u("cols")?, rows: u("rows")? })
+    }
+    fn same(&self, o: &Grid) -> bool {
+        let eq = |a: f64, b: f64| (a - b).abs() <= 1e-12 * a.abs().max(b.abs());
+        eq(self.west, o.west) && eq(self.north, o.north) && eq(self.dlon, o.dlon) && eq(self.dlat, o.dlat) && self.cols == o.cols && self.rows == o.rows
+    }
+    /// Pixels square in degrees (the box asked for is the box served).
+    fn square(&self) -> bool {
+        (self.dlon - self.dlat).abs() <= 1e-9 * self.dlat
+    }
+    /// Ground metres of one pixel, east-west and north-south.
+    fn pixel_m(&self, frame: &PlanFrame) -> [f64; 2] {
+        [self.dlon * frame.m_per_deg_lon, self.dlat * frame.m_per_deg_lat]
     }
     /// Continuous pixel coordinates of (lon, lat) (pixel centres at +0.5).
     fn px(&self, lon: f64, lat: f64) -> (f64, f64) {
@@ -77,6 +116,45 @@ struct Ctx {
     rgb: Grid,
     cir: Grid,
     dir: PathBuf,
+}
+
+/// The context with the grids the fetched tiles were planned on (the
+/// manifest's), each checked: square pixels, and every file's recorded box
+/// its tile's. Tiles fetched on the old grid (pixels square in metres, served
+/// stretched north-south) are refused.
+fn load_fetched() -> Ctx {
+    let mut ctx = load_ctx();
+    let p = ctx.dir.join("manifest.json");
+    let m: serde_json::Value = serde_json::from_slice(&std::fs::read(&p).unwrap_or_else(|e| panic!("{}: {e} (run plan and fetch-aerial.mjs first)", p.display()))).expect("manifest.json");
+    for set in ["rgb", "cir"] {
+        let g = Grid::from_json(&m["grids"][set]).unwrap_or_else(|| panic!("{}: no {set} grid of {TILE} px tiles", p.display()));
+        assert!(
+            g.square(),
+            "{}: the {set} tiles were planned with pixels {:.3e} x {:.3e} degrees, not square; the image service serves such a box stretched north-south about its centre, so the tiles are not where the manifest records them. Run `plan` into an empty folder and fetch again.",
+            p.display(),
+            g.dlon,
+            g.dlat
+        );
+        if set == "rgb" { ctx.rgb = g } else { ctx.cir = g }
+    }
+    let mut n = 0;
+    for f in m["files"].as_array().expect("manifest files") {
+        let name = f["file"].as_str().unwrap_or_default();
+        let (set, rest) = name.split_once('/').unwrap_or_default();
+        let g = match set {
+            "rgb" => ctx.rgb,
+            "cir" => ctx.cir,
+            _ => continue,
+        };
+        let (r, c) = (rest.get(1..4).and_then(|s| s.parse().ok()), rest.get(6..9).and_then(|s| s.parse().ok()));
+        let (Some(r), Some(c)) = (r, c) else { panic!("{name}: not a tile name") };
+        let want = g.tile_bbox(r, c);
+        let got: Vec<f64> = f["bbox"].as_array().map(|a| a.iter().filter_map(|v| v.as_f64()).collect()).unwrap_or_default();
+        assert!(got.len() == 4 && (0..4).all(|k| (got[k] - want[k]).abs() < 1e-9), "{name}: recorded box {got:?} is not its tile's {want:?}");
+        n += 1;
+    }
+    eprintln!("{n} tiles on square-degree grids (rgb {:.3} x {:.3} m, cir {:.3} x {:.3} m a pixel)", ctx.rgb.pixel_m(&ctx.frame)[0], ctx.rgb.pixel_m(&ctx.frame)[1], ctx.cir.pixel_m(&ctx.frame)[0], ctx.cir.pixel_m(&ctx.frame)[1]);
+    ctx
 }
 
 fn load_ctx() -> Ctx {
@@ -114,7 +192,14 @@ fn main() {
         Some("plan") => plan(),
         Some("survey") => survey(),
         Some("overlay") => overlay(Path::new(args.get(1).map(|s| s.as_str()).unwrap_or(".")), &args[2.min(args.len())..]),
-        _ => eprintln!("usage: roof_survey plan | survey | overlay <out dir>"),
+        Some("register") => {
+            let ctx = load_fetched();
+            let feet: Vec<Foot> = ctx.city.buildings.iter().map(foot).collect();
+            for (set, g) in [("rgb", ctx.rgb), ("cir", ctx.cir)] {
+                registration(&ctx, &feet, set, g);
+            }
+        }
+        _ => eprintln!("usage: roof_survey plan | survey | overlay <out dir> | register"),
     }
 }
 
@@ -151,10 +236,27 @@ fn needed_tiles(ctx: &Ctx, g: &Grid) -> Vec<(usize, usize)> {
 fn plan() {
     let ctx = load_ctx();
     std::fs::create_dir_all(&ctx.dir).unwrap();
+    // fetch-aerial keeps a tile file already present, and would record it under
+    // this plan's box: refuse a folder holding tiles of another plan.
+    for doc in ["tiles.json", "manifest.json"] {
+        let Ok(b) = std::fs::read(ctx.dir.join(doc)) else { continue };
+        let v: serde_json::Value = serde_json::from_slice(&b).unwrap_or_default();
+        for (set, g) in [("rgb", &ctx.rgb), ("cir", &ctx.cir)] {
+            let old = if doc == "tiles.json" { &v[set] } else { &v["grids"][set] };
+            let has_tiles = std::fs::read_dir(ctx.dir.join(set)).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.path().extension().is_some_and(|x| x == "jpg"))));
+            assert!(
+                !has_tiles || Grid::from_json(old).is_some_and(|o| o.same(g)),
+                "{} holds {set} tiles of another plan ({doc}): plan into an empty folder",
+                ctx.dir.display()
+            );
+        }
+    }
     let mut tiles = vec![];
     for (set, g, bands) in [("rgb", &ctx.rgb, "0,1,2"), ("cir", &ctx.cir, "3,0,1")] {
+        assert!(g.square(), "{set}: pixels not square in degrees");
         let need = needed_tiles(&ctx, g);
-        eprintln!("{set}: grid {} x {} tiles of {TILE} px, {} hold buildings", g.cols, g.rows, need.len());
+        let pm = g.pixel_m(&ctx.frame);
+        eprintln!("{set}: grid {} x {} tiles of {TILE} px ({:.3} x {:.3} m a pixel, {:.0} x {:.0} m a tile), {} hold buildings", g.cols, g.rows, pm[0], pm[1], pm[0] * TILE as f64, pm[1] * TILE as f64, need.len());
         for (r, c) in need {
             let bb = g.tile_bbox(r, c);
             let name = format!("{set}/r{r:03}_c{c:03}.jpg");
@@ -165,10 +267,9 @@ fn plan() {
             tiles.push(serde_json::json!({ "file": name, "url": url, "bbox": bb }));
         }
     }
-    let grid = |g: &Grid, m: f64| serde_json::json!({ "west": g.west, "north": g.north, "dlon": g.dlon, "dlat": g.dlat, "cols": g.cols, "rows": g.rows, "metres": m, "tile": TILE });
     let doc = serde_json::json!({
         "frame": { "centerLat": ctx.frame.center_lat, "centerLon": ctx.frame.center_lon, "metersPerDegreeLat": ctx.frame.m_per_deg_lat, "metersPerDegreeLon": ctx.frame.m_per_deg_lon },
-        "rgb": grid(&ctx.rgb, RGB_M), "cir": grid(&ctx.cir, CIR_M), "tiles": tiles,
+        "rgb": ctx.rgb.to_json(RGB_M), "cir": ctx.cir.to_json(CIR_M), "tiles": tiles,
     });
     let p = ctx.dir.join("tiles.json");
     std::fs::write(&p, serde_json::to_vec_pretty(&doc).unwrap()).unwrap();
@@ -423,7 +524,8 @@ fn lattice(ctx: &Ctx, f: &Foot, off: [f64; 2], d: f64, cap: usize) -> Vec<(f64, 
     let (le, ls) = ctx.frame.to_lonlat(f.max[0] + off[0], f.max[1] + off[1]);
     let (x0, y0) = g.px(lw, ln);
     let (x1, y1) = g.px(le, ls);
-    let est = f.area / (RGB_M * RGB_M);
+    let pm = g.pixel_m(&ctx.frame);
+    let est = f.area / (pm[0] * pm[1]);
     let stride = ((est / cap as f64).sqrt().ceil() as usize).max(1);
     let mut out = vec![];
     let mut gy = y0.floor().max(0.0) as usize;
@@ -487,31 +589,7 @@ fn find_lean(ctx: &Ctx, t: &Tiles, f: &Foot) -> Option<([f64; 2], f64)> {
     if base.len() < 40 {
         return None;
     }
-    // Pairs across the outline, every metre: (inside point, outside point).
-    let sign = {
-        let mut a = 0.0;
-        for i in 0..f.ring.len() {
-            let (p, q) = (f.ring[i], f.ring[(i + 1) % f.ring.len()]);
-            a += p[0] * q[1] - q[0] * p[1];
-        }
-        a.signum()
-    };
-    let mut pairs = vec![];
-    for i in 0..f.ring.len() {
-        let (a, b) = (f.ring[i], f.ring[(i + 1) % f.ring.len()]);
-        let (ex, ez) = (b[0] - a[0], b[1] - a[1]);
-        let len = ex.hypot(ez);
-        if len < 2.0 {
-            continue;
-        }
-        let n = [-ez / len * sign * 0.9, ex / len * sign * 0.9];
-        let steps = len.floor() as usize;
-        for s in 1..steps {
-            let t = s as f64 / steps as f64;
-            let p = [a[0] + ex * t, a[1] + ez * t];
-            pairs.push(([p[0] + n[0], p[1] + n[1]], [p[0] - n[0], p[1] - n[1]]));
-        }
-    }
+    let pairs = outline_pairs(f);
     if pairs.len() < 20 {
         return None;
     }
@@ -549,6 +627,161 @@ fn find_lean(ctx: &Ctx, t: &Tiles, f: &Foot) -> Option<([f64; 2], f64)> {
     }
     // Only a clear win over the footprint as drawn counts.
     (best.1 < s0 - 0.04).then_some((best.0, best.1))
+}
+
+/// Pairs across the outline, every metre: (inside point, outside point), 0.9 m either side.
+fn outline_pairs(f: &Foot) -> Vec<([f64; 2], [f64; 2])> {
+    let sign = {
+        let mut a = 0.0;
+        for i in 0..f.ring.len() {
+            let (p, q) = (f.ring[i], f.ring[(i + 1) % f.ring.len()]);
+            a += p[0] * q[1] - q[0] * p[1];
+        }
+        a.signum()
+    };
+    let mut pairs = vec![];
+    for i in 0..f.ring.len() {
+        let (a, b) = (f.ring[i], f.ring[(i + 1) % f.ring.len()]);
+        let (ex, ez) = (b[0] - a[0], b[1] - a[1]);
+        let len = ex.hypot(ez);
+        if len < 2.0 {
+            continue;
+        }
+        let n = [-ez / len * sign * 0.9, ex / len * sign * 0.9];
+        let steps = len.floor() as usize;
+        for s in 1..steps {
+            let t = s as f64 / steps as f64;
+            let p = [a[0] + ex * t, a[1] + ez * t];
+            pairs.push(([p[0] + n[0], p[1] + n[1]], [p[0] - n[0], p[1] - n[1]]));
+        }
+    }
+    pairs
+}
+
+// ---------------------------------------------------------------------------
+// register: where the tiles sit against the footprints.
+// ---------------------------------------------------------------------------
+
+/// The largest median shift (metres) between tiles and footprints `survey` accepts.
+const REG_MAX_M: f64 = 4.0;
+/// How far `register` looks each way, metres (past the old grid's 154 m).
+const REG_REACH: i32 = 170;
+
+/// Where one set's tiles sit against the footprints: in the top, middle and
+/// bottom tenth of every tile, the shift (north-south, then east-west, in 1 m
+/// steps up to `REG_REACH`) that puts the outlines of the low buildings there
+/// (at least 25) on the photo's strongest lightness edges. Tiles served over
+/// their recorded box give about a metre everywhere (the low roofs' own
+/// lean); tiles served stretched about their centre give 0 in the middle and
+/// tens of metres, opposite ways, at the top and bottom. Writes
+/// `register-<set>.csv` beside the imagery; returns the median |north-south|
+/// and |east-west| shift over the bands with a clear best, if 20 have one.
+fn registration(ctx: &Ctx, feet: &[Foot], set: &'static str, g: Grid) -> Option<[f64; 2]> {
+    const BANDS: [(&str, f64); 3] = [("top", 0.05), ("middle", 0.5), ("bottom", 0.95)];
+    type Key = (usize, usize, usize);
+    let mut groups: std::collections::BTreeMap<Key, Vec<usize>> = Default::default();
+    for (i, f) in feet.iter().enumerate() {
+        if f.height > 20.0 || f.area < 40.0 || f.area > 3000.0 {
+            continue;
+        }
+        let (lon, lat) = ctx.frame.to_lonlat(f.centroid[0], f.centroid[1]);
+        let (gx, gy) = g.px(lon, lat);
+        if gx < 0.0 || gy < 0.0 || gx as usize / TILE >= g.cols || gy as usize / TILE >= g.rows {
+            continue;
+        }
+        let (r, c) = (gy as usize / TILE, gx as usize / TILE);
+        let fy = gy / TILE as f64 - r as f64;
+        if let Some(b) = BANDS.iter().position(|b| (fy - b.1).abs() < 0.05) {
+            groups.entry((r, c, b)).or_default().push(i);
+        }
+    }
+    let mut by_row: std::collections::BTreeMap<usize, Vec<(Key, Vec<usize>)>> = Default::default();
+    for (k, list) in groups.into_iter().filter(|(_, l)| l.len() >= 25) {
+        by_row.entry(k.0).or_default().push((k, list));
+    }
+    // The shift along `axis` from `base` with the strongest outline contrast,
+    // and that contrast over the median of the scan.
+    let best_shift = |t: &Tiles, pairs: &[([f64; 2], [f64; 2])], axis: usize, base: [f64; 2]| -> Option<(f64, f64)> {
+        let luma = |x: f64, z: f64| sample_rgb(ctx, t, x, z).map(|c| 0.2126 * c[0] as f64 + 0.7152 * c[1] as f64 + 0.0722 * c[2] as f64);
+        let mut scores = vec![];
+        for s in -REG_REACH..=REG_REACH {
+            let mut o = base;
+            o[axis] += s as f64;
+            let (mut sum, mut n) = (0.0, 0usize);
+            for (pi, po) in pairs {
+                if let (Some(a), Some(b)) = (luma(pi[0] + o[0], pi[1] + o[1]), luma(po[0] + o[0], po[1] + o[1])) {
+                    sum += (a - b).abs();
+                    n += 1;
+                }
+            }
+            if n * 2 > pairs.len() {
+                scores.push((o[axis], sum / n as f64));
+            }
+        }
+        if scores.len() < 20 {
+            return None;
+        }
+        let best = *scores.iter().max_by(|a, b| a.1.total_cmp(&b.1))?;
+        let mut v: Vec<f64> = scores.iter().map(|s| s.1).collect();
+        v.sort_by(f64::total_cmp);
+        Some((best.0, best.1 / v[v.len() / 2].max(1e-9)))
+    };
+    let mut tiles = Tiles::new(set, g, &ctx.dir);
+    let mut rows: Vec<(Key, usize, Option<(f64, f64, f64, f64)>)> = vec![];
+    for (r, list) in &by_row {
+        tiles.keep_rows(r.saturating_sub(1), r + 1);
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let t = &tiles;
+        let got: Vec<(Key, usize, Option<(f64, f64, f64, f64)>)> = std::thread::scope(|s| {
+            let hs: Vec<_> = (0..threads())
+                .map(|_| {
+                    let next = &next;
+                    s.spawn(move || {
+                        let mut v = vec![];
+                        loop {
+                            let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some((key, ids)) = list.get(k) else { break };
+                            let pairs: Vec<_> = ids.iter().flat_map(|&i| outline_pairs(&feet[i])).collect();
+                            let res = best_shift(t, &pairs, 1, [0.0, 0.0]).and_then(|(dz, rz)| best_shift(t, &pairs, 0, [0.0, dz]).map(|(dx, rx)| (dz, rz, dx, rx)));
+                            v.push((*key, ids.len(), res));
+                        }
+                        v
+                    })
+                })
+                .collect();
+            hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
+        });
+        rows.extend(got);
+    }
+    rows.sort_by_key(|r| r.0);
+    let mut csv = String::from("row,col,band,buildings,shift_south_m,contrast_ratio_ns,shift_east_m,contrast_ratio_ew\n");
+    let mut clear: [Vec<f64>; 3] = [vec![], vec![], vec![]];
+    let (mut ns, mut ew) = (vec![], vec![]);
+    for ((r, c, b), n, res) in &rows {
+        let Some((dz, rz, dx, rx)) = res else { continue };
+        csv += &format!("{r},{c},{},{n},{dz:.0},{rz:.3},{dx:.0},{rx:.3}\n", BANDS[*b].0);
+        if *rz > 1.15 && *rx > 1.15 {
+            clear[*b].push(*dz);
+            ns.push(dz.abs());
+            ew.push(dx.abs());
+        }
+    }
+    let p = ctx.dir.join(format!("register-{set}.csv"));
+    std::fs::write(&p, csv).ok();
+    let med = |v: &mut Vec<f64>| {
+        v.sort_by(f64::total_cmp);
+        v.get(v.len() / 2).copied().unwrap_or(f64::NAN)
+    };
+    let by_band: Vec<String> = (0..3).map(|b| format!("{} {:+.0} m ({} bands)", BANDS[b].0, med(&mut clear[b]), clear[b].len())).collect();
+    let (mns, mew) = (med(&mut ns), med(&mut ew));
+    eprintln!(
+        "register {set}: {} of {} bands with a clear fit; median |shift| north-south {mns:.1} m, east-west {mew:.1} m; median shift south by band: {}; {}",
+        ns.len(),
+        rows.len(),
+        by_band.join(", "),
+        p.display()
+    );
+    (ns.len() >= 20).then_some([mns, mew])
 }
 
 fn trimmed_median(v: &mut [f32]) -> f32 {
@@ -726,10 +959,17 @@ fn manifest_digest(dir: &Path) -> u32 {
 }
 
 fn survey() {
-    let ctx = load_ctx();
+    let ctx = load_fetched();
     let feet: Vec<Foot> = ctx.city.buildings.iter().map(foot).collect();
     eprintln!("{} footprints (1:1 plan)", feet.len());
     set_haze(&ctx);
+    // 0. The tiles must sit on the footprints.
+    for (set, g) in [("rgb", ctx.rgb), ("cir", ctx.cir)] {
+        match registration(&ctx, &feet, set, g) {
+            Some(m) => assert!(m[0] <= REG_MAX_M && m[1] <= REG_MAX_M, "the {set} tiles sit {:.0} m north-south and {:.0} m east-west off the footprints (median, register-{set}.csv): not measured", m[0], m[1]),
+            None => eprintln!("register {set}: too few low buildings with a clear fit to check the tiles' placement"),
+        }
+    }
     // 1. The lean field from tall buildings.
     let tall: Vec<usize> = (0..feet.len()).filter(|&i| feet[i].height >= 24.0 && feet[i].area >= 250.0).collect();
     let tall_feet: Vec<Foot> = tall.iter().map(|&i| feet[i].clone()).collect();
@@ -977,7 +1217,7 @@ fn overlay(out: &Path, extra: &[String]) {
     // The pictures show the photo as delivered (the survey measures it dehazed).
     // SAFETY: before any thread starts.
     unsafe { std::env::set_var("EO_ROOF_DEHAZE", "off") };
-    let ctx = load_ctx();
+    let ctx = load_fetched();
     std::fs::create_dir_all(out).unwrap();
     let table = RoofTable::read(&out_dir().join("roof-colours-v1.bin.gz")).ok();
     // The lean field the survey used (roof offset per metre of height), to draw tall roofs where the photo shows them.
