@@ -79,7 +79,7 @@ pub mod on_foot {
     pub fn run_distance() -> f64 {
         if eo_data::groundscale::low_camera() { LOW_RUN_DISTANCE_M } else { RUN_DISTANCE }
     }
-    pub const ELEVATION_MIN: f64 = -1.0;
+    pub const ELEVATION_MIN: f64 = -1.25;
     pub const ELEVATION_MAX: f64 = 1.15;
     pub const SHOULDER: f64 = 0.5;
     pub const AIM_SHOULDER: f64 = 0.7;
@@ -341,7 +341,18 @@ impl OnFootCamera {
         let mut best = reach(arm_for(rest, 0.0));
         let mut rise = 0.0;
         let aiming_against_car = self.aim >= 0.5 && best.soft_blocked && !best.hard_blocked;
-        if best.blocked && best.allowed < desired * c::RISE_TARGET && !aiming_against_car {
+        // When the player intentionally tilts up to look at the sky, sun or tall
+        // buildings (`rest < 0`), the downward camera boom hits the sidewalk behind
+        // them. Never force `rise` to push their gaze back down toward the horizon,
+        // and do not swing yaw sideways when the obstruction is just the ground.
+        let looking_up = rest < 0.0;
+        let ground_clear = if rest < -1e-4 {
+            ((pivot.y - feet.y - c::RADIUS).max(0.1) / (-rest.sin())) - c::CLEARANCE
+        } else {
+            f64::INFINITY
+        };
+        let ground_hit = looking_up && best.allowed >= ground_clear - 0.35;
+        if best.blocked && best.allowed < desired * c::RISE_TARGET && !aiming_against_car && !looking_up {
             let at_eye = best.allowed;
             let gain_needed = if at_eye >= c::BODY_REVEAL_DISTANCE { c::RISE_MIN_GAIN_M } else { 0.0 };
             for step in c::RISE_STEPS {
@@ -357,14 +368,15 @@ impl OnFootCamera {
             }
         }
         let mut swing = 0.0;
-        if best.blocked && best.allowed < desired * c::RISE_TARGET && self.aim < 0.5 {
+        if best.blocked && best.allowed < desired * c::RISE_TARGET && self.aim < 0.5 && !ground_hit {
             let current = self.swing;
             let preferred = if current != 0.0 { current.signum() } else { 1.0 };
             let mut score = best.allowed;
+            let lifts: &[f64] = if looking_up { &[0.0] } else { &[0.0, c::RISE_STEPS[0], c::RISE_STEPS[1], c::RISE_STEPS[2]] };
             for step in c::SWING_STEPS {
                 for sign in [preferred, -preferred] {
                     let offset = sign * step;
-                    for lift in [0.0, c::RISE_STEPS[0], c::RISE_STEPS[1], c::RISE_STEPS[2]] {
+                    for &lift in lifts {
                         let angle = clamp(rest + lift, c::ELEVATION_MIN, c::ELEVATION_MAX);
                         let trial = reach(arm_for(angle, offset));
                         if trial.allowed < desired * c::RISE_TARGET {
@@ -514,7 +526,7 @@ impl OnFootCamera {
 }
 
 /// `WALK_PITCH_LIMITS` (player-camera-rig.js): up is negative.
-pub const WALK_PITCH_MIN: f64 = -1.05;
+pub const WALK_PITCH_MIN: f64 = -1.32;
 pub const WALK_PITCH_MAX: f64 = 0.95;
 
 /// `DRIVE_CAMERA` (player-camera-rig.js).
@@ -530,7 +542,7 @@ pub mod drive {
     pub const FAST_FOV: f64 = 59.0;
     pub const FAST_FOV_AT_MPS: f64 = 28.0;
     pub const DEFAULT_PITCH: f64 = 0.16;
-    pub const PITCH_MIN: f64 = -0.12;
+    pub const PITCH_MIN: f64 = -0.60;
     pub const PITCH_MAX: f64 = 0.9;
     pub const RECENTRE_DELAY_SEC: f64 = 1.5;
     pub const RECENTRE_RESPONSIVENESS: f64 = 4.5;
@@ -685,14 +697,17 @@ impl DriveCamera {
         let orbit = yaw + self.orbit_yaw;
         let pivot = DVec3::new(datum.x, datum.y + 1.2, datum.z);
         let lift = clamp(frame_angle, 0.0, d::FRAME_ANGLE) * clamp(self.lift_scale, 0.0, 1.0);
+        // Looking up past the old -0.12 rad floor keeps the boom safely off the road
+        // and adds the remaining upward tilt to the aim so the noon sun and skyline are visible.
+        let sky_lift = (-0.12 - pitch).max(0.0) * 0.85;
         let pose_at = |distance: f64| {
             let horizontal = pitch.cos() * distance;
             let position = DVec3::new(
                 datum.x - orbit.sin() * horizontal,
-                datum.y + d::height() + pitch.sin() * d::distance() * 0.6 + height_offset.max(0.0), // height(), distance()
+                (datum.y + d::height() + pitch.sin() * d::distance() * 0.6 + height_offset.max(0.0)).max(datum.y + 0.55), // height(), distance()
                 datum.z - orbit.cos() * horizontal,
             );
-            (position, lifted_aim(position, pivot, lift))
+            (position, lifted_aim(position, pivot, lift + sky_lift))
         };
         let framing = vehicle.and_then(|v| fit_vehicle_camera_distance(d::distance(), v, aspect, d::REST_FOV, &pose_at)); // distance()
         let (position, look_dir) = pose_at(framing.unwrap_or(d::distance()));
@@ -779,5 +794,104 @@ pub fn resolve_camera_collision(probe: &mut dyn CameraProbe, pivot: DVec3, desir
             ResolvedLens { position: pivot + dir * distance, blocked: true, distance }
         }
         _ => ResolvedLens { position: desired, blocked: false, distance: length },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FlatGround {
+        y: f64,
+        wall_z: Option<f64>,
+    }
+
+    impl CameraProbe for FlatGround {
+        fn probe(&mut self, origin: DVec3, direction: DVec3, max_distance: f64, _radius: Option<f64>) -> Option<ProbeHit> {
+            let mut best = f64::INFINITY;
+            if direction.y < -1e-6 && origin.y > self.y {
+                let t = (self.y - origin.y) / direction.y;
+                if t >= 0.0 && t <= max_distance {
+                    best = best.min(t);
+                }
+            }
+            if let Some(wz) = self.wall_z {
+                if direction.z.abs() > 1e-6 {
+                    let t = (wz - origin.z) / direction.z;
+                    if t >= 0.0 && t <= max_distance {
+                        best = best.min(t);
+                    }
+                }
+            }
+            best.is_finite().then_some(ProbeHit { distance: best, soft: false })
+        }
+    }
+
+    #[test]
+    fn looking_up_on_foot_is_not_pushed_down_by_the_ground() {
+        let mut cam = OnFootCamera::default();
+        let mut ground = FlatGround { y: 0.0, wall_z: None };
+        let input = OnFootInput {
+            feet: DVec3::ZERO,
+            yaw: 0.0,
+            pitch: WALK_PITCH_MIN,
+            delta: 1.0 / 60.0,
+            shoulder_side: 1.0,
+            ..Default::default()
+        };
+        let mut pose = cam.update(&input, &mut ground);
+        for _ in 0..120 {
+            pose = cam.update(&input, &mut ground);
+        }
+        let fwd = (pose.target - pose.position).normalize();
+        let look_up_deg = fwd.y.asin().to_degrees();
+        assert_eq!(pose.rise, 0.0, "ground hit while looking up must not trigger anti-crush rise");
+        assert!(pose.position.y > 0.25, "camera lens stays cleanly above the ground: y={}", pose.position.y);
+        // Noon sun in SF (~52 deg) must lie well inside the camera's upward gaze.
+        assert!(look_up_deg > 65.0, "expected upward look > 65 deg, got {look_up_deg:.1} deg");
+    }
+
+    #[test]
+    fn horizontal_wall_behind_player_still_triggers_rise() {
+        let mut cam = OnFootCamera::default();
+        // Low wall behind player at z = -1.2 (player faces +Z, boom points -Z).
+        struct LowWall;
+        impl CameraProbe for LowWall {
+            fn probe(&mut self, origin: DVec3, direction: DVec3, max_distance: f64, _radius: Option<f64>) -> Option<ProbeHit> {
+                if direction.z < -1e-6 {
+                    let t = (-1.2 - origin.z) / direction.z;
+                    let hit_y = origin.y + direction.y * t;
+                    if t >= 0.0 && t <= max_distance && hit_y < 2.0 {
+                        return Some(ProbeHit { distance: t, soft: false });
+                    }
+                }
+                None
+            }
+        }
+        let mut wall = LowWall;
+        let input = OnFootInput {
+            feet: DVec3::ZERO,
+            yaw: 0.0,
+            pitch: 0.0,
+            delta: 1.0 / 60.0,
+            shoulder_side: 1.0,
+            ..Default::default()
+        };
+        let mut pose = cam.update(&input, &mut wall);
+        for _ in 0..120 {
+            pose = cam.update(&input, &mut wall);
+        }
+        assert!(pose.rise > 0.05, "horizontal obstacle behind player should still lift the boom");
+    }
+
+    #[test]
+    fn looking_up_while_driving_tilts_into_sky_above_ground() {
+        let mut dc = DriveCamera::default();
+        dc.pitch = drive::PITCH_MIN;
+        let pose = dc.pose(DVec3::ZERO, 0.0, 0.0, None, 16.0 / 9.0);
+        let look_up_deg = pose.look_dir.y.asin().to_degrees();
+        assert!(pose.position.y >= 0.54, "drive lens must stay above road: y={}", pose.position.y);
+        // With 55 deg vertical FOV (+/- 27.5 deg), look_up_deg >= 28 deg frames the 52 deg noon sun.
+        assert!(look_up_deg >= 28.0, "expected drive upward look >= 28 deg, got {look_up_deg:.1} deg");
     }
 }
