@@ -100,17 +100,36 @@ pub fn people_contact_wgsl() -> &'static str {
 }
 
 /// The city's shader source the agents' module is made on: the full set but the
-/// single probe's lookups. With the cars' materials compiled in (`--car-materials`)
-/// the sun's penumbra (`--soft-shadows`, look.rs `shadow_wgsl` `LK_SHADOW_SOFT`) is
-/// left out of it: the two together are more than Apple's compiler takes (the
-/// agents' opaque pipeline failed, XPC_ERROR_CONNECTION_INTERRUPTED, measured in the
-/// round 1 integration), as the props' cut-out pipeline was. The cars and people
-/// then keep the tent filter; the street and the buildings keep the penumbra.
+/// single probe's lookups. The sun's penumbra (`--soft-shadows`, look.rs
+/// `shadow_wgsl` `LK_SHADOW_SOFT`) is looked up once at the top of the agents'
+/// fragment (`LK_SUN_PRE`, agents_draw.wgsl `ag_shade`), not inside look_light's
+/// key branch: there, with the cars' materials, Apple's compiler aborted the
+/// agents' opaque pipeline (XPC_ERROR_CONNECTION_INTERRUPTED: an LLVM fatal
+/// error in MTLCompilerService's instruction emission). r2i2 bisect on the
+/// round's switch set: not its size (fewer taps, no loads, no filter all
+/// failed); the same lookup hoisted out of that divergent branch builds, and a
+/// divergent test put back round it (the sub-pixel skip) failed again, so the
+/// agents' module keeps the penumbra's branch uniform. The occluder light
+/// (`--occluder-light`): the cars and people take what hides the sky as the
+/// city does, but the street's own sky from the volume they read at the point
+/// itself (`AMB_OL_STREET` off, ambient.wgsl `amb_sample`), not from the
+/// separate reads under it (`amb_sample_ground`), with which the opaque
+/// pipeline aborted Apple's compiler with the cars' materials (r2i1, r2i2, its
+/// reads hoisted too), and with the walls' or a deck's exitance worked out per
+/// pixel in any shape tried (r2i3): what hides the sky is lit by a stand-in set
+/// first thing in the fragment (`AMB_OL_PRE`, ambient.wgsl `amb_ol_pre`: the
+/// ground lobe x eo-look `occluder::AGENTS_OCCLUDER`), the rest of the model as
+/// the city's. Until r2i3 they kept the whole stand-in (the occluder light
+/// compiled out: the full ground lobe below them, the sunlit street's bounce
+/// under a deck), brighter than a deck's shade round them.
 fn agents_city_source() -> String {
-    let src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
+    let mut src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
     let f = crate::look::shader_features();
-    if f.car_materials && f.soft_shadows {
-        return src.replacen("const LK_SHADOW_SOFT: bool = true;", "const LK_SHADOW_SOFT: bool = false;", 1);
+    if f.soft_shadows {
+        src = src.replacen("const LK_SUN_PRE: bool = false;", "const LK_SUN_PRE: bool = true;", 1);
+    }
+    if f.occluder_light {
+        src = src.replacen("const AMB_OL_STREET: bool = true;", "const AMB_OL_STREET: bool = false;", 1).replacen("const AMB_OL_PRE: bool = false;", "const AMB_OL_PRE: bool = true;", 1);
     }
     src
 }
@@ -1145,15 +1164,34 @@ mod tests {
         super::set_people_contact(false);
     }
 
-    /// (`--soft-shadows` with `--car-materials`) the agents' module takes the tent, not the penumbra
-    /// (Apple's compiler fails the two together); either alone keeps its code as it was.
+    /// (`--soft-shadows`, `--occluder-light`) the agents' module keeps the penumbra,
+    /// looked up at the top of the fragment (`LK_SUN_PRE`), and takes the
+    /// occluder light with the street's sky from its own sample (`AMB_OL_STREET`
+    /// off), with or without the cars' materials; the stand-in as before without it.
     #[test]
-    fn the_agents_keep_the_tent_with_the_cars_materials() {
+    fn the_agents_look_the_sun_up_first_and_read_the_street_sky_where_they_stand() {
         let none = crate::look::ShaderFeatures::NONE;
-        let soft = |f: crate::look::ShaderFeatures| crate::look::with_shader_features(f, || super::agents_city_source().contains("const LK_SHADOW_SOFT: bool = true;"));
-        assert!(soft(crate::look::ShaderFeatures { soft_shadows: true, ..none }), "the penumbra alone");
-        assert!(soft(crate::look::ShaderFeatures { car_materials: true, ..none }), "(the constant is declared either way)");
-        assert!(!soft(crate::look::ShaderFeatures { soft_shadows: true, car_materials: true, ..none }), "the two together: the tent");
+        let src = |f: crate::look::ShaderFeatures| crate::look::with_shader_features(f, super::agents_city_source);
+        let soft = |s: &str| s.contains("const LK_SHADOW_SOFT: bool = true;");
+        let pre = |s: &str| s.contains("const LK_SUN_PRE: bool = true;");
+        let ol = |s: &str| s.contains("const SF_OCCLUDER_LIGHT: bool = true;");
+        let street = |s: &str| s.contains("const AMB_OL_STREET: bool = true;");
+        let first = |s: &str| s.contains("const AMB_OL_PRE: bool = true;");
+        let occ = |s: &str| s.contains(&format!("const AMB_OCCLUDER: f32 = {:.6};", crate::ambient::OCCLUDER_OVER_GROUND));
+        for cars in [false, true] {
+            let s = src(crate::look::ShaderFeatures { soft_shadows: true, occluder_light: true, car_materials: cars, ..none });
+            assert!(soft(&s) && pre(&s) && ol(&s) && !street(&s) && first(&s) && occ(&s), "cars' materials {cars}: the penumbra first, the occluder light from the point's own sample, worked out first");
+        }
+        let s = src(crate::look::ShaderFeatures { soft_shadows: true, car_materials: true, ..none });
+        assert!(occ(&s) && !ol(&s), "without the occluder light, the stand-in as before");
+        let s = src(crate::look::ShaderFeatures { car_materials: true, ..none });
+        assert!(soft(&s) && !pre(&s), "(the constants are declared either way; the lookup in place without the penumbra)");
+        // the city's own source looks the sun up in place and reads the street's sky apart.
+        let city = crate::look::with_shader_features(crate::look::ShaderFeatures { soft_shadows: true, occluder_light: true, ..none }, || crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false));
+        assert!(city.contains("const LK_SUN_PRE: bool = false;") && street(&city) && !first(&city));
+        let plane = crate::look::with_shader_features(crate::look::ShaderFeatures { occluder_light: true, ..none }, || crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false));
+        let far = crate::look::with_shader_features(crate::look::ShaderFeatures { occluder_light: true, ..none }, crate::look::city_shader_source_far);
+        assert!(!ol(&plane) && !ol(&far), "the props and the far layer keep the stand-in (their pipelines do not build with it)");
     }
 
     /// (`--people-contact`) the shader's joints are eo-agents' contact joints, in order.

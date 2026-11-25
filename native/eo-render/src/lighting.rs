@@ -255,6 +255,8 @@ mod tests {
         sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)
         sets.push(("screen gi".into(), look::ShaderFeatures { screen_gi: true, ..none })); // (`--screen-gi`)
         sets.push(("screen gi + sun bounce".into(), look::ShaderFeatures { screen_gi: true, sun_bounce: true, ..none }));
+        sets.push(("occluder light".into(), look::ShaderFeatures { occluder_light: true, ..none })); // (`--occluder-light`)
+        sets.push(("occluder light + sun bounce + every lighting part".into(), look::ShaderFeatures { occluder_light: true, sun_bounce: true, screen_gi: true, lx_bits: u32::MAX, car_materials: true, cinematic: true, ..none }));
         sets.push(("wet surfaces".into(), look::ShaderFeatures { wet_surfaces: true, ..none })); // (`--wet-surfaces`)
         sets.push(("wet surfaces, cinematic".into(), look::ShaderFeatures { wet_surfaces: true, cinematic: true, ..none }));
         sets.push(("screen reflect".into(), look::ShaderFeatures { screen_reflect: true, ..none })); // (`--screen-reflect`)
@@ -354,7 +356,7 @@ mod tests {
         // command line, `facade::glass_from_args` and `facade::far_from_args`, never from the look's options;
         // the sun bounce, the albedo's multi-bounce, the penumbra and the screen-space indirect light,
         // the reflect track's switches, the camera model and the cars' materials are their own, below)
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, wet_surfaces: false, screen_reflect: false, camera: false, car_materials: false, car_reflections: false, ..look::ShaderFeatures::ALL });
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, wet_surfaces: false, screen_reflect: false, camera: false, car_materials: false, car_reflections: false, ..look::ShaderFeatures::ALL });
         assert!(!f.street_pbr && !look::ShaderFeatures::ALL.street_pbr, "the street pass comes in with its switch only (eo-app)");
         assert!(f.street == 0 && look::ShaderFeatures::ALL.street == 0, "the street track's round-2 passes come in with their switches only (eo-app)");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
@@ -389,6 +391,7 @@ mod tests {
         assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SOFT_SHADOWS: bool = false;"));
         assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_TAN_DIAMETER: f32 = {:.8};", eo_look::penumbra::tan_diameter())), "the penumbra's constants reach the shader");
         assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_MIN_CASTER_M: f32 = {:.8};", eo_look::penumbra::MIN_CASTER_M)));
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_SUBPIXEL_PX: f32 = {:.8};", eo_look::penumbra::SUBPIXEL_PX)), "the penumbra's sub-pixel limit reaches the shader");
         // (`--screen-gi`) the same.
         let gi = look::LookOptions { screen_gi: true, ..on };
         assert!(look::ShaderFeatures::of(&gi, false, false, false).screen_gi);
@@ -396,6 +399,22 @@ mod tests {
         assert!(look::ShaderFeatures::ALL.limit(&gi).screen_gi);
         assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_SCREEN_GI: bool = false;"));
         assert!(look::ao_gi_filter_source().contains(&format!("const GI_FILTER_PLANE_M: f32 = {:.8};", eo_look::screen_gi::FILTER_PLANE_M)), "the gather's constants reach the filter");
+        // (`--occluder-light`) the same.
+        let ol = look::LookOptions { occluder_light: true, ..on };
+        assert!(look::ShaderFeatures::of(&ol, false, false, false).occluder_light);
+        assert!(!look::ShaderFeatures::NONE.limit(&ol).occluder_light);
+        assert!(look::ShaderFeatures::ALL.limit(&ol).occluder_light);
+        assert!(look::ShaderFeatures::NONE.wgsl().contains("const SF_OCCLUDER_LIGHT: bool = false;"));
+        assert!(look::ShaderFeatures::ALL.wgsl().contains("const SF_OCCLUDER_LIGHT: bool = true;"));
+        let wa = eo_look::occluder::WALL_ALBEDO;
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({:.8}, {:.8}, {:.8});", wa[0], wa[1], wa[2])), "the walls' albedo reaches the shader");
+        // the decks' undersides: their albedo and the lid's reading.
+        let w = look::ShaderFeatures::ALL.wgsl();
+        assert!(w.contains(&format!("const OL_DECK_ALBEDO: f32 = {:.8};", eo_look::occluder::DECK_ALBEDO)), "the decks' albedo reaches the shader");
+        assert!(w.contains(&format!("const OL_LID_R0: f32 = {:.8};", eo_look::occluder::LID_R0)) && w.contains(&format!("const OL_LID_R1: f32 = {:.8};", eo_look::occluder::LID_R1)), "the lid's reading reaches the shader");
+        // (`--soft-shadows`) the penumbra's discs are eo-look's Vogel taps.
+        let d = eo_look::penumbra::vogel_disc(eo_look::penumbra::SEARCH_TAPS);
+        assert!(look::ShaderFeatures::ALL.wgsl().contains(&format!("const PS_SEARCH_DISC: array<vec2<f32>, {}> = array<vec2<f32>, {}>(vec2<f32>({:.8}, {:.8}),", d.len(), d.len(), d[0][0], d[0][1])));
     }
 
     #[test]

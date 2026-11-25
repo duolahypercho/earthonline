@@ -55,6 +55,10 @@ use crate::math::*;
 /// Samples a point gathers (24 at half resolution: the frame's temporal
 /// resolve takes the rest of the noise).
 pub const SAMPLES: u32 = 24;
+/// Samples a point gathers a frame where the screen-space gather's history
+/// (`--screen-gi`, `screen_gi::HISTORY_WEIGHT`) holds the result: its mean
+/// over about 19 frames takes the rest, each frame's disc turned anew.
+pub const SAMPLES_WITH_HISTORY: u32 = 12;
 /// The gather's radius in light space, metres: a street's width and a
 /// canyon's lower floors (the falloff leaves a surface at 32 m about a
 /// tenth of one at 10 m).

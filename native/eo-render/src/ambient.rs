@@ -252,8 +252,13 @@ pub fn wgsl(levels: ShaderLevels) -> String {
         ShaderLevels::Plane => (0, true),
         ShaderLevels::Off => (0, false),
     };
+    // (`--occluder-light`) whether the street's own sky is read apart (ambient.wgsl
+    // `amb_sample_ground`): where the levels are; the agents' module turns it off,
+    // and turns on the stand-in set first thing in the fragment (`AMB_OL_PRE`,
+    // `amb_ol_pre`; agents.rs `agents_city_source`).
+    let street = levels == ShaderLevels::Full;
     s.push_str(&format!(
-        "const AMB_LAYERS: u32 = {}u;\nconst AMB_FINE_LAYERS: u32 = {}u;\nconst AMB_VOLUME_TEXELS: u32 = {VOLUME_TEXELS}u;\nconst AMB_PLANE_TEXELS: u32 = {PLANE_TEXELS}u;\nconst AMB_SHADER_LEVELS: u32 = {n}u;\nconst AMB_SHADER_ON: bool = {on};\n",
+        "const AMB_LAYERS: u32 = {}u;\nconst AMB_FINE_LAYERS: u32 = {}u;\nconst AMB_VOLUME_TEXELS: u32 = {VOLUME_TEXELS}u;\nconst AMB_PLANE_TEXELS: u32 = {PLANE_TEXELS}u;\nconst AMB_SHADER_LEVELS: u32 = {n}u;\nconst AMB_SHADER_ON: bool = {on};\nconst AMB_OL_STREET: bool = {street};\nconst AMB_OL_PRE: bool = false;\n",
         bake::LAYERS,
         bake::FINE_LAYERS
     ));
