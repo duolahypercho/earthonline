@@ -890,7 +890,7 @@ struct Volume {
     inscatter: vec3<f32>,
 };
 
-fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: vec3<f32>, sig_a: vec3<f32>, sig_s: vec3<f32>, bb_share: f32, daylight: f32) -> Volume {
+fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: vec3<f32>, sig_a: vec3<f32>, sig_s: vec3<f32>, bb_share: f32, daylight: f32, kd: f32) -> Volume {
     let sig_t = sig_a + sig_s;
     let ls = wo_refracted_sun_up(l);
     let mu_s = max(ls.y, 0.1);
@@ -900,7 +900,7 @@ fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: ve
     let k_sun = sig_t * (mu_v / mu_s + 1.0);
     var k_amb = sig_t * (mu_v / 0.75 + 1.0);
     if (daylight > 0.0) {
-        k_amb = mix(k_amb, sig_t * (mu_v * wo_daylight_ratio(sig_t, look.cove.y) + 1.0), daylight);
+        k_amb = mix(k_amb, sig_t * (mu_v * wo_daylight_ratio(sig_t, kd) + 1.0), daylight);
     }
     let ph = wo_phase(dot(tv, ls));
     let bb = sig_s * bb_share;
@@ -922,6 +922,22 @@ fn wo_cove(xz: vec2<f32>) -> f32 {
 }
 const WO_COVE_A = vec3<f32>(1.12, 0.93, 1.14);
 const WO_COVE_S = vec3<f32>(0.16, 0.20, 0.15);
+
+// The mapped dive uses the existing regional spectral diffuse attenuation. Beam
+// attenuation also includes light scattered out of the camera's narrow sightline.
+fn wo_marine_kd(ocean:f32, cove:f32) -> vec3f {
+    var regional = mix(WO_BAY2_FILL, WO_COAST2_FILL, ocean);
+    if look.cove.w > 0.5 { regional = mix(WO_BAY_DIVE_KD, WO_COAST_DIVE_KD, ocean); }
+    return mix(regional, regional*(0.80/max(lk_luma(regional), 0.01)), cove);
+}
+fn wo_marine_ext(ocean:f32,cove:f32,scatter:vec3f) -> vec3f {
+    if look.cove.w > 0.5 {
+        let absorption = mix(WO_BAY_DIVE_A, WO_COAST_DIVE_A, ocean);
+        let regional_kd = mix(WO_BAY_DIVE_KD, WO_COAST_DIVE_KD, ocean);
+        return absorption * mix(1., 0.80 / lk_luma(regional_kd), cove) + scatter;
+    }
+    return wo_marine_kd(ocean,cove) + scatter;
+}
 
 fn wo_underwater(depth: f32, l: vec3<f32>) -> vec3<f32> {
     let sig_t = vec3<f32>(0.432, 0.093, 0.059);
@@ -946,6 +962,17 @@ fn w_caustic(receiver: vec3<f32>, depth: f32, sun_up: vec3<f32>) -> f32 {
     let k = depth * (1.0 - 1.0 / WO_IOR) * wg_cascade_amp(entry.x).w / step;
     let area = (1.0 + k * dx.x) * (1.0 + k * dz.y) - k * k * dx.y * dz.x;
     return clamp(1.0 / max(abs(area), 0.3), 0.45, 2.5);
+}
+
+// The finite sun and unresolved slopes spread a focused spot over its
+// receiver. Both sides of the surface see the same footprint at the bed.
+fn w_focus_coherence(x: f32, depth: f32, sun_y: f32, cove: f32) -> f32 {
+    let cove_blur = exp(-cove * depth * 1.5);
+    if look.cove.w < 0.5 { return cove_blur; }
+    let slope_rms = sqrt(wu.wv_mss.w) * wg_cascade_amp(x).w;
+    let spread = depth / max(sun_y, 0.1) * (0.00465 + (1.-1./WO_IOR)*slope_rms);
+    let baseline = 3.0 * wu.sizes.w / 256.;
+    return cove_blur * baseline*baseline / (baseline*baseline + spread*spread);
 }
 
 // ---- the look's cascaded sun shadow (look_light.wgsl `lk_shadow`) ----
@@ -2400,6 +2427,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     let cove = wo_cove(world.xz);
     var sig_a = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove);
     var sig_s = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
+    if look.cove.z > 0.5 {
+        sig_a = wo_marine_kd(ocean,cove);
+        if look.cove.w > 0.5 { sig_a = wo_marine_ext(ocean,cove,sig_s) - sig_s; }
+    }
     var bb = mix(mix(WO_BAY_BB, WO_COAST_BB, ocean), 0.045, cove);
     // a beach's surf zone carries churned sand: opaque grey-green to
     // tan, never clear blue (strongest inside the break, gone past 450 m).
@@ -2441,8 +2472,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     }
     let sun = look.key.xyz * vol_shadow;
     let sky_irr = look.hemi_sky.xyz / WG_PI;
-    let daylight = select(0.0, cove, look.cove.y > 0.0);
-    var vol = wo_volume(path, tv, l, sun, sky_irr, sig_a, sig_s, bb, daylight);
+    let daylight = max(select(0.0, cove, look.cove.y > 0.0), look.cove.z);
+    var vol = wo_volume(path, tv, l, sun, sky_irr, sig_a, sig_s, bb, daylight, select(look.cove.y, lk_luma(wo_marine_kd(ocean,cove)), look.cove.z > 0.5));
     // the bay is turbid (visibility under a metre): the bottom through
     // it fades within about a metre of water, so Crissy's sand is not seen
     // through the strait.
@@ -2706,8 +2737,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         let entering_sun = sun * (1.0 - wo_fresnel(l.y, WO_IOR)) * smoothstep(0.0, 0.08, l.y);
         let ambient = w_sh(vec3<f32>(0.0, 1.0, 0.0)) * look.ambient.w * look.env_class.w + look.hemi_sky.xyz + look.ambient.xyz;
         let share = lk_luma(entering_sun) / max(lk_luma(entering_sun + ambient), 1e-5);
-        let focus = mix(1.0, bed_focus, exp(-cove * bottom_depth * 1.5));
-        let light = wo_daylight_bed(bottom_depth, sig_a + sig_s, ls_up.y, share, focus, look.cove.y);
+        let focus = mix(1.0, bed_focus, w_focus_coherence(p_bottom.x, bottom_depth, ls_up.y, cove));
+        let light = wo_daylight_bed(bottom_depth, sig_a + sig_s, ls_up.y, share, focus, select(look.cove.y, lk_luma(wo_marine_kd(ocean,cove)), look.cove.z > 0.5));
         s.through = mix(s.through, vol.tview * light * k_t * (1.0 - fog) * (1.0 - 0.4 * film), daylight);
     }
     s.uv = uv_f;

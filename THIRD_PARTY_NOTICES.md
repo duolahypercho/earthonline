@@ -124,6 +124,10 @@ carries its sources under `meta.sources`.
   in Environmental Sciences (CIRES) at the University of Colorado, Boulder,
   2014, https://doi.org/10.25921/ds9v-ky35. Not for navigation; NOAA and
   NCEI give no warranty and do not endorse this product.
+- **NOAA NCEI ETOPO 2022**, 15 arc-second global relief. The regional shelf and
+  Bay subset supplies offshore soundings beyond the detailed city grid. US
+  Government public-domain data. [Dataset](https://doi.org/10.25921/fd45-gt74)
+  and [build record](public/data/sf/sf-shelf.NOTICE.txt).
 - **ESA WorldCover 10 m 2021 v200** (`sf-land-cover.bin.gz`): © ESA
   WorldCover project 2021 / Contains modified Copernicus Sentinel data
   (2021) processed by ESA WorldCover consortium. Zanaga, D. et al., 2022,
@@ -309,6 +313,8 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 | `ISC` | 1 | libloading 0.8.9 |
 <!-- END GENERATED: cargo-licences -->
 
+The submerged reef uses reduced colour, normal and roughness maps from *Coast Sand 04* by Rob Tuytel, Dario Barresi ([source](https://polyhaven.com/a/coast_sand_04), [provenance](public/assets/shore/coast-sand-04.provenance.json)) and *Damp Beach Sand* by Dimitrios Savva ([source](https://polyhaven.com/a/damp_beach_sand), [provenance](public/assets/shore/damp-beach-sand.provenance.json)). Both scans are from Poly Haven under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The reef rocks also use the credited *Seaside Rock* scan.
+
 The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
 
 The optional 21 Beaver sitting-room carpet uses the public-domain recto photograph of *Carpet*, attributed to Turkey, first half of the nineteenth century, Bequest of Joseph V. McMullan, 1973, accession 1974.149.36. The material builder rectifies and resamples the photograph. [The Metropolitan Museum of Art object record](https://www.metmuseum.org/art/collection/search/452588) · [The Met Open Access policy](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access).
@@ -333,3 +339,16 @@ Source SHA-256 values:
 
 - `2016_2021SanFranciscoBayWaterQualityData.csv` — `726906506c62e64b5a3e78a8c4e41100cf4e1f6f82c54a13e5adcf892639ddcf`
 - `SFBay_TableofStationLocations_v4.csv` — `55f28f5b4f706ec0b0d78feafc56be1779e665fc7e9ebd5dfc0041c8edec7726`
+
+## Procedural marine forms
+
+The two rock outcrops, sponges, branching colony, kelp-column arrangement and
+baitfish use mesh generators by Maksymilian Dendura, copyright 2026, licensed
+under MIT. The source leaf shader supplies the kelp's taper, curl, width, twist,
+edge ruffling and pigment. Earth Online bakes the geometry, adds a midrib and
+adapts the animation and placement to the coastal habitat. Earth Online contributors
+modeled the bull-kelp forms, eelgrass shoots, bedrock ledges and fractured boulders. Their biological
+references are listed in the provenance record. The shipped model includes
+[the original license](public/assets/ocean/reef-forms.LICENSE.txt) and a
+[provenance record](public/assets/ocean/reef-forms.provenance.json).
+[Upstream source at the pinned revision](https://github.com/Noniv/abyssal-garden/tree/a596354eff400d458bc2aeb9bdf5e0a9734b2bcf).

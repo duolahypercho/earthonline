@@ -218,7 +218,7 @@ impl Player {
         while self.accumulator >= tuning::FIXED_STEP_S - 1e-9 {
             self.accumulator -= tuning::FIXED_STEP_S;
             self.fixed_step(world, &i);
-            i.jump = false;
+            if !self.is_swimming(world) { i.jump = false; }
             i.vehicle_toggle = false;
             i.interact = false;
             n += 1;
@@ -271,7 +271,11 @@ impl Player {
         }
         match self.mode {
             Mode::OnFoot => {
-                self.walk_step(world, input, dt);
+                if self.is_swimming(world) {
+                    self.swim_step(world, input, dt);
+                } else {
+                    self.walk_step(world, input, dt);
+                }
                 for v in &mut self.vehicles {
                     v.park(world);
                 }
@@ -295,6 +299,29 @@ impl Player {
             self.drive_cam.update(dt, input.look_behind);
         }
         self.ticks += 1;
+    }
+
+    pub fn is_swimming(&self, world: &CollisionWorld) -> bool {
+        let feet = self.character.feet();
+        self.mode == Mode::OnFoot && self.lift.is_none() && world.ground.water_column(feet.x, feet.z)
+            .is_some_and(|(floor, surface)| surface - floor > 1.22 && feet.y <= surface - 1.09 && feet.y >= floor - 0.35)
+    }
+
+    fn swim_step(&mut self, world: &CollisionWorld, input: &StepInput, dt: f64) {
+        let feet = self.character.feet();
+        let (x, z) = momentum::stick_world(input.move_x, input.move_y * self.pitch.cos(), self.yaw);
+        let vertical = f64::from(input.jump as u8) - f64::from(input.crouch as u8) - input.move_y * self.pitch.sin();
+        let speed = if input.sprint { 2.3 } else { 1.35 };
+        let mut delta = DVec3::new(x, vertical, z).clamp_length_max(1.) * speed * dt;
+        if let Some((floor, surface)) = world.ground.water_column(feet.x + delta.x, feet.z + delta.z) {
+            delta.y = (feet.y + delta.y).clamp(floor + 0.03, (surface - 1.10).max(floor + 0.03)) - feet.y;
+        }
+        self.character.swim(world, delta, dt);
+        self.momentum.reset();
+        self.sprint_held_s = 0.;
+        self.sprint = 0.;
+        self.ground_speed = self.character.feet().distance(feet) / dt;
+        self.facing_yaw = self.yaw;
     }
 
     fn walk_step(&mut self, world: &CollisionWorld, input: &StepInput, dt: f64) {
@@ -507,6 +534,13 @@ impl Player {
 
     /// The camera for this drawn frame (advances the camera filters by `frame_dt`).
     pub fn camera(&mut self, world: &CollisionWorld, frame_dt: f64, aspect: f64) -> CameraView {
+        if self.is_swimming(world) {
+            return CameraView {
+                eye: self.character.feet() + DVec3::Y * 1.49,
+                forward: DVec3::new(self.yaw.sin() * self.pitch.cos(), -self.pitch.sin(), self.yaw.cos() * self.pitch.cos()),
+                fov_deg: 64., body_visible: false,
+            };
+        }
         match self.mode {
             Mode::OnFoot => {
                 let mut probe = WorldProbe { world, exclude: None, filter: layer::WORLD | layer::STREET | layer::VEHICLE };

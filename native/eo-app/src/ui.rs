@@ -148,6 +148,9 @@ impl Flags {
                 "--no-kit" => args.kit = false,
                 "--no-shadows" => args.look.shadows = false,
                 "--no-settings-apply" => {} // read by `settings_apply`
+                "--ocean-life" | "--no-ocean-life" | "--ocean-reef" | "--no-ocean-reef"
+                | "--dive-detail" | "--no-dive-detail" | "--coastal-habitat" | "--no-coastal-habitat" | "--rocky-reef" | "--no-rocky-reef"
+            | "--reef-materials" | "--no-reef-materials" | "--dive-daylight" | "--no-dive-daylight" | "--no-reef-kelp" | "--no-reef-canopy-light" | "--no-reef-rocks" => {}
                 "--water-optics" => args.look.water_optics = true,
                 "--cove-detail" => args.cove_detail = true,
                 "--cove-canopy" => { args.cove_detail = true; args.look.cove_canopy = true; }

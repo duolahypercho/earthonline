@@ -489,6 +489,44 @@ EO_NATIVE_CACHE=... ./target/release/eo-app --shots views.json --out shots-out -
 EO_NATIVE_CACHE=... ./target/release/eo-app --scene-cards --out cards-out
 ```
 
+### Swim the Pacific and San Francisco Bay
+
+The [SF coast and Bay water production plan](../Docs/SF-OCEAN-PRODUCTION-PLAN.md) sets the scope for the playable region, the three reference swims and the frame-time checks.
+
+Start the single-player game at Aquatic Park:
+
+```sh
+./target/release/eo-app --play --ocean-life --dive-site bay
+```
+
+Other starts are `black-point`, `pacific` (Ocean Beach), `channel` (Golden Gate),
+`east-bay`, `south-bay`, `shelf` and the Mile Rocks entries `reef` and `kelp`. With `--ocean-life` alone, walk into the
+water from the usual city spawn. Swim with the movement keys and mouse, hold
+Space to rise, C or Ctrl to descend, and Shift for a faster stroke. Shallow
+water returns to walking. The dive uses the single-player fixed physics step.
+
+The terrain uses the city's NOAA CUDEM soundings and NOAA ETOPO 2022 regional
+relief. Small-scale ridges, rock shapes, patches of eelgrass, macroalgae, fish
+schools and soft-bottom animals are procedural habitat suggestions. Outside
+the city, the relief represents a grid roughly 400 m across. The habitat window
+follows the diver. The start locations are bookmarks throughout the same sea.
+The switch also enables water optics and dive exposure unless explicitly disabled.
+
+Run `./target/release/eo-app --play --ocean-reef --dive-detail --dive-site kelp` to enter the
+Pacific kelp habitat. The additional rock outcrops, colonies and schooling fish
+use the licensed procedural mesh generators credited in the third-party notices.
+The kelp grows on the modeled hard bottom within the lit coastal depth range.
+These are habitat reconstructions. To rebuild the seven source forms and the
+detailed coastal variants using the pinned sources and original plant models, run `node scripts/blender-ocean/cook-reef.mjs` at the repository root.
+
+The marine library comes from the original Blender habitat study. Restore the
+locked source with `npm run assets:pull -- ocean/sf-habitats` at the repository
+root, then rebuild the game mesh and its digest with the following command:
+
+```sh
+blender -b artifacts/ocean/sf-habitats.blend --python-exit-code 1 --python scripts/blender-ocean/export_habitat.py
+```
+
 ### Kill switches
 
 Every visual feature can be turned off from the command line, so a change
@@ -498,6 +536,13 @@ selection:
 | Area | Switches |
 | --- | --- |
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
+| Coastal plant communities | `--coastal-habitat` includes the reef and dive optics, with bull-kelp crowns at exposed rocks, eelgrass shoots on sheltered sediment, and broken whitecaps seen from below. Add `--no-coastal-habitat` to an `--ocean-reef --dive-detail` run for the former plants. |
+| Rocky reef | `--rocky-reef` includes the coastal habitat with individual kelp forms, light filtered through the canopy, and partly buried ledges and boulders. Compare with `--coastal-habitat --no-rocky-reef`. With the reef enabled, `--no-reef-kelp`, `--no-reef-canopy-light` and `--no-reef-rocks` disable the three additions independently. |
+| Reef surfaces | `--reef-materials` adds rock, damp sand and coarse beach sand scans to the rocky reef. With `--rocky-reef`, `--no-reef-materials` restores the previous rock and sediment shaders. |
+| Submerged daylight | Add `--dive-daylight` to `--coastal-habitat` or `--rocky-reef` for wavelength-dependent scattered light, depth-filtered caustics and softer kelp shadows. `--no-dive-daylight` restores the previous underwater lighting on the same reef. |
+| Underwater close detail | Add `--dive-detail` for camera-relative water rays, regional underwater light absorption, depth-filtered sunlight and moving reef blades. `--no-dive-detail` restores the previous dive. Use with `--ocean-reef` for the kelp and schooling fish. |
+| Pacific kelp and reef forms | `--ocean-reef` includes the mapped marine habitats. Add `--no-ocean-reef` to an `--ocean-life` run for the original Blender habitats alone. |
+| Mapped marine habitats and swimming | `--ocean-life` enables the surveyed seafloor, regional light transport, fish, plants and seabed animals. `--no-ocean-life` restores the previous water. |
 | Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |
 | Underwater habitats | `--underwater-habitats` adds the Bay and Pacific beds. `--no-underwater-habitats` removes them |
 | Aquatic Park Cove | `--cove-detail` enables the beach profile, cobbles, pier parapet, distant wooded slope, fair-weather clouds and cove optics. `--no-cove-detail` restores the previous scene. The Bay dive-site starts enable the preview. |

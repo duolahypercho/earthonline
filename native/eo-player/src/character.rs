@@ -15,7 +15,7 @@
 //! the swept move with snap-to-ground off while lifting or holding; landing,
 //! and the refused-fall press. `jump()` and crouch are ported.
 //!
-//! Not ported: the impact hand-off to a dynamic body, mantles, swimming and
+//! Not ported: the impact hand-off to a dynamic body, mantles and
 //! the open-water hazard, interiors, loose-prop pushes, vehicle-contact events,
 //! obstacle steering round poles (there are no street props here yet).
 //!
@@ -127,6 +127,23 @@ impl Character {
         self.kerb_step_lift = 0.0;
         self.kerb_hold_steps = 0;
         self.perched_steps = 0;
+    }
+
+    /// Sweep the same body used on foot, with no stair assist or downward snap.
+    pub(crate) fn swim(&mut self, world: &CollisionWorld, delta: DVec3, dt: f64) {
+        let mut controller = self.controller;
+        controller.snap_to_ground = None;
+        controller.autostep = None;
+        let filter = QueryFilter::default().groups(InteractionGroups::new(layer::CHARACTER, Self::filter(), InteractionTestMode::And));
+        let queries = world.physics.query_pipeline_with_filter(filter);
+        let pose = Pose::from_translation(Vector::new(self.position.x as f32, self.position.y as f32, self.position.z as f32));
+        let result = controller.move_shape(dt as f32, &queries, &self.shape(), &pose, Vector::new(delta.x as f32, delta.y as f32, delta.z as f32), |_| {});
+        self.position += DVec3::new(result.translation.x as f64, result.translation.y as f64, result.translation.z as f64);
+        self.vertical_velocity = 0.;
+        self.grounded = false;
+        self.perched_steps = 0;
+        self.kerb_step_lift = 0.;
+        self.kerb_hold_steps = 0;
     }
 
     fn shape(&self) -> Capsule {

@@ -639,6 +639,7 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
         }
     };
     let mut cam = cam;
+    crate::ocean_habitat::dive_lens(world, &mut cam);
     let subject = spec.subject.as_ref().map(|s| {
         let (feet, yaw) = subject_place(world, s, cam.eye.as_dvec3());
         (feet, yaw, s.model, s.walking)
@@ -1162,7 +1163,10 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     if let Some(b) = &inside {
         notes.push(format!("the eye is inside building {} (below its top, y {})", b["building"], b["top_y"]));
     }
-    let ground = io.world.elevation.ground(cam.eye.x as f64, cam.eye.z as f64);
+    let ground = io.world.marine_floor.as_ref()
+        .and_then(|sample| sample(glam::Vec2::new(cam.eye.x, cam.eye.z)))
+        .filter(|site| site.shore > 0.0)
+        .map_or_else(|| io.world.elevation.ground(cam.eye.x as f64, cam.eye.z as f64), |site| f64::from(site.floor));
     if (cam.eye.y as f64) < ground {
         notes.push(format!("the eye is {:.1} m under the drawn ground", ground - cam.eye.y as f64));
     }

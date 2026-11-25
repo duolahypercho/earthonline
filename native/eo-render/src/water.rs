@@ -201,7 +201,7 @@ struct WaterUniform {
     // the identity (0, 0, 1, 1) without a field
     wv_extra: [f32; 4],
     // x the sea's reach's extra run south (m; `CINEMATIC_SOUTH_REACH_M` under the
-    // cinematic look, stage L5, else 0: water_common.wgsl `wg_reach`); y, z, w 0
+    // cinematic look, stage L5, else 0: water_common.wgsl `wg_reach`); y the occupied canopy depth bands
     reach: [f32; 4],
 }
 
@@ -358,6 +358,8 @@ impl PlanGpu {
 pub struct WaterGpu {
     device: wgpu::Device,
     pub bytes: u64,
+    pub(crate) canopy_map: Option<wgpu::Texture>,
+    canopy_view: Option<wgpu::TextureView>,
     uniform_buf: wgpu::Buffer,
     fft_buf: wgpu::Buffer,
     fft_rows: wgpu::ComputePipeline,
@@ -817,6 +819,18 @@ impl WaterGpu {
             draw_entries.push(entry(16, fs, tex(filt, wgpu::TextureViewDimension::D3)));
             draw_entries.push(entry(17, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)));
         }
+        let canopy_map = (look.options.reef_canopy_light && look.options.water_optics).then(|| {
+            draw_entries.push(entry(20, fs, tex(filt, wgpu::TextureViewDimension::D2)));
+            let side = crate::ocean_life::canopy::SIDE;
+            let levels = if look.options.dive_daylight { crate::ocean_life::canopy::LEVELS } else { 1 };
+            bytes += (0..levels).map(|level| u64::from((side >> level).pow(2) * 4)).sum::<u64>();
+            d.create_texture(&wgpu::TextureDescriptor {
+                label: Some("kelp projected blade area"), size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
+                mip_level_count: levels, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, view_formats: &[],
+            })
+        });
+        let canopy_view = canopy_map.as_ref().map(|t| t.create_view(&Default::default()));
         let draw_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("water-draw-bgl"), entries: &draw_entries });
         // (ppr) the projection pass: the uniform, the opaque depth, the target buffer.
         let cs = wgpu::ShaderStages::COMPUTE;
@@ -834,7 +848,7 @@ impl WaterGpu {
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
             // + the dive exposure's switch, the display transforms (look.rs `DISPLAY_SHADER`, the camera look at group 0 bindings 16, 17)
-            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\n", look.options.dive_exposure) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + include_str!("underwater.wgsl")
+            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\nconst UW_DIVE_DETAIL: bool = {};\nconst UW_COASTAL_HABITAT: bool = {};\nconst UW_DIVE_DAYLIGHT: bool = {};\n", look.options.dive_exposure, look.options.dive_detail, look.options.coastal_habitat, look.options.dive_daylight) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + if look.options.reef_canopy_light { include_str!("ocean_life/canopy.wgsl") } else { "\nfn reef_transmission(p:vec3f, sun:vec3f) -> vec2f { return vec2f(1.); }\n" } + include_str!("underwater.wgsl")
         } else {
             draw_src
         };
@@ -932,6 +946,7 @@ impl WaterGpu {
         bytes += uniform_buf.size() + fft_buf.size();
         Self {
             device: d.clone(),
+            canopy_map, canopy_view,
             bytes,
             uniform_buf,
             fft_buf,
@@ -1289,10 +1304,10 @@ impl WaterGpu {
     /// (FFT and copy while water was seen lately; nothing drawn when all water
     /// is past `fog_far`, the look's range fog end), the uniforms.
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32) {
-        self.update_at_time(queue, cam, probe, active, fog_far, 0.0);
+        self.update_at_time(queue, cam, probe, active, fog_far, 0.0, None);
     }
 
-    pub(crate) fn update_at_time(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32, world_time: f64) {
+    pub(crate) fn update_at_time(&self, queue: &wgpu::Queue, cam: &Camera, probe: Option<glam::Vec3>, active: bool, fog_far: f32, world_time: f64, mapped_ocean: Option<crate::ocean_life::HabitatView>) {
         let mut st = self.state.lock().unwrap();
         st.active = active;
         if !active {
@@ -1314,8 +1329,8 @@ impl WaterGpu {
         st.near_waterline = self.submerged.as_ref().is_some_and(|(_, field)| {
             cam.eye.y <= sea + BOX_M + cam.near
                 && cam.eye.x >= self.extent[0] - 60000.0 && cam.eye.x <= self.extent[2] + 60000.0
-                && cam.eye.z >= self.extent[1] - 60000.0 && cam.eye.z <= self.extent[3]
-                && field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > 0.0
+                && cam.eye.z >= self.extent[1] - 60000.0 && cam.eye.z <= self.extent[3] + if mapped_ocean.is_some() {st.south_m} else {0.0}
+                && mapped_ocean.map(|v| v.wet).unwrap_or_else(||field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > 0.0)
         });
         let recent = st.always || st.near_waterline
             || match st.seen {
@@ -1377,7 +1392,7 @@ impl WaterGpu {
             wv_gn: { let n = eo_water::waves::EXPO_WIND_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
             wv_xa: pg.xa,
             wv_extra: self.extra_frame,
-            reach: [st.south_m, 0.0, 0.0, 0.0],
+            reach: [st.south_m, mapped_ocean.map_or(0., |v| f32::from(v.canopy_bands)), 0.0, 0.0],
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0, self.index_count, 0, 0, 0, 0, 0, 0, 0]));
@@ -1592,6 +1607,9 @@ impl WaterGpu {
                         wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&self.extra_view) },
                         wgpu::BindGroupEntry { binding: 19, resource: wgpu::BindingResource::Sampler(&self.clamp) },
                     ];
+                    if let Some(view) = &self.canopy_view {
+                        entries.push(wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::TextureView(view) });
+                    }
                     if self.submerged.is_some() {
                         let (lut, samp) = look.camera_lut();
                         entries.push(wgpu::BindGroupEntry { binding: 16, resource: wgpu::BindingResource::TextureView(lut) });

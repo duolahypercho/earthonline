@@ -1,0 +1,12 @@
+{
+  "url": "/assets/ocean/sf-habitat.glb",
+  "bytes": 241424,
+  "sha256": "68319d66745891bee8b31336e404289eaa5b3ca6ebcf2db19ef621a0b089a2dd",
+  "source": "artifacts/ocean/sf-habitats.blend",
+  "sourceSha256": "5feb77971c0e59a47aa645fb8ec8f4bb3d9863ca5f736f51655275afa6996822",
+  "author": "Earth Online contributors",
+  "license": "Project license (LICENSE)",
+  "builder": "scripts/blender-ocean/export_habitat.py",
+  "blender": "4.5.3 LTS",
+  "description": "Original aquatic animal, plant, shell and stone geometry and vertex pigments. No third-party texture or geometry is embedded."
+}

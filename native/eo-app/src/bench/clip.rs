@@ -122,7 +122,12 @@ fn one(io: &mut Io, c: &Clip, dir: &Path, timeout: f64, far: f32) -> Result<()> 
     let every = (60.0 / c.fps).round().max(1.0) as usize;
     let frames = (c.seconds * 60.0).round() as usize;
     let t0k = c.keys[0].t;
-    let cam_at = |i: usize| camera_at(c, t0k + i as f64 / 60.0, far, aspect);
+    let world = io.world;
+    let cam_at = |i: usize| {
+        let mut cam = camera_at(c, t0k + i as f64 / 60.0, far, aspect);
+        crate::ocean_habitat::dive_lens(world, &mut cam);
+        cam
+    };
     let seq = dir.join(&c.name);
     std::fs::create_dir_all(&seq)?;
     let cam0 = cam_at(0);
