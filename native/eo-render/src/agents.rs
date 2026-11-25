@@ -288,6 +288,15 @@ pub fn car_lamps_wgsl() -> String {
 fn agents_city_source() -> String {
     let mut src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
     let f = crate::look::shader_features();
+    if f.car_finish && f.tunnels {
+        // (round 2 integration) the cars' finish (`--car-finish`) with the bores (`--tunnels`)
+        // and the light track's agents' code (the penumbra looked up first, the occluder light)
+        // was more than Apple's compiler takes (agent-opaque, XPC_ERROR_CONNECTION_INTERRUPTED,
+        // deterministic; aaa/vehicles alone builds it, with aaa/light merged it aborts): there
+        // the cars and people keep the tent and the occluder light's stand-in, as they did
+        // before round 2 (the city keeps both).
+        return src.replacen("const LK_SHADOW_SOFT: bool = true;", "const LK_SHADOW_SOFT: bool = false;", 1).replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+    }
     if f.soft_shadows {
         src = src.replacen("const LK_SUN_PRE: bool = false;", "const LK_SUN_PRE: bool = true;", 1);
     }
@@ -1447,6 +1456,14 @@ mod tests {
         let plane = crate::look::with_shader_features(crate::look::ShaderFeatures { occluder_light: true, ..none }, || crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false));
         let far = crate::look::with_shader_features(crate::look::ShaderFeatures { occluder_light: true, ..none }, crate::look::city_shader_source_far);
         assert!(!ol(&plane) && !ol(&far), "the props and the far layer keep the stand-in (their pipelines do not build with it)");
+        // (round 2 integration) the cars' finish with the bores: the tent and the stand-in in the agents' module alone
+        let fb = crate::look::ShaderFeatures { soft_shadows: true, occluder_light: true, car_materials: true, car_finish: true, structures: true, tunnels: true, ..none };
+        let s = src(fb);
+        assert!(!soft(&s) && !pre(&s) && !ol(&s), "finish and bores: the tent, the stand-in");
+        let city = crate::look::with_shader_features(fb, || crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false));
+        assert!(soft(&city) && ol(&city), "the city keeps the penumbra and the occluder light");
+        let s = src(crate::look::ShaderFeatures { tunnels: false, structures: true, ..fb });
+        assert!(soft(&s) && pre(&s) && ol(&s), "without the bores the finish keeps the light track's agents' code");
     }
 
     /// (`--people-capsules`) the shader's joints are eo-agents' capsule joints, in order.
