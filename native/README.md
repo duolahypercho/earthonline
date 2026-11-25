@@ -491,6 +491,8 @@ EO_NATIVE_CACHE=... ./target/release/eo-app --scene-cards --out cards-out
 
 ### Swim the Pacific and San Francisco Bay
 
+The [SF coast and Bay water production plan](../Docs/SF-OCEAN-PRODUCTION-PLAN.md) sets the scope for the playable region, the three reference swims and the frame-time checks.
+
 Start the single-player game at Aquatic Park:
 
 ```sh
