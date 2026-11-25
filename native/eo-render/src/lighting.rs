@@ -323,6 +323,12 @@ mod tests {
             sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`, `--palm-variety`, `--crown-light`, `--far-palms`, `--prop-far-shadow`)
         }
         sets.push(("all + nature".into(), look::ShaderFeatures { nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL }));
+        // (round 2 integration) every track's switches together, as the round's capture compiles them
+        let street = look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF;
+        sets.push((
+            "round 2: every track together".into(),
+            look::ShaderFeatures { far_relief: true, facade_patina: true, window_depth: true, street_pbr: true, street, car_lamps: true, car_wet: true, car_finish: true, camera_bits: crate::cine_post::CAM_BITS_ALL, nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL },
+        ));
         sets
     }
 

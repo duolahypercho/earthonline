@@ -1546,9 +1546,13 @@ mod tests {
     #[test]
     fn the_rear_lamps_compile_in_and_out_of_the_gather() {
         let none = crate::look::ShaderFeatures::NONE;
-        for (on, f) in [(false, none), (true, crate::look::ShaderFeatures { car_materials: true, car_lamps: true, cinematic: true, ..none }), (false, crate::look::ShaderFeatures { cinematic: true, ..none })] {
+        // (round 2 integration) with the night track's rear lamps and signals and the reflect
+        // track's lamp streaks beside them: the cars' rear lamps lit once, streaked once.
+        let all_rear = crate::look::ShaderFeatures { car_materials: true, car_lamps: true, cinematic: true, rear_lamps: true, signal_spill: true, lamp_units: true, lamp_streaks: true, ..none };
+        for (on, f) in [(false, none), (true, crate::look::ShaderFeatures { car_materials: true, car_lamps: true, cinematic: true, ..none }), (false, crate::look::ShaderFeatures { cinematic: true, ..none }), (true, all_rear), (false, crate::look::ShaderFeatures { car_lamps: false, ..all_rear })] {
             crate::look::with_shader_features(f, || {
-                let src = format!("{}\n{}\nconst LT_TILE_M: f32 = 1.0;\n{}{}", include_str!("sky_common.wgsl"), crate::sky::sea_wgsl(), crate::shop_lights::wgsl() + &crate::sky::cine_lamps_wgsl(f.cinematic) + &crate::sky::night_photometry_wgsl() + &crate::sky::lamp_bounce_wgsl(), include_str!("sky_lights.wgsl"));
+                // as sky.rs composes the gather's module (the night track's units, lenses and rear lamps with it)
+                let src = format!("{}\n{}\nconst LT_TILE_M: f32 = 1.0;\n{}{}", include_str!("sky_common.wgsl"), crate::sky::sea_wgsl(), crate::shop_lights::wgsl() + &crate::sky::cine_lamps_wgsl(f.cinematic) + &crate::sky::night_photometry_wgsl() + &crate::sky::lamp_bounce_wgsl() + &crate::sky::lamp_units_wgsl(), include_str!("sky_lights.wgsl"));
                 assert!(src.contains(&format!("const LT_CAR_LAMPS: bool = {on};")), "the constant follows the feature");
                 use wgpu::naga;
                 let m = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("the gather ({on}): {}", e.emit_to_string(&src)));
