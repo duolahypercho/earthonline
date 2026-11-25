@@ -679,14 +679,14 @@ pub fn decks(w: &WeatherState) -> Decks {
 /// convective cumulus mediocris and congestus climb to 4.2 km with broad multi-dome
 /// crowns; storm cumulonimbus reach 5.4 km.
 const VOL_HEIGHTS: [[f64; 2]; 5] = [
-    [1220.0, 4850.0],
+    [1620.0, 3550.0],
     [60.0, 320.0],
     [580.0, 2650.0],
     [560.0, 4400.0],
     [540.0, 6200.0],
 ];
 const VOL_OVERCAST_HEIGHTS: [f64; 2] = [750.0, 2900.0];
-const VOL_DAMP_HEIGHTS: [f64; 2] = [1080.0, 4850.0];
+const VOL_DAMP_HEIGHTS: [f64; 2] = [1350.0, 3800.0];
 /// Volumetric cumulus extinction (1/m): balanced vapor extinction lets light penetrate outer
 /// 50-150 m entrainment margins for glowing translucency while keeping distant ranges plump.
 const VOL_CUMULUS_SIGMA: f64 = 0.044;
@@ -720,8 +720,8 @@ pub fn volumetric_decks(w: &WeatherState) -> Decks {
     d.low_base_m = h[0];
     d.low_top_m = h[1];
     d.coverage = match w.kind {
-        Kind::Clear => 0.48,
-        Kind::Damp => 0.58,
+        Kind::Clear => 0.40,
+        Kind::Damp => 0.56,
         Kind::SunRain => 0.58,
         Kind::Overcast => 0.86,
         Kind::Fog => 0.92,
@@ -1186,7 +1186,7 @@ mod tests {
             assert!(d.extinction > 0.02 && d.extinction < 0.1, "{kind:?}: extinction {}", d.extinction);
         }
         // Every volumetric noise tile divides VOL_WRAP_TILE_M evenly for seamless drift wrapping.
-        for tile in [51200.0, 25600.0, 10240.0, 6400.0, 3200.0, 2560.0, 1280.0, 800.0, 640.0, 200.0, 80.0] {
+        for tile in [51200.0, 25600.0, 12800.0, 10240.0, 6400.0, 3200.0, 2560.0, 1600.0, 1280.0, 800.0, 640.0, 200.0, 80.0] {
             let r = VOL_WRAP_TILE_M % tile;
             assert!(r.abs() < 1e-9, "tile {tile} does not divide {VOL_WRAP_TILE_M}");
         }
