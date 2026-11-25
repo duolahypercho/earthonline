@@ -492,7 +492,7 @@ impl Default for SkyOptions {
             wet_relief: false,
             lamp_streaks: false,
             volumetric_clouds: true,
-            weather_fx: false,
+            weather_fx: true,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,

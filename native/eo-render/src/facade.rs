@@ -22,6 +22,7 @@
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The oracle the JS export wrote (tables, kit appearance sample, authored weathering).
 pub fn oracle() -> &'static Value {
@@ -462,9 +463,26 @@ impl FacadeGpu {
 // ---- the facades track's opt-in switches (read from the command line, as
 // `rooms::RoomFixes::from_args` and the far layer's switches are) ----
 
+static PLAY_DEFAULTS: AtomicBool = AtomicBool::new(false);
+
+/// Enable the facades track's switches by default for interactive play (`--play`),
+/// while still allowing every `--no-<feature>` kill switch to turn any off.
+pub fn set_play_defaults(on: bool) {
+    PLAY_DEFAULTS.store(on, Ordering::Relaxed);
+}
+
+fn play_default() -> bool {
+    PLAY_DEFAULTS.load(Ordering::Relaxed)
+}
+
+/// Whether `on` is set on `args`: the last of `on` and `off` given wins; neither, `default`.
+fn last_switch_default(args: &[String], on: &str, off: &str, default: bool) -> bool {
+    args.iter().rev().find(|a| *a == on || *a == off).map_or(default, |a| a == on)
+}
+
 /// Whether `on` is set on `args`: the last of `on` and `off` given wins; neither, off.
 pub fn last_switch(args: &[String], on: &str, off: &str) -> bool {
-    args.iter().rev().find(|a| *a == on || *a == off).is_some_and(|a| a == on)
+    last_switch_default(args, on, off, false)
 }
 
 /// `--facade-glass` (`--no-facade-glass`; off by default): the kit glazing
@@ -475,12 +493,14 @@ pub fn last_switch(args: &[String], on: &str, off: &str) -> bool {
 /// as before.
 pub fn glass_from_args() -> bool {
     let args: Vec<String> = std::env::args().collect();
-    last_switch(&args, "--facade-glass", "--no-facade-glass")
+    last_switch_default(&args, "--facade-glass", "--no-facade-glass", play_default())
 }
 
 /// `--far-facades` (`--no-far-facades`; off by default): the far layer's
 /// facades and roofs (hlod_draw.wgsl behind `SF_FAR_FACADES`). Off, the code
-/// is compiled out and the frame is as before.
+/// is compiled out and the frame is as before. Remains opt-in even in play mode
+/// because combining it with `--quality high` aborts Apple Metal's shader compiler
+/// on `hlod-draw` (`XPC_ERROR_CONNECTION_INTERRUPTED`).
 pub fn far_from_args() -> bool {
     let args: Vec<String> = std::env::args().collect();
     last_switch(&args, "--far-facades", "--no-far-facades")
@@ -497,7 +517,7 @@ pub fn weather_from_args() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
         let args: Vec<String> = std::env::args().collect();
-        last_switch(&args, "--facade-weather", "--no-facade-weather")
+        last_switch_default(&args, "--facade-weather", "--no-facade-weather", play_default())
     })
 }
 
@@ -511,7 +531,7 @@ pub fn weather_from_args() -> bool {
 /// compiled out and the frame is as before.
 pub fn canyon_from_args() -> bool {
     let args: Vec<String> = std::env::args().collect();
-    last_switch(&args, "--canyon-glass", "--no-canyon-glass")
+    last_switch_default(&args, "--canyon-glass", "--no-canyon-glass", play_default())
 }
 
 /// `--far-relief` (`--no-far-relief`; off by default): the far layer's
@@ -549,7 +569,7 @@ pub fn patina_from_args() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
         let args: Vec<String> = std::env::args().collect();
-        last_switch(&args, "--facade-patina", "--no-facade-patina")
+        last_switch_default(&args, "--facade-patina", "--no-facade-patina", play_default())
     })
 }
 
@@ -572,7 +592,7 @@ pub fn window_depth_from_args() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
         let args: Vec<String> = std::env::args().collect();
-        last_switch(&args, "--window-depth", "--no-window-depth")
+        last_switch_default(&args, "--window-depth", "--no-window-depth", play_default())
     })
 }
 
@@ -611,6 +631,8 @@ mod switch_tests {
         assert!(!last_switch(&a(&["--facade-glass", "--no-facade-glass"]), "--facade-glass", "--no-facade-glass"));
         assert!(last_switch(&a(&["--no-facade-glass", "--facade-glass"]), "--facade-glass", "--no-facade-glass"));
         assert!(!last_switch(&a(&["--facade-glassy"]), "--facade-glass", "--no-facade-glass"), "exact names only");
+        assert!(super::last_switch_default(&a(&[]), "--facade-glass", "--no-facade-glass", true), "play default turns it on");
+        assert!(!super::last_switch_default(&a(&["--no-facade-glass"]), "--facade-glass", "--no-facade-glass", true), "explicit --no-* overrides play default");
     }
 
     #[test]

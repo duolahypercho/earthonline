@@ -1244,10 +1244,10 @@ impl ShaderFeatures {
         car_materials: true, car_reflections: true, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, wire_light: true, // the night track
         nature: 0, // the nature track
-        volumetric_clouds: true, weather_fx: false,
+        volumetric_clouds: true, weather_fx: true,
     };
     /// No opt-in feature compiled in (the default frame's pipelines: the
-    /// features on by default, `phys_sky`, `ap_lut`, `far_facade` and `volumetric_clouds`, stay in).
+    /// features on by default, `phys_sky`, `ap_lut`, `far_facade`, `volumetric_clouds` and `weather_fx`, stay in).
     pub const NONE: Self = Self {
         lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false,
         rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, far_facade: true, seabed: false, cove_sediment: false,
@@ -1259,7 +1259,7 @@ impl ShaderFeatures {
         car_materials: false, car_reflections: false, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, wire_light: false, // the night track
         nature: 0, // the nature track
-        volumetric_clouds: true, weather_fx: false,
+        volumetric_clouds: true, weather_fx: true,
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -1740,7 +1740,9 @@ pub fn props_city_source(src: String) -> String {
 }
 
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
-    let s = sf_select_with(&city_shader_parts(ambient, shadow, single_probe), single_probe); // the natural-detail and weather-fx blocks (`// sf:`) of the features compiled in (props and agents never puddle)
+    // The far layer (`ShadowLevels::Far`: hlod-draw, hlod-trees, hlod-lights) lies past
+    // street-level puddle/rain-ring range and stands at Apple's shader compiler's limit.
+    let mut s = sf_select_with(&city_shader_parts(ambient, shadow, single_probe), single_probe && shadow != ShadowLevels::Far); // the natural-detail and weather-fx blocks (`// sf:`) of the features compiled in (props, agents and far layer never puddle)
     if ambient == crate::ambient::ShaderLevels::Plane {
         // (`--occluder-light`) the plane-only pipelines (the far layer, the props) keep the
         // stand-in for the blocked sky: on Apple's GPU `hlod-draw` failed to build with the
@@ -1748,7 +1750,45 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         // and `prop-cutout` with the test suite's feature set (r2i3, tests/props.rs, in every
         // shape tried, the agents' stand-in set first included), though it built with the
         // round's: XPC_ERROR_CONNECTION_INTERRUPTED.
-        return s.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+        s = s.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+    }
+    if shadow == ShadowLevels::Far {
+        // The far layer (`hlod-draw`, `hlod-trees`, `hlod-lights`) never draws near city streets,
+        // kit facades, houses, viaducts, seabed, cascades or screen reflections; folding those
+        // dead near-city branches out keeps `hlod-draw` well inside Apple Metal's compiler limit
+        // when every round-2 track is enabled together in `--play`.
+        for name in [
+            "SF_HOUSE",
+            "SF_STREET_PBR",
+            "SF_STREET_WEAR",
+            "SF_STREET_GLARE",
+            "SF_STREET_AGGREGATE",
+            "SF_PLAZA_SETTS",
+            "SF_WALK_RELIEF",
+            "SF_FACADE_GLASS",
+            "SF_FACADE_WEATHER",
+            "SF_CANYON_GLASS",
+            "SF_FACADE_PATINA",
+            "SF_WINDOW_DEPTH",
+            "SF_SOFT_SHADOWS",
+            "SF_WET_SURFACES",
+            "SF_SCREEN_REFLECT",
+            "SF_WET_RELIEF",
+            "SF_LAMP_STREAKS",
+            "SF_STRUCTURES",
+            "SF_TUNNELS",
+            "SF_SEABED",
+            "SF_COVE_SEDIMENT",
+            "SF_SHOP_LIGHT",
+            "SF_FACADE_CLUTTER",
+            "SF_STREET_LIFE",
+            "SF_ROOM_DEPTH",
+            "SF_REAR_LAMPS",
+            "SF_SIGNAL_SPILL",
+            "SF_WIRE_LIGHT",
+        ] {
+            s = s.replacen(&format!("const {name}: bool = true;"), &format!("const {name}: bool = false;"), 1);
+        }
     }
     s
 }
@@ -1764,7 +1804,7 @@ fn city_shader_parts(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels
         include_str!("facade_age.wgsl"),             // facade
         crate::facade::facade_constants_wgsl()        // facade
     ) + "\n" + &crate::rooms::wgsl_constants() + include_str!("rooms.wgsl")
-        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + &crate::sky_reflect::sky_light_source(single_probe || shadow != ShadowLevels::Full) // sky (the reflect track's switches' code out of the agents' variant, sky_reflect.rs)
+        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + &crate::sky_reflect::sky_light_source(shadow == ShadowLevels::Near || (single_probe && shadow == ShadowLevels::Full)) // sky (the reflect track's switches' code out of the agents' and far-layer variants, sky_reflect.rs)
         + "\n" + LOOK_EXT_WGSL // group 1 bindings 12-18
         + "\n" + crate::far_shadow::WGSL + &shadow_wgsl(shadow) // the far sun shadow map's lookup and the variant's shadow parts (lighting)
         + "\n" + &crate::ambient::wgsl(ambient) // the ambient volume's sampling (lighting)
