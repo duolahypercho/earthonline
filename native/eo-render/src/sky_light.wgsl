@@ -243,6 +243,52 @@ fn sky_local_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<
     return sky_local_lights_ao(world, n, v, diffuse, f0, rough, 1.0);
 }
 
+// sf:LEAF_SHADE+
+// (`--leaf-shade`, set by props_draw.wgsl on a palm's or a street tree's
+// pixels; w 0 everywhere else) the crown the point stands in: its centre (xyz)
+// and radius (w, m), and its leaf area's extinction (x per metre, uniform in
+// the crown; y m, its radial part's C in sigma(r) = C / r^2: the fronds of a
+// palm all leave the heart, so their leaf area per volume falls as the square
+// of the distance from it).
+var<private> sky_leaf: vec4<f32> = vec4<f32>(0.0);
+var<private> sky_leaf_k: vec2<f32> = vec2<f32>(0.0);
+// true in the props' module alone (look.rs `props_city_source`): every other
+// pipeline's lights' loop compiles as before, its registers untouched.
+const SKY_LEAF_ON: bool = false;
+
+/// (`--leaf-shade`) The share of a light at `lp` that reaches `p` through the
+/// crown's leaves (Beer-Lambert over the segment's optical depth inside the
+/// crown: the uniform part's length, and the radial part's C / b (atan(t1 / b)
+/// - atan(t0 / b)), b the segment line's distance from the centre, at least a
+/// tenth of the radius: the heart and the trunk's top).
+fn sky_leaf_t(p: vec3<f32>, lp: vec3<f32>) -> f32 {
+    let d = lp - p;
+    let len = max(length(d), 1e-4);
+    let w = d / len;
+    let oc = p - sky_leaf.xyz;
+    let b = dot(oc, w);
+    let disc = b * b - (dot(oc, oc) - sky_leaf.w * sky_leaf.w);
+    if (disc <= 0.0) {
+        return 1.0;
+    }
+    let r = sqrt(disc);
+    let t0 = max(-b - r, 0.0);
+    let t1 = min(-b + r, len);
+    if (t1 <= t0) {
+        return 1.0;
+    }
+    var tau = sky_leaf_k.x * (t1 - t0);
+    if (sky_leaf_k.y > 0.0) {
+        // atan(u1) - atan(u0) in one atan (u1 > u0: the difference lies in (0, pi))
+        let bl = max(sqrt(max(dot(oc, oc) - b * b, 0.0)), 0.1 * sky_leaf.w);
+        let u1 = (t1 + b) / bl;
+        let u0 = (t0 + b) / bl;
+        let q = 1.0 + u1 * u0;
+        tau = tau + sky_leaf_k.y / bl * (atan((u1 - u0) / q) + select(0.0, 3.14159265, q < 0.0));
+    }
+    return exp(-tau);
+}
+// sf:end
 /// `sky_local_lights` with the surface's occlusion `ao` (lighting,
 /// `--light-shadows`, `--headlight-shadows`; light_shadow.rs): while they are
 /// on, a light's record carries in its spare word its shadow map's tile + 1
@@ -337,6 +383,11 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
                 e = e * ls_light_visibility(u32(li.pad) - 1u, world, n);
             }
         }
+// sf:LEAF_SHADE+
+        if (SKY_LEAF_ON && sky_leaf.w > 0.0 && e > 0.0 && li.pad < 1.0) {
+            e = e * sky_leaf_t(world, li.pos); // (`--leaf-shade`) a light with no map of its own, through the crown's leaves
+        }
+// sf:end
         if (e > 0.0) {
             var re = rough;
             if (cine) {

@@ -286,8 +286,41 @@ mod tests {
         sets.push(("lit rooms, room depth".into(), look::ShaderFeatures { lit_rooms: true, room_depth: true, ..none })); // (`--lit-rooms`)
         sets.push(("rear lamps, signal spill, night photometry".into(), look::ShaderFeatures { rear_lamps: true, signal_spill: true, night_photometry: true, ..none })); // (`--rear-lamps`, `--signal-spill`: their lobes)
         sets.push(("wire light".into(), look::ShaderFeatures { wire_light: true, ..none })); // (`--wire-light`)
-        for bit in [look::NATURE_FOLIAGE, look::NATURE_LOD_FADE, look::NATURE_TURF, look::NATURE_PALM, look::NATURE_HILLS, look::NATURE_COVER, look::NATURE_FOLIAGE | look::NATURE_PALM, look::NATURE_TURF | look::NATURE_COVER, look::NATURE_ALL] {
-            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`)
+        for bit in [
+            look::NATURE_FOLIAGE,
+            look::NATURE_LOD_FADE,
+            look::NATURE_TURF,
+            look::NATURE_PALM,
+            look::NATURE_HILLS,
+            look::NATURE_COVER,
+            look::NATURE_BARE,
+            look::NATURE_PALM_VARIETY,
+            look::NATURE_FOLIAGE | look::NATURE_PALM,
+            look::NATURE_TURF | look::NATURE_COVER,
+            look::NATURE_TURF | look::NATURE_BARE,
+            look::NATURE_COVER | look::NATURE_BARE,
+            look::NATURE_PALM | look::NATURE_PALM_VARIETY,
+            look::NATURE_FOLIAGE | look::NATURE_PALM | look::NATURE_PALM_VARIETY,
+            look::NATURE_CROWN,
+            look::NATURE_FAR_PALMS,
+            look::NATURE_PROP_FAR,
+            look::NATURE_CROWN | look::NATURE_FAR_PALMS,
+            look::NATURE_FOLIAGE | look::NATURE_CROWN,
+            look::NATURE_FOLIAGE | look::NATURE_FAR_PALMS,
+            look::NATURE_LOD_FADE | look::NATURE_CROWN,
+            look::NATURE_LOD_FADE | look::NATURE_FAR_PALMS,
+            look::NATURE_FOLIAGE | look::NATURE_PROP_FAR,
+            look::NATURE_LEAF_SHADE,
+            look::NATURE_WET_FOLIAGE,
+            look::NATURE_FOLIAGE | look::NATURE_LEAF_SHADE,
+            look::NATURE_FOLIAGE | look::NATURE_WET_FOLIAGE,
+            look::NATURE_CROWN | look::NATURE_LEAF_SHADE,
+            look::NATURE_FOLIAGE | look::NATURE_CROWN | look::NATURE_LEAF_SHADE | look::NATURE_WET_FOLIAGE,
+            look::NATURE_LAWN_ALBEDO,
+            look::NATURE_TURF | look::NATURE_LAWN_ALBEDO,
+            look::NATURE_ALL,
+        ] {
+            sets.push((format!("nature {bit}"), look::ShaderFeatures { nature: bit, ..none })); // (`--foliage-light`, `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`, `--palm-variety`, `--crown-light`, `--far-palms`, `--prop-far-shadow`)
         }
         sets.push(("all + nature".into(), look::ShaderFeatures { nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL }));
         sets
@@ -306,7 +339,7 @@ mod tests {
                 for (label, src) in group1_shaders() {
                     parse(&format!("{name}: {label}"), &src);
                 }
-                let props = format!("{}\n{}\n{}", look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), look::sf_select(include_str!("props_draw.wgsl")));
+                let props = format!("{}\n{}\n{}", look::props_city_source(look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false)), include_str!("props_types.wgsl"), look::sf_select(include_str!("props_draw.wgsl")));
                 parse(&format!("{name}: props"), &props);
                 // the natural-detail blocks (`// sf:`): without the bits the props' shader holds
                 // the old back-light and none of the new code; with foliage, the new code alone.
@@ -320,13 +353,82 @@ mod tests {
                     assert!(props.contains(&format!("const PR_PALM: u32 = {}u;", eo_props::Model::Palm as u32)), "PR_PALM is eo_props::Model::Palm");
                 }
                 assert_eq!(props.contains("var palm_leaf"), foliage || palm, "{name}: the shared block is in with either bit");
+                // (`--palm-variety`) with `--palm-detail` only: the joined blocks (`// sf:A&B`)
+                let variety = f.nature & look::NATURE_PALM_VARIETY != 0 && palm;
+                assert_eq!(props.contains("fn pr_palm_variety("), variety, "{name}: the variety block follows both bits");
+                assert_eq!(props.contains("let pv = pr_palm_variety(inst);"), variety, "{name}: the trunk's hook follows both bits");
+                assert_eq!(props.contains("let pvc = pr_palm_variety(inst);"), variety, "{name}: the crown's hook follows both bits");
                 // (`--ground-cover`) the terrain's mosaic and its hook follow the bit
                 let city = look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false);
                 assert_eq!(city.contains("fn nt_cover("), f.nature & look::NATURE_COVER != 0, "{name}: the cover block follows its bit");
                 assert_eq!(city.contains("nt_cover(&s, nc_w"), f.nature & look::NATURE_COVER != 0, "{name}: the cover hook follows its bit");
+                // (`--bare-ground`) the bare ground and the revetments, their hooks, and the ground scans skipped under them
+                let bare = f.nature & look::NATURE_BARE != 0;
+                assert_eq!(city.contains("fn nt_bare("), bare, "{name}: the bare ground's block follows its bit");
+                assert_eq!(city.contains("nt_bare(&s, nb_w"), bare, "{name}: the bare ground's hook follows its bit");
+                assert_eq!(city.contains("nb_w.x < 0.999"), bare, "{name}: the scans' skip follows its bit");
+                assert_eq!(city.matches("cc0_ground(&s, in.world, n, dpx, dpy);").count(), 1, "{name}: one ground-scan call either way");
+                assert_eq!(city.contains("nt_w = nt_w * (1.0 - nb_w.x);"), bare && f.nature & look::NATURE_TURF != 0, "{name}: the turf's share joins both bits");
+                assert_eq!(city.contains("nc_w.x = nc_w.x * (1.0 - nb_w.x);"), bare && f.nature & look::NATURE_COVER != 0, "{name}: the cover's share joins both bits");
                 assert!(!city.contains("// sf:"), "{name}: no marker is left in the city shader");
                 let far_trees = format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{}", look::city_shader_source_far(), crate::cove_canopy::VIEWS, crate::cove_canopy::LAYERS, look::sf_select(crate::hlod_trees::WGSL));
                 parse(&format!("{name}: far trees"), &far_trees);
+                // (`--crown-light`, `--far-palms`) the far trees' new shading and its hooks follow the bits
+                let crown = f.nature & look::NATURE_CROWN != 0;
+                let far_palms = f.nature & look::NATURE_FAR_PALMS != 0;
+                assert_eq!(far_trees.contains("fn ft_crown("), crown, "{name}: the crown's volume follows its bit");
+                assert_eq!(far_trees.contains("fn ft_palm("), far_palms, "{name}: the far palm follows its bit");
+                assert_eq!(far_trees.contains("return ft_shade2(in);"), crown || far_palms, "{name}: the new shading is the entry's with either bit");
+                assert_eq!(far_trees.contains("key = key * lk_leaf_sun;"), crown, "{name}: look_light's hook follows the crown's bit");
+                assert_eq!(props.contains("pr_crown_sky = exp(-PR_CROWN_KL * (1.0 - f));"), crown, "{name}: the street trees' crown light follows the crown's bit");
+                assert_eq!(props.contains("ao = ao * pr_crown_sky;"), crown && foliage, "{name}: the light through the leaves takes it with both bits");
+                assert_eq!(far_trees.contains("hlod_dither(floor(in.clip.xy) + shift)"), crown || far_palms, "{name}");
+                assert!(!far_trees.contains("// sf:"), "{name}: no marker is left in the far trees");
+                if far_palms {
+                    assert!(far_trees.contains(&format!("const FT_PALM: u32 = {}u;", crate::hlod_trees::FAR_PALM)), "FT_PALM is hlod_trees::FAR_PALM");
+                }
+                // (`--prop-far-shadow`) the props' vertex lookup and look_light's reading of it
+                let prop_far = f.nature & look::NATURE_PROP_FAR != 0;
+                assert_eq!(props.contains("out.far_sun = pr_far_sun(world);"), prop_far, "{name}: the props' far lookup follows its bit");
+                assert_eq!(props.contains("lk_far_vertex = in.far_sun;"), prop_far, "{name}");
+                assert_eq!(props.contains("return mix(1.0, lk_far_vertex, look.key_dir.w);"), prop_far, "{name}: lk_shadow reads it with the bit only");
+                // (`--leaf-shade`) the crown's transmittance in the lights' loop, set by the props; the
+                // leaves' transmittance over reflectance by band, in the props and the far crowns
+                let leaf_shade = f.nature & look::NATURE_LEAF_SHADE != 0;
+                assert_eq!(city.contains("fn sky_leaf_t("), leaf_shade, "{name}: the crown's transmittance follows its bit");
+                assert_eq!(city.contains("e = e * sky_leaf_t(world, li.pos);"), leaf_shade, "{name}: the lights' loop takes it with the bit only");
+                assert_eq!(props.contains("const SKY_LEAF_ON: bool = true;"), leaf_shade, "{name}: compiled into the props' loop with the bit");
+                assert!(!city.contains("const SKY_LEAF_ON: bool = true;"), "{name}: and into no other pipeline's");
+                assert_eq!(props.contains("sky_leaf_k = vec2<f32>(PR_LS_PALM_K.x, PR_LS_PALM_K.y * sc);"), leaf_shade, "{name}: the palms set their crown with the bit only");
+                assert_eq!(props.contains("@location(9) sway: f32,"), leaf_shade || crown, "{name}: the wind weight reaches the fragment with either bit");
+                if leaf_shade {
+                    assert!(props.contains(&format!("const PR_LS_PALM: u32 = {}u;", eo_props::Model::Palm as u32)), "PR_LS_PALM is eo_props::Model::Palm");
+                    assert!(props.contains(&format!("const PR_LS_TREE: u32 = {}u;", eo_props::Model::Tree as u32)), "PR_LS_TREE is eo_props::Model::Tree");
+                }
+                if foliage {
+                    let by_band = props.contains("const PR_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.8, 0.95, 0.35);");
+                    assert_eq!(by_band, leaf_shade, "{name}: the leaves' ratio by band with the bit only");
+                    assert_eq!(props.matches("const PR_LEAF_T_OVER_R").count(), 1, "{name}: one ratio");
+                    assert_eq!(far_trees.contains("let t = albedo * vec3<f32>(0.8, 0.95, 0.35);"), leaf_shade, "{name}: the far crowns' too");
+                }
+                if crown {
+                    assert_eq!(far_trees.matches("const FT_LEAF_T_OVER_R").count(), 1, "{name}: one far ratio");
+                }
+                // (`--wet-foliage`) with `--foliage-light`: the leaves' and the bark's water
+                let wet_foliage = f.nature & look::NATURE_WET_FOLIAGE != 0 && foliage;
+                assert_eq!(props.contains("fn pr_wet_leaf("), wet_foliage, "{name}: the wet leaves follow both bits");
+                assert_eq!(props.contains("pr_wet_bark(&s, skyu.wet.x, run);"), wet_foliage, "{name}: the wet bark follows both bits");
+                assert_eq!(props.contains("s.albedo = s.albedo * mix(1.0, 0.85, wet);"), foliage && !wet_foliage, "{name}: the old wet leaf without it");
+                if wet_foliage {
+                    assert!(props.contains(&format!("const PR_WET_PALM: u32 = {}u;", eo_props::Model::Palm as u32)), "PR_WET_PALM is eo_props::Model::Palm");
+                    assert!(props.contains(&format!("const PR_WET_TREE: u32 = {}u;", eo_props::Model::Tree as u32)), "PR_WET_TREE is eo_props::Model::Tree");
+                }
+                // (`--lawn-albedo`) with `--turf`: the lawn's tone held to a measured turf's
+                let lawn_albedo = f.nature & look::NATURE_LAWN_ALBEDO != 0 && f.nature & look::NATURE_TURF != 0;
+                assert_eq!(city.contains("alb = alb * mix(1.0, nt_lawn_k, w.x);"), lawn_albedo, "{name}: the lawn's scale follows both bits");
+                assert_eq!(city.contains("nt_lawn_k = clamp(l, NT_TURF_LUM.x, NT_TURF_LUM.y)"), lawn_albedo, "{name}: set from the tone with both bits");
+                let stages = if prop_far { wgpu::ShaderStages::VERTEX_FRAGMENT } else { wgpu::ShaderStages::FRAGMENT };
+                assert_eq!(look::far_map_stages(), stages, "{name}: the far map reaches the vertex stage with the bit only");
                 let agents = format!(
                     "{}\n{}\n{}\n{}\n{}\n{}\n{}",
                     look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, look::ShadowLevels::Full, false),

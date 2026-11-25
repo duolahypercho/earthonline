@@ -271,7 +271,9 @@ pub struct LookOptions {
     /// `SF_CAR_FINISH` (`ShaderFeatures::car_finish`).
     pub car_finish: u8,
     /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
-    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`): 0 (the default) is the frame as before,
+    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`,
+    /// `--palm-variety`, `--crown-light`, `--far-palms`, `--prop-far-shadow`, `--hill-relief`, `--leaf-shade`,
+    /// `--wet-foliage`, `--lawn-albedo`): 0 (the default) is the frame as before,
     /// and each bit's shader code is compiled out while it is off (`sf_select`).
     pub nature: u32,
 }
@@ -293,6 +295,42 @@ pub const NATURE_HILLS: u32 = 16;
 /// (landmarks_surface.wgsl `nt_cover`), and their tones without the per-vertex
 /// jitter (ground2.rs `hill_tone`).
 pub const NATURE_COVER: u32 = 32;
+/// `--bare-ground`: WorldCover's bare ground and the shore's revetments drawn as
+/// gravel, fines and weeds, and as riprap with its tide zones (landmarks_surface.wgsl
+/// `nt_bare`), the vertices marked by ground2.rs `bare_ground`.
+pub const NATURE_BARE: u32 = 64;
+/// `--palm-variety`: each palm its own crown, skirt, fruit and trunk (props_draw.wgsl
+/// `pr_palm_variety`).
+pub const NATURE_PALM_VARIETY: u32 = 128;
+/// `--crown-light`: the far trees' crowns lit as a volume of leaves (Ross's area
+/// scattering phase function, the sun's and the sky's Beer-Lambert paths through
+/// the crown; hlod_trees.wgsl `ft_crown`) at measured leaf reflectances.
+pub const NATURE_CROWN: u32 = 256;
+/// `--far-palms`: the survey's palms drawn as palms past the street props' palms
+/// (hlod_trees.wgsl `ft_palm`; hlod_trees.rs `FAR_PALM`), not as round crowns
+/// over them.
+pub const NATURE_FAR_PALMS: u32 = 512;
+/// `--prop-far-shadow`: the street props past the sun cascades take the far sun
+/// map, sampled per vertex (props_draw.wgsl `pr_far_sun`, look_light.wgsl
+/// `lk_far_vertex`), where they stood unshadowed.
+pub const NATURE_PROP_FAR: u32 = 1024;
+/// `--hill-relief`: the far hills' gullies and spurs under the height field's
+/// 40 m lattice, bending its normal (farshore.wgsl `fs_relief`).
+pub const NATURE_HILL_RELIEF: u32 = 2048;
+/// `--leaf-shade`: the street lights without a shadow map of their own (shop
+/// windows, the lamps' ground bounce, headlamps) reach a palm's or a street
+/// tree's leaves through the crown's leaf area between them (Beer-Lambert over
+/// the light's path through the crown; sky_light.wgsl `sky_leaf_t`, set by
+/// props_draw.wgsl), and the light through a leaf takes the transmittance over
+/// reflectance of each display primary's band (props_draw.wgsl `PR_LEAF_T_OVER_R`).
+pub const NATURE_LEAF_SHADE: u32 = 4096;
+/// `--wet-foliage`: in the rain the leaves carry drops and a film (darker, a
+/// glossier lobe where the water stands) and the bark soaks (the albedo
+/// halved on the palms' fibre, rain tracks down the trunk; props_draw.wgsl `pr_wet_leaf`, `pr_wet_bark`).
+pub const NATURE_WET_FOLIAGE: u32 = 8192;
+/// `--lawn-albedo` (with `--turf`): a mown lawn's tone held to a measured turf's
+/// luminance, 0.06-0.10 (landmarks_surface.wgsl `NT_TURF_LUM`).
+pub const NATURE_LAWN_ALBEDO: u32 = 16384;
 /// `--street-wear` (the street track, round 2; street_pbr.wgsl `sw_*`): the
 /// carriageway's distress as laid out by its causes (transverse and lane-joint
 /// cracks, fatigue cracking in the wheel paths, sealed with meandering tar
@@ -322,7 +360,7 @@ pub const PLAZA_SETTS: u32 = 8;
 /// the groove, the noses, box-filtered across the joint).
 pub const WALK_RELIEF: u32 = 16;
 /// Every natural-detail bit.
-pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER;
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER | NATURE_BARE | NATURE_PALM_VARIETY | NATURE_CROWN | NATURE_FAR_PALMS | NATURE_PROP_FAR | NATURE_HILL_RELIEF | NATURE_LEAF_SHADE | NATURE_WET_FOLIAGE | NATURE_LAWN_ALBEDO;
 
 impl Default for LookOptions {
     fn default() -> Self {
@@ -599,10 +637,11 @@ impl LightingBindings {
         ]
     }
 
-    /// The layout entries (fragment only).
+    /// The layout entries (fragment only; with `--prop-far-shadow` the far sun
+    /// map also to the vertex stage, where the props sample it: `far_map_stages`).
     pub(crate) fn layout_entries() -> [wgpu::BindGroupLayoutEntry; 8] {
         let fs = wgpu::ShaderStages::FRAGMENT;
-        let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: fs, ty, count: None };
+        let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: if binding == B_FAR_SHADOW_MAP { far_map_stages() } else { fs }, ty, count: None };
         let tex = |sample_type, view_dimension| wgpu::BindingType::Texture { sample_type, view_dimension, multisampled: false };
         let float = wgpu::TextureSampleType::Float { filterable: true };
         let table = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None };
@@ -617,6 +656,13 @@ impl LightingBindings {
             e(B_SHOP_FRONTS, table),
         ]
     }
+}
+
+/// The stages that see the far sun map and the shadow comparison sampler (group 1
+/// bindings 12 and 2): the fragment stage, and with `--prop-far-shadow`
+/// (`NATURE_PROP_FAR`) the vertex stage too (props_draw.wgsl `pr_far_sun`).
+pub(crate) fn far_map_stages() -> wgpu::ShaderStages {
+    if shader_features().nature & NATURE_PROP_FAR != 0 { wgpu::ShaderStages::VERTEX_FRAGMENT } else { wgpu::ShaderStages::FRAGMENT }
 }
 
 pub struct LookGpu {
@@ -1212,9 +1258,9 @@ fn night_gain(on: bool, f: &LookFrame) -> f32 {
 
 /// A shader file's natural-detail blocks for the features compiled in now: the
 /// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
-/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`: `NATURE_*`) in, those between `// sf:NAME-`
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`, `BARE`, `PALM_VARIETY`, `CROWN`, `FAR_PALMS`, `PROP_FAR`, `HILL_RELIEF`, `LEAF_SHADE`, `WET_FOLIAGE`, `LAWN_ALBEDO`: `NATURE_*`) in, those between `// sf:NAME-`
 /// and `// sf:end` only without it, and the marker lines are dropped (`NAME|OTHER`:
-/// either bit; blocks do not nest). With every
+/// either bit; `NAME&OTHER`: both; `!NAME`: without it; blocks do not nest). With every
 /// bit out the text is the file as it was before the bits existed, so a shader
 /// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
 /// before, and with a bit in it holds its code alone, not the code it replaces.
@@ -1227,8 +1273,21 @@ pub fn sf_select(src: &str) -> String {
         "PALM" => f.nature & NATURE_PALM != 0,
         "HILLS" => f.nature & NATURE_HILLS != 0,
         "COVER" => f.nature & NATURE_COVER != 0,
+        "BARE" => f.nature & NATURE_BARE != 0,
+        "PALM_VARIETY" => f.nature & NATURE_PALM_VARIETY != 0,
+        "CROWN" => f.nature & NATURE_CROWN != 0,
+        "FAR_PALMS" => f.nature & NATURE_FAR_PALMS != 0,
+        "PROP_FAR" => f.nature & NATURE_PROP_FAR != 0,
+        "HILL_RELIEF" => f.nature & NATURE_HILL_RELIEF != 0,
+        "LEAF_SHADE" => f.nature & NATURE_LEAF_SHADE != 0,
+        "WET_FOLIAGE" => f.nature & NATURE_WET_FOLIAGE != 0,
+        "LAWN_ALBEDO" => f.nature & NATURE_LAWN_ALBEDO != 0,
         _ => false,
     };
+    // `A|B`: either bit in (code two features share); `A&B`: both (code that joins them);
+    // `!A`: the bit out (`A&!B`: code of A's that B replaces).
+    let term = |t: &str| t.strip_prefix('!').map_or_else(|| on(t), |n| !on(n));
+    let any_on = |names: &str| names.split('|').any(|n| n.split('&').all(term));
     let mut out = String::with_capacity(src.len());
     let mut keep = true;
     for line in src.split_inclusive('\n') {
@@ -1237,13 +1296,12 @@ pub fn sf_select(src: &str) -> String {
                 keep = true;
                 continue;
             }
-            // `A|B`: kept with either bit in (code two features share).
             if let Some(names) = rest.strip_suffix('+') {
-                keep = names.split('|').any(on);
+                keep = any_on(names);
                 continue;
             }
             if let Some(names) = rest.strip_suffix('-') {
-                keep = !names.split('|').any(on);
+                keep = !any_on(names);
                 continue;
             }
         }
@@ -1298,6 +1356,16 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// binds stand-ins), so their output is the same and their fragment shaders,
 /// at the edge of what Apple's compiler takes, have room for the probe grid
 /// (probe_grid.wgsl, compiled in everywhere but the far layer).
+/// (`--leaf-shade`) The props' city shader: the crown's transmittance in the
+/// lights' loop (sky_light.wgsl `SKY_LEAF_ON`) is compiled into the props'
+/// module alone; every other pipeline keeps the const false, so its loop
+/// compiles as before (measured, r2i3: with the hook in every city pipeline
+/// the city overview's early draw took about 1 ms more by day, when no light
+/// runs; with it in the props' alone, nothing measurable).
+pub fn props_city_source(src: String) -> String {
+    src.replace("const SKY_LEAF_ON: bool = false;", "const SKY_LEAF_ON: bool = true;")
+}
+
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
     let s = sf_select(&city_shader_parts(ambient, shadow, single_probe)); // the natural-detail blocks (`// sf:`) of the features compiled in
     if ambient == crate::ambient::ShaderLevels::Plane {
@@ -1642,7 +1710,7 @@ impl LookGpu {
             entries: &[
                 entry(0, vf, ubuf),
                 entry(1, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }),
-                entry(2, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
+                entry(2, far_map_stages(), wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
                 // occlusion + bounce result, its depth, a clamped linear sampler.
                 entry(3, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 entry(4, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
