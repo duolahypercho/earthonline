@@ -42,6 +42,7 @@ const PLAYER_HITCH_BUDGET_MS: f64 = 2.0;
 
 struct PlayOpts {
     dive: Option<String>,
+    beaver_spawn: bool,
     interior_eye: bool,
     car_door_animation: bool,
     bench: bool,
@@ -52,13 +53,70 @@ struct PlayOpts {
     collision_threads: usize,
 }
 
+#[derive(Default, Debug, PartialEq, Eq)]
+struct PlayGlobals {
+    play_street_defaults: bool,
+    play_facade_defaults: bool,
+    rocketbox_motions: Option<bool>,
+    palm_detail: Option<bool>,
+    car_density: Option<bool>,
+    car_panels: Option<bool>,
+    crowd: Option<bool>,
+    people_groups: Option<bool>,
+    people_crosswalks: Option<bool>,
+    people_windows: Option<bool>,
+    people_stagger: Option<bool>,
+    people_evening: Option<bool>,
+    people_space: Option<bool>,
+    people_shading: Option<bool>,
+    people_bounce: Option<bool>,
+    people_contact: Option<bool>,
+    people_capsules: Option<bool>,
+    people_lamps: Option<bool>,
+    people_motion: Option<bool>,
+    people_idles: Option<bool>,
+}
+
+impl PlayGlobals {
+    fn apply(&self) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if self.play_street_defaults {
+            crate::models::set_play_street_defaults(true);
+        }
+        if self.play_facade_defaults {
+            eo_render::facade::set_play_defaults(true);
+        }
+        if let Some(v) = self.rocketbox_motions { eo_agents::motion::set_enabled(v); }
+        if let Some(v) = self.palm_detail { eo_landmarks::features::set_palm_detail(v); }
+        if let Some(v) = self.car_density { crate::agents::set_car_density(v); }
+        if let Some(v) = self.car_panels { eo_render::agents::set_car_panels(v); }
+        if let Some(v) = self.crowd { crate::agents::CROWD.store(v, Relaxed); }
+        if let Some(v) = self.people_groups { crate::agents::PEOPLE_GROUPS.store(v, Relaxed); }
+        if let Some(v) = self.people_crosswalks { crate::agents::PEOPLE_CROSSWALKS.store(v, Relaxed); }
+        if let Some(v) = self.people_windows { crate::agents::PEOPLE_WINDOWS.store(v, Relaxed); }
+        if let Some(v) = self.people_stagger { crate::agents::PEOPLE_STAGGER.store(v, Relaxed); }
+        if let Some(v) = self.people_evening { crate::agents::PEOPLE_EVENING.store(v, Relaxed); }
+        if let Some(v) = self.people_space { eo_agents::feed::set_personal_space(v); }
+        if let Some(v) = self.people_shading { eo_render::agents::set_people_shading(v); }
+        if let Some(v) = self.people_bounce { eo_render::agents::set_people_bounce(v); }
+        if let Some(v) = self.people_contact { eo_render::agents::set_people_contact(v); }
+        if let Some(v) = self.people_capsules { eo_render::agents::set_people_capsules(v); }
+        if let Some(v) = self.people_lamps { eo_render::agents::set_people_lamps(v); }
+        if let Some(v) = self.people_motion { eo_agents::motion::set_steady_heads(v); }
+        if let Some(v) = self.people_idles { eo_agents::motion::set_more_idles(v); }
+    }
+}
+
 /// The hook main.rs calls: None unless `--play` is on the command line.
 pub fn intercept(process_start: Instant) -> Option<Result<()>> {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     if !raw.iter().any(|a| a == "--play") {
         return None;
     }
-    Some(parse(&raw).and_then(|(args, opts)| if opts.bench { bench(&args, &opts, process_start) } else { window::run(&args, &opts, process_start) }))
+    Some(parse_full(&raw).and_then(|(args, opts, globals)| {
+        globals.apply();
+        if opts.bench { bench(&args, &opts, process_start) } else { window::run(&args, &opts, process_start) }
+    }))
 }
 
 /// main.rs's defaults (`parse_args`), field by field: `Args` has no Default.
@@ -158,11 +216,30 @@ fn base_args() -> Args {
     }
 }
 
+/// Whether `on` is active in `raw`: the last occurrence of `on` or `off` wins; neither uses `default`.
+fn flag_default(raw: &[String], on: &str, off: &str, default: bool) -> bool {
+    raw.iter().rev().find(|a| *a == on || *a == off).map_or(default, |a| a == on)
+}
+
+#[cfg(test)]
 fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
+    parse_full(raw).map(|(a, o, _)| (a, o))
+}
+
+fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
     let mut a = base_args();
+    let mut g = PlayGlobals::default();
     let mut test_character = crate::test_characters::Options::default();
-    let mut o = PlayOpts { dive: None, interior_eye: true, car_door_animation: false, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let mut o = PlayOpts { dive: None, beaver_spawn: false, interior_eye: true, car_door_animation: false, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let interactive_play = raw.iter().any(|s| s == "--play") && !raw.iter().any(|s| s == "--bench");
     let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
+    if interactive_play {
+        // Full playable game mode: High quality tier + grade-separated roads & tunnels by default;
+        // any explicit `--quality`, `--no-structures`, `--no-tunnels` or `--no-<feature>` overrides it.
+        tier.take("--quality", Some("high"))?;
+        tier.take("--structures", None)?;
+        tier.take("--tunnels", None)?;
+    }
     let mut it = raw.iter();
     while let Some(s) = it.next() {
         if let Some(n) = tier.take(s, it.as_slice().first().map(String::as_str))? {
@@ -176,17 +253,18 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-car-door-animation" => o.car_door_animation = false,
             "--house-eye-camera" => o.interior_eye = true,
             "--no-house-eye-camera" => o.interior_eye = false,
-            "--beaver-house" => a.beaver_house = true,
+            "--beaver-house" => { a.beaver_house = true; o.beaver_spawn = true; }
             "--no-interior-lighting" => a.interior_lighting = false,
-            "--house-finishes" => a.house_finishes = true,
-            "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
+            "--house-finishes" => { a.house_finishes = true; o.beaver_spawn = true; }
+            "--house-patina" => { a.house_finishes = true; a.house_patina = true; o.beaver_spawn = true; }
             "--no-house-patina" => { a.house_patina = false; a.house_furniture = false; a.house_photo = false; }
-            "--house-furniture" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; }
+            "--house-furniture" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; o.beaver_spawn = true; }
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
-            "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
+            "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; o.beaver_spawn = true; }
             "--no-house-photo" => a.house_photo = false,
             "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" | "--house-porch-lamp" | "--house-fired-stoop" => {
                 a.beaver_house = true;
+                o.beaver_spawn = true;
                 a.house_finishes = true;
                 a.house_patina = true;
                 a.house_furniture = true;
@@ -311,7 +389,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             "--no-photo-mode" | "--no-dof" => {} // read by photo.rs
             "--no-rocketbox" => a.rocketbox = false, // people
-            "--no-rocketbox-motions" => eo_agents::motion::set_enabled(false),
+            "--no-rocketbox-motions" => g.rocketbox_motions = Some(false),
             "--no-props" => a.props = false, // props
             "--no-landmark-access" => a.landmark_access = false, // the landmark decks and lifts
             s if a.props2.parse_flag(s) => {}
@@ -329,6 +407,124 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
             "--no-external" => {} // main's `external_flag`
+            // Round-2 AAA feature switches & kill switches (all parsed cleanly in `--play`)
+            "--sun-bounce" | "--no-sun-bounce" => a.look.sun_bounce = s == "--sun-bounce",
+            "--ao-albedo" | "--no-ao-albedo" => a.look.ao_albedo = s == "--ao-albedo",
+            "--soft-shadows" | "--no-soft-shadows" => a.look.soft_shadows = s == "--soft-shadows",
+            "--screen-gi" | "--no-screen-gi" => a.look.screen_gi = s == "--screen-gi",
+            "--occluder-light" | "--no-occluder-light" => a.look.occluder_light = s == "--occluder-light",
+            "--dome-env" | "--no-dome-env" => a.look.dome_env = s == "--dome-env",
+            "--wet-surfaces" | "--no-wet-surfaces" => a.look.sky.wet_surfaces = s == "--wet-surfaces",
+            "--screen-reflect" | "--no-screen-reflect" => a.look.sky.screen_reflect = s == "--screen-reflect",
+            "--probe-sky" | "--no-probe-sky" => a.look.sky.probe_sky = s == "--probe-sky",
+            "--wet-relief" | "--no-wet-relief" => a.look.sky.wet_relief = s == "--wet-relief",
+            "--lamp-streaks" | "--no-lamp-streaks" => a.look.sky.lamp_streaks = s == "--lamp-streaks",
+            "--car-materials" => a.look.car_materials = 1,
+            "--no-car-materials" => a.look.car_materials = 0,
+            "--car-contact" => a.look.car_contact = 1,
+            "--no-car-contact" => a.look.car_contact = 0,
+            "--car-reflections" => a.look.car_reflections = 1,
+            "--no-car-reflections" => a.look.car_reflections = 0,
+            "--car-lamps" => a.look.car_lamps = 1,
+            "--no-car-lamps" => a.look.car_lamps = 0,
+            "--car-wet" => a.look.car_wet = 1,
+            "--no-car-wet" => a.look.car_wet = 0,
+            "--car-finish" => a.look.car_finish = 1,
+            "--no-car-finish" => a.look.car_finish = 0,
+            "--car-density" => g.car_density = Some(true),
+            "--no-car-density" => g.car_density = Some(false),
+            "--car-panels" => g.car_panels = Some(true),
+            "--no-car-panels" => g.car_panels = Some(false),
+            "--night-photometry" | "--no-night-photometry" => a.look.sky.night_photometry = s == "--night-photometry",
+            "--lamp-bounce" | "--no-lamp-bounce" => a.look.sky.lamp_bounce = s == "--lamp-bounce",
+            "--urban-sky" | "--no-urban-sky" => a.look.sky.urban_sky = s == "--urban-sky",
+            "--office-floors" | "--no-office-floors" => a.look.sky.office_floors = s == "--office-floors",
+            "--room-depth" | "--no-room-depth" => a.look.sky.room_depth = s == "--room-depth",
+            "--lamp-units" | "--no-lamp-units" => a.look.sky.lamp_units = s == "--lamp-units",
+            "--luminaires" => { a.look.sky.luminaires = true; a.props2.luminaires = true; }
+            "--no-luminaires" => { a.look.sky.luminaires = false; a.props2.luminaires = false; }
+            "--rear-lamps" | "--no-rear-lamps" => a.look.sky.rear_lamps = s == "--rear-lamps",
+            "--signal-spill" | "--no-signal-spill" => a.look.sky.signal_spill = s == "--signal-spill",
+            "--lit-rooms" | "--no-lit-rooms" => a.look.sky.lit_rooms = s == "--lit-rooms",
+            "--wire-light" | "--no-wire-light" => a.look.sky.wire_light = s == "--wire-light",
+            "--foliage-light" => a.look.nature |= eo_render::look::NATURE_FOLIAGE,
+            "--no-foliage-light" => a.look.nature &= !eo_render::look::NATURE_FOLIAGE,
+            "--temporal-lod-fade" => a.look.nature |= eo_render::look::NATURE_LOD_FADE,
+            "--no-temporal-lod-fade" => a.look.nature &= !eo_render::look::NATURE_LOD_FADE,
+            "--turf" => a.look.nature |= eo_render::look::NATURE_TURF,
+            "--no-turf" => a.look.nature &= !eo_render::look::NATURE_TURF,
+            "--palm-detail" => { a.look.nature |= eo_render::look::NATURE_PALM; g.palm_detail = Some(true); }
+            "--no-palm-detail" => { a.look.nature &= !eo_render::look::NATURE_PALM; g.palm_detail = Some(false); }
+            "--hill-cover" => a.look.nature |= eo_render::look::NATURE_HILLS,
+            "--no-hill-cover" => a.look.nature &= !eo_render::look::NATURE_HILLS,
+            "--ground-cover" => a.look.nature |= eo_render::look::NATURE_COVER,
+            "--no-ground-cover" => a.look.nature &= !eo_render::look::NATURE_COVER,
+            "--bare-ground" => a.look.nature |= eo_render::look::NATURE_BARE,
+            "--no-bare-ground" => a.look.nature &= !eo_render::look::NATURE_BARE,
+            "--palm-variety" => a.look.nature |= eo_render::look::NATURE_PALM_VARIETY,
+            "--no-palm-variety" => a.look.nature &= !eo_render::look::NATURE_PALM_VARIETY,
+            "--crown-light" => a.look.nature |= eo_render::look::NATURE_CROWN,
+            "--no-crown-light" => a.look.nature &= !eo_render::look::NATURE_CROWN,
+            "--far-palms" => a.look.nature |= eo_render::look::NATURE_FAR_PALMS,
+            "--no-far-palms" => a.look.nature &= !eo_render::look::NATURE_FAR_PALMS,
+            "--prop-far-shadow" => a.look.nature |= eo_render::look::NATURE_PROP_FAR,
+            "--no-prop-far-shadow" => a.look.nature &= !eo_render::look::NATURE_PROP_FAR,
+            "--hill-relief" => a.look.nature |= eo_render::look::NATURE_HILL_RELIEF,
+            "--no-hill-relief" => a.look.nature &= !eo_render::look::NATURE_HILL_RELIEF,
+            "--leaf-shade" => a.look.nature |= eo_render::look::NATURE_LEAF_SHADE,
+            "--no-leaf-shade" => a.look.nature &= !eo_render::look::NATURE_LEAF_SHADE,
+            "--wet-foliage" => a.look.nature |= eo_render::look::NATURE_WET_FOLIAGE,
+            "--no-wet-foliage" => a.look.nature &= !eo_render::look::NATURE_WET_FOLIAGE,
+            "--lawn-albedo" => a.look.nature |= eo_render::look::NATURE_LAWN_ALBEDO,
+            "--no-lawn-albedo" => a.look.nature &= !eo_render::look::NATURE_LAWN_ALBEDO,
+            "--cine-camera" | "--no-cine-camera" => a.look.sky.cine_camera = s == "--cine-camera",
+            "--camera-tone" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_TONE,
+            "--no-camera-tone" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_TONE,
+            "--white-balance" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_WB,
+            "--no-white-balance" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_WB,
+            "--lens-halation" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_HALATION,
+            "--no-lens-halation" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_HALATION,
+            "--camera-sharpen" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_SHARPEN,
+            "--no-camera-sharpen" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_SHARPEN,
+            "--lens-flare" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_FLARE,
+            "--no-lens-flare" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_FLARE,
+            "--camera-resolve" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_RESOLVE,
+            "--no-camera-resolve" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_RESOLVE,
+            "--camera-print" => a.look.sky.cam_bits |= eo_render::cine_post::CAM_BIT_PRINT,
+            "--no-camera-print" => a.look.sky.cam_bits &= !eo_render::cine_post::CAM_BIT_PRINT,
+            "--crowd" => g.crowd = Some(true),
+            "--no-crowd" => g.crowd = Some(false),
+            "--people-shading" => g.people_shading = Some(true),
+            "--no-people-shading" => g.people_shading = Some(false),
+            "--people-bounce" => g.people_bounce = Some(true),
+            "--no-people-bounce" => g.people_bounce = Some(false),
+            "--people-contact" => g.people_contact = Some(true),
+            "--no-people-contact" => g.people_contact = Some(false),
+            "--people-capsules" => g.people_capsules = Some(true),
+            "--no-people-capsules" => g.people_capsules = Some(false),
+            "--people-lamps" => g.people_lamps = Some(true),
+            "--no-people-lamps" => g.people_lamps = Some(false),
+            "--people-space" => g.people_space = Some(true),
+            "--no-people-space" => g.people_space = Some(false),
+            "--people-groups" => g.people_groups = Some(true),
+            "--no-people-groups" => g.people_groups = Some(false),
+            "--people-crosswalks" => g.people_crosswalks = Some(true),
+            "--no-people-crosswalks" => g.people_crosswalks = Some(false),
+            "--people-windows" => g.people_windows = Some(true),
+            "--no-people-windows" => g.people_windows = Some(false),
+            "--people-stagger" => g.people_stagger = Some(true),
+            "--no-people-stagger" => g.people_stagger = Some(false),
+            "--people-evening" => g.people_evening = Some(true),
+            "--no-people-evening" => g.people_evening = Some(false),
+            "--people-motion" => g.people_motion = Some(true),
+            "--no-people-motion" => g.people_motion = Some(false),
+            "--people-idles" => g.people_idles = Some(true),
+            "--no-people-idles" => g.people_idles = Some(false),
+            "--facade-glass" | "--no-facade-glass" | "--far-facades" | "--no-far-facades" | "--facade-weather" | "--no-facade-weather"
+            | "--canyon-glass" | "--no-canyon-glass" | "--far-relief" | "--no-far-relief" | "--facade-patina" | "--no-facade-patina"
+            | "--window-depth" | "--no-window-depth"
+            | "--street-pbr" | "--no-street-pbr" | "--street-wear" | "--no-street-wear" | "--street-glare" | "--no-street-glare"
+            | "--street-aggregate" | "--no-street-aggregate" | "--plaza-setts" | "--no-plaza-setts" | "--walk-relief" | "--no-walk-relief" => {}
             flag if test_character.parse(flag, &mut val)? => {}
             other => anyhow::bail!("--play: unknown argument {other} (see native/eo-app/src/play.rs)"),
         }
@@ -336,6 +532,147 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     tier.apply(&mut a);
     a.bench = o.bench;
     crate::apply_cove_look(&mut a, raw);
+    if interactive_play {
+        // Promote every merged AAA feature into the default playable game mode while
+        // preserving every `--no-<feature>` kill switch.
+        let want = |on: &str, off: &str| flag_default(raw, on, off, true);
+        // 1. Diveable SF coastal habitats, kelp reefs, rocky intertidal & underwater optics
+        let ocean = want("--ocean-life", "--no-ocean-life");
+        let reef = ocean && want("--ocean-reef", "--no-ocean-reef");
+        let coastal = reef && want("--coastal-habitat", "--no-coastal-habitat");
+        let rocky = coastal && want("--rocky-reef", "--no-rocky-reef");
+        a.look.ocean_life = ocean;
+        a.look.ocean_reef = reef;
+        a.look.dive_detail = want("--dive-detail", "--no-dive-detail");
+        a.look.coastal_habitat = coastal;
+        a.look.reef_materials = rocky && want("--reef-materials", "--no-reef-materials");
+        a.look.dive_daylight = coastal && want("--dive-daylight", "--no-dive-daylight") && want("--water-optics", "--no-water-optics");
+        a.look.reef_kelp = rocky && want("--reef-kelp", "--no-reef-kelp");
+        a.look.reef_canopy_light = rocky && want("--reef-canopy-light", "--no-reef-canopy-light") && want("--water-optics", "--no-water-optics");
+        a.look.reef_rocks = rocky && want("--reef-rocks", "--no-reef-rocks");
+        let cove = want("--cove-detail", "--no-cove-detail");
+        a.cove_detail = cove;
+        a.look.cove_detail = cove;
+        a.look.cove_canopy = cove && want("--cove-canopy", "--no-cove-canopy");
+        a.look.cove_sediment = cove && want("--cove-sediment", "--no-cove-sediment");
+        a.look.cove_daylight = cove && want("--cove-daylight", "--no-cove-daylight");
+        a.cove_pile_contact = cove && want("--cove-pile-contact", "--no-cove-pile-contact");
+        let intertidal = cove && want("--black-point-intertidal", "--no-black-point-intertidal");
+        a.black_point_intertidal = intertidal;
+        a.black_point_rockweed = intertidal && want("--black-point-rockweed", "--no-black-point-rockweed");
+        a.underwater_habitats = want("--underwater-habitats", "--no-underwater-habitats");
+        a.look.water_optics = want("--water-optics", "--no-water-optics");
+        a.look.dive_exposure = want("--dive-exposure", "--no-dive-exposure");
+        // 2. Playable furnished 21 Beaver Street house in the city map (keeps downtown spawn unless `--beaver-house`/`--house-*` asked)
+        if want("--beaver-house", "--no-beaver-house") {
+            a.beaver_house = true;
+            if want("--house-finishes", "--no-house-finishes") {
+                a.house_finishes = true;
+                if want("--house-patina", "--no-house-patina") {
+                    a.house_patina = true;
+                    if want("--house-furniture", "--no-house-furniture") {
+                        a.house_furniture = true;
+                        if want("--house-photo", "--no-house-photo") {
+                            a.house_photo = true;
+                        }
+                    }
+                }
+            }
+        }
+        // 3. Street PBR & Facades tracks
+        g.play_street_defaults = true;
+        g.play_facade_defaults = true;
+        // 4. Light track (sky chromaticity, multi-bounce AO, canyon/soffit bounce, wall sun bounce, physical sun penumbra)
+        a.look.dome_env = want("--dome-env", "--no-dome-env");
+        a.look.ao_albedo = want("--ao-albedo", "--no-ao-albedo");
+        a.look.occluder_light = a.look.lighting.ambient_volume > 0 && want("--occluder-light", "--no-occluder-light");
+        a.look.sun_bounce = a.look.lighting.far_shadows > 0 && want("--sun-bounce", "--no-sun-bounce");
+        a.look.soft_shadows = want("--soft-shadows", "--no-soft-shadows");
+        // 5. Reflect track (porosity & puddles, Hi-Z GGX screen reflections, rut ponding, wet tail-lamp streaks)
+        a.look.sky.wet_surfaces = want("--wet-surfaces", "--no-wet-surfaces");
+        a.look.sky.screen_reflect = want("--screen-reflect", "--no-screen-reflect");
+        a.look.sky.wet_relief = a.look.sky.wet_surfaces && want("--wet-relief", "--no-wet-relief");
+        a.look.sky.lamp_streaks = want("--lamp-streaks", "--no-lamp-streaks");
+        // 6. Vehicles track (Metal-safe set with `--tunnels`: car-lamps/car-wet remain opt-in due to MTLCompilerService abort)
+        a.look.car_materials = u8::from(want("--car-materials", "--no-car-materials"));
+        a.look.car_contact = u8::from(want("--car-contact", "--no-car-contact"));
+        a.look.car_reflections = u8::from(want("--car-reflections", "--no-car-reflections"));
+        a.look.car_finish = u8::from(want("--car-finish", "--no-car-finish"));
+        g.car_panels = Some(want("--car-panels", "--no-car-panels"));
+        g.car_density = Some(want("--car-density", "--no-car-density"));
+        // 7. People & Crowds track
+        let crowd = want("--crowd", "--no-crowd");
+        g.crowd = Some(crowd);
+        g.people_groups = Some(crowd && want("--people-groups", "--no-people-groups"));
+        g.people_crosswalks = Some(crowd && want("--people-crosswalks", "--no-people-crosswalks"));
+        g.people_windows = Some(crowd && want("--people-windows", "--no-people-windows"));
+        g.people_stagger = Some(crowd && want("--people-stagger", "--no-people-stagger"));
+        g.people_evening = Some(crowd && want("--people-evening", "--no-people-evening"));
+        g.people_space = Some(crowd && want("--people-space", "--no-people-space"));
+        g.people_shading = Some(want("--people-shading", "--no-people-shading"));
+        g.people_bounce = Some(want("--people-bounce", "--no-people-bounce"));
+        g.people_capsules = Some(want("--people-capsules", "--no-people-capsules"));
+        g.people_lamps = Some(want("--people-lamps", "--no-people-lamps"));
+        g.people_motion = Some(want("--people-motion", "--no-people-motion"));
+        g.people_idles = Some(want("--people-idles", "--no-people-idles"));
+        // 8. Night photometry, lit interiors, luminaires & signal spill
+        a.look.sky.night_photometry = want("--night-photometry", "--no-night-photometry");
+        a.look.sky.lamp_bounce = want("--lamp-bounce", "--no-lamp-bounce");
+        a.look.sky.urban_sky = want("--urban-sky", "--no-urban-sky");
+        a.look.sky.office_floors = want("--office-floors", "--no-office-floors");
+        a.look.sky.room_depth = want("--room-depth", "--no-room-depth");
+        a.look.sky.lamp_units = want("--lamp-units", "--no-lamp-units");
+        let lum = want("--luminaires", "--no-luminaires");
+        a.look.sky.luminaires = lum;
+        a.props2.luminaires = lum;
+        a.look.sky.rear_lamps = want("--rear-lamps", "--no-rear-lamps");
+        a.look.sky.signal_spill = want("--signal-spill", "--no-signal-spill");
+        a.look.sky.lit_rooms = want("--lit-rooms", "--no-lit-rooms");
+        a.look.sky.wire_light = want("--wire-light", "--no-wire-light");
+        // 9. Nature track (subsurface foliage, palms, hillside turf & relief)
+        let mut nat = 0u32;
+        for (on, off, bit) in [
+            ("--foliage-light", "--no-foliage-light", eo_render::look::NATURE_FOLIAGE),
+            ("--temporal-lod-fade", "--no-temporal-lod-fade", eo_render::look::NATURE_LOD_FADE),
+            ("--turf", "--no-turf", eo_render::look::NATURE_TURF),
+            ("--palm-detail", "--no-palm-detail", eo_render::look::NATURE_PALM),
+            ("--hill-cover", "--no-hill-cover", eo_render::look::NATURE_HILLS),
+            ("--ground-cover", "--no-ground-cover", eo_render::look::NATURE_COVER),
+            ("--bare-ground", "--no-bare-ground", eo_render::look::NATURE_BARE),
+            ("--palm-variety", "--no-palm-variety", eo_render::look::NATURE_PALM_VARIETY),
+            ("--crown-light", "--no-crown-light", eo_render::look::NATURE_CROWN),
+            ("--far-palms", "--no-far-palms", eo_render::look::NATURE_FAR_PALMS),
+            ("--prop-far-shadow", "--no-prop-far-shadow", eo_render::look::NATURE_PROP_FAR),
+            ("--hill-relief", "--no-hill-relief", eo_render::look::NATURE_HILL_RELIEF),
+            ("--leaf-shade", "--no-leaf-shade", eo_render::look::NATURE_LEAF_SHADE),
+            ("--wet-foliage", "--no-wet-foliage", eo_render::look::NATURE_WET_FOLIAGE),
+            ("--lawn-albedo", "--no-lawn-albedo", eo_render::look::NATURE_LAWN_ALBEDO),
+        ] {
+            if want(on, off) {
+                nat |= bit;
+            }
+        }
+        a.look.nature = nat;
+        // 10. Camera model under cinematic look (tone, white balance, lens halation, flare, print)
+        a.look.sky.cine_camera = a.look.look.is_cinematic() && want("--cine-camera", "--no-cine-camera");
+        if a.look.sky.cine_camera {
+            let mut cb = 0u32;
+            for (on, off, bit) in [
+                ("--camera-tone", "--no-camera-tone", eo_render::cine_post::CAM_BIT_TONE),
+                ("--white-balance", "--no-white-balance", eo_render::cine_post::CAM_BIT_WB),
+                ("--lens-halation", "--no-lens-halation", eo_render::cine_post::CAM_BIT_HALATION),
+                ("--camera-sharpen", "--no-camera-sharpen", eo_render::cine_post::CAM_BIT_SHARPEN),
+                ("--lens-flare", "--no-lens-flare", eo_render::cine_post::CAM_BIT_FLARE),
+                ("--camera-resolve", "--no-camera-resolve", eo_render::cine_post::CAM_BIT_RESOLVE),
+                ("--camera-print", "--no-camera-print", eo_render::cine_post::CAM_BIT_PRINT),
+            ] {
+                if want(on, off) {
+                    cb |= bit;
+                }
+            }
+            a.look.sky.cam_bits = cb;
+        }
+    }
     if let Some(name) = &o.dive {
         anyhow::ensure!(crate::ocean_habitat::STARTS.iter().any(|s| s.0 == name), "unknown swim site {name}; choose bay, black-point, pacific, channel, east-bay, south-bay, shelf, reef or kelp");
         anyhow::ensure!(a.look.ocean_life && a.look.water, "playable dive sites require --ocean-life and water");
@@ -349,7 +686,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
         });
         anyhow::ensure!(has_clips && o.render, "--car-door-animation needs a demo avatar with both car clips and live rendering");
     }
-    Ok((a, o))
+    Ok((a, o, g))
 }
 
 /// The collision world over the loaded city: every footprint as its JS prism
@@ -944,8 +1281,11 @@ mod window {
         let (mut cw, door) = collision_world(&world, opts.collision_threads, args.landmark_access)?;
         let s = crate::bench::spawn(); // the spawn on the scaled plan
         let mut feet = DVec3::new(s[0] as f64, world.elevation.ground(s[0] as f64, s[1] as f64), s[1] as f64);
-        if let Some(h) = &world.house { feet = h.entry_position(); }
-        let mut yaw = world.house.as_ref().map_or(0., |h| h.entry_yaw());
+        let mut yaw = 0.0;
+        if opts.beaver_spawn && let Some(h) = &world.house {
+            feet = h.entry_position();
+            yaw = h.entry_yaw();
+        }
         if let Some(name) = &opts.dive {
             let start = crate::ocean_habitat::start(world.marine_floor.as_ref().expect("play validated the dive"), name)?;
             feet = start.0;
@@ -1066,7 +1406,7 @@ mod window {
                     input.jump |= frame.held(eo_player::input::Action::Jump);
                 }
                 input.vehicle_toggle |= std::mem::take(&mut self.vehicle_toggle_requested);
-                if self.args.look.sky.weather_fx {
+                if self.gfx.as_ref().map_or(self.args.look.sky.weather_fx, |g| g.renderer.look.sky.options().weather_fx) {
                     let wx = self.gfx.as_ref().map(|g| g.renderer.look.sky.weather()).unwrap_or_else(|| eo_render::sky::weather_of(&self.args.look.sky, self.args.look.sky.world_time_s));
                     self.player.set_weather(eo_player::WeatherPhysics { wetness: wx.wetness, puddle_fill: wx.puddle_fill, rain_mm_h: wx.rain_mm_h, wind: wx.wind, gust: wx.gust });
                 }
@@ -1190,8 +1530,12 @@ mod window {
                 let bed_hint = if self.player.mode == Mode::OnFoot && self.world.house.as_ref().is_some_and(|h| h.by_bed(pos)) { " - R: sleep until 07:00" } else { "" };
                 // a landmark lift's stop: the prompt leads the title (the play window has no HUD; none in photo mode).
                 let prompt = self.player.lift_prompt(&self.cw).filter(|_| !photo_on).map(|p| format!("E: {} - ", crate::fade::prompt_text(&p))).unwrap_or_default();
+                let hour = g.renderer.look.time_of_day().rem_euclid(24.0);
+                let hh = hour.floor() as u32;
+                let mm = ((hour - hour.floor()) * 60.0).floor() as u32;
+                let wx_label = weather_label(g.renderer.look.sky.options().weather);
                 g.window.set_title(&format!(
-                    "{prompt}Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, E: lift, P: photo mode, Esc: mouse{door_hint}{bed_hint}",
+                    "{prompt}Earth Online - {hh:02}:{mm:02} {wx_label} - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, E: lift, P: photo, [/]: time, \\: live SF time, K: weather, Esc: mouse{door_hint}{bed_hint}",
                     self.fps_frames as f64 / el,
                     speed,
                     self.player_ms_sum / self.fps_frames.max(1) as f64,
@@ -1232,6 +1576,49 @@ mod window {
             let f = self.player.character.feet();
             let y = self.player.yaw;
             self.player.spawn_vehicle(&mut self.cw, f.x + y.sin() * 6.0, f.z + y.cos() * 6.0, y);
+        }
+    }
+
+    pub(super) fn sf_clock_hour_now() -> f64 {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(eo_render::look::DEFAULT_HOUR * 3600.0);
+        ((secs / 3600.0) + eo_look::sun::UTC_OFFSET_HOURS).rem_euclid(24.0)
+    }
+
+    pub(super) const WEATHER_CYCLE: [eo_render::sky::WeatherMode; 11] = [
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Clear),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::SunRain),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Fog),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Overcast),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Drizzle),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::LightRain),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Rain),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::HeavyRain),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Storm),
+        eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Damp),
+        eo_render::sky::WeatherMode::Schedule,
+    ];
+
+    pub(super) fn next_weather(cur: eo_render::sky::WeatherMode) -> eo_render::sky::WeatherMode {
+        let i = WEATHER_CYCLE.iter().position(|&m| m == cur).unwrap_or(0);
+        WEATHER_CYCLE[(i + 1) % WEATHER_CYCLE.len()]
+    }
+
+    pub(super) fn weather_label(m: eo_render::sky::WeatherMode) -> &'static str {
+        match m {
+            eo_render::sky::WeatherMode::Schedule => "schedule",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Clear) => "clear",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::SunRain) => "sun-rain",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Fog) => "fog",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Overcast) => "overcast",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Drizzle) => "drizzle",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::LightRain) => "light-rain",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Rain) => "rain",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::HeavyRain) => "heavy-rain",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Storm) => "storm",
+            eo_render::sky::WeatherMode::Preset(eo_sky::Kind::Damp) => "damp",
         }
     }
 
@@ -1330,6 +1717,27 @@ mod window {
                                 }
                                 if code == KeyCode::KeyV && !event.repeat && !photo_on {
                                     self.spawn_car_ahead();
+                                }
+                                // Live realistic clock & weather controls in play mode:
+                                // `[` / `]` scrub time by 30 minutes, `\` syncs to current San Francisco time,
+                                // `K` cycles weather presets and dynamic weather schedule.
+                                if !photo_on && let Some(g) = &self.gfx {
+                                    if code == KeyCode::BracketLeft || code == KeyCode::BracketRight {
+                                        let step = if code == KeyCode::BracketRight { 0.5 } else { -0.5 };
+                                        let next = (g.renderer.look.time_of_day() + step).rem_euclid(24.0);
+                                        g.renderer.look.set_time_of_day(next);
+                                        return;
+                                    }
+                                    if code == KeyCode::Backslash && !event.repeat {
+                                        g.renderer.look.set_time_of_day(sf_clock_hour_now());
+                                        return;
+                                    }
+                                    if code == KeyCode::KeyK && !event.repeat {
+                                        let mut sky = g.renderer.look.sky.options();
+                                        sky.weather = next_weather(sky.weather);
+                                        g.renderer.look.set_sky_options(sky);
+                                        return;
+                                    }
                                 }
                                 self.raw.held.insert(name);
                             }
@@ -2303,5 +2711,100 @@ mod house_tests {
             !door.toggle(house.point(2., 6.7, 8.)),
             "door can be operated from another floor"
         );
+    }
+}
+
+#[cfg(test)]
+mod play_defaults_tests {
+    use super::*;
+
+    fn raw(flags: &[&str]) -> Vec<String> {
+        flags.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn interactive_play_enables_full_metal_safe_aaa_stack() {
+        let (a, o, g) = parse_full(&raw(&["--play"])).unwrap();
+        assert_eq!(a.quality, crate::quality::Quality::High);
+        assert!(a.look.lighting.smooth_time);
+        assert!(a.look.look.is_cinematic());
+        assert!(a.structures.is_some_and(|s| s.tunnels));
+        assert!(a.look.sky.volumetric_clouds && a.look.sky.weather_fx);
+        assert!(a.look.ocean_life && a.look.ocean_reef && a.look.coastal_habitat && a.cove_detail && a.underwater_habitats);
+        assert!(a.beaver_house && a.house_finishes && a.house_patina && a.house_furniture && a.house_photo);
+        assert!(!o.beaver_spawn, "plain --play should keep the downtown spawn while loading the house in the city");
+        assert!(a.look.dome_env && a.look.ao_albedo && a.look.occluder_light && a.look.sun_bounce && a.look.soft_shadows);
+        assert!(a.look.sky.wet_surfaces && a.look.sky.screen_reflect && a.look.sky.wet_relief && a.look.sky.lamp_streaks);
+        assert_eq!((a.look.car_materials, a.look.car_contact, a.look.car_reflections, a.look.car_finish), (1, 1, 1, 1));
+        assert_eq!((a.look.car_lamps, a.look.car_wet), (0, 0), "car-lamps/car-wet remain opt-in for Apple Metal compiler safety");
+        assert!(a.look.sky.night_photometry && a.look.sky.lamp_bounce && a.look.sky.urban_sky && a.look.sky.office_floors && a.look.sky.luminaires && a.props2.luminaires);
+        assert_ne!(a.look.nature & eo_render::look::NATURE_FOLIAGE, 0);
+        assert_ne!(a.look.nature & eo_render::look::NATURE_LAWN_ALBEDO, 0);
+        assert!(a.look.sky.cine_camera);
+        assert_ne!(a.look.sky.cam_bits & eo_render::cine_post::CAM_BIT_TONE, 0);
+        assert!(g.play_street_defaults && g.play_facade_defaults);
+        assert_eq!(g.crowd, Some(true));
+        assert_eq!(g.people_shading, Some(true));
+        assert_eq!(g.people_capsules, Some(true));
+        assert_eq!(g.car_panels, Some(true));
+        assert_eq!(g.car_density, Some(true));
+    }
+
+    #[test]
+    fn play_kill_switches_and_quality_override_defaults() {
+        let (a, o, g) = parse_full(&raw(&[
+            "--play",
+            "--quality", "medium",
+            "--no-structures",
+            "--no-weather-fx",
+            "--no-volumetric-clouds",
+            "--no-beaver-house",
+            "--no-crowd",
+            "--no-cine-camera",
+            "--no-soft-shadows",
+            "--no-wet-surfaces",
+            "--no-car-finish",
+            "--no-foliage-light",
+        ])).unwrap();
+        assert_eq!(a.quality, crate::quality::Quality::Medium);
+        assert!(a.structures.is_none());
+        assert!(!a.look.sky.weather_fx && !a.look.sky.volumetric_clouds);
+        assert!(!a.beaver_house && !a.house_photo && !o.beaver_spawn);
+        assert!(!a.look.soft_shadows && !a.look.sky.wet_surfaces && !a.look.sky.wet_relief);
+        assert_eq!(a.look.car_finish, 0);
+        assert_eq!(a.look.nature & eo_render::look::NATURE_FOLIAGE, 0);
+        assert!(!a.look.sky.cine_camera);
+        assert_eq!(g.crowd, Some(false));
+        assert_eq!(g.people_groups, Some(false));
+    }
+
+    #[test]
+    fn explicit_beaver_house_moves_spawn_to_house() {
+        let (a, o, _) = parse_full(&raw(&["--play", "--beaver-house"])).unwrap();
+        assert!(a.beaver_house && o.beaver_spawn);
+    }
+
+    #[test]
+    fn play_bench_keeps_default_medium_tier() {
+        let (a, o, g) = parse_full(&raw(&["--play", "--bench"])).unwrap();
+        assert!(o.bench);
+        assert_eq!(a.quality, crate::quality::Quality::Medium);
+        assert!(a.structures.is_none());
+        assert!(!a.beaver_house && !a.look.ocean_life && !a.look.dome_env && !a.look.sky.cine_camera);
+        assert!(!g.play_street_defaults && !g.play_facade_defaults);
+        assert_eq!(g.crowd, None);
+    }
+
+    #[test]
+    fn weather_cycle_and_sf_clock_helpers_work() {
+        let h = window::sf_clock_hour_now();
+        assert!((0.0..24.0).contains(&h), "clock hour {h} out of 0..24");
+        let mut m = window::WEATHER_CYCLE[0];
+        for i in 0..window::WEATHER_CYCLE.len() {
+            assert_eq!(m, window::WEATHER_CYCLE[i]);
+            assert!(!window::weather_label(m).is_empty());
+            m = window::next_weather(m);
+        }
+        assert_eq!(m, window::WEATHER_CYCLE[0]);
     }
 }

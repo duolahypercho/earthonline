@@ -14,7 +14,25 @@ use eo_render::scene::{GpuObject, Vertex};
 use eo_render::upload::{Data, Job, PumpStats, Target, UploadQueue, Write};
 use eo_render::{GpuContext, Renderer, RendererInit, hitch, wgpu};
 use glam::Vec3;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
+
+static PLAY_STREET_DEFAULTS: AtomicBool = AtomicBool::new(false);
+
+/// Enable the street PBR & round-2 street detail passes by default in interactive
+/// play (`--play`), while still letting every `--no-<feature>` switch turn any off.
+pub fn set_play_street_defaults(on: bool) {
+    PLAY_STREET_DEFAULTS.store(on, Ordering::Relaxed);
+}
+
+fn street_switch(name: &str, explicit: bool) -> bool {
+    let (on, off) = (format!("--{name}"), format!("--no-{name}"));
+    let last = std::env::args().rev().find(|a| *a == on || *a == off);
+    match last.as_deref() {
+        Some(s) => s == on,
+        None => explicit || PLAY_STREET_DEFAULTS.load(Ordering::Relaxed),
+    }
+}
 
 pub struct Bases {
     pub models: ArenaBase,
@@ -264,21 +282,21 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     if (args.look.lighting.rt_gi || args.look.lighting.rt_reflect) && !ctx.ray_query {
         eprintln!("rt-gi, rt-reflect: off: {} ({:?}) offers no inline ray queries here (Metal with EXPERIMENTAL_RAY_QUERY only); the rig's ambient light and reflections as before", ctx.info.name, ctx.info.backend);
     }
-    features.street_pbr |= crate::street_pbr(); // the street's physically based surface (`--street-pbr`; no runtime gate, so only with its switch)
+    features.street_pbr |= street_switch("street-pbr", crate::street_pbr()); // the street's physically based surface (`--street-pbr`; no runtime gate, so only with its switch)
     // the street track's round-2 passes (`--street-wear`, `--street-glare`, `--street-aggregate`, `--plaza-setts`, `--walk-relief`; no runtime gate, so only with their switches)
-    if crate::street_wear() {
+    if street_switch("street-wear", crate::street_wear()) {
         features.street |= eo_render::look::STREET_WEAR;
     }
-    if crate::street_glare() {
+    if street_switch("street-glare", crate::street_glare()) {
         features.street |= eo_render::look::STREET_GLARE;
     }
-    if crate::street_aggregate() {
+    if street_switch("street-aggregate", crate::street_aggregate()) {
         features.street |= eo_render::look::STREET_AGGREGATE;
     }
-    if crate::plaza_setts() {
+    if street_switch("plaza-setts", crate::plaza_setts()) {
         features.street |= eo_render::look::PLAZA_SETTS;
     }
-    if crate::walk_relief() {
+    if street_switch("walk-relief", crate::walk_relief()) {
         features.street |= eo_render::look::WALK_RELIEF; // (`--walk-relief`)
     }
     eo_render::look::set_shader_features(features);
