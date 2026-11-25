@@ -377,3 +377,53 @@ fn car_contact_darkens_the_street_at_the_car_alone() {
     let (a, b) = (corner(&off), corner(&on));
     assert!(a.iter().zip(&b).all(|(p, q)| (p - q).abs() <= 1e-3 * (1.0 + p.abs())), "the far slab changed");
 }
+
+/// `--car-finish`: compiled in but at level 0 the frame is the one without it
+/// (bit-identical, the one pipeline); at level 1 the car alone changes, drawn
+/// with a person beside it by the cars' and the people's own pipelines (their
+/// meshes held apart in the library: `person_mesh_split`), the person as before.
+#[test]
+fn car_finish_changes_the_car_alone_and_nothing_while_off() {
+    let ctx = ctx();
+    let lib = library();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let roles = Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &eo_agents::library::PeopleSource::Off, eo_agents::library::CookOptions { car_materials: true, ..Default::default() }).expect("agent library");
+    let lib = if lib.meta.people_models.is_empty() { roles } else { lib };
+    if !lib.meta.people_models.is_empty() {
+        let k = eo_render::agents::person_mesh_split(&lib).expect("the bodies' meshes come before the people's");
+        assert!(k > 0 && k < lib.meshes.len() as u32);
+    }
+    let cam = Camera::new(Vec3::new(0.0, 1.5, 0.0), 0.0, -0.08, W as f32 / H as f32);
+    let all = eo_render::look::ShaderFeatures::ALL;
+    let shot = |finish: bool, level: u8| {
+        eo_render::look::with_shader_features(eo_render::look::ShaderFeatures { car_finish: finish, ..all }, || {
+            let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+            slab(&mut v, &mut i, &mut o);
+            let mut r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+            let options = eo_render::look::LookOptions { car_materials: 1, car_finish: level, ..r.look.options };
+            r.look.set_options(&ctx.device, options);
+            r.attach_agents(&ctx, &lib).unwrap();
+            let a = r.agents.get().unwrap();
+            let mut agents = vec![car(&lib, "sedan", Vec3::new(0.0, 0.0, -7.0), std::f32::consts::FRAC_PI_2)];
+            if !lib.meta.people_models.is_empty() {
+                agents.push(person(&lib, Vec3::new(-3.0, 0.0, -5.0), 0.0));
+            }
+            a.upload(&ctx.queue, &agents);
+            render(&ctx, &r, &cam, 2)
+        })
+    };
+    let (base, off, on) = (shot(false, 0), shot(true, 0), shot(true, 1));
+    let differ = |a: &[f32], b: &[f32]| a.iter().zip(b).filter(|(x, y)| (*x - *y).abs() > 1e-3 * (1.0 + x.abs())).count();
+    assert_eq!(differ(&base, &off), 0, "level 0: the finish draws nothing");
+    let changed = differ(&base, &on);
+    assert!(changed > 50, "level 1 changes the car ({changed} pixels)");
+    let region = |img: &[f32], x0: u32, x1: u32| (0..H).flat_map(|y| (x0..x1).map(move |x| (y * W + x) as usize)).map(|k| img[k]).collect::<Vec<_>>();
+    // the person, left of the car (its own pipeline): as before
+    if !lib.meta.people_models.is_empty() {
+        let (px, _) = project(&cam, Vec3::new(-3.0, 0.9, -5.0));
+        let (x0, x1) = (px.saturating_sub(12), (px + 12).min(W));
+        assert_eq!(differ(&region(&base, x0, x1), &region(&on, x0, x1)), 0, "the person is drawn as before");
+    }
+    let corner = |img: &[f32]| (0..20).flat_map(|y| (0..20).map(move |x| (H as usize - 1 - y) * W as usize + W as usize - 1 - x)).map(|k| img[k]).collect::<Vec<_>>();
+    assert_eq!(differ(&corner(&base), &corner(&on)), 0, "nothing but the car changes");
+}

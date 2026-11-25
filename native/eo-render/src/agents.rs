@@ -93,10 +93,128 @@ pub fn people_shading_wgsl() -> String {
     format!("const SF_PEOPLE_SHADING: bool = {};\nconst SF_PEOPLE_BOUNCE: bool = {};", people_shading(), people_bounce())
 }
 
+/// `--car-panels`: the cars' panels cooked taut (eo-agents
+/// `vehicles::filter_panel_normals`) and their badges drawn as pressed chrome
+/// emblems (agents_draw.wgsl `ag_car_badge`, role `ROLE_BADGE`), compiled into
+/// the agents' pipelines made after this is set (eo-app sets it before the
+/// library attaches, and cooks the library with it); off, the code is compiled
+/// out, the library is cooked as before and the frame is as before.
+static CAR_PANELS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_car_panels(on: bool) {
+    CAR_PANELS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn car_panels() -> bool {
+    CAR_PANELS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The vehicles' generated constants agents_draw.wgsl reads: `SF_CAR_PANELS`
+/// (`--car-panels`), and (`--car-lamps`) a daytime running lamp's luminance in
+/// the rig's radiance units (`DRL_CD` over `DRL_LENS_M2`, eo-sky
+/// `photometry::cd_m2`'s scale).
+pub fn car_wgsl() -> String {
+    let drl = DRL_CD / DRL_LENS_M2 / eo_sky::photometry::lux_per_unit();
+    format!("const SF_CAR_PANELS: bool = {};\nconst AG_CAR_DRL_DAY: f32 = {:.6};\n", car_panels() && crate::look::shader_features().car_materials, drl)
+}
+
 /// The people's ground occlusion's shader, appended to the agents' colour
 /// shader only with `--people-contact` (empty without it).
 pub fn people_contact_wgsl() -> &'static str {
     if people_contact() { include_str!("people_contact.wgsl") } else { "" }
+}
+
+/// (`--car-lamps`) A tail lamp's luminous intensity on its axis, cd: UN ECE R7
+/// holds a rear position lamp to 4-17 cd, FMVSS 108 a tail lamp to 2-18 cd;
+/// an LED tail lamp sits near the middle.
+pub const TAIL_LAMP_CD: f64 = 8.0;
+/// (`--car-lamps`) A stop lamp's, cd: UN ECE R7 60-185 cd (S1), FMVSS 108
+/// 80-300 cd; on the low side of both, as a single LED lamp.
+pub const STOP_LAMP_CD: f64 = 100.0;
+/// (`--car-lamps`) The rear lamps' photometric field: a lobe about the body's
+/// axis, wider across than up and down, as FMVSS 108 and UN ECE R7 shape a
+/// tail or stop lamp's test points (a third of the axis value at 20 degrees
+/// left or right; up and down the lamp is made for the following driver's
+/// eye, a third to a half of the axis value at 10 degrees: two fifths here,
+/// an eighth at 15, so the road a few metres behind the car, 10 to 20 degrees
+/// below the lamp, takes only the lobe's edge), over the lens's own diffuse
+/// emission into the whole rear half-space (an LED light guide's lens glows
+/// from every side it faces). The lobe is
+/// exp(-(tan h / tan H)^2 - (tan v / tan V)^2) for the angles h across and v
+/// up or down; the floor is this share of the axis value times the cosine off
+/// the axis. The floor is what lights the bumper and the street right behind
+/// the lamp (a faint glow from the bumper, gone within a metre or two), the
+/// lobe the car behind and the wet street's streak; neither has an edge.
+/// Degrees, and the floor's share.
+pub const REAR_LAMP_SPREAD_H_DEG: f64 = 20.0;
+pub const REAR_LAMP_SPREAD_V_DEG: f64 = 10.5;
+pub const REAR_LAMP_FLOOR: f64 = 0.06;
+/// (`--car-lamps`) The cone the light list's record carries for a reader
+/// that shapes it as a spot (none does: every one reads `sf_rear_lamp_shape`):
+/// its lobe's reach. Degrees.
+pub const REAR_LAMP_FULL_DEG: f64 = 5.0;
+pub const REAR_LAMP_EDGE_DEG: f64 = 40.0;
+/// (`--car-lamps`) A daytime running lamp's intensity on its axis, cd (UN ECE
+/// R87: 400-1200 cd), and its lit lens, m^2 (a 30 x 2 cm LED light guide):
+/// a moving car's running lamps by day at their luminance (~1.2e5 cd/m^2, a
+/// bright strip in sunlight; agents_draw.wgsl `ag_lamp`).
+pub const DRL_CD: f64 = 700.0;
+pub const DRL_LENS_M2: f64 = 0.006;
+
+/// (`--car-lamps`) A rear lamp's lit lens, m^2 (a 25 x 5 cm LED light guide).
+pub const REAR_LAMP_LENS_M2: f64 = 0.0125;
+/// (`--car-lamps`) A rear lamp lights the clusters out to where it gives this
+/// much, lux (a sixteenth of the unlit night ground's `NIGHT_UNLIT_GROUND_LUX`).
+pub const REAR_LAMP_REACH_LUX: f64 = 0.25;
+/// (`--car-lamps`) The rear lamps' kind in the frame's light list (after the
+/// shop windows' 4 and the lamps' bounce 5: shaded as a spot of its cone, its
+/// lobe widened by its lens).
+pub const REAR_LAMP_KIND: u32 = 6;
+
+/// (`--car-lamps`) A rear lamp's emission toward the unit direction `d` (from
+/// the lamp) over its axis's (`REAR_LAMP_SPREAD_*`, `REAR_LAMP_FLOOR`), as
+/// WGSL: `{prefix}_rear_lamp_shape(d, axis)`. The look's modules carry it as
+/// `sf_` (look.rs `ShaderFeatures::wgsl`, every module that reads the light
+/// list: the clusters, the streaks, the lit fog, the cars' far lights, the
+/// contact pass), the gather as `lt_` (its streak pick).
+pub fn rear_lamp_shape_fn(prefix: &str) -> String {
+    let th = REAR_LAMP_SPREAD_H_DEG.to_radians().tan();
+    let tv = REAR_LAMP_SPREAD_V_DEG.to_radians().tan();
+    format!(
+        "\n// generated by agents.rs rear_lamp_shape_fn (`--car-lamps`): a car's rear lamp's field\nfn {prefix}_rear_lamp_shape(d: vec3<f32>, axis: vec3<f32>) -> f32 {{\n    let z = dot(d, axis);\n    if (z <= 0.0) {{\n        return 0.0;\n    }}\n    let up = normalize(vec3<f32>(0.0, 1.0, 0.0) - axis * axis.y + vec3<f32>(0.0, 1e-4, 0.0));\n    let y = dot(d, up);\n    let x2 = max(1.0 - z * z - y * y, 0.0);\n    let lobe = exp(-(x2 * {:.6} + y * y * {:.6}) / max(z * z, 1e-4));\n    return max(lobe, {:?} * z);\n}}\n",
+        1.0 / (th * th),
+        1.0 / (tv * tv),
+        REAR_LAMP_FLOOR as f32,
+    )
+}
+
+/// (`--car-lamps`) The look's modules' share of it (look.rs `ShaderFeatures::wgsl`
+/// appends it to every set, as the penumbra's constants: declared either way,
+/// read only behind `SF_CAR_LAMPS`): the rear lamps' kind and their shape.
+pub fn rear_lamp_look_wgsl() -> String {
+    format!("const SF_REAR_LAMP_KIND: u32 = {REAR_LAMP_KIND}u;\n{}", rear_lamp_shape_fn("sf"))
+}
+
+/// The light gather's constants and code for the cars' rear lamps
+/// (`--car-lamps`, agents_lamps.wgsl; sky.rs `cine_lamps_wgsl` appends it):
+/// `LT_CAR_LAMPS` false (the switch off) compiles it out.
+pub fn car_lamps_wgsl() -> String {
+    let on = crate::look::shader_features().car_lamps;
+    // the tail lamps' LED red (agents_draw.wgsl AG_CAR_LED_RED) at unit luminance, as the frame's lights carry colour
+    let red = [1.0f64, 0.012, 0.004];
+    let lum = 0.2126 * red[0] + 0.7152 * red[1] + 0.0722 * red[2];
+    format!(
+        "\n// generated by agents.rs car_lamps_wgsl (`--car-lamps`)\nconst LT_CAR_LAMPS: bool = {on};\nconst LT_FLAG_BRAKING: u32 = 1u;\nconst LT_TAIL_LAMP_CD: f32 = {TAIL_LAMP_CD:?};\nconst LT_STOP_LAMP_CD: f32 = {STOP_LAMP_CD:?};\nconst LT_LOW_BEAM_PEAK_CD: f32 = {:?};\nconst LT_REAR_RED: vec3<f32> = vec3<f32>({:.6}, {:.6}, {:.6});\nconst LT_REAR_REACH_LUX: f32 = {REAR_LAMP_REACH_LUX:?};\nconst LT_REAR_COS_OUTER: f32 = {:.6};\nconst LT_REAR_COS_INNER: f32 = {:.6};\nconst LT_REAR_KIND: u32 = {REAR_LAMP_KIND}u;\nconst LT_REAR_LENS_M2: f32 = {REAR_LAMP_LENS_M2:?};\nconst LT_REAR_PACK: f32 = {:?};\n// a body without its own lamps: above the rear axle by this, behind it by this (m)\nconst LT_REAR_STAND_IN: vec3<f32> = vec3<f32>(0.0, 0.55, 0.95);\n// the light leaves this far behind the body's tail (m)\nconst LT_REAR_OUT_M: f32 = 0.05;\n// a low beam's lens floor toward the street behind it (sky_light.wgsl SKY_CINE_STREAK_HEAD_LENS)\nconst LT_HEAD_LENS_SHARE: f32 = 0.06;\n{}{}",
+        eo_sky::photometry::LOW_BEAM_PEAK_CD,
+        red[0] / lum,
+        red[1] / lum,
+        red[2] / lum,
+        REAR_LAMP_EDGE_DEG.to_radians().cos(),
+        REAR_LAMP_FULL_DEG.to_radians().cos(),
+        eo_agents::vehicles::REAR_LAMP_PACK,
+        rear_lamp_shape_fn("lt"),
+        include_str!("agents_lamps.wgsl")
+    )
 }
 
 /// The city's shader source the agents' module is made on: the full set but the
@@ -247,6 +365,13 @@ pub struct AgentsGpu {
     view_bg: wgpu::BindGroup,
     opaque: wgpu::RenderPipeline,
     glass: wgpu::RenderPipeline,
+    /// (`--car-finish`) the people's own opaque and glass pipelines and the
+    /// first of their meshes (`person_mesh_split`): the cars' (`opaque`,
+    /// `glass`, `AG_PIPE` 1) and the people's (`AG_PIPE` 2) each compiled
+    /// without the other's code, the two ranges of the one command list drawn
+    /// one after the other. None (the switch off, or a library without people):
+    /// `opaque` and `glass` draw every mesh, as before.
+    people_pipes: Option<(u32, wgpu::RenderPipeline, wgpu::RenderPipeline)>,
     /// (`--tunnels`) the agents in a tunnel's bore drawn by pipelines of their
     /// own (agents_draw.wgsl `agent_bore_fs`: opaque, glass), made by
     /// `enable_bores` when the world has bores; and whether this frame's
@@ -292,7 +417,15 @@ impl AgentPipes {
 
     /// A camera pipeline over the agent vertices with fragment entry `fs` (`blend`: the glass list's).
     fn make(&self, label: &str, fs: &str, blend: bool) -> wgpu::RenderPipeline {
+        self.make_for(label, fs, blend, 0)
+    }
+
+    /// `make` for the cars alone (`pipe` 1) or the people alone (2), agents_draw.wgsl
+    /// `AG_PIPE` (0: every agent, as `make`).
+    fn make_for(&self, label: &str, fs: &str, blend: bool, pipe: u32) -> wgpu::RenderPipeline {
         let d = &self.device;
+        let constants = [("AG_PIPE", pipe as f64)];
+        let fs_options = wgpu::PipelineCompilationOptions { constants: if pipe == 0 { &[] } else { &constants }, ..Default::default() };
         let stride = std::mem::size_of::<AgentVertex>() as u64;
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: blend.then_some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: if blend { wgpu::ColorWrites::empty() } else { wgpu::ColorWrites::ALL } };
@@ -316,11 +449,22 @@ impl AgentPipes {
                 bias: Default::default(),
             }),
             multisample: wgpu::MultisampleState { count: self.sample_count, ..Default::default() },
-            fragment: Some(wgpu::FragmentState { module: &self.module, entry_point: Some(fs), compilation_options: Default::default(), targets: if self.debug_ids { &targets_ids } else { &targets } }),
+            fragment: Some(wgpu::FragmentState { module: &self.module, entry_point: Some(fs), compilation_options: fs_options, targets: if self.debug_ids { &targets_ids } else { &targets } }),
             multiview_mask: None,
             cache: None,
         })
     }
+}
+
+/// (`--car-finish`) The first person mesh, where every vehicle's meshes lie
+/// before it and every person's from it (the library cooks the bodies before
+/// the people): the people's pipelines draw the command list from there. None
+/// when the library has no people or does not hold them apart.
+pub fn person_mesh_split(lib: &Library) -> Option<u32> {
+    let meshes = |class: u32| lib.models.iter().filter(move |m| m.class == class).flat_map(|m| m.meshes.iter().copied().filter(|&k| k != eo_agents::NO_MESH));
+    let first_person = meshes(eo_agents::CLASS_PERSON).min()?;
+    let last_body = meshes(eo_agents::CLASS_VEHICLE).max().unwrap_or(0);
+    (last_body < first_person && first_person < lib.meshes.len() as u32).then_some(first_person)
 }
 
 impl AgentsGpu {
@@ -347,7 +491,12 @@ impl AgentsGpu {
         let vbuf = init("agent-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX | U::STORAGE);
         let ibuf = init("agent-indices", bytemuck::cast_slice(&lib.indices), U::INDEX | U::STORAGE);
         let meshes = init("agent-meshes", bytemuck::cast_slice(&lib.meshes), U::STORAGE);
-        let models = init("agent-models", bytemuck::cast_slice(&lib.models), U::STORAGE);
+        // (`--car-lamps`) each body's rear lamps in its spare words, for the light gather (agents_lamps.wgsl)
+        let models = if crate::look::shader_features().car_lamps {
+            init("agent-models", bytemuck::cast_slice(&lib.models_with_rear_lamps()), U::STORAGE)
+        } else {
+            init("agent-models", bytemuck::cast_slice(&lib.models), U::STORAGE)
+        };
         let bones = init("agent-bones", bytemuck::cast_slice(&lib.bones), U::STORAGE);
         let materials = init("agent-materials", bytemuck::cast_slice(&lib.materials), U::STORAGE);
         // One object entry: the look's material class "painted" (draw.wgsl kind 0).
@@ -578,10 +727,11 @@ impl AgentsGpu {
         // (`--car-contact`) the cars' occlusion of the street, appended only with the switch on.
         let contact_on = look.options.car_contact > 0;
         let draw_src = format!(
-            "{}\n{}\n{}\n{}\n{}\n{}{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}{}\n{}",
             // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
             agents_city_source(),
             people_shading_wgsl(), // (`--people-shading`, `--people-bounce`) compiled out without them
+            car_wgsl(), // (`--car-panels`, `--car-lamps`) the vehicles' generated constants
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
             include_str!("agents_draw.wgsl"),
@@ -599,9 +749,14 @@ impl AgentsGpu {
         let contact = contact_on.then(|| crate::agents_contact::Contact::new(d, &draw_module, [&draw_bgl, look.main_bind_group_layout(), &data_bgl]));
         let attrs = AgentPipes::ATTRS;
         let stride = std::mem::size_of::<AgentVertex>() as u64;
-        let make = |label: &str, blend: bool| pipes.make(label, if debug_ids { "agent_fs_ids" } else { "agent_fs" }, blend);
-        let opaque = make("agent-opaque", false);
-        let glass = make("agent-glass", true);
+        // (`--car-finish`) the cars and the people in pipelines of their own (each
+        // without the other's code: the two in one were more than Apple's compiler takes)
+        let split = if crate::look::shader_features().car_finish { person_mesh_split(lib) } else { None };
+        let fs = if debug_ids { "agent_fs_ids" } else { "agent_fs" };
+        let cars = if crate::look::shader_features().car_finish && (split.is_some() || lib.meta.people_models.is_empty()) { 1 } else { 0 };
+        let opaque = pipes.make_for("agent-opaque", fs, false, cars);
+        let glass = pipes.make_for("agent-glass", fs, true, cars);
+        let people_pipes = split.map(|k| (k, pipes.make_for("agent-opaque-people", fs, false, 2), pipes.make_for("agent-glass-people", fs, true, 2)));
         // the agents' screen motion for the temporal resolve (single-sample, no ids).
         let velocity = (sample_count == 1 && !debug_ids).then(|| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -750,6 +905,7 @@ impl AgentsGpu {
             view_bg,
             opaque,
             glass,
+            people_pipes,
             bore: std::sync::OnceLock::new(),
             bore_live: AtomicBool::new(false),
             pipes,
@@ -849,11 +1005,12 @@ impl AgentsGpu {
             // before the shadows the cascades, and the camera only
             // without an occlusion pass this frame.
             // y: (`--car-materials`) the cars' materials' level (agents_draw.wgsl `ag_car_on`; 0 as before).
-            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, look.options.car_materials as u32, 0, 0],
+            // z: (`--car-lamps`) bit 0, (`--car-wet`) bit 1, (`--car-finish`) bit 2 (agents_draw.wgsl `ag_car_lamps_on`, `ag_car_wet_on`, `ag_car_finish_on`; 0 as before).
+            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, look.options.car_materials as u32, (look.options.car_lamps > 0) as u32 | ((look.options.car_wet > 0) as u32) << 1 | ((look.options.car_finish > 0) as u32) << 2, 0],
             view_proj: vp.to_cols_array_2d(),
         };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
-        let pc = AgParams { misc: [0b0001, p.misc[1], 0, 0], ..p }; // after the pyramid, the camera
+        let pc = AgParams { misc: [0b0001, p.misc[1], p.misc[2], 0], ..p }; // after the pyramid, the camera
         queue.write_buffer(&self.params_c, 0, bytemuck::bytes_of(&pc));
         let f = AgFrame {
             view_proj: vp.to_cols_array_2d(),
@@ -969,7 +1126,14 @@ impl AgentsGpu {
         pass.set_bind_group(2, &self.data_bg, &[]);
         pass.set_vertex_buffer(0, self.vbuf.slice(..));
         pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
-        pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+        if let Some((k, people, _)) = &self.people_pipes {
+            // (`--car-finish`) the cars' meshes, then the people's in their own pipeline
+            pass.multi_draw_indexed_indirect(&self.cmds, 0, *k);
+            pass.set_pipeline(people);
+            pass.multi_draw_indexed_indirect(&self.cmds, *k as u64 * DRAW_ARGS_BYTES, self.mesh_count - k);
+        } else {
+            pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+        }
         // (`--tunnels`) the same list again for the agents in a bore (the first draw discarded them).
         if let Some(b) = self.bore.get().filter(|_| self.bore_live.load(Ordering::Relaxed)) {
             pass.set_pipeline(&b[0]);
@@ -1030,7 +1194,14 @@ impl AgentsGpu {
         pass.set_bind_group(2, &self.data_bg, &[]);
         pass.set_vertex_buffer(0, self.vbuf.slice(..));
         pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
-        pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
+        if let Some((k, _, people)) = &self.people_pipes {
+            // (`--car-finish`) the cars' glass and lenses, then the people's in their own pipeline
+            pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, *k);
+            pass.set_pipeline(people);
+            pass.multi_draw_indexed_indirect(&self.cmds, (self.mesh_count + k) as u64 * DRAW_ARGS_BYTES, self.mesh_count - k);
+        } else {
+            pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
+        }
         if let Some(b) = self.bore.get().filter(|_| self.bore_live.load(Ordering::Relaxed)) {
             pass.set_pipeline(&b[1]);
             pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
@@ -1095,6 +1266,7 @@ mod tests {
             ("EMERGENCY", v::ROLE_EMERGENCY),
             ("BRAKE", v::ROLE_BRAKE),
             ("LIVERY", v::ROLE_LIVERY),
+            ("BADGE", v::ROLE_BADGE),
         ] {
             assert!(src.contains(&format!("const AG_ROLE_{name}: u32 = {role}u;")), "AG_ROLE_{name}");
         }
@@ -1147,9 +1319,10 @@ mod tests {
             assert_eq!(konst, format!("const SF_PEOPLE_SHADING: bool = {shading};\nconst SF_PEOPLE_BOUNCE: bool = {bounce};"));
             assert_eq!(super::people_contact_wgsl().contains("fn agent_contact_vs"), contact);
             let src = format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
                 crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
                 konst,
+                super::car_wgsl(),
                 include_str!("agents_types.wgsl"),
                 include_str!("agents_common.wgsl"),
                 include_str!("agents_draw.wgsl"),
@@ -1162,6 +1335,36 @@ mod tests {
         super::set_people_shading(false);
         super::set_people_bounce(false);
         super::set_people_contact(false);
+    }
+
+    /// (`--car-panels`, `--car-lamps`) the agents' colour shader validates with the panels compiled in
+    /// and out, the constant says which, and a running lamp by day is a bright strip in sunlight
+    /// (several times the white of a sunlit card, under a headlamp's core).
+    #[test]
+    fn the_car_panels_compile_in_and_out() {
+        for on in [false, true] {
+            super::set_car_panels(on);
+            let konst = super::car_wgsl();
+            let want = on && crate::look::shader_features().car_materials;
+            assert!(konst.contains(&format!("const SF_CAR_PANELS: bool = {want};")), "{konst}");
+            let src = format!(
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
+                super::people_shading_wgsl(),
+                konst,
+                include_str!("agents_types.wgsl"),
+                include_str!("agents_common.wgsl"),
+                include_str!("agents_draw.wgsl"),
+                include_str!("sky_velocity.wgsl"),
+            );
+            let module = wgpu::naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("panels {on}: {}", e.emit_to_string(&src)));
+            wgpu::naga::valid::Validator::new(wgpu::naga::valid::ValidationFlags::all(), wgpu::naga::valid::Capabilities::all()).validate(&module).unwrap_or_else(|e| panic!("panels {on}: {e:?}"));
+        }
+        super::set_car_panels(false);
+        // a white card in the noon sun (90 klx) is ~2.9e4 cd/m^2; a running lamp's strip four times that
+        let drl = super::DRL_CD / super::DRL_LENS_M2;
+        let card = 90_000.0 / std::f64::consts::PI;
+        assert!(drl > 3.0 * card && drl < 1e6, "{drl:.0} cd/m^2");
     }
 
     /// (`--soft-shadows`, `--occluder-light`) the agents' module keeps the penumbra,
@@ -1201,5 +1404,26 @@ mod tests {
         let list = eo_agents::people::CONTACT_JOINTS.iter().map(|j| format!("{j}u")).collect::<Vec<_>>().join(", ");
         assert!(src.contains(&format!("const PC_JOINTS: array<u32, {}> = array<u32, {}>({list});", eo_agents::people::CONTACT_JOINTS.len(), eo_agents::people::CONTACT_JOINTS.len())), "PC_JOINTS");
         assert!(src.contains(&format!("const PC_PARTS: u32 = {}u;", eo_agents::people::CONTACT_JOINTS.len())), "PC_PARTS");
+    }
+
+    /// (`--car-lamps`) the light gather composes with the cars' rear lamps compiled in and out; its
+    /// lamps' kind is a kind of its own and the streak pick's low-beam floor is the street's.
+    #[test]
+    fn the_rear_lamps_compile_in_and_out_of_the_gather() {
+        let none = crate::look::ShaderFeatures::NONE;
+        for (on, f) in [(false, none), (true, crate::look::ShaderFeatures { car_materials: true, car_lamps: true, cinematic: true, ..none }), (false, crate::look::ShaderFeatures { cinematic: true, ..none })] {
+            crate::look::with_shader_features(f, || {
+                let src = format!("{}\n{}\nconst LT_TILE_M: f32 = 1.0;\n{}{}", include_str!("sky_common.wgsl"), crate::sky::sea_wgsl(), crate::shop_lights::wgsl() + &crate::sky::cine_lamps_wgsl(f.cinematic) + &crate::sky::night_photometry_wgsl() + &crate::sky::lamp_bounce_wgsl(), include_str!("sky_lights.wgsl"));
+                assert!(src.contains(&format!("const LT_CAR_LAMPS: bool = {on};")), "the constant follows the feature");
+                use wgpu::naga;
+                let m = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("the gather ({on}): {}", e.emit_to_string(&src)));
+                naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&m).unwrap_or_else(|e| panic!("the gather ({on}): {}", e.emit_to_string(&src)));
+            });
+        }
+        assert!(![0, 1, 3, crate::shop_lights::SHOP_LIGHT_KIND, crate::sky::BOUNCE_LIGHT_KIND].contains(&super::REAR_LAMP_KIND), "a kind of its own");
+        assert!(include_str!("sky_light.wgsl").contains("const SKY_CINE_STREAK_HEAD_LENS: f32 = 0.06;"), "LT_HEAD_LENS_SHARE");
+        assert!(super::car_lamps_wgsl().contains("const LT_HEAD_LENS_SHARE: f32 = 0.06;"));
+        assert!(super::REAR_LAMP_FULL_DEG < super::REAR_LAMP_EDGE_DEG && super::TAIL_LAMP_CD < super::STOP_LAMP_CD);
+        assert!(super::REAR_LAMP_SPREAD_V_DEG < super::REAR_LAMP_SPREAD_H_DEG && super::REAR_LAMP_FLOOR > 0.0 && super::REAR_LAMP_FLOOR < 0.2);
     }
 }

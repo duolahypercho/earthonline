@@ -72,6 +72,50 @@ pub struct RegionConfig {
     /// The crowd by place and hour (eo-app `--crowd`, `CrowdDensity`) in
     /// place of `people`'s fixed resident disc; None (the default) as before.
     pub crowd: Option<CrowdDensity>,
+    /// The traffic by street class and hour (eo-app `--car-density`) in place of
+    /// the JS pool's even spread and its fixed local target; None (the default) as before.
+    pub traffic: Option<TrafficDensity>,
+}
+
+/// (`--car-density`) The fleet put down and kept round the focus at each
+/// lane's density for its street class (`lane_density_per_km`) times the
+/// hour's share of the day's busiest (`hour_footfall`), within `radius_m`
+/// (falling off past `DENSE_FALLOFF_FROM` of it), the fleet at most
+/// `vehicle_pool` cars.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrafficDensity {
+    /// The hour the density is taken at (the drawn hour; the crowd keeps its own).
+    pub hour: f64,
+    pub radius_m: f64,
+}
+
+impl TrafficDensity {
+    pub fn standard(hour: f64) -> Self {
+        TrafficDensity { hour, radius_m: DENSE_RADIUS_M }
+    }
+
+    /// A point's weight at distance `d` from the focus (1 near, a quarter at the radius, 0 past it).
+    pub fn falloff(&self, d: f64) -> f64 {
+        if d > self.radius_m {
+            return 0.0;
+        }
+        let t = ((d / self.radius_m - DENSE_FALLOFF_FROM) / (1.0 - DENSE_FALLOFF_FROM)).clamp(0.0, 1.0);
+        1.0 - 0.75 * t
+    }
+
+    /// The cars a lane carries round `focus` (its segments by their midpoints'
+    /// distance, each at its street class's density at the hour).
+    pub fn lane_cars(&self, lane: &crate::network::Lane, focus: [f64; 2]) -> f64 {
+        let k = lane_density_per_km(lane.highway.as_str()) * hour_footfall(self.hour) / 1000.0;
+        let mut n = 0.0;
+        for w in lane.pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let len = geom::hypot(b[0] - a[0], b[1] - a[1]);
+            let d = geom::hypot((a[0] + b[0]) * 0.5 - focus[0], (a[1] + b[1]) * 0.5 - focus[1]);
+            n += len * k * self.falloff(d);
+        }
+        n
+    }
 }
 
 /// The game camera of the JS harnesses: 52 degrees vertical at 16:9.
@@ -93,6 +137,7 @@ impl RegionConfig {
             view_half_angle: game_camera_half_angle(),
             draw_horizon: traffic_window(Level::High).1,
             crowd: None,
+            traffic: None,
         }
     }
 
@@ -110,6 +155,7 @@ impl RegionConfig {
             view_half_angle: game_camera_half_angle(),
             draw_horizon: traffic_window(Level::High).1,
             crowd: None,
+            traffic: None,
         }
     }
 }
@@ -296,6 +342,42 @@ impl Region {
                 v
             }
         };
+        if let Some(t) = self.cfg.traffic {
+            // (`--car-density`) the JS pool first, put down exactly as without
+            // the density (the same lanes and the same draws: the same cars where
+            // they were), then on each lane the cars its street class carries
+            // beyond the pool's cars on it, from a stream of draws of their own:
+            // a lane drawn by its shortfall (the list holds it once for every
+            // twentieth of a car), the extras the shortfalls' sum (at most the
+            // pool). A busy hour fills every street to its density; a quiet one
+            // still fills an arterial the pool's even spread left short.
+            for _ in 0..VEHICLE_POOL.min(self.cfg.vehicle_pool) {
+                let _ = self.fleet.spawn(net, &lanes, &mut self.car_rng, self.cfg.seed_int);
+            }
+            let focus = [self.focus.x, self.focus.z];
+            let mut on_lane: std::collections::HashMap<LaneId, f64> = std::collections::HashMap::new();
+            for c in &self.fleet.cars {
+                *on_lane.entry(c.lane).or_insert(0.0) += 1.0;
+            }
+            let mut weighted = vec![];
+            let mut short = 0.0;
+            for &l in &lanes {
+                let n = t.lane_cars(&net.lanes[l as usize], focus) - on_lane.get(&l).copied().unwrap_or(0.0);
+                if n > 0.0 {
+                    short += n;
+                    for _ in 0..(n * 20.0).round() as usize {
+                        weighted.push(l);
+                    }
+                }
+            }
+            let count = (self.fleet.len() + short.round() as usize).min(self.cfg.vehicle_pool);
+            let mut extra = Mulberry32::new(self.cfg.seed_int.wrapping_add(77).wrapping_add(self.id.wrapping_mul(0x9e37_79b9)) ^ DENSE_EXTRA_SEED);
+            for _ in self.fleet.len()..count {
+                let _ = self.fleet.spawn(net, &weighted, &mut extra, self.cfg.seed_int);
+            }
+            self.fleet.separate(net);
+            return;
+        }
         for _ in 0..self.cfg.vehicle_pool {
             if !self.fleet.spawn(net, &lanes, &mut self.car_rng, self.cfg.seed_int) {
                 continue;
@@ -405,7 +487,16 @@ impl Region {
         self.stats.focus_updates += 1;
         let first = self.stats.focus_updates == 1;
         let footfall = hour_footfall(hour);
-        let car_target = crate::standards::js_round(LOCAL_CAR_TARGET * (0.55 + 0.45 * footfall)) as usize;
+        let mut car_target = crate::standards::js_round(LOCAL_CAR_TARGET * (0.55 + 0.45 * footfall)) as usize;
+        if let Some(t) = self.cfg.traffic {
+            // (`--car-density`) the cars the streets within the local radius carry, at most four fifths of the fleet
+            let mut ids: Vec<LaneId> = net.tiles_near(focus[0], focus[1], LOCAL_LIFE_RADIUS).flat_map(|tile| tile.lanes.iter().copied()).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            let near = TrafficDensity { radius_m: LOCAL_LIFE_RADIUS, ..t };
+            let n: f64 = ids.iter().map(|&l| &net.lanes[l as usize]).filter(|lane| lane.alive).map(|lane| near.lane_cars(lane, focus)).sum();
+            car_target = (n.round() as usize).min(self.fleet.len() * 4 / 5).max(car_target.min(self.fleet.len()));
+        }
         let n = self.fleet.len();
         let mut local = 0;
         let mut on_screen = 0;

@@ -421,9 +421,24 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // the cars' reflections of the street's brightest lights at any distance (agents_draw.wgsl `ag_car_far_lights`; off by default).
             "--car-reflections" => a.look.car_reflections = 1,
             "--no-car-reflections" => a.look.car_reflections = 0,
+            // the cars' lamps as a driver works them, their rear lamps lights of the street (agents_draw.wgsl `ag_lamp`, agents_lamps.wgsl; off by default).
+            "--car-lamps" => a.look.car_lamps = 1,
+            "--no-car-lamps" => a.look.car_lamps = 0,
+            // the cars in the wet: the wet street's mirror of the lights behind them cut by their bodies (agents_contact.wgsl `ag_ct_wet`; off by default).
+            "--car-wet" => a.look.car_wet = 1,
+            "--no-car-wet" => a.look.car_wet = 0,
+            // the cars' finish as the street wears it: flake and orange peel, road film, dust, faded lacquer, green-grey glass, rain beads (agents_draw.wgsl `ag_car_finish_*`; off by default).
+            "--car-finish" => a.look.car_finish = 1,
+            "--no-car-finish" => a.look.car_finish = 0,
             // the capture cards' streets with their simulated traffic (agents.rs `warm_traffic`; off by default).
             "--car-traffic" => crate::agents::set_warm_traffic(true),
             "--no-car-traffic" => crate::agents::set_warm_traffic(false),
+            // the traffic by street class and hour: each lane round the focus at its class's density (eo-sim `TrafficDensity`; off by default).
+            "--car-density" => crate::agents::set_car_density(true),
+            "--no-car-density" => crate::agents::set_car_density(false),
+            // the cars' panels cooked taut (the paint's normals filtered) and their badges as pressed chrome emblems (eo-agents `filter_panel_normals`, agents_draw.wgsl `ag_car_badge`; off by default; needs --car-materials).
+            "--car-panels" => eo_render::agents::set_car_panels(true),
+            "--no-car-panels" => eo_render::agents::set_car_panels(false),
             "--night-photometry" => a.look.sky.night_photometry = true,
             "--no-night-photometry" => a.look.sky.night_photometry = false,
             "--lamp-bounce" => a.look.sky.lamp_bounce = true,

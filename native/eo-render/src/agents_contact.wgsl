@@ -108,8 +108,21 @@ fn ag_contact_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) inst: 
         vec4<u32>(4u, 5u, 7u, 6u), // +z
     );
     let c = quads[face][k];
-    let lo = vec3<f32>(-s.lower.x - AG_CT_REACH, -0.4, s.lower.z - AG_CT_REACH);
-    let hi = vec3<f32>(s.lower.x + AG_CT_REACH, s.upper.x, s.lower.w + AG_CT_REACH);
+    var lo = vec3<f32>(-s.lower.x - AG_CT_REACH, -0.4, s.lower.z - AG_CT_REACH);
+    var hi = vec3<f32>(s.lower.x + AG_CT_REACH, s.upper.x, s.lower.w + AG_CT_REACH);
+    if (SF_CAR_WET && ag_ct_wet_on()) {
+        // (`--car-wet`) on a wet street the box reaches toward the eye: the
+        // road between the car and the eye mirrors the lights behind the car
+        let e = ag_rotate(vec4<f32>(-a.rot.xyz, a.rot.w), frame.cam_pos.xyz - a.pos) / max(a.scale, 1e-3);
+        let de = length(e.xz);
+        let reach = clamp(de - AG_CT_WET_NEAR, 0.0, AG_CT_WET_REACH);
+        if (reach > 0.0) {
+            let q = e.xz / de * reach;
+            let rise = reach * AG_CT_WET_GRADE;
+            lo = min(lo, vec3<f32>(q.x - AG_CT_REACH, -0.4 - rise, q.y - AG_CT_REACH));
+            hi = max(hi, vec3<f32>(q.x + AG_CT_REACH, s.upper.x + rise, q.y + AG_CT_REACH));
+        }
+    }
     let p = select(lo, hi, vec3<bool>((c & 1u) != 0u, (c & 2u) != 0u, (c & 4u) != 0u));
     out.clip = frame.view_proj * vec4<f32>(a.pos + ag_rotate(a.rot, p * a.scale), 1.0);
     return out;
@@ -238,6 +251,9 @@ fn ag_ct_lamp_shape(li: SkyLight, l: vec3<f32>, dist: f32, cine: bool) -> vec2<f
         }
         return vec2<f32>(vert * side * near * near, SKY_CINE_SRC_HEADLAMP);
     }
+    if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+        return vec2<f32>(sf_rear_lamp_shape(-l, li.dir), 0.5 * sqrt(max(li.size, 0.0))); // (`--car-lamps`) a rear lamp's field
+    }
     if (li.kind >= 3u) {
         return vec2<f32>(smoothstep(li.cos_outer, li.cos_inner, ca), select(SKY_CINE_SRC_STREET, 0.5 * sqrt(max(li.size, 0.0)), li.kind >= 4u));
     }
@@ -347,13 +363,19 @@ fn ag_contact_fs(in: AgCtOut) -> @location(0) vec4<f32> {
     if (ag_ct_inside(p, lower_lo - grow, lower_hi + grow) || ag_ct_inside(p, upper_lo - grow, upper_hi + grow)) {
         return none;
     }
+    // (`--car-wet`) the wet street's mirror of the lights the car stands in front of
+    var wet = 1.0;
+    if (SF_CAR_WET && ag_ct_wet_on()) {
+        wet = ag_ct_wet(world, n, p, a, array<vec3<f32>, 6>(lower_lo, lower_hi, upper_lo, upper_hi, lower_lo, lower_hi));
+    }
+    let wet_out = vec4<f32>(vec3<f32>(wet), 1.0);
     // how far outside the body's footprint (0 under it).
     let out_x = max(abs(p.x) - s.lower.x, 0.0);
     let out_z = max(max(s.lower.z - p.z, p.z - s.lower.w), 0.0);
     let away = length(vec2<f32>(out_x, out_z));
     let fade = 1.0 - smoothstep(AG_CT_REACH * 0.6, AG_CT_REACH, away);
     if (fade <= 0.0) {
-        return none;
+        return wet_out;
     }
     let body = 1.0 - (1.0 - ag_ct_box(p, lower_lo, lower_hi)) * (1.0 - ag_ct_box(p, upper_lo, upper_hi));
     var tyres = 0.0;
@@ -403,8 +425,198 @@ fn ag_contact_fs(in: AgCtOut) -> @location(0) vec4<f32> {
     let taken = irr * ao + rim + bounce + lamps.lit;
     let left = irr * min(ao, vis) + (rim + bounce) * vis + lamps_left;
     if (occ < 0.004 && all(lamps_left >= lamps.lit * 0.996)) {
-        return none;
+        return wet_out;
     }
     let k = (stand + left) / max(stand + taken, vec3<f32>(1e-6));
-    return vec4<f32>(clamp(k, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    return vec4<f32>(clamp(k, vec3<f32>(0.0), vec3<f32>(1.0)) * wet, 1.0);
+}
+
+// ---- (`--car-wet`; SF_CAR_WET compiles it out) The wet street's mirror of
+// the lights behind a car. The wet film reflects the frame's brightest lights
+// in long streaks down the road toward the eye (sky_light.wgsl
+// `sky_cine_streaks`), each from the points whose mirrored ray finds the
+// light; where the car stands between such a point and its light, the
+// point mirrors the car instead (a dark body, its own lamps kept), so the
+// streak is cut and the car's mirror image stands in the road. Each streak
+// light's reflection at the point is reckoned as the street reckons it (the
+// film's base lobe; its puddles' sharper lobes are left out) with the share
+// of the light's sphere the car's bodies leave (`ag_ct_lamp_vis`, as for
+// the lamps' shadows), and the pixel is multiplied by what is left of the
+// point's radiance when the hidden reflections are taken from it: its
+// radiance from the previous frame (the screen-space reflection's history,
+// already without them) plus them, so the cut converges on the radiance less
+// the hidden streaks and leaves the rest of the pixel (the street's diffuse,
+// its mirror of the sky, the facades and the cars' own lamps) as it was; the
+// street's own diffuse light (its wet albedo under the sky, the ambient and
+// the clusters' lamps, unshadowed) is never taken.
+
+// The box reaches toward the eye along the road this far (m), stopping this
+// short of the eye's foot, its height grown by this grade along it (the road
+// rising or falling).
+const AG_CT_WET_REACH: f32 = 30.0;
+const AG_CT_WET_NEAR: f32 = 2.5;
+const AG_CT_WET_GRADE: f32 = 0.15;
+// The road's plane in the car's frame: within this of it at the car (a kerb's top is 0.15 m up).
+const AG_CT_WET_ROAD_M: f32 = 0.35;
+// Wet asphalt's albedo (dry ~0.1 darkened by the film, sky_light.wgsl SKY_CINE_WET_DARKEN.x).
+const AG_CT_WET_ALBEDO: f32 = 0.045;
+// A streak light's reflection under this share of the point's radiance is not tested against the car.
+const AG_CT_WET_MIN: f32 = 0.003;
+
+// Whether the cars' wet terms are on (`--car-wet`, agents.rs `AgParams::misc.z` bit 1) and the street is wet under the look.
+fn ag_ct_wet_on() -> bool {
+    return SF_CAR_WET && SKY_CINE_FULL && (ag.misc.z & 2u) != 0u && sky_on(skyu.flags.x, SKY_WET) && sky_on(skyu.flags.x, SKY_CINEMATIC)
+        && sky_on(skyu.flags.x, SKY_LIGHTS) && skyu.lights.x != 0u && skyu.wet.x >= 0.02;
+}
+
+// A streak light's emission toward the point over its axis's and its source's radius (m), as `sky_cine_streaks` shapes them.
+fn ag_ct_streak_shape(li: SkyLight, l: vec3<f32>) -> vec2<f32> {
+    let ca = dot(-l, li.dir);
+    if (li.kind == 0u) {
+        return vec2<f32>(max(sky_cine_cobra(l, li.dir), SKY_CINE_STREAK_LENS), SKY_CINE_SRC_STREET);
+    }
+    if (li.kind == 3u) {
+        return vec2<f32>(max(smoothstep(li.cos_outer, li.cos_inner, ca), SKY_CINE_STREAK_LENS), SKY_CINE_SRC_STREET);
+    }
+    if (li.kind == 1u) {
+        let dep = asin(clamp(l.y, -1.0, 1.0)) * 57.29578;
+        let hl = normalize(vec2<f32>(-l.x, -l.z) + vec2<f32>(1e-6, 0.0));
+        let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
+        let hr = vec2<f32>(-ha.y, ha.x);
+        let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
+        return vec2<f32>(max(sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578) * side, SKY_CINE_STREAK_HEAD_LENS * smoothstep(-0.2, 0.2, dot(hl, ha))), SKY_CINE_SRC_HEADLAMP);
+    }
+    if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+        return vec2<f32>(sf_rear_lamp_shape(-l, li.dir), 0.5 * sqrt(max(li.size, 0.0))); // (`--car-lamps`) a rear lamp's field
+    }
+    if (li.kind >= 4u) {
+        return vec2<f32>(smoothstep(li.cos_outer, li.cos_inner, ca), 0.5 * sqrt(max(li.size, 0.0)));
+    }
+    return vec2<f32>(1.0, SKY_CINE_SRC_STREET);
+}
+
+// The share of the point's radiance (luminance) the car leaves it: 1 where it
+// mirrors no streak light the car hides. `p` the point in the car's frame, `b`
+// the car's boxes (lower, upper, a tyre).
+fn ag_ct_wet(world: vec3<f32>, n: vec3<f32>, p: vec3<f32>, a: AgAgent, b: array<vec3<f32>, 6>) -> f32 {
+    // the road (and a kerb's top) round the car: its plane, rising or falling a little away from it (not a bonnet)
+    let off = length(max(abs(p.xz - 0.5 * (b[0].xz + b[1].xz)) - 0.5 * (b[1].xz - b[0].xz), vec2<f32>(0.0)));
+    if (n.y < 0.7 || abs(p.y) > AG_CT_WET_ROAD_M + AG_CT_WET_GRADE * off) {
+        return 1.0;
+    }
+    var w = skyu.wet.x;
+    if (sky_on(skyu.flags.x, SKY_DAMP)) {
+        w = w * sky_damp_left(world.xz, -1.0); // (`--weather damp`) the drying patches, as the street's
+    }
+    if (w < 0.02) {
+        return 1.0;
+    }
+    let v = normalize(skyu.eye.xyz - world);
+    var t = v - n * dot(v, n);
+    if (dot(t, t) < 1e-8) {
+        t = cross(n, vec3<f32>(1.0, 0.0, 0.0));
+    }
+    t = normalize(t);
+    let g = skyu.lights.yzw;
+    let base = g.x * g.y * g.z * (1u + SKY_CLUSTER_CAP);
+    let count = min(sky_clusters[base], SKY_STREAK_CAP);
+    let qi = vec4<f32>(-a.rot.xyz, a.rot.w);
+    let inv = 1.0 / max(a.scale, 1e-3);
+    var sum = 0.0;
+    var hidden = 0.0;
+    var lights = array<vec2<f32>, 32>();
+    for (var k = 0u; k < count; k = k + 1u) {
+        let li = sky_lights[sky_clusters[base + 1u + k]];
+        let d = li.pos - world;
+        let d2 = max(dot(d, d), 0.04);
+        let dist = sqrt(d2);
+        let l = d / dist;
+        if (dot(n, l) <= 0.0) {
+            continue;
+        }
+        let sh = ag_ct_streak_shape(li, l);
+        let wide = sh.y / (2.0 * dist);
+        let f = sky_cine_film(n, v, l, t, min(SKY_CINE_STREAK_ALONG + wide, 1.0), min(SKY_CINE_STREAK_ACROSS + wide, 1.0));
+        let e = lk_luma(li.color) * li.intensity * sh.x / d2;
+        let r = e * min(f, d2 / (LK_PI * sh.y * sh.y)) * w;
+        sum = sum + r;
+        lights[k] = vec2<f32>(r, sh.y);
+    }
+    if (sum <= 0.0) {
+        return 1.0;
+    }
+    // the street's own light at the point (white, unshadowed): the sky, the ambient, the key and the clusters' lamps
+    let env_i = look.ambient.w * look.env_class.z;
+    let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
+    var irr = lk_luma(hemi + look.ambient.xyz + lk_sh(n) * env_i) + lk_luma(look.key.xyz) * max(dot(n, look.key_dir.xyz), 0.0);
+    irr = irr + ag_ct_wet_lamps(world, n);
+    let own = AG_CT_WET_ALBEDO / LK_PI * irr;
+    let guess = own + sum;
+    for (var k = 0u; k < count; k = k + 1u) {
+        let r = lights[k].x;
+        if (r <= AG_CT_WET_MIN * guess) {
+            continue;
+        }
+        let li = sky_lights[sky_clusters[base + 1u + k]];
+        hidden = hidden + r * (1.0 - ag_ct_lamp_vis(p, ag_rotate(qi, li.pos - a.pos) * inv, lights[k].y * inv, b));
+    }
+    if (hidden <= 0.0) {
+        return 1.0;
+    }
+    // what the point sends the eye before the car takes its streaks: the
+    // previous frame's (which the car's cut already left out: its radiance
+    // plus the cut, a fixed point at the radiance less the cut), where the
+    // history holds it; else the film's mirror of the lights over the street's
+    // own diffuse. The cut never takes the street's own diffuse.
+    var total = guess;
+    if (sky_on(skyu.flags.x, SKY_SSR) && skyu.flags.z != 0u) {
+        let c = ag_ct_prev_luma(world, 0.0);
+        if (c < 1e8) {
+            total = c + hidden;
+        }
+    }
+    return clamp(1.0 - hidden / total, min(own / total, 1.0), 1.0);
+}
+
+// The previous resolved frame's luminance at a world point (its level `lod`), 1e9 off the frame.
+fn ag_ct_prev_luma(p: vec3<f32>, lod: f32) -> f32 {
+    let q = sky_ssr_cine_uv(p);
+    if (q.z < 0.0 || any(q.xy < vec2<f32>(0.0)) || any(q.xy > vec2<f32>(1.0))) {
+        return 1e9;
+    }
+    return lk_luma(textureSampleLevel(sky_prev, sky_rep, q.xy, lod).rgb);
+}
+
+// The clusters' lamps' irradiance (luminance) at a point facing `n`, shaped as the city's shading shapes them, without their maps.
+fn ag_ct_wet_lamps(world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let rel = world - skyu.eye.xyz;
+    let vz = dot(rel, skyu.cam_fwd.xyz);
+    if (vz < skyu.cluster.x || vz > skyu.cluster.y) {
+        return 0.0;
+    }
+    let vx = dot(rel, skyu.cam_right.xyz);
+    let vy = dot(rel, skyu.cam_up.xyz);
+    let ndc = vec2<f32>(vx / (vz * skyu.cluster.z * skyu.cluster.w), vy / (vz * skyu.cluster.z));
+    let g = skyu.lights.yzw;
+    let tx = u32(clamp((ndc.x * 0.5 + 0.5) * f32(g.x), 0.0, f32(g.x) - 1.0));
+    let ty = u32(clamp((0.5 - ndc.y * 0.5) * f32(g.y), 0.0, f32(g.y) - 1.0));
+    let tz = u32(clamp(log(vz / skyu.cluster.x) / log(skyu.cluster.y / skyu.cluster.x) * f32(g.z), 0.0, f32(g.z) - 1.0));
+    let c = (tz * g.y + ty) * g.x + tx;
+    let count = min(sky_clusters[c], SKY_CLUSTER_CAP);
+    let base = g.x * g.y * g.z + c * SKY_CLUSTER_CAP;
+    var e = 0.0;
+    for (var k = 0u; k < count; k = k + 1u) {
+        let li = sky_lights[sky_clusters[base + k]];
+        let d = li.pos - world;
+        let d2 = max(dot(d, d), 0.04);
+        let dist = sqrt(d2);
+        let l = d / dist;
+        let wr = clamp(1.0 - pow(dist / li.range, 4.0), 0.0, 1.0);
+        let nl = max(dot(n, l), 0.0);
+        if (nl <= 0.0 || wr <= 0.0) {
+            continue;
+        }
+        e = e + lk_luma(li.color) * li.intensity * ag_ct_lamp_shape(li, l, dist, true).x * wr * wr / d2 * nl;
+    }
+    return e;
 }

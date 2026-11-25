@@ -441,7 +441,7 @@ pub fn run(
         settle_p(ctx, renderer, world, models, Some(&mut *props), &cam, 600.0)?;
         // (`--car-traffic`) the card's street as a player arriving there finds it (nothing without it).
         let warm = crate::agents::warm_traffic_on();
-        let traffic = if warm { agents.warm_traffic(ctx, renderer, world, cam.eye, cam.forward()) } else { None };
+        let traffic = if warm { agents.warm_traffic(ctx, renderer, world, cam.eye, cam.forward(), hour) } else { None };
         crate::props::sync_parked(ctx, renderer, props, agents, &cam);
         let p = dir.join(format!("capture-light-{label}-{name}.png"));
         capture(ctx, renderer, color, attach, resolve, &targets.depth, &cam, &p)?;

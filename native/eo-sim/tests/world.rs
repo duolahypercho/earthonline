@@ -211,3 +211,60 @@ fn a_level_table_of_ways_at_grade_changes_nothing() {
     }
     assert_eq!(records(&worlds[0]), records(&worlds[2]));
 }
+
+/// (`--car-density`, `TrafficDensity`) The fleet put down by street class and
+/// hour: at the busy hour SoMa's streets carry half as many again as the JS
+/// pool's cars round the focus, most of them on its arterials, none on top of
+/// another; at four in the morning the JS pool's count; off (None) the JS pool as before.
+#[test]
+fn the_traffic_density_follows_the_streets_and_the_hour() {
+    use eo_sim::consts::{DENSE_VEHICLE_POOL, VEHICLE_POOL};
+    use eo_sim::region::TrafficDensity;
+    let src = source();
+    let mut net = Network::new(src.timing.clone());
+    net.add(src.build(&native::tiles_around(SOMA[0], SOMA[1], 600.0)));
+    let focus = Focus { x: SOMA[0], z: SOMA[1], yaw: 0.0 };
+    let region = |traffic: Option<f64>| {
+        let mut cfg = RegionConfig::game_default(1);
+        if let Some(h) = traffic {
+            cfg.vehicle_pool = DENSE_VEHICLE_POOL;
+            cfg.traffic = Some(TrafficDensity::standard(h));
+        }
+        Region::new(&net, 0, cfg, focus)
+    };
+    let near = |r: &Region| (0..r.fleet.len()).filter(|&i| ((r.fleet.x[i] - focus.x).powi(2) + (r.fleet.z[i] - focus.z).powi(2)).sqrt() < 120.0).count();
+    let off = region(None);
+    assert_eq!(off.fleet.len(), VEHICLE_POOL, "off: the JS pool");
+    let busy = region(Some(17.0));
+    let small = region(Some(4.0));
+    // the cars the streets carry within the radius at their classes' densities (SoMa's two collectors: ~65)
+    let t = TrafficDensity::standard(17.0);
+    let expected: f64 = net.lanes.iter().filter(|l| l.alive).map(|l| t.lane_cars(l, [focus.x, focus.z])).sum();
+    assert!(expected > 1.3 * VEHICLE_POOL as f64, "SoMa at 5 pm: {expected:.0} cars expected");
+    assert!(busy.fleet.len() as f64 >= 0.9 * expected.min(DENSE_VEHICLE_POOL as f64) && busy.fleet.len() <= DENSE_VEHICLE_POOL, "busy: {} of {expected:.0}", busy.fleet.len());
+    // a quiet hour keeps the JS pool's cars and adds only where an arterial is left short
+    assert!(small.fleet.len() + 3 >= VEHICLE_POOL && small.fleet.len() < busy.fleet.len(), "4 am {} vs 5 pm {}", small.fleet.len(), busy.fleet.len());
+    // the JS pool's cars are put down where they were without the density (the same lanes and draws), the rest after them
+    let kept = (0..off.fleet.len().min(busy.fleet.len()))
+        .filter(|&i| busy.fleet.cars[i].lane == off.fleet.cars[i].lane && (busy.fleet.cars[i].arc - off.fleet.cars[i].arc).abs() < 8.0)
+        .count();
+    assert!(kept * 10 >= off.fleet.len() * 9, "{kept} of the pool's {} cars where they were", off.fleet.len());
+    assert!(near(&busy) > near(&off), "near the focus: {} vs {}", near(&busy), near(&off));
+    // the arterials carry most of them
+    let class = |r: &Region, i: usize| net.lanes[r.fleet.cars[i].lane as usize].highway.clone();
+    let arterial = (0..busy.fleet.len()).filter(|&i| matches!(class(&busy, i).as_str(), "primary" | "secondary" | "primary_link" | "secondary_link")).count();
+    assert!(arterial * 2 > busy.fleet.len(), "{arterial} of {} on primary or secondary streets", busy.fleet.len());
+    // no two on one lane closer than a car's length
+    for i in 0..busy.fleet.len() {
+        for j in i + 1..busy.fleet.len() {
+            let (a, b) = (&busy.fleet.cars[i], &busy.fleet.cars[j]);
+            if a.lane == b.lane {
+                assert!((a.arc - b.arc).abs() >= 4.0, "cars {i} and {j} overlap on lane {}", a.lane);
+            }
+        }
+    }
+    // the falloff: whole near, a quarter at the radius, none past it
+    let t = TrafficDensity::standard(12.0);
+    assert_eq!(t.falloff(0.0), 1.0);
+    assert!((t.falloff(t.radius_m) - 0.25).abs() < 1e-9 && t.falloff(t.radius_m + 1.0) == 0.0);
+}

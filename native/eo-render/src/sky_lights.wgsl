@@ -485,6 +485,7 @@ fn lights_agents(@builtin(global_invocation_id) gid: vec3<u32>) {
             lt_push(l);
         }
     }
+    lt_rear_lamps(a, m); // (`--car-lamps`, agents_lamps.wgsl; nothing without it)
 }
 
 /// (`--shop-light`, stage N1) The shop windows' lights near the eye: lit
@@ -550,11 +551,12 @@ fn lights_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocati
     let total = g.x * g.y * g.z;
     // (`--shop-light`) the street lamps and vehicle lamps first, then the shop
     // windows' lights in what room is left (none without them: one pass).
-    let phases = select(1u, 2u, lt.shops.x > 0.0 || lt_bounce_on());
+    // (`--car-lamps`) the cars' rear lamps with them: they never take a street lamp's or a low beam's room.
+    let phases = select(1u, 2u, lt.shops.x > 0.0 || lt_bounce_on() || LT_CAR_LAMPS);
     for (var phase = 0u; phase < phases; phase = phase + 1u) {
         for (var i = lid; i < n; i = i + 64u) {
             let l = lt_frame[i];
-            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND); // (`--lamp-bounce`: the pools with the shops, last)
+            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) || (LT_CAR_LAMPS && l.kind == LT_REAR_KIND); // (`--lamp-bounce`: the pools with the shops, last)
             if (phases == 2u && late != (phase == 1u)) {
                 continue;
             }
