@@ -168,6 +168,12 @@ pub const GLARE_AGGREGATE_M: f64 = 0.009;
 /// Granite setts' crowns polished by feet (the share of the crown's layer)
 /// and their roughness; the setts' own relief spread is SP_PAVE_SLOPE.
 pub const GLARE_SETT_POLISH: f64 = 0.55;
+/// A marking wider than these (m) is a coloured surfacing (a bike or bus lane:
+/// an anti-skid resin carrying its own aggregate, matte), not a line's cast
+/// film: its layer this much less (a crosswalk's bars, 0.3-0.6 m, mostly kept).
+pub const GLARE_WIDE_MIN_M: f64 = 0.7;
+pub const GLARE_WIDE_MAX_M: f64 = 1.2;
+pub const GLARE_WIDE_MATTE: f64 = 0.7;
 pub const GLARE_SETT_ROUGH: f64 = 0.5;
 
 // ---- `--street-aggregate` (look::STREET_AGGREGATE; street_pbr.wgsl `sa_*`) --------------
@@ -244,41 +250,122 @@ pub const AGG_SCAN_RELIEF_OUT: f64 = 0.65;
 
 // ---- `--plaza-setts` (look::PLAZA_SETTS; street_pbr.wgsl `ss_*`) ------------------------
 //
-// The grey-stone plazas re-laid sett by sett in place of the cobble scan's
-// tiling: granite setts in courses (BS 7533-7: setts 100 mm, 9-16 mm
-// joints; the courses' joints broken by at least a quarter of a sett), each
-// sett its own length, outline (split faces, rounded and worn corners),
-// crown, settlement tilt and stone (granite's lots grey, warm and blue-grey,
-// its crystals), its top cleaned and polished by feet, soil held round its
-// edges; the joints sand and grit a few millimetres down, moss where they
-// stay damp. The relief is analytic, so it shades (the crown's normal, the
-// arris falling into the joint), occludes (the joint's sky), shadows (the
-// neighbour's crown toward a low sun) and masks (toward grazing the joints
-// hide behind the crowns, so the far field is the tops' tone) without a
-// texture; past a few pixels a sett is its mean.
+// The grey-stone plazas' cobble scan (cobblestone_floor_08: split granite
+// setts in sand) with what its one patch cannot carry over a plaza: the
+// joints' fill at a level of its own along each stretch (swept in nearly
+// flush, or washed out to the stones' feet), drawn as its own material
+// (jointing sand, packed grit and soil, moss) where it lies over the scan's
+// floor, the parallax ray stopping on it; each sett's own wear over the tops;
+// the crowns (the scan's height over its local mean) cleaned and polished by
+// soles. Heights are in the scan's units (0 its deepest joint, 1 its highest
+// crown, over SP_PAVE_DEPTH): measured on the 2k displacement map, the joints'
+// floor lies under 0.35 (15 % of the plan), the tops over 0.5 (61 %).
 
-/// The course pitch (m: large setts, 150-210 mm wide with their joint, graded
-/// course by course) and the setts' mean pitch along a course (m: 170-310 mm
-/// lengths; BS 7533-7's large setts run to 300 mm).
-pub const SETT_COURSE_M: f64 = 0.19;
-pub const SETT_PITCH_M: f64 = 0.24;
-/// A joint's half-width (m) at its narrowest and its widest (8-18 mm joints:
-/// split setts' joints run a little wider than BS 7533's sawn 9-16 mm).
-pub const SETT_JOINT_MIN_M: f64 = 0.004;
-pub const SETT_JOINT_MAX_M: f64 = 0.009;
-/// A sett's crown over its arrises (m), the worn arris's radius and drop (m),
-/// the joint's sand under the arrises (m: BS 7533 fills joints to within a
-/// few millimetres; traffic and sweeping take more), and the settlement tilt
-/// (slope, either way).
-pub const SETT_CROWN_M: f64 = 0.008;
-pub const SETT_ARRIS_M: f64 = 0.012;
-pub const SETT_ARRIS_DROP_M: f64 = 0.005;
-pub const SETT_JOINT_DEPTH_M: f64 = 0.009;
-pub const SETT_TILT: f64 = 0.02;
-/// The joint's sand, grit and soil over the setts' mean tone (dark grey-brown
-/// against a grey granite, in the joint's shade), and the share of joints holding moss.
-pub const SETT_JOINT_TONE: f64 = 0.42;
-pub const SETT_MOSS_SHARE: f64 = 0.18;
+/// The fill's level, lowest and highest (scan height units: 0.2 just over the
+/// joints' floor, 0.33 up to the foot of the stones' rounded sides, which
+/// start at 0.35; a fill over them would sink the setts in a bed), and the
+/// stretch over which it changes (m: a few setts; a shading choice).
+pub const SETT_FILL_LOW: f64 = 0.2;
+pub const SETT_FILL_HIGH: f64 = 0.33;
+pub const SETT_FILL_M: f64 = 0.83;
+/// The fill's materials (linear albedo): kiln-dried jointing sand dulled by
+/// the street's grit (dry sand 0.35-0.45, Oke's "Boundary Layer Climates"
+/// table 1.1; less in a joint's dirt), dark packed soil (0.05-0.15, the same
+/// table), and moss (green, ~0.05-0.08 in the visible).
+pub const SETT_SAND: [f64; 3] = [0.23, 0.215, 0.18];
+pub const SETT_SOIL: [f64; 3] = [0.085, 0.075, 0.06];
+pub const SETT_MOSS: [f64; 3] = [0.045, 0.07, 0.028];
+/// The scan's own joint luminance (linear, its heights under 0.35 on the 2k
+/// diffuse map: sand and grit), which the fill's grain is taken over.
+pub const SETT_SCAN_JOINT_LUMA: f64 = 0.17;
+/// The most of a damp, unswept stretch's fill that is moss, and the fill's sky
+/// occlusion at its deepest (a joint 1.5 cm under the crowns, 1-2 cm wide:
+/// shading choices).
+pub const SETT_MOSS_COVER: f64 = 0.7;
+pub const SETT_FILL_AO: f64 = 0.5;
+/// The local mean the crowns stand over: the scan's height blurred by this
+/// footprint multiple (about a stone across at the scan's scale).
+pub const SETT_BLUR: f64 = 6.0;
+/// Each sett's wear and soiling: a field at the stones' scale (m) over the
+/// tops, its tone spread (+- this share), and the crowns' cleaning (lighter)
+/// and polish (smoother) where the soles run (shading choices).
+pub const SETT_STONE_M: f64 = 0.23;
+pub const SETT_STONE_TONE: f64 = 0.12;
+pub const SETT_CROWN_CLEAN: f64 = 0.1;
+pub const SETT_CROWN_POLISH: f64 = 0.35;
+
+// ---- `--walk-relief` (look::WALK_RELIEF; street_pbr.wgsl `wr_*`) ---------------------------
+//
+// The kerbs as cast concrete in segments, spalled at random along the arris,
+// with a silt and water line at their foot; the walk's tooled joints in
+// relief between slabs that each settled to a height of their own. The
+// segment's length is a count of the walk's scoring squares (the registry's
+// 'sidewalk-scoring-grid-sf' pitch: the kerb's joints fall on the walk's
+// lines); the rest are material and wear values, named as shading choices.
+
+/// The kerb's cast segments: a contraction joint at every third scoring line
+/// (about 2.7 m: cast-in-place kerb joints run 3-4.5 m, precast units 0.9-1
+/// m; a shading choice between them that keeps the joints on the walk's), its
+/// gap's half-width (m), each segment's tone spread (+- this share) and yaw
+/// out of line (radians).
+pub const KERB_SEG_SQUARES: f64 = 3.0;
+pub const KERB_JOINT_HALF_M: f64 = 0.003;
+pub const KERB_TONE: f64 = 0.1;
+pub const KERB_YAW: f64 = 0.012;
+/// Each segment's nose worn to its own radius: this range times the street
+/// pass's arris (ARRIS_SHARE of the kerb height).
+pub const KERB_NOSE_MIN: f64 = 0.6;
+pub const KERB_NOSE_MAX: f64 = 1.8;
+/// Spalls: one cell (m) in this share holds one, its half-length between
+/// these (m: breaks 4-20 cm long), its fracture this much lighter than the
+/// weathered skin (fresh paste and aggregate).
+pub const KERB_SPALL_CELL_M: f64 = 0.6;
+pub const KERB_SPALL_SHARE: f64 = 0.45;
+pub const KERB_SPALL_MIN_M: f64 = 0.03;
+pub const KERB_SPALL_MAX_M: f64 = 0.11;
+pub const KERB_SPALL_LIGHT: f64 = 0.35;
+/// The share of spalls recent enough to be lighter (the rest hold the street's
+/// dirt in their open fracture: this much darker).
+pub const KERB_SPALL_FRESH: f64 = 0.25;
+pub const KERB_SPALL_DIRT: f64 = 0.18;
+/// The silt and water line at the face's foot: its mean height (m) and how
+/// much darker the silt is (a shading choice from SF kerbs: the run-off's
+/// line a few centimetres up).
+pub const KERB_TIDE_M: f64 = 0.035;
+pub const KERB_TIDE_DARK: f64 = 0.55;
+/// The walk's tooled joints: the groove's half-width and depth (m: an edger's
+/// 6-10 mm groove a quarter of the slab deep, ACI 302.1R's contraction joint
+/// depth), the tooled nose's radius (m: 6-10 mm edgers), and the slabs'
+/// settlement lip either way and a heaved slab's lift (m: ADA's 1/4 in
+/// vertical change is the trip-hazard line SF repairs past; roots lift
+/// slabs a centimetre or more).
+pub const WALK_JOINT_HALF_M: f64 = 0.005;
+pub const WALK_JOINT_DEPTH_M: f64 = 0.02;
+pub const WALK_NOSE_M: f64 = 0.008;
+pub const WALK_LIP_M: f64 = 0.0025;
+pub const WALK_HEAVE_M: f64 = 0.012;
+/// A slab replaced with cold-patch asphalt settles under its neighbours (m).
+pub const WALK_PATCH_SINK_M: f64 = 0.006;
+/// The groove's floor (its dirt and shade: tone and sky occlusion), the far
+/// riser's sky occlusion inside the groove and above the near slab (its lip).
+pub const WALK_FLOOR_TONE: f64 = 0.3;
+pub const WALK_FLOOR_AO: f64 = 0.25;
+/// The far riser's tone inside the groove (its face in the groove's shade and
+/// dirt: the sub-pixel cavity's darkening carried in the albedo, as a cavity
+/// map would, since the frame's ambient terms read the occlusion only weakly).
+pub const WALK_RISER_TONE: f64 = 0.55;
+/// The band either side of a joint over which the slabs' own terms fade (m: the
+/// along coordinate's noise, a few centimetres at the far end of a block).
+pub const WALK_SEAM_M: f64 = 0.03;
+/// The dirt soles grind into the tooled noses and a margin past them (m), and
+/// its tone (what keeps an old joint legible as a line down the walk).
+pub const WALK_MARGIN_M: f64 = 0.012;
+pub const WALK_MARGIN_TONE: f64 = 0.8;
+pub const WALK_RISER_AO: f64 = 0.45;
+pub const WALK_LIP_AO: f64 = 0.85;
+/// The steepest ray descent the joint's profile is taken at (looking down
+/// along a joint: its plan, no parallax).
+pub const WALK_T_MAX: f64 = 40.0;
 
 /// The shader's hash (draw.wgsl `st_hash`), for measuring the layout here.
 fn st_hash(p: [f32; 2]) -> f32 {
@@ -613,6 +700,9 @@ pub fn wgsl() -> String {
         ("SG_COAT_ROUGH_WHEEL", GLARE_COAT_ROUGH_WHEEL),
         ("SG_AGGREGATE_M", GLARE_AGGREGATE_M),
         ("SG_SETT_POLISH", GLARE_SETT_POLISH),
+        ("SG_WIDE_MIN_M", GLARE_WIDE_MIN_M),
+        ("SG_WIDE_MAX_M", GLARE_WIDE_MAX_M),
+        ("SG_WIDE_MATTE", GLARE_WIDE_MATTE),
         ("SG_SETT_ROUGH", GLARE_SETT_ROUGH),
         ("SA_STONE_M", AGG_STONE_M),
         ("SA_STONE_SHARE", AGG_STONE_SHARE),
@@ -639,22 +729,60 @@ pub fn wgsl() -> String {
         ("SA_ARRIS_SLOPE", AGG_ARRIS_SLOPE),
         ("SA_MASTIC_AO", AGG_MASTIC_AO),
         ("SA_SCAN_RELIEF_OUT", AGG_SCAN_RELIEF_OUT),
-        ("SS_COURSE_M", SETT_COURSE_M),
-        ("SS_PITCH_M", SETT_PITCH_M),
-        ("SS_JOINT_MIN_M", SETT_JOINT_MIN_M),
-        ("SS_JOINT_MAX_M", SETT_JOINT_MAX_M),
-        ("SS_CROWN_M", SETT_CROWN_M),
-        ("SS_ARRIS_M", SETT_ARRIS_M),
-        ("SS_ARRIS_DROP_M", SETT_ARRIS_DROP_M),
-        ("SS_JOINT_DEPTH_M", SETT_JOINT_DEPTH_M),
-        ("SS_TILT", SETT_TILT),
-        ("SS_JOINT_TONE", SETT_JOINT_TONE),
-        ("SS_MOSS_SHARE", SETT_MOSS_SHARE),
+        ("WR_KERB_SQUARES", KERB_SEG_SQUARES),
+        ("WR_KERB_JOINT_M", KERB_JOINT_HALF_M),
+        ("WR_KERB_TONE", KERB_TONE),
+        ("WR_KERB_YAW", KERB_YAW),
+        ("WR_NOSE_MIN", KERB_NOSE_MIN),
+        ("WR_NOSE_MAX", KERB_NOSE_MAX),
+        ("WR_SPALL_CELL_M", KERB_SPALL_CELL_M),
+        ("WR_SPALL_SHARE", KERB_SPALL_SHARE),
+        ("WR_SPALL_MIN_M", KERB_SPALL_MIN_M),
+        ("WR_SPALL_MAX_M", KERB_SPALL_MAX_M),
+        ("WR_SPALL_LIGHT", KERB_SPALL_LIGHT),
+        ("WR_SPALL_FRESH", KERB_SPALL_FRESH),
+        ("WR_SPALL_DIRT", KERB_SPALL_DIRT),
+        ("WR_TIDE_M", KERB_TIDE_M),
+        ("WR_TIDE_DARK", KERB_TIDE_DARK),
+        ("WR_JOINT_HALF_M", WALK_JOINT_HALF_M),
+        ("WR_JOINT_DEPTH_M", WALK_JOINT_DEPTH_M),
+        ("WR_NOSE_M", WALK_NOSE_M),
+        ("WR_LIP_M", WALK_LIP_M),
+        ("WR_HEAVE_M", WALK_HEAVE_M),
+        ("WR_PATCH_SINK_M", WALK_PATCH_SINK_M),
+        ("WR_FLOOR_TONE", WALK_FLOOR_TONE),
+        ("WR_RISER_TONE", WALK_RISER_TONE),
+        ("WR_SEAM_M", WALK_SEAM_M),
+        ("WR_MARGIN_M", WALK_MARGIN_M),
+        ("WR_MARGIN_TONE", WALK_MARGIN_TONE),
+        ("WR_FLOOR_AO", WALK_FLOOR_AO),
+        ("WR_RISER_AO", WALK_RISER_AO),
+        ("WR_LIP_AO", WALK_LIP_AO),
+        ("WR_T_MAX", WALK_T_MAX),
+        ("SS_FILL_LOW", SETT_FILL_LOW),
+        ("SS_FILL_HIGH", SETT_FILL_HIGH),
+        ("SS_FILL_M", SETT_FILL_M),
+        ("SS_SCAN_JOINT_LUMA", SETT_SCAN_JOINT_LUMA),
+        ("SS_MOSS_COVER", SETT_MOSS_COVER),
+        ("SS_FILL_AO", SETT_FILL_AO),
+        ("SS_BLUR", SETT_BLUR),
+        ("SS_STONE_M", SETT_STONE_M),
+        ("SS_STONE_TONE", SETT_STONE_TONE),
+        ("SS_CROWN_CLEAN", SETT_CROWN_CLEAN),
+        ("SS_CROWN_POLISH", SETT_CROWN_POLISH),
     ] {
         s.push_str(&format!("const {k}: f32 = {};\n", f(v)));
     }
     let v3 = |v: [f64; 3]| format!("vec3<f32>({}, {}, {})", f(v[0]), f(v[1]), f(v[2]));
-    for (k, v) in [("SA_GREY_TINT", AGG_GREY_TINT), ("SA_DARK_TINT", AGG_DARK_TINT), ("SA_PALE_TINT", AGG_PALE_TINT), ("SA_RED_TINT", AGG_RED_TINT)] {
+    for (k, v) in [
+        ("SA_GREY_TINT", AGG_GREY_TINT),
+        ("SA_DARK_TINT", AGG_DARK_TINT),
+        ("SA_PALE_TINT", AGG_PALE_TINT),
+        ("SA_RED_TINT", AGG_RED_TINT),
+        ("SS_SAND", SETT_SAND),
+        ("SS_SOIL", SETT_SOIL),
+        ("SS_MOSS", SETT_MOSS),
+    ] {
         s.push_str(&format!("const {k}: vec3<f32> = {};\n", v3(v)));
     }
     // the layout's measured means between the tracks (0) and in them (1): every term over its mean
@@ -770,6 +898,34 @@ mod tests {
         assert!(AGG_TOP_ROUGH_WHEEL < AGG_TOP_ROUGH && AGG_TOP_ROUGH < AGG_FILM_ROUGH && AGG_FILM_ROUGH < AGG_MASTIC_ROUGH);
         let w = wgsl();
         for k in ["SA_STONE_M", "SA_MEAN_ALB0", "SA_MEAN_ROUGH1", "SA_MEAN_TOPS0", "SA_GREY_TINT"] {
+            assert!(w.contains(&format!("const {k}: ")), "{k}");
+        }
+    }
+
+    /// (`--walk-relief`, `--plaza-setts`) The kerb's segments fall on the walk's
+    /// scoring lines and stay inside cast kerbs' joint spacing; spalls are a
+    /// sparse scatter of breaks a few centimetres to two decimetres long; the
+    /// walk's lips stay under ADA's quarter inch but for heaved slabs, the groove
+    /// narrower than its depth; the setts' fill lies between the scan's joint
+    /// floor and its tops, its materials inside their measured bands.
+    #[test]
+    fn walk_relief_and_setts_fill_stay_in_their_bands() {
+        let scoring = crate::cc0::scoring_pitch_m() as f64;
+        assert!(scoring > 0.8 && scoring < 1.0, "{scoring}");
+        let seg = scoring * KERB_SEG_SQUARES;
+        assert!(KERB_SEG_SQUARES.fract() == 0.0 && (1.5..=4.5).contains(&seg), "{seg}");
+        assert!(KERB_SPALL_SHARE < 0.5 && KERB_SPALL_MIN_M < KERB_SPALL_MAX_M && 2.0 * KERB_SPALL_MAX_M <= 0.25);
+        assert!(KERB_SPALL_CELL_M * 0.2 > KERB_SPALL_MAX_M, "a spall stays inside its own cell");
+        assert!(KERB_NOSE_MIN < 1.0 && KERB_NOSE_MAX > 1.0);
+        assert!(WALK_LIP_M <= 0.00635 && WALK_HEAVE_M > 0.00635 && WALK_HEAVE_M < 0.03);
+        assert!(2.0 * WALK_JOINT_HALF_M < WALK_JOINT_DEPTH_M && WALK_NOSE_M < 0.012);
+        assert!(WALK_FLOOR_AO < WALK_RISER_AO && WALK_RISER_AO < WALK_LIP_AO && WALK_LIP_AO < 1.0);
+        assert!(SETT_FILL_LOW >= 0.2 && SETT_FILL_LOW < SETT_FILL_HIGH && SETT_FILL_HIGH < 0.35, "over the scan's joint floor, under its stones' sides");
+        let l = |a: [f64; 3]| 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+        assert!(l(SETT_SOIL) < l(SETT_SAND) && l(SETT_SAND) < 0.45 && l(SETT_SOIL) > 0.05);
+        assert!(SETT_MOSS[1] > SETT_MOSS[0] && SETT_MOSS[1] > SETT_MOSS[2] && l(SETT_MOSS) < 0.1);
+        let w = wgsl();
+        for k in ["WR_KERB_SQUARES", "WR_SPALL_SHARE", "WR_JOINT_HALF_M", "WR_LIP_M", "SS_FILL_LOW", "SS_SAND"] {
             assert!(w.contains(&format!("const {k}: ")), "{k}");
         }
     }

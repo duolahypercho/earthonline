@@ -119,7 +119,7 @@ fn wx_walk(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
     var clean = 0.0;
     if (cls == SC_FOOTWAY && kd >= 0.0 && CC0_SCORING_M > 0.0) {
         let pitch = CC0_SCORING_M;
-        let r = wx_run(rel, g, pitch);
+        let r = wr_run(world, rel, g, pitch); // (`--walk-relief`: anchored on the street tile; wx_run without)
         if (r.ok) {
             let cell = floor(vec2<f32>(r.along, kd) / pitch) + vec2<f32>(r.k, 0.0);
             let r0 = st_hash(cell + vec2<f32>(41.3, 17.9));
@@ -133,7 +133,7 @@ fn wx_walk(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
                 tone = tone * WX_SLAB_OLD_TONE;
             }
             let keep = wx_keep(pitch, fw);
-            (*s).albedo = (*s).albedo * mix(WX_SLAB_MEAN, tone, keep);
+            (*s).albedo = (*s).albedo * mix(WX_SLAB_MEAN, tone, keep * wr_seam(r.along, kd, fw)); // (`--walk-relief`: faded at the joints)
             clean = clean * keep;
             // Dirt held in the joints (both directions), its mean once the joints are under a pixel.
             let la = fract(r.along / pitch);
@@ -144,8 +144,11 @@ fn wx_walk(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
             let fill_a = 0.25 + 0.75 * st_hash(vec2<f32>(floor(r.along / pitch + 0.5) + r.k, 7.7));
             let fill_c = 0.25 + 0.75 * st_hash(vec2<f32>(floor(kd / pitch + 0.5), 19.3));
             let j = wx_band(min(da, dc) * pitch, WX_JOINT_DIRT_M, fw) * select(fill_c, fill_a, da < dc);
-            (*s).albedo = (*s).albedo * (1.0 - WX_JOINT_DARK * j);
-            (*s).rough = min(1.0, (*s).rough + 0.08 * j);
+            if (!SF_WALK_RELIEF) {
+                // (`--walk-relief`: the dirt lies on the groove's floor, street_pbr.wgsl `wr_joint`)
+                (*s).albedo = (*s).albedo * (1.0 - WX_JOINT_DARK * j);
+                (*s).rough = min(1.0, (*s).rough + 0.08 * j);
+            }
         }
         // Dirt along the kerb (gutter splash, leaves, grit).
         let kb = (1.0 - smoothstep(0.0, WX_KERB_BAND_M, kd)) * mix(0.7, 0.45 + 0.55 * st_noise(world.xz / 0.9 + 4.1), wx_keep(0.9, fw));
@@ -184,11 +187,13 @@ fn wx_walk(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
         let nz = mix(0.75, 0.45 + 0.55 * st_noise(world.xz / 0.4 + world.y * 2.0), wx_keep(0.4, fw));
         (*s).albedo = (*s).albedo * (1.0 - WX_KERB_GRIME * rise * nz);
         (*s).rough = min(1.0, (*s).rough + 0.05 * rise);
-        wx_chip(s, world, 1.0 - smoothstep(0.0, WX_CHIP_M, abs(CC0_CURB_H - kd)), fw);
+        if (!SF_WALK_RELIEF) {
+            wx_chip(s, world, 1.0 - smoothstep(0.0, WX_CHIP_M, abs(CC0_CURB_H - kd)), fw); // (`--walk-relief`: spalls, street_pbr.wgsl `wr_kerb`)
+        }
     } else if (cls == SC_KERB_TOP) {
         (*s).albedo = (*s).albedo * (1.0 - 0.1 * mix(0.6, st_noise(world.xz / 0.6 + 1.1), wx_keep(0.6, fw)));
-        if (kd >= 0.0) {
-            wx_chip(s, world, 1.0 - smoothstep(0.0, WX_CHIP_M, kd), fw);
+        if (kd >= 0.0 && !SF_WALK_RELIEF) {
+            wx_chip(s, world, 1.0 - smoothstep(0.0, WX_CHIP_M, kd), fw); // (`--walk-relief`: spalls, street_pbr.wgsl `wr_kerb`)
         }
     }
 }

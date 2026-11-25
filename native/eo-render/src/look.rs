@@ -278,11 +278,17 @@ pub const STREET_GLARE: u32 = 2;
 /// into the mastic, every term over the layout's mean; the asphalt scans'
 /// blotchy relief gives way to it.
 pub const STREET_AGGREGATE: u32 = 4;
-/// `--plaza-setts` (street_pbr.wgsl `ss_*`): the grey-stone plazas re-laid
-/// sett by sett in place of the cobble scan's tiling (courses of granite
-/// setts, each its own length, outline, crown, tilt and stone; sand and moss
-/// joints), shaded, occluded, self-shadowed and masked from its analytic relief.
+/// `--plaza-setts` (street_pbr.wgsl `ss_*`): the grey-stone plazas' cobble
+/// scan with its joints filled to a level of their own along each stretch
+/// (sand, packed grit and soil, moss; the parallax ray stops on the fill),
+/// each sett's wear over the tops, the crowns cleaned and polished by soles.
 pub const PLAZA_SETTS: u32 = 8;
+/// `--walk-relief` (street_pbr.wgsl `wr_*`): the kerbs cast in segments
+/// (joints on the walk's scoring lines, each its pour, nose and yaw), spalled
+/// at random along the arris, a silt line at their foot; the walk's tooled
+/// joints in relief between slabs settled each to its own height (the lip,
+/// the groove, the noses, box-filtered across the joint).
+pub const WALK_RELIEF: u32 = 16;
 /// Every natural-detail bit.
 pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER;
 
@@ -768,8 +774,9 @@ pub struct ShaderFeatures {
     /// options do not carry it, and `ALL` leaves it out), and then always on.
     pub street_pbr: bool,
     /// The street track's round-2 passes (`STREET_*` bits: `--street-wear`,
-    /// `--street-glare`, `--street-aggregate`, `--plaza-setts`; `SF_STREET_WEAR`,
-    /// `SF_STREET_GLARE`, `SF_STREET_AGGREGATE`, `SF_PLAZA_SETTS`): as `street_pbr`,
+    /// `--street-glare`, `--street-aggregate`, `--plaza-setts`, `--walk-relief`;
+    /// `SF_STREET_WEAR`, `SF_STREET_GLARE`, `SF_STREET_AGGREGATE`, `SF_PLAZA_SETTS`,
+    /// `SF_WALK_RELIEF`): as `street_pbr`,
     /// compiled in only with their switches (eo-app sets them; `ALL` leaves them out).
     pub street: u32,
     /// The sun bounce (`--sun-bounce`; `SF_SUN_BOUNCE`): the occlusion pass's
@@ -975,6 +982,7 @@ impl ShaderFeatures {
                 ("SF_STREET_GLARE", self.street & STREET_GLARE != 0),
                 ("SF_STREET_AGGREGATE", self.street & STREET_AGGREGATE != 0),
                 ("SF_PLAZA_SETTS", self.street & PLAZA_SETTS != 0),
+                ("SF_WALK_RELIEF", self.street & WALK_RELIEF != 0),
                 // the light track
                 ("SF_SUN_BOUNCE", self.sun_bounce),
                 ("SF_AO_ALBEDO", self.ao_albedo),

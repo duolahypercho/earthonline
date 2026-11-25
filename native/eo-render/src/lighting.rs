@@ -241,6 +241,9 @@ mod tests {
         sets.push(("street wear and glare over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE, cinematic: true, lx_bits: u32::MAX, ..none }));
         sets.push(("street aggregate and plaza setts".into(), look::ShaderFeatures { street: look::STREET_AGGREGATE | look::PLAZA_SETTS, ..none }));
         sets.push(("street aggregate, setts, wear and glare over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS, cinematic: true, lx_bits: u32::MAX, ..none }));
+        // (`--walk-relief`) alone, and over the street pass with every street bit and the cinematic look
+        sets.push(("walk relief".into(), look::ShaderFeatures { street: look::WALK_RELIEF, ..none }));
+        sets.push(("walk relief with every street bit over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF, cinematic: true, lx_bits: u32::MAX, ..none }));
         sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
         sets.push(("ao albedo".into(), look::ShaderFeatures { ao_albedo: true, ..none })); // (`--ao-albedo`)
         sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)

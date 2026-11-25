@@ -658,8 +658,14 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     // Along the walk from the eye (small numbers, smooth), plus the eye's own
     // position reduced to one pitch first: no world-sized value is interpolated.
     let a_eye = dot(frame.cam_pos.xz, tan);
-    let k_eye = floor(a_eye / pitch);
-    let along = (a_eye - k_eye * pitch) + dot(rel.xz, tan);
+    var k_eye = floor(a_eye / pitch);
+    var along = (a_eye - k_eye * pitch) + dot(rel.xz, tan);
+    if (SF_WALK_RELIEF) {
+        // (`--walk-relief`) anchored on the street tile, as the slabs (street_pbr.wgsl `wr_run`)
+        let wr = wr_run(rel + frame.cam_pos.xyz, rel, g, pitch);
+        k_eye = wr.k;
+        along = wr.along;
+    }
     let fa = abs(dot(dpx.xz, tan)) + abs(dot(dpy.xz, tan));
     let fc = abs(dot(dpx.xz, nrm)) + abs(dot(dpy.xz, nrm));
     let fade = 1.0 - smoothstep(pitch * 0.12, pitch * 0.4, max(fa, fc));
@@ -668,7 +674,9 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     // The squares were poured together: their tones differ only faintly; the
     // variation lives inside each slab (mottled dirt, the tooled border, the
     // broom finish, grime held at the joints).
-    (*s).albedo = (*s).albedo * (1.0 + (rnd - 0.5) * 0.025 * fade);
+    // (`--walk-relief`) the square's own terms fade at its joints (street_pbr.wgsl `wr_seam`; 1 without)
+    let seam = wr_seam(along, across, max(fa, fc));
+    (*s).albedo = (*s).albedo * (1.0 + (rnd - 0.5) * 0.025 * fade * seam);
     if (fade <= 0.0) {
         return;
     }
@@ -687,7 +695,7 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
         let gb2 = vec2<f32>(dot(dpy.xz, tan), dot(dpy.xz, nrm)) / size;
         let t = textureSampleGrad(cc0_dalbedo, cc0_samp, q, li, ga2, gb2);
         let mot = clamp(dot(t.rgb, CC0_LUMA) / max(cc0_dmean(li).w, 1e-3), 0.45, 1.6);
-        (*s).albedo = (*s).albedo * mix(1.0, mot, (0.22 + 0.16 * rnd) * fade);
+        (*s).albedo = (*s).albedo * mix(1.0, mot, (0.22 + 0.16 * rnd) * fade * seam);
         (*s).rough = clamp((*s).rough * mix(1.0, 2.0 - mot, 0.12 * fade), 0.04, 1.0);
     }
     // The tooled border along each joint: troweled smooth (lighter, less rough) inside the broomed field.
@@ -719,9 +727,12 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     let ga = (1.0 - smoothstep(hw, hw + fa, abs(sa) * pitch)) * ja;
     let gc = (1.0 - smoothstep(hw, hw + fc, abs(sc) * pitch)) * jc;
     let k = max(ga, gc) * fade * (0.35 + 0.65 * near_j);
-    (*s).albedo = (*s).albedo * (1.0 - 0.26 * k);
-    (*s).ao = (*s).ao * (1.0 - 0.35 * k);
-    (*s).rough = min(1.0, (*s).rough + 0.06 * k);
+    if (!SF_WALK_RELIEF) {
+        // (`--walk-relief` draws the joints in relief instead, street_pbr.wgsl `wr_joints`)
+        (*s).albedo = (*s).albedo * (1.0 - 0.26 * k);
+        (*s).ao = (*s).ao * (1.0 - 0.35 * k);
+        (*s).rough = min(1.0, (*s).rough + 0.06 * k);
+    }
     // The groove's walls lean the normal away from its centre line.
     let ta = normalize(vec3<f32>(tan.x, 0.0, tan.y) - n_geom * dot(vec3<f32>(tan.x, 0.0, tan.y), n_geom));
     let tc = normalize(vec3<f32>(nrm.x, 0.0, nrm.y) - n_geom * dot(vec3<f32>(nrm.x, 0.0, nrm.y), n_geom));
@@ -933,6 +944,10 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                         let ga = vec2<f32>(along, across);
                         a = a * smoothstep(0.48, 0.62, st_noise(ga / 0.07 + rnd * 7.0)) * (0.6 + 0.4 * st_noise(ga / 0.9 + 2.0));
                         c = mix(c, vec3<f32>(0.14, 0.135, 0.125), smoothstep(0.35, 0.8, st_noise(ga / 0.35 + rnd * 5.0)));
+                    }
+                    if (SF_PLAZA_SETTS && ss_here > 0.0) {
+                        // (`--plaza-setts`) on setts the gum lies in a few trodden clusters, not a disc on every stone
+                        a = a * smoothstep(0.6, 0.78, st_noise(vec2<f32>(along, across) / 1.3 + rnd * 3.0));
                     }
                     cc0_p_alb = vec4<f32>(mix(cc0_p_alb.rgb, c, a), max(cc0_p_alb.w, a));
                     cc0_p_rough = vec2<f32>(0.55, max(cc0_p_rough.y, a));
