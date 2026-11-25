@@ -634,6 +634,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     if !args.perf.occlusion_check {
         segs.extend(sky_shots::extra_segments(segments(&world, args, aspect, args.far)));
     }
+    // `EO_BENCH_POSES=<pose file>` (the `EO_CAPTURE_POSES` format): a held camera at each
+    // pose, timed as a path `pose-<name>` (`--segments pose-a,pose-b` runs just those).
+    if let Ok(f) = std::env::var("EO_BENCH_POSES") {
+        for crate::props::CapturePose { name, camera: mut cam, .. } in crate::props::read_poses(std::path::Path::new(&f))? {
+            cam.aspect = aspect;
+            let name: &'static str = Box::leak(format!("pose-{name}").into_boxed_str());
+            segs.push(Segment { name, description: format!("held camera at pose {name} of {f}"), camera: Box::new(move |_, _| cam), frames: args.frames, paced: false, streams: false });
+        }
+    }
     eprintln!("startup: segments {:.0} ms", t_s.elapsed().as_secs_f64() * 1e3);
     if let Some(only) = &args.segments {
         segs.retain(|s| only.iter().any(|o| o == s.name));

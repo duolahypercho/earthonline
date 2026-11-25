@@ -583,7 +583,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
                 let v = val()?;
                 a.look.sky.weather = match v.as_str() {
                     "schedule" | "auto" => eo_render::sky::WeatherMode::Schedule,
-                    k => eo_render::sky::WeatherMode::Preset(eo_sky::Kind::parse(k).ok_or_else(|| anyhow::anyhow!("--weather clear|overcast|fog|drizzle|rain|storm|damp|schedule, not {k}"))?),
+                    k => eo_render::sky::WeatherMode::Preset(eo_sky::Kind::parse(k).ok_or_else(|| anyhow::anyhow!("--weather clear|overcast|fog|drizzle|light-rain|sun-rain|rain|heavy-rain|storm|damp|schedule, not {k}"))?),
                 }
             }
             "--weather-seed" => a.look.sky.seed = val()?.parse()?,
@@ -601,6 +601,10 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-cloud-shadows" => a.look.sky.cloud_shadows = false,
             "--cloud-depth-haze" => a.look.sky.cloud_depth_haze = true,
             "--no-cloud-depth-haze" => a.look.sky.cloud_depth_haze = false,
+            "--volumetric-clouds" => a.look.sky.volumetric_clouds = true,
+            "--no-volumetric-clouds" => a.look.sky.volumetric_clouds = false,
+            "--weather-fx" => a.look.sky.weather_fx = true,
+            "--no-weather-fx" => a.look.sky.weather_fx = false,
             "--wet-surfaces" => a.look.sky.wet_surfaces = true, // (the reflect track) every exposed surface takes the rain by its porosity, puddles, the water's whole environment
             "--no-wet-surfaces" => a.look.sky.wet_surfaces = false,
             "--screen-reflect" => a.look.sky.screen_reflect = true, // (the reflect track) the jittered, lobe-filtered trace, the frame's sky, glass

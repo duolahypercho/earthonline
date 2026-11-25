@@ -171,6 +171,10 @@ impl Flags {
                 "--underwater-habitats" => args.underwater_habitats = true,
                 "--no-underwater-habitats" => args.underwater_habitats = false,
                 "--no-water-optics" => args.look.water_optics = false,
+                "--volumetric-clouds" => args.look.sky.volumetric_clouds = true,
+                "--no-volumetric-clouds" => args.look.sky.volumetric_clouds = false,
+                "--weather-fx" => args.look.sky.weather_fx = true,
+                "--no-weather-fx" => args.look.sky.weather_fx = false,
                 "--dive-exposure" => args.look.dive_exposure = true,
                 "--no-dive-exposure" => args.look.dive_exposure = false,
                 "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`

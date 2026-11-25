@@ -155,6 +155,13 @@ pub fn run(
             shot(n.into(), above, h, Kind::Clear, base, false)?;
         }
     }
+    let explicit = |n: &str| only.as_deref().is_some_and(|o| o.split(',').any(|k| n.contains(k)));
+    if explicit("sun-above-afternoon") {
+        shot("sun-above-afternoon".into(), above, 14.5, Kind::Clear, base, false)?;
+    }
+    if explicit("sun-above-noon") {
+        shot("sun-above-noon".into(), above, 12.0, Kind::Clear, base, false)?;
+    }
     // The marine layer over the hills, from above, late afternoon.
     let fog_from = super::on_plan(Vec3::new(-5200.0, 900.0, 4200.0));
     let fog_to = super::on_plan(Vec3::new(-800.0, 0.0, 600.0)) - fog_from;
@@ -170,6 +177,22 @@ pub fn run(
                 shot(n.into(), cam, h, Kind::Rain, base, true)?;
             }
         }
+        if explicit("sun-street-afternoon") {
+            let sun_st = Camera { pitch: 0.10, ..cam };
+            shot("sun-street-afternoon".into(), sun_st, 16.5, Kind::Clear, base, false)?;
+        }
+        // Optional rain-spectrum shots (only when named in EO_SKY_SHOTS): light rain,
+        // sunshower, heavy downpour, and thunderstorm on Folsom Street.
+        for (n, h, wk) in [
+            ("rain-street-light", 12.0, Kind::LightRain),
+            ("rain-street-sun", 16.5, Kind::SunRain),
+            ("rain-street-heavy", 12.0, Kind::HeavyRain),
+            ("rain-street-storm", 12.0, Kind::Storm),
+        ] {
+            if explicit(n) {
+                shot(n.into(), cam, h, wk, base, true)?;
+            }
+        }
         // Moving traffic close up: the temporal resolve on and off.
         let down = Camera { pitch: -0.12, ..cam };
         for (n, taa) in [("taa-cars-on", true), ("taa-cars-off", false)] {
@@ -183,6 +206,22 @@ pub fn run(
     // and downtown across the bay from 1 km out, the lamps by the water seen
     // in it.
     for (wn, cam, _) in super::water_bench::capture_cameras(world, aspect, args.far) {
+        if wn == "embarcadero" && explicit("bay-sunshower") {
+            let sun_cam = Camera { far: args.far, ..Camera::new(cam.eye, yaw_of(Vec3::new(1.0, 0.0, 0.25)), 0.14, aspect) };
+            shot("bay-sunshower".into(), sun_cam, 17.6, Kind::SunRain, base, false)?;
+        }
+        if wn == "skyline-reflection" && explicit("sun-bay-afternoon") {
+            let sun_cam = Camera { far: args.far.max(9000.0), ..Camera::new(cam.eye, yaw_of(Vec3::new(-0.96, 0.0, 0.28)), 0.18, aspect) };
+            shot("sun-bay-afternoon".into(), sun_cam, 17.3, Kind::Clear, base, false)?;
+        }
+        if wn == "skyline-reflection" && explicit("sun-bay-golden") {
+            let sun_cam = Camera { far: args.far.max(9000.0), ..Camera::new(cam.eye, yaw_of(Vec3::new(-0.994, 0.0, 0.105)), 0.10, aspect) };
+            shot("sun-bay-golden".into(), sun_cam, 18.35, Kind::Clear, base, false)?;
+        }
+        if wn == "ocean-beach" && explicit("sun-pacific-golden") {
+            let pcam = Camera { far: args.far.max(9000.0), ..Camera::new(cam.eye + Vec3::Y * 4.0, yaw_of(Vec3::new(-0.997, 0.0, 0.070)), 0.11, aspect) };
+            shot("sun-pacific-golden".into(), pcam, 18.55, Kind::Clear, base, false)?;
+        }
         if !matches!(wn, "embarcadero" | "pier" | "skyline-reflection") {
             continue;
         }

@@ -273,6 +273,27 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
+            "--volumetric-clouds" => a.look.sky.volumetric_clouds = true,
+            "--no-volumetric-clouds" => a.look.sky.volumetric_clouds = false,
+            "--weather-fx" => a.look.sky.weather_fx = true,
+            "--no-weather-fx" => a.look.sky.weather_fx = false,
+            "--weather" => {
+                let v = val()?;
+                a.look.sky.weather = match v.as_str() {
+                    "schedule" | "auto" => eo_render::sky::WeatherMode::Schedule,
+                    k => eo_render::sky::WeatherMode::Preset(eo_sky::Kind::parse(k).ok_or_else(|| anyhow!("--weather clear|overcast|fog|drizzle|light-rain|sun-rain|rain|heavy-rain|storm|damp|schedule, not {k}"))?),
+                };
+            }
+            "--weather-seed" => a.look.sky.seed = val()?.parse()?,
+            "--world-time" => a.look.sky.world_time_s = val()?.parse()?,
+            "--time-of-day" | "--time" => a.time_of_day = val()?.parse()?,
+            "--sky-quality" => {
+                a.look.sky.quality = match val()?.as_str() {
+                    "low" => 0,
+                    "high" => 2,
+                    _ => 1,
+                };
+            }
             "--dive-exposure" => a.look.dive_exposure = true,
             "--no-dive-exposure" => a.look.dive_exposure = false,
             "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`
@@ -662,6 +683,10 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             } else {
                 walk_pilot.input(&mut player, &cw)
             };
+            if args.look.sky.weather_fx {
+                let wx = eo_render::sky::weather_of(&args.look.sky, args.look.sky.world_time_s + i as f64 * dt);
+                player.set_weather(eo_player::WeatherPhysics { wetness: wx.wetness, puddle_fill: wx.puddle_fill, rain_mm_h: wx.rain_mm_h, wind: wx.wind, gust: wx.gust });
+            }
             if access_path && opts.car_door_animation {
                 let lib = agents_rt.as_ref().and_then(|rt| rt.lib.as_deref());
                 car_access.advance(&mut player, &mut cw, lib, input, dt);
@@ -1041,6 +1066,10 @@ mod window {
                     input.jump |= frame.held(eo_player::input::Action::Jump);
                 }
                 input.vehicle_toggle |= std::mem::take(&mut self.vehicle_toggle_requested);
+                if self.args.look.sky.weather_fx {
+                    let wx = self.gfx.as_ref().map(|g| g.renderer.look.sky.weather()).unwrap_or_else(|| eo_render::sky::weather_of(&self.args.look.sky, self.args.look.sky.world_time_s));
+                    self.player.set_weather(eo_player::WeatherPhysics { wetness: wx.wetness, puddle_fill: wx.puddle_fill, rain_mm_h: wx.rain_mm_h, wind: wx.wind, gust: wx.gust });
+                }
                 // the moored boats near the player: bodies on the drawn sea (eo-player `harbour`), its clock the water's.
                 if let Some(g) = self.gfx.as_ref() {
                     if let (Some(fleet), Some(sea)) = (self.world.fleet.clone(), g.props.boat_sea()) {

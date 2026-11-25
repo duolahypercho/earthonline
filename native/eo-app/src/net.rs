@@ -277,6 +277,10 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
+            "--volumetric-clouds" => a.look.sky.volumetric_clouds = true,
+            "--no-volumetric-clouds" => a.look.sky.volumetric_clouds = false,
+            "--weather-fx" => a.look.sky.weather_fx = true,
+            "--no-weather-fx" => a.look.sky.weather_fx = false,
             "--dive-exposure" => a.look.dive_exposure = true,
             "--no-dive-exposure" => a.look.dive_exposure = false,
             "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`
