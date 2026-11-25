@@ -200,6 +200,16 @@ fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32
         shape = vert * smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
     } else if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
         shape = sf_rear_lamp_shape(lt, li.dir); // (`--car-lamps`) a car's rear lamp lights the fog behind it, not round it
+    } else if ((SF_SIGNAL_SPILL || SF_REAR_LAMPS) && (li.kind == NT_SIGNAL_KIND || li.kind == NT_REAR_KIND)) {
+        // (`--signal-spill`, `--rear-lamps`) a signal lens's or rear lamp's lobe (eo-sky lights
+        // `SIGNAL_LOBE`, `REAR_LOBE`): the haze glows in its beam, not round it every way.
+        // A signal's beam is clear near its lens (as on the surfaces, sky_light.wgsl: what
+        // stood there would hide the lens), so a head hidden behind a trunk or a pole
+        // leaves no glow floating in front of it; its lens's own glow is the camera's.
+        // (round 2 integration: the two kinds by name, so the cars' rear lamps of
+        // `--car-lamps` and the lamp streaks' records keep their own shapes)
+        let sig = li.kind == NT_SIGNAL_KIND;
+        shape = nt_lobe(lt, li.dir, select(NT_REAR_V, NT_SIGNAL_V, sig), select(NT_REAR_H, NT_SIGNAL_H, sig)) * select(1.0, smoothstep(0.75 * NT_SIGNAL_CLEAR_M, NT_SIGNAL_CLEAR_M, dist), sig);
     }
     if (shape <= 0.0) {
         return vec3<f32>(0.0);

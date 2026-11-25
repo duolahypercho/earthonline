@@ -210,9 +210,11 @@ pub const REAR_LAMP_LENS_M2: f64 = 0.0125;
 /// much, lux (a sixteenth of the unlit night ground's `NIGHT_UNLIT_GROUND_LUX`).
 pub const REAR_LAMP_REACH_LUX: f64 = 0.25;
 /// (`--car-lamps`) The rear lamps' kind in the frame's light list (after the
-/// shop windows' 4 and the lamps' bounce 5: shaded as a spot of its cone, its
-/// lobe widened by its lens).
-pub const REAR_LAMP_KIND: u32 = 6;
+/// shop windows' 4, the lamps' bounce 5 and the night track's signal lenses 6
+/// and rear lamps 7, sky.rs `SIGNAL_LIGHT_KIND`, `REAR_LIGHT_KIND`: shaded as a
+/// spot of its cone, its lobe widened by its lens). (Round 2 integration: 6 was
+/// taken by both tracks; the vehicles track's moved to 8.)
+pub const REAR_LAMP_KIND: u32 = 8;
 
 /// (`--car-lamps`) A rear lamp's emission toward the unit direction `d` (from
 /// the lamp) over its axis's (`REAR_LAMP_SPREAD_*`, `REAR_LAMP_FLOOR`), as
@@ -1553,7 +1555,7 @@ mod tests {
                 naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&m).unwrap_or_else(|e| panic!("the gather ({on}): {}", e.emit_to_string(&src)));
             });
         }
-        assert!(![0, 1, 3, crate::shop_lights::SHOP_LIGHT_KIND, crate::sky::BOUNCE_LIGHT_KIND].contains(&super::REAR_LAMP_KIND), "a kind of its own");
+        assert!(![0, 1, 3, crate::shop_lights::SHOP_LIGHT_KIND, crate::sky::BOUNCE_LIGHT_KIND, crate::sky::SIGNAL_LIGHT_KIND, crate::sky::REAR_LIGHT_KIND, crate::sky_reflect::LAMP_KIND].contains(&super::REAR_LAMP_KIND), "a kind of its own");
         assert!(include_str!("sky_light.wgsl").contains("const SKY_CINE_STREAK_HEAD_LENS: f32 = 0.06;"), "LT_HEAD_LENS_SHARE");
         assert!(super::car_lamps_wgsl().contains("const LT_HEAD_LENS_SHARE: f32 = 0.06;"));
         assert!(super::REAR_LAMP_FULL_DEG < super::REAR_LAMP_EDGE_DEG && super::TAIL_LAMP_CD < super::STOP_LAMP_CD);

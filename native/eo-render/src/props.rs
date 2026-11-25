@@ -540,7 +540,8 @@ impl PropsGpu {
             entries: &[
                 entry(0, vf, ubuf),
                 entry(1, vf, sbuf(true)),
-                entry(2, fs, sbuf(true)),
+                // (the materials: the vertex stage reads a signal lens's flags, `--signal-spill`)
+                entry(2, vf, sbuf(true)),
                 tex(3, fs),
                 tex(4, fs),
                 tex(5, fs),

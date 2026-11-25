@@ -120,7 +120,12 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     }
     // The core never under 1.5 px (its energy kept), the halo a few metres.
     let px = fx_pixel_m(z);
-    let core = max(FX_LENS_M, 1.5 * px);
+    var core = max(FX_LENS_M, 1.5 * px);
+    if (SF_LUMINAIRES && (u32(l.pad) & 4u) != 0u) {
+        // (`--luminaires`) a lantern drawn with its panes lit: the core is its lamp seen
+        // through the clear glass (`LUM_LANTERN_LAMP_M`), its energy kept, the frame round it seen
+        core = max(LUM_LANTERN_LAMP_M, 1.5 * px);
+    }
     let halo = (1.2 + 2.5 * (skyu.bloom_w2.w - 1.0)) * max(1.0, core / FX_LENS_M);
     let size = max(core, halo);
     let c = fx_corner(vi);
@@ -133,6 +138,8 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     out.uv = c * size;
     // Luminance of the lens: the intensity over its projected area (`--night-photometry`: toward the eye).
     let eye = fx_eye_share(l);
+    // (`--luminaires`: over a fixture drawn with its glass lit, the core is the lamp seen
+    // through its clear panes or the glare of its lens, props_draw.wgsl `pr_lamp_glass`)
     let lens = lum.w * eye / (FX_LENS_M * FX_LENS_M * 3.14159) * (FX_LENS_M / core) * (FX_LENS_M / core);
     out.color = vec4<f32>(l.color * lens, core);
     // z: (lighting, `--lit-fog`) the share of the lamp's air light the lit fog's
@@ -352,7 +359,7 @@ fn glitter_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) 
     var out: FxOut;
     out.clip = vec4<f32>(0.0, 0.0, -1.0, 1.0);
     let l = fx_lights[ii];
-    if (vi >= 6u || (l.kind != 0u && l.kind != 3u) || u32(l.pad) < 2u || !sky_on(skyu.flags.x, SKY_SPRITES)) {
+    if (vi >= 6u || (l.kind != 0u && l.kind != 3u) || (u32(l.pad) & 2u) == 0u || !sky_on(skyu.flags.x, SKY_SPRITES)) { // (bit 1: by the water; bit 2 `--luminaires`)
         return out;
     }
     // The lens, as the luminaire sprite draws it.

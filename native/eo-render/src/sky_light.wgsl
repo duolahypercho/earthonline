@@ -215,6 +215,10 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
             if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
                 shape = sf_rear_lamp_shape(-l, li.dir); // (`--car-lamps`) a car's rear lamp's field (agents.rs)
             }
+            if ((SF_SIGNAL_SPILL || SF_REAR_LAMPS) && (li.kind == NT_SIGNAL_KIND || li.kind == NT_REAR_KIND)) {
+                // (`--signal-spill`, `--rear-lamps`) its lobe toward the film
+                shape = nt_lobe(-l, li.dir, select(NT_REAR_V, NT_SIGNAL_V, li.kind == NT_SIGNAL_KIND), select(NT_REAR_H, NT_SIGNAL_H, li.kind == NT_SIGNAL_KIND));
+            }
             src = 0.5 * sqrt(max(li.size, 0.0));
         }
         // the source's size widens the lobe both ways (as the clusters' specular)
@@ -316,6 +320,13 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
             if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
                 shape = sf_rear_lamp_shape(-l, li.dir); // (`--car-lamps`) a car's rear lamp's field (agents.rs)
+            }
+            if ((SF_SIGNAL_SPILL || SF_REAR_LAMPS) && (li.kind == NT_SIGNAL_KIND || li.kind == NT_REAR_KIND)) {
+                // (`--signal-spill`, `--rear-lamps`) a signal lens's or rear lamp's lobe (eo-sky
+                // lights `SIGNAL_LOBE`, `REAR_LOBE`); a signal's beam lights nothing nearer
+                // it than NT_SIGNAL_CLEAR_M (what stood there would hide the lens).
+                let sig = li.kind == NT_SIGNAL_KIND;
+                shape = nt_lobe(-l, li.dir, select(NT_REAR_V, NT_SIGNAL_V, sig), select(NT_REAR_H, NT_SIGNAL_H, sig)) * select(1.0, smoothstep(0.75 * NT_SIGNAL_CLEAR_M, NT_SIGNAL_CLEAR_M, dist), sig);
             }
         }
         let nl = max(dot(n, l), 0.0);

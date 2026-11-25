@@ -157,6 +157,11 @@ fn lt_visible(p: vec3<f32>, r: f32) -> bool {
     return abs(v.x) <= hx && abs(v.y) <= hy;
 }
 
+/// (`--lamp-units`) the units are drawn (compiled in and the sky flag on).
+fn lt_units_on() -> bool {
+    return LU_ON && (skyu.flags.x & LU_BIT) != 0u;
+}
+
 fn lt_push(l: SkyLight) {
     let i = atomicAdd(&lt_count[0], 1u);
     if (i < lt.counts.z) {
@@ -276,7 +281,7 @@ fn lt_eye_share(head: vec3<f32>) -> f32 {
 /// sprite reach). `head` is the luminaire (the lens; the source may stand
 /// above it); `cutoff` a full-cutoff street luminaire (`--night-photometry`:
 /// its sprite carries its intensity toward the eye, `lt_eye_share`).
-fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool) {
+fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool, lantern: bool) {
     let near = lt_visible(l.pos, l.range);
     if (near) {
         lt_push(l);
@@ -301,6 +306,11 @@ fn lt_emit(l: SkyLight, head: vec3<f32>, cutoff: bool) {
                 if (LT_NIGHT_PHOTOMETRY && cutoff && (skyu.flags.x & LT_NIGHT_PHOTOMETRY_BIT) != 0u) {
                     // (`--night-photometry`) its share toward the eye in the fraction (sky_fx.wgsl `fx_eye_share`).
                     s.pad = s.pad + 0.999 * (1.0 - lt_eye_share(head));
+                }
+                if (lantern) {
+                    // (`--luminaires`) bit 2: a lantern drawn with its panes lit: its core
+                    // the lamp inside (sky_fx.wgsl `sprite_vs`)
+                    s.pad = s.pad + 4.0;
                 }
                 lt_sprites[k] = s;
             }
@@ -362,18 +372,41 @@ fn lights_lamps(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     var l = lt_lamps[i];
+    if (SG_ON && l.pad == SG_MARK) {
+        // (`--signal-spill`, sky.rs `set_signal_lights`) a signal's lit lens: a spot of its
+        // beam in its colour, in candela on the lamps' units per lux (lit day and night;
+        // the gather runs at night); no sprite (its lens is the props' own), no pool, no unit.
+        if ((skyu.flags.x & SG_BIT) == 0u) {
+            return;
+        }
+        l.intensity = l.intensity * skyu.bloom_w2.z;
+        l.pad = 0.0;
+        if (lt_visible(l.pos, l.range)) {
+            lt_push(l);
+        }
+        return;
+    }
     // The fallback placement stands down where the props slice's real lamps are resident.
     if (lt_props_tile(l.pos)) {
         return;
     }
     l.intensity = l.intensity * lt.scale.x;
+    // (`--lamp-units`) a street luminaire is a unit: on by its own control, its output (seeded where it stands).
+    let units = lt_units_on() && l.kind == 0u;
+    let seed = lu_seed_at(l.pos);
+    let uf = lu_factor(seed, skyu.night.x, units);
+    if (uf <= 0.0) {
+        return;
+    }
+    l.intensity = l.intensity * uf;
     if (lt_cine_on() && l.kind == 0u && lt_cine_key(l.color)) {
         // (`--look cinematic`) its street's colour, axis and reach (`size`: the head's height).
         lt_cine_lamp(&l, l.pos, l.size, 4u, false);
     } else {
         l.color = lt_led(l.color);
     }
-    lt_emit(l, l.pos, l.kind == 0u);
+    l.color = l.color * lu_tint(seed, units); // (`--lamp-units`) its colour bin
+    lt_emit(l, l.pos, l.kind == 0u, false);
     if (LT_LAMP_BOUNCE && l.kind == 0u) {
         lt_bounce(l.pos, l.size, l.intensity, l.color); // (`--lamp-bounce`) its pool (`size`: the head's height)
     }
@@ -401,10 +434,18 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.intensity <= 0.0 || select(lt.props.x, lt.props.w, tunnel) <= 0.0) {
         return;
     }
+    // (`--lamp-units`) a district light is a unit (its seed from its post's foot, eo-app props `pad1`;
+    // its fixture's glass takes the same, props_draw.wgsl) and (`--luminaires`) a lantern of a
+    // twin post carries its share of the post's light (`pad2`, f32 bits; 0: the whole).
+    let units = lt_units_on() && !tunnel && p.kind != LT_LANDMARK;
+    let uf = lu_factor(p.pad1, skyu.night.x, units) * select(1.0, bitcast<f32>(p.pad2), LUM_ON && p.pad2 != 0u);
+    if (uf <= 0.0) {
+        return;
+    }
     var l: SkyLight;
     l.pos = p.pos + vec3<f32>(0.0, p.source_lift, 0.0);
     let hs = p.source_lift / LT_JS_SOURCE_LIFT_MH + p.source_lift;
-    l.intensity = select(p.intensity * lt.props.x, select(lt.props.z, lt.props.w, tunnel) * hs * hs, p.source_lift > 0.0);
+    l.intensity = select(p.intensity * lt.props.x, select(lt.props.z, lt.props.w, tunnel) * hs * hs, p.source_lift > 0.0) * uf;
     l.color = select(lt_led(p.colour), p.colour, tunnel);
     l.range = p.range;
     l.dir = vec3<f32>(0.0, -1.0, 0.0);
@@ -419,7 +460,7 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
         // white, a historic globe's pool round.
         let h = p.source_lift / LT_JS_SOURCE_LIFT_MH;
         l.pos = p.pos;
-        l.intensity = lt.props.z * h * h;
+        l.intensity = lt.props.z * h * h * uf;
         l.color = p.colour;
         l.kind = 0u;
         l.size = h;
@@ -428,11 +469,15 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
         let warm = p.kind == LT_MODEL_HISTORIC || p.kind == LT_MODEL_BANNER;
         lt_cine_lamp(&l, p.pos, h, select(4u, 3u, warm), p.kind == LT_MODEL_HISTORIC);
     }
-    lt_emit(l, p.pos, !tunnel && p.kind != LT_LANDMARK && p.kind != LT_MODEL_HISTORIC && p.kind != LT_MODEL_BANNER);
+    l.color = l.color * lu_tint(p.pad1, units); // (`--lamp-units`) its colour bin
+    // (`--luminaires`: its sprite keeps its core over the fixture drawn with its glass lit:
+    // the lamp seen through a lantern's clear panes, a cobra head's lens's glare)
+    let lantern = LUM_ON && (skyu.flags.x & LUM_BIT) != 0u && !tunnel && (p.kind == LT_MODEL_HISTORIC || p.kind == LT_MODEL_BANNER);
+    lt_emit(l, p.pos, !tunnel && p.kind != LT_LANDMARK && p.kind != LT_MODEL_HISTORIC && p.kind != LT_MODEL_BANNER, lantern);
     if (LT_LAMP_BOUNCE && !tunnel && p.kind != LT_LANDMARK && p.source_lift > 0.0) {
         // (`--lamp-bounce`) its pool: the nadir at the RP-8 peak from its head's height.
         let hb = p.source_lift / LT_JS_SOURCE_LIFT_MH;
-        lt_bounce(p.pos, hb, lt.props.z * hb * hb, l.color);
+        lt_bounce(p.pos, hb, lt.props.z * hb * hb * uf, l.color);
     }
 }
 
@@ -486,6 +531,43 @@ fn lights_agents(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
     lt_rear_lamps(a, m); // (`--car-lamps`, agents_lamps.wgsl; nothing without it)
+    // (round 2 integration) a car's rear lamps are lit once: by `--car-lamps` (each body's own
+    // lamps, agents_lamps.wgsl) where it is compiled in, else by `--rear-lamps` (from the bounds).
+    if (RL_ON && (skyu.flags.x & RL_BIT) != 0u && !LT_CAR_LAMPS) {
+        // (`--rear-lamps`) the tail lamps (SAE J585), the stop lamps while it brakes
+        // (J586; the braking flag its drawn lenses light by, agents_draw.wgsl
+        // `ag_lamp`), each a light of the rear lamps' lobe (NT_REAR_KIND: eo-sky
+        // `lights::REAR_LOBE` on the surfaces and in the haze; the streaks take its
+        // cone) standing just behind the body's rear face (from its bounds: the
+        // half-diagonal less the half-width by the wheels' track and the half-height
+        // over the tyres' contact), so its own body and the road under it take none:
+        // red on the road behind, the kerb and the car behind, the wet street's
+        // streaks, the haze; no map, no sprite.
+        let hx = abs(fl.x) + 0.15;
+        let hy = max(m.center.y - (fl.y - m.wheel_radius), 0.0);
+        let hz = sqrt(max(m.radius * m.radius - hx * hx - hy * hy, 0.0));
+        let boxed = abs(fl.x) * 0.78 < 0.2;
+        let rz = select(m.center.z - hz - 0.05, m.center.z - m.radius * 0.85, boxed);
+        let rlat = select(max(hx - 0.2, lat), lat, boxed);
+        let cd = select(RL_TAIL_CD, RL_STOP_CD, (a.flags & 1u) != 0u);
+        for (var s = 0; s < 2; s = s + 1) {
+            let side = select(-1.0, 1.0, s == 0);
+            var r: SkyLight;
+            r.pos = a.pos + lt_rotate(a.rot, vec3<f32>(side * rlat, up + 0.12, rz) * a.scale);
+            r.intensity = cd * lt.scale.y / RL_LOW_BEAM_PEAK_CD;
+            r.color = RL_RED;
+            r.range = sqrt(cd / RL_REACH_LUX);
+            r.dir = normalize(lt_rotate(a.rot, vec3<f32>(0.0, 0.0, -1.0)));
+            r.cos_outer = cos(RL_OUTER_DEG * 0.017453292);
+            r.cos_inner = cos(RL_INNER_DEG * 0.017453292);
+            r.kind = NT_REAR_KIND;
+            r.size = RL_LENS_AREA_M2;
+            r.pad = 0.0;
+            if (lt_visible(r.pos, r.range)) {
+                lt_push(r);
+            }
+        }
+    }
 }
 
 /// (`--shop-light`, stage N1) The shop windows' lights near the eye: lit
@@ -556,7 +638,15 @@ fn lights_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocati
     for (var phase = 0u; phase < phases; phase = phase + 1u) {
         for (var i = lid; i < n; i = i + 64u) {
             let l = lt_frame[i];
-            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) || (LT_CAR_LAMPS && l.kind == LT_REAR_KIND); // (`--lamp-bounce`: the pools with the shops, last)
+            if (SG_ON && l.kind == NT_SIGNAL_KIND) {
+                // (`--signal-spill`) a signal's beam has no shadow: in the clusters it lit trunks,
+                // poles, sign backs and the next head (diffuse and specular) and glowed in the haze
+                // in front of a trunk that hides it. It stays out of them: its light shows only as
+                // its lens's image in the wet street (the streak list, sky_streaks.wgsl).
+                continue;
+            }
+            // (`--lamp-bounce`: the pools with the shops, last; `--car-lamps`, `--rear-lamps`: the rear lamps' and the signals' lenses with the shops)
+            let late = l.kind == SHOP_KIND || (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) || (LT_CAR_LAMPS && l.kind == LT_REAR_KIND) || ((SG_ON || RL_ON) && (l.kind == NT_SIGNAL_KIND || l.kind == NT_REAR_KIND));
             if (phases == 2u && late != (phase == 1u)) {
                 continue;
             }
