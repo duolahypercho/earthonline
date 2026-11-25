@@ -46,6 +46,34 @@ fn bl_down13(uv: vec2<f32>, t: vec2<f32>, ceiling: bool) -> vec3<f32> {
     return e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
 }
 
+/// (`--cine-camera`) a tap's share the lens spreads (cine_post.rs `cam_bloom_part`).
+fn bl_cam_tap(uv: vec2<f32>, e: f32) -> vec3<f32> {
+    var c = max(textureSampleLevel(bl_src, bl_lin, uv, 0.0).rgb, vec3<f32>(0.0));
+    if (any(c != c)) {
+        c = vec3<f32>(0.0);
+    }
+    return cam_bloom_part(c, e);
+}
+
+/// (`--cine-camera`) the 13-tap downsample of the taps' shares (each tap mapped
+/// before it is averaged: a glint keeps its own share, it does not lend it to its
+/// neighbours).
+fn bl_cam_down13(uv: vec2<f32>, t: vec2<f32>, e: f32) -> vec3<f32> {
+    let a = bl_cam_tap(uv + t * vec2<f32>(-2.0, -2.0), e);
+    let b = bl_cam_tap(uv + t * vec2<f32>(0.0, -2.0), e);
+    let c = bl_cam_tap(uv + t * vec2<f32>(2.0, -2.0), e);
+    let d = bl_cam_tap(uv + t * vec2<f32>(-2.0, 0.0), e);
+    let f = bl_cam_tap(uv + t * vec2<f32>(2.0, 0.0), e);
+    let g = bl_cam_tap(uv + t * vec2<f32>(-2.0, 2.0), e);
+    let h = bl_cam_tap(uv + t * vec2<f32>(0.0, 2.0), e);
+    let i = bl_cam_tap(uv + t * vec2<f32>(2.0, 2.0), e);
+    let j = bl_cam_tap(uv + t * vec2<f32>(-1.0, -1.0), e);
+    let k = bl_cam_tap(uv + t * vec2<f32>(1.0, -1.0), e);
+    let l = bl_cam_tap(uv + t * vec2<f32>(-1.0, 1.0), e);
+    let m = bl_cam_tap(uv + t * vec2<f32>(1.0, 1.0), e);
+    return bl_cam_tap(uv, e) * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
+}
+
 /// The first level: the source frame's bright pass at half resolution.
 @compute @workgroup_size(8, 8)
 fn bloom_prefilter(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -55,6 +83,13 @@ fn bloom_prefilter(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let uv = (vec2<f32>(gid.xy) + 0.5) / vec2<f32>(od);
     let t = 1.0 / vec2<f32>(textureDimensions(bl_src));
+    // (`--cine-camera`, compiled out without it) threshold-free: every pixel's share the
+    // lens spreads at the hour's exposure (`bl_level.z`, 0 with the model off); the levels'
+    // weights sum to 1 (cine_post.rs `CAM_BLOOM_WEIGHTS`).
+    if (SF_CAMERA && bl_level.z > 0.0) {
+        textureStore(bl_dst, vec2<i32>(gid.xy), vec4<f32>(bl_cam_down13(uv, t, bl_level.z), 1.0));
+        return;
+    }
     var c = bl_down13(uv, t, true);
     let th = skyu.bloom.x;
     // the glare from a source is capped at 16 x the threshold: the sun's disc

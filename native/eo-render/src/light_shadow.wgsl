@@ -164,6 +164,7 @@ struct LsAgModel {
     skeleton: u32,
     joints: u32,
     wheel_radius: f32,
+    driver_door: vec4<f32>,
     pad: vec4<u32>,
 };
 
@@ -224,9 +225,14 @@ fn ls_view(p: vec3<f32>) -> vec3<f32> {
 /// (`--shop-light`) A shop window's light ranks after every other light
 /// (its distance pushed past any in the clusters' reach), nearest first
 /// among them: a cluster keeps its street lamps and headlamps first.
+/// (`--lamp-bounce`) A pool's bounce ranks after the shop windows.
 fn ls_key(l: LsLight) -> vec4<u32> {
     let d = l.pos - skyu.eye.xyz;
-    let d2 = select(dot(d, d), dot(d, d) + LS_SHOP_RANK_M2, l.kind == SHOP_KIND);
+    // (`--signal-spill`, `--rear-lamps`) a signal lens's or rear lamp's light ranks with the shop windows
+    var d2 = select(dot(d, d), dot(d, d) + LS_SHOP_RANK_M2, l.kind == SHOP_KIND || l.kind == NT_SIGNAL_KIND || l.kind == NT_REAR_KIND);
+    if (LT_LAMP_BOUNCE && l.kind == LT_BOUNCE_KIND) {
+        d2 = dot(d, d) + 2.0 * LS_SHOP_RANK_M2;
+    }
     return vec4<u32>(bitcast<u32>(d2), bitcast<u32>(l.pos.x), bitcast<u32>(l.pos.y), bitcast<u32>(l.pos.z));
 }
 
@@ -331,7 +337,9 @@ fn ls_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_i
             let l = ls_lights[idx];
             let v = ls_view(l.pos);
             let dd = v - clamp(v, lo, hi);
-            hit = select(0u, 1u, dot(dd, dd) <= l.range * l.range);
+            // (`--signal-spill`) a signal's lens stays out of the clusters (sky_lights.wgsl
+            // `lights_cluster`: its beam has no shadow); its light shows in the wet streaks only.
+            hit = select(0u, 1u, dot(dd, dd) <= l.range * l.range && l.kind != NT_SIGNAL_KIND);
         }
         lsc_hits[lid] = hit;
         workgroupBarrier();

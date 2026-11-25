@@ -63,6 +63,25 @@ pub fn added_irradiance(f: &LookFrame, share: f64, lower: f64, cloud: f64) -> Rg
     [0, 1, 2].map(|i| s * e[i] * cloud - lower * l[i].min(e[i] * cloud))
 }
 
+/// (`--occluder-light`) `added_irradiance` with the lobe's sun part leaving
+/// whole: where the ground is known, the rig's flat lobe's sun part is taken
+/// out entirely and the sunlit ground's exitance comes back over its open
+/// share. `added_irradiance` takes out at most the sunlit ground's exitance a
+/// channel; at a low sun that exitance is orange under a neutral lobe, and the
+/// lobe's green and blue it leaves are a blue fill the ground does not give
+/// (18.5 h: 0.02, 0.07, 0.10 left of a lobe sun part of 0.18, 0.16, 0.14).
+/// The open share also reflects the whole sky (`LOBE_SKY_ALBEDO` x the sky's
+/// fill: nothing is over it), where the occluder light keeps the lobe's sky
+/// part at the street's own sky `vg` under the point (eo-look `occluder`).
+pub fn added_irradiance_whole(f: &LookFrame, share: f64, lower: f64, cloud: f64, vg: f64) -> Rgb {
+    let e = sun_exitance(f);
+    let l = lobe_sun(f);
+    let lower = lower.clamp(0.0, 1.0);
+    let s = share.clamp(0.0, lower);
+    let vg = vg.clamp(0.0, 1.0);
+    [0, 1, 2].map(|i| s * (e[i] * cloud + (LOBE_SKY_ALBEDO * (f.hemi_sky[i] + f.ambient[i])).min(f.hemi_ground[i]) * (1.0 - vg)) - lower * l[i])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +127,39 @@ mod tests {
         let (a, b, c) = (added_irradiance(&noon, 0.25, 1.0, 1.0), added_irradiance(&noon, 0.5, 1.0, 1.0), added_irradiance(&noon, 0.75, 1.0, 1.0));
         for i in 0..3 {
             assert!((a[i] + c[i] - 2.0 * b[i]).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn the_whole_lobe_leaves_no_blue_behind() {
+        // at a low sun the per-channel cap leaves the lobe's green and blue on covered ground;
+        // the whole lobe's sun part leaves the lobe's sky part, neutral as the sky's fill.
+        let f = LookFrame::new(18.5);
+        let capped = added_irradiance(&f, 0.0, 1.0, 1.0);
+        let whole = added_irradiance_whole(&f, 0.0, 1.0, 1.0, 1.0);
+        let left_c = [0, 1, 2].map(|i| f.hemi_ground[i] + capped[i]);
+        let left_w = [0, 1, 2].map(|i| f.hemi_ground[i] + whole[i]);
+        println!("18.5 h covered ground: capped leaves {left_c:?}, whole leaves {left_w:?}");
+        assert!(left_c[2] / left_c[0] > 1.3, "the capped residual is blue: {left_c:?}");
+        for i in 0..3 {
+            let sky = LOBE_SKY_ALBEDO * (f.hemi_sky[i] + f.ambient[i]);
+            assert!((left_w[i] - sky.min(f.hemi_ground[i])).abs() < 1e-9, "{i}: {left_w:?}");
+        }
+        // at noon (the lobe's sun part under the sunlit ground's exitance) and with the
+        // street seeing the whole sky the two agree.
+        let n = LookFrame::new(12.0);
+        for (s, l) in [(1.0, 1.0), (0.3, 1.0), (0.2, 0.5)] {
+            let (a, b) = (added_irradiance(&n, s, l, 1.0), added_irradiance_whole(&n, s, l, 1.0, 1.0));
+            for i in 0..3 {
+                assert!((a[i] - b[i]).abs() < 1e-12);
+            }
+        }
+        // under a deck (the street a quarter of the sky) the open share beyond its edge
+        // takes the sky's reflection the covered ground lost.
+        let (deck, open) = (added_irradiance_whole(&n, 0.3, 1.0, 1.0, 0.25), added_irradiance_whole(&n, 0.3, 1.0, 1.0, 1.0));
+        for i in 0..3 {
+            let sky = LOBE_SKY_ALBEDO * (n.hemi_sky[i] + n.ambient[i]);
+            assert!((deck[i] - open[i] - 0.3 * sky * 0.75).abs() < 1e-12);
         }
     }
 

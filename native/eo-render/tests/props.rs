@@ -212,7 +212,7 @@ fn setup2_with(ctx: &GpuContext, stand_ins: bool) -> (Renderer, eo_render::props
     let fonts = eo_props::sign_atlas::Fonts::system().unwrap();
     let (signs, _) = eo_props::sign_atlas::load_or_cook(&cache, &js, &fonts, &[], eo_props::sign_atlas::SIGN_FALLBACK_STREETS).unwrap();
     let oh = eo_props::overhead::OverheadJs::load().unwrap();
-    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins, boats: None };
+    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins, boats: None, luminaires: false };
     let lib = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &x, lib2::dome_standards(&ca).unwrap()).unwrap();
     r.attach_props(ctx, &lib).unwrap();
     (r, lib)
@@ -275,6 +275,52 @@ fn props2_stand_ins_only_with_their_switch() {
         assert!(m_off.meshes[0] == m_off.meshes[1] && m_off.meshes[1] == m_off.meshes[2], "off: one proxy box at every level");
         assert!(m_on.lod[0] < m_off.lod[0], "on: the GLB's own level edges (off: the proxy's near ring)");
     }
+}
+
+/// (`--luminaires`) Every district light's lamp stands inside its fixture: the sockets
+/// of each lamp GLB of this checkout are its lit glass's parts (a twin post's two
+/// lanterns, a cobra head's one lens), each socket inside its part's box and its
+/// GLB's; the historic post's JS head (`lampHead.column`, on its shaft) is in no
+/// glass (the light the switch moves). The cook with the switch splits the glass onto
+/// a material of its own, keyed apart from the cook without it.
+#[test]
+fn props2_luminaire_sockets_stand_in_their_glass() {
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let js = eo_props::JsProps::load().unwrap();
+    // the v2 files where this checkout has them (eo-app's default), else the manifest's
+    let v2 = eo_props::props_v2::load(&paths.repo_root).ok();
+    let sockets = eo_render::props_lib::district_light_sockets_with(&paths.repo_root, |k| v2.as_ref().and_then(|v| v.props.get(k).cloned()).or_else(|| js.street_prop(k).ok().cloned()));
+    for (model, s) in &sockets {
+        assert!(!s.is_empty());
+        let want = if *model == Model::LampHistoric { 2 } else { 1 };
+        assert_eq!(s.len(), want, "{model:?}: its lit glass's parts");
+        for (c, params) in s {
+            let flat = params[0] > 1.5;
+            assert_eq!(flat, *model != Model::LampHistoric, "{model:?}: a cobra's lens is flat, a lantern is not");
+            assert!(params[1] > 0.01 && params[1] < 0.5, "{model:?}: glass area {}", params[1]);
+            assert!((params[2] - c[1]).abs() < 1e-6 && c[1] > 5.0 && c[1] < 7.62, "{model:?}: the socket's height {}", c[1]);
+            assert!((params[3] * want as f32 - 1.0).abs() < 1e-6, "{model:?}: the parts share the post's light");
+        }
+        if *model == Model::LampHistoric {
+            // the JS column head (5.12 m on the shaft) is under both lanterns
+            assert!(s.iter().all(|(c, _)| c[1] - 5.12 > 0.8 && c[0].abs() > 1.0), "the lanterns hang on the arms, over the JS head: {s:?}");
+        }
+    }
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let lens = ca.metric_key("signal-lens-size", "circularNewFaces").unwrap();
+    let dome = lib2::dome_standards(&ca).unwrap();
+    let off = LibExtras::default();
+    let on = LibExtras { luminaires: true, ..off };
+    assert_ne!(eo_render::props_lib::PropLibrary::key_with(&js, &off, dome), eo_render::props_lib::PropLibrary::key_with(&js, &on, dome), "on and off cook different libraries");
+    if sockets.is_empty() || js.street_prop("lampCobra").ok().is_none_or(|p| !paths.repo_root.join(&p.path).is_file()) {
+        eprintln!("luminaires: the manifest's district light GLBs are not in this checkout (the cook below reads them)");
+        return;
+    }
+    let lib_off = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &off, dome).unwrap();
+    let lib_on = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &on, dome).unwrap();
+    let glow = |l: &eo_render::props_lib::PropLibrary| l.materials.iter().filter(|m| m.flags & eo_render::props_lib::P_LAMP_GLOW != 0).count();
+    assert_eq!(glow(&lib_off), 0, "off: no glass material");
+    assert_eq!(glow(&lib_on), sockets.len(), "on: one glass material per district light GLB");
 }
 
 fn kinds_fade_wires_lights(ctx: &GpuContext, r: Renderer, lib: eo_render::props_lib::PropLibrary) {

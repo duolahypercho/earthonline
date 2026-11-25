@@ -30,10 +30,13 @@
 //! `SHORE_KEEP_M` of a shoreline or below `SEA_KEEP_M` over the sea (the
 //! surf and the sand have their own passes), mapped bare, sand, court, play and paved
 //! surfaces, inland water, the land beyond the city (Marin). No table, or all
-//! three switches off: the ground as before.
+//! three switches off: the ground as before. With `--bare-ground` (`set_bare`)
+//! the shore band is drawn as inland, and WorldCover's bare ground and the
+//! revetments at the shore are marked for the city shader (`bare_ground`).
 
 use eo_data::roof_colours::{GreenGrid, native_assets, srgb_to_linear};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub type Linear = [f64; 3];
 
@@ -43,6 +46,127 @@ pub const SHORE_KEEP_M: f64 = 40.0;
 pub const SEA_KEEP_M: f64 = 1.0;
 /// The darkest the footprints' share makes open ground (x 1 - CONTACT_MAX x built).
 pub const CONTACT_MAX: f64 = 0.4;
+
+static COVER: AtomicBool = AtomicBool::new(false);
+
+/// `--ground-cover` (eo-render look::NATURE_COVER, off by default): the hills'
+/// tones vary over a smooth field instead of vertex by vertex, and the city
+/// shader (landmarks_surface.wgsl `nt_cover`) draws the mosaic, the crowns and
+/// the chert at the pixel. Set before the terrain is built.
+pub fn set_cover(on: bool) {
+    COVER.store(on, Ordering::Relaxed);
+}
+
+/// Whether `--ground-cover` is on (`set_cover`).
+pub fn cover() -> bool {
+    COVER.load(Ordering::Relaxed)
+}
+
+static BARE: AtomicBool = AtomicBool::new(false);
+
+/// `--bare-ground` (eo-render look::NATURE_BARE, off by default): the ground
+/// the land-cover classes left in their flat placeholder tones (WorldCover's
+/// bare or sparsely vegetated ground anywhere, every class in the shore band)
+/// is decided here (`bare_ground`, and the shore band's built and vegetated
+/// ground as inland in `open_ground`), and the city shader
+/// (landmarks_surface.wgsl `nt_bare`) draws the bare ground and the
+/// revetments. Set before the terrain is built.
+pub fn set_bare(on: bool) {
+    BARE.store(on, Ordering::Relaxed);
+}
+
+/// Whether `--bare-ground` is on (`set_bare`).
+pub fn bare() -> bool {
+    BARE.load(Ordering::Relaxed)
+}
+
+/// `--bare-ground`: the alpha byte of a vertex the city shader draws as bare
+/// ground or as a revetment's rock (landmarks_surface.wgsl `nt_bare`). The
+/// beach sand's alpha carries its shore distance (0-253); every other vertex has 255.
+pub const BARE_ALPHA: u8 = 254;
+/// `--bare-ground`: a revetment's rock lies within this distance of the
+/// shoreline (m). The bay's riprap slopes (1.5-2 run to 1 rise) climb about 4 m
+/// from below the low water to a crest a few metres wide.
+pub const REVETMENT_M: f64 = 9.0;
+/// `--bare-ground`: and at most this high over the sea (m)...
+pub const REVETMENT_TOP_M: f64 = 5.0;
+/// `--bare-ground`: ...from its foot just under the waterline (the rock carries on under the water).
+pub const REVETMENT_FOOT_M: f64 = -0.3;
+/// `--bare-ground`: and only on a bank at least this steep (rise over run; a
+/// riprap slope is 0.5-0.67, smoothed by the 12 m difference), or at the waterline itself: flat made ground
+/// behind a seawall is bare ground, not rock.
+pub const REVETMENT_SLOPE: f64 = 0.35;
+/// `--bare-ground`: the measured vegetation share over which bare ground is at
+/// its weediest (WorldCover's class keeps it under about 10 %; the 16 m cell
+/// counts the street and the kerb's weeds with it).
+pub const BARE_WEEDY_SHARE: f64 = 0.35;
+// Bare ground (sRGB): dry fines and gravel with a few weeds, the same weedier;
+// the revetment's quarry rock. The shader reads which and how weedy back from
+// the tone (r/b: rock under 1.35; g/r: 0.71 bare to 0.93 weedy) and draws its own albedo.
+const BARE_SOIL: [u8; 3] = [138, 118, 94];
+const BARE_WEEDY: [u8; 3] = [120, 116, 82];
+const RIPRAP: [u8; 3] = [112, 110, 104];
+/// WorldCover's bare or sparse vegetation (never over 10 % vegetated in a year).
+const BARE_CLASS: u8 = 60;
+
+/// (`--bare-ground`) The tone of a terrain vertex the city shader draws as
+/// bare ground or as a revetment's rock (linear; packed with `BARE_ALPHA`),
+/// or None (and always None with the switch off). The rock: any ground left
+/// unmapped within `REVETMENT_M` of the shoreline and under `REVETMENT_TOP_M`
+/// over the sea (San Francisco's bay shore is mostly riprap where no seawall
+/// or quay stands). Bare ground: WorldCover's bare or sparse class, and in the
+/// shore band (`SHORE_KEEP_M`) its water and wetland pixels standing on land
+/// (the 10 m classifier's mixed pixels at the waterline), weedier where the
+/// measured vegetation share is higher; and the greens mapped as bare earth
+/// (bare pitches and courts of decomposed granite, construction sites,
+/// brownfields), as raked and weedless as their tone allows. `park`: the tone
+/// name of a green, inland water or a beach mapped there (the others keep
+/// theirs); `slope`: the ground's gradient (rise over run).
+pub fn bare_ground(x: f64, z: f64, class: u8, park: Option<&str>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
+    bare_ground_on(bare(), x, z, class, park, shore_m, above_sea_m, slope)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bare_ground_on(on: bool, x: f64, z: f64, class: u8, park: Option<&str>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
+    if !on {
+        return None;
+    }
+    let h = above_sea_m?;
+    if park == Some("bareEarth") && h >= SEA_KEEP_M {
+        return Some(hex(BARE_SOIL));
+    }
+    if park.is_some() {
+        return None;
+    }
+    if shore_m.is_some_and(|s| s < REVETMENT_M) && (REVETMENT_FOOT_M..REVETMENT_TOP_M).contains(&h) && (slope >= REVETMENT_SLOPE || h < SEA_KEEP_M) {
+        return Some(hex(RIPRAP));
+    }
+    if h < SEA_KEEP_M {
+        return None;
+    }
+    let band = shore_m.is_some_and(|s| s < SHORE_KEEP_M);
+    if class != BARE_CLASS && !(band && matches!(class, 0 | 80 | 90 | 95)) {
+        return None;
+    }
+    let share = grid().and_then(|g| {
+        let s = eo_data::groundscale::scale();
+        sample(g, x / s, z / s, false)
+    });
+    Some(mix(hex(BARE_SOIL), hex(BARE_WEEDY), smoothstep(0.02, BARE_WEEDY_SHARE, share.unwrap_or(0.05))))
+}
+
+/// Value noise in [0, 1) over cells of `cell` m (smoothstep between the corners' hashes).
+pub fn value_noise(x: f64, z: f64, cell: f64, salt: u32) -> f64 {
+    let (fx, fz) = (x / cell, z / cell);
+    let (ix, iz) = (fx.floor(), fz.floor());
+    let (tx, tz) = (fx - ix, fz - iz);
+    let (ux, uz) = (tx * tx * (3.0 - 2.0 * tx), tz * tz * (3.0 - 2.0 * tz));
+    // corner hashes on a lattice a metre apart (hash01 rounds to the metre)
+    let h = |i: f64, j: f64| hash01(i, j, salt);
+    let a = h(ix, iz) + (h(ix + 1.0, iz) - h(ix, iz)) * ux;
+    let b = h(ix, iz + 1.0) + (h(ix + 1.0, iz + 1.0) - h(ix, iz + 1.0)) * ux;
+    a + (b - a) * uz
+}
 
 /// A switch: `EO_GROUND_<NAME>=off` (or 0) turns it off.
 pub fn on(name: &str) -> bool {
@@ -160,11 +284,18 @@ fn class_green(class: u8) -> f64 {
     }
 }
 
-/// Dry grass to scrub to `green` by the vegetation share (per vertex jitter).
+/// Dry grass to scrub to `green` by the vegetation share (per vertex jitter;
+/// with `--ground-cover` a smooth field of 40 and 14 m, whose spread is stretched
+/// to the jitter's, so the terrain's triangles do not show).
 pub fn hill_tone(share: f64, green: Linear, x: f64, z: f64) -> Linear {
-    let h = hash01(x, z, 7);
+    let (h, k) = if cover() {
+        let f = value_noise(x, z, 40.0, 7) * 0.65 + value_noise(x + 17.0, z - 29.0, 14.0, 13) * 0.35;
+        ((0.5 + (f - 0.5) * 2.2).clamp(0.0, 1.0), value_noise(x, z, 60.0, 11))
+    } else {
+        (hash01(x, z, 7), hash01(x, z, 11))
+    };
     let level = share * 2.2 + (h - 0.5) * 0.9;
-    let dry = mix(hex(DRY_A), hex(DRY_B), hash01(x, z, 11));
+    let dry = mix(hex(DRY_A), hex(DRY_B), k);
     if level < 1.0 { mix(dry, hex(SCRUB), smoothstep(0.4, 0.75, level)) } else { mix(hex(SCRUB), green, smoothstep(1.15, 1.5, level)) }
 }
 
@@ -184,11 +315,12 @@ pub struct OpenGroundSettings {
     green: bool,
     hills: bool,
     contact: bool,
+    band: bool,
 }
 
 impl OpenGroundSettings {
     pub fn from_env() -> Self {
-        Self { green: on("green"), hills: on("hills"), contact: on("contact") }
+        Self { green: on("green"), hills: on("hills"), contact: on("contact"), band: bare() }
     }
 
     /// The open ground's colour at a drawn terrain vertex (linear), or None to
@@ -196,11 +328,14 @@ impl OpenGroundSettings {
     /// there (`GroundCover::tone_name_at` / `tone_at`); `class`: WorldCover;
     /// `shore_m`: distance to the nearest shoreline; `above_sea_m`: ground height
     /// over the sea; `slope`: the ground's gradient (rise over run).
+    #[allow(clippy::too_many_arguments)]
     pub fn sample(&self, x: f64, z: f64, class: u8, park: Option<(&str, Linear)>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
         if !(self.green || self.hills || self.contact) {
             return None;
         }
-        if shore_m.is_some_and(|s| s < SHORE_KEEP_M) || above_sea_m.is_none_or(|h| h < SEA_KEEP_M) {
+        // (`--bare-ground`) the shore band's ground as inland's (its bare ground and
+        // revetments are `bare_ground`'s): no longer the land-cover's flat tones.
+        if (shore_m.is_some_and(|s| s < SHORE_KEEP_M) && !self.band) || above_sea_m.is_none_or(|h| h < SEA_KEEP_M) {
             return None;
         }
         let g = grid()?;
@@ -246,7 +381,15 @@ impl OpenGroundSettings {
 
 /// Sample a single point using the current ground switches.
 pub fn open_ground(x: f64, z: f64, class: u8, park: Option<(&str, Linear)>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
-    OpenGroundSettings::from_env().sample(x, z, class, park, shore_m, above_sea_m, slope)
+    open_ground_in(bare(), x, z, class, park, shore_m, above_sea_m, slope)
+}
+
+/// `open_ground`, with the shore band drawn as inland (`band`: `--bare-ground`) or left alone.
+#[allow(clippy::too_many_arguments)]
+fn open_ground_in(band: bool, x: f64, z: f64, class: u8, park: Option<(&str, Linear)>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
+    let mut settings = OpenGroundSettings::from_env();
+    settings.band = band;
+    settings.sample(x, z, class, park, shore_m, above_sea_m, slope)
 }
 
 /// The far ground's paving branch in `cc0_ground_sets` (WGSL constant).
@@ -344,6 +487,22 @@ mod tests {
     }
 
     #[test]
+    fn the_cover_field_is_smooth_and_spread_like_the_jitter() {
+        // neighbouring vertices (8 m) differ little; the field still spans most of [0, 1)
+        let (mut lo, mut hi, mut step) = (1.0f64, 0.0f64, 0.0f64);
+        for i in 0..4000 {
+            let (x, z) = ((i % 80) as f64 * 8.0, (i / 80) as f64 * 8.0);
+            let a = value_noise(x, z, 40.0, 7);
+            lo = lo.min(a);
+            hi = hi.max(a);
+            step = step.max((value_noise(x + 8.0, z, 40.0, 7) - a).abs());
+        }
+        assert!(lo < 0.15 && hi > 0.85, "{lo} {hi}");
+        assert!(step < 0.35, "{step}");
+        assert!(!cover(), "off unless set");
+    }
+
+    #[test]
     fn the_sample_is_bilinear_and_skips_no_data() {
         let g = GreenGrid { x0: 0.0, z0: 0.0, cell: 16.0, nx: 2, nz: 1, green: vec![0, 250], built: vec![0, 125] };
         assert!((sample(&g, 8.0, 8.0, false).unwrap() - 0.0).abs() < 1e-9);
@@ -360,6 +519,58 @@ mod tests {
         assert!(open_ground(0.0, 0.0, 50, None, Some(10.0), Some(20.0), 0.0).is_none());
         assert!(open_ground(0.0, 0.0, 50, None, Some(500.0), Some(0.5), 0.0).is_none());
         assert!(open_ground(0.0, 0.0, 50, None, Some(500.0), None, 0.0).is_none());
+    }
+
+    /// landmarks_surface.wgsl `nt_bare_weight`, mirrored: (rock, weedy) from a marked tone.
+    fn bare_kind(c: Linear) -> (bool, f64) {
+        let rb = c[0] / c[2].max(1e-4);
+        let gr = c[1] / c[0].max(1e-4);
+        (rb < 1.3 && gr > 0.9, ((gr - 0.71) / 0.22).clamp(0.0, 1.0))
+    }
+
+    #[test]
+    fn bare_ground_marks_the_bare_class_and_the_shore_rock() {
+        let bs = |class: u8, mapped: bool, shore: f64, h: f64, slope: f64| bare_ground_on(true, 0.0, 0.0, class, mapped.then_some("grass"), Some(shore), Some(h), slope);
+        let b = |class: u8, mapped: bool, shore: f64, h: f64| bs(class, mapped, shore, h, 0.0);
+        assert!(!bare(), "off unless set");
+        assert!(bare_ground(0.0, 0.0, BARE_CLASS, None, Some(500.0), Some(20.0), 0.0).is_none(), "nothing while off");
+        // the revetment: a bank near the shoreline, from its foot under the waterline to its crest, whatever the class
+        let rock = bs(50, false, 4.0, 2.0, 0.5).expect("rock on the shore's bank");
+        assert!(bare_kind(rock).0);
+        assert!(!bare_kind(b(BARE_CLASS, false, 4.0, 2.0).expect("flat made ground behind a seawall")).0, "is bare ground, not rock");
+        assert!(b(80, false, 4.0, 0.2).is_some_and(|c| bare_kind(c).0), "the rock carries on to the waterline");
+        assert!(bs(50, false, 4.0, -1.0, 0.5).is_none(), "not on the seabed");
+        assert!(bs(50, false, 4.0, REVETMENT_TOP_M + 1.0, 0.5).is_none(), "a high bank is not a revetment");
+        // a green mapped as bare earth is bare ground, unweeded
+        let pitch = bare_ground_on(true, 0.0, 0.0, 50, Some("bareEarth"), Some(500.0), Some(10.0), 0.0).expect("a bare pitch");
+        assert!(!bare_kind(pitch).0 && bare_kind(pitch).1 < 0.05);
+        assert!(bare_ground_on(true, 0.0, 0.0, BARE_CLASS, Some("court"), Some(500.0), Some(10.0), 0.0).is_none(), "a court keeps its tone");
+        // bare ground: the bare class anywhere, the water classes on land in the shore band only
+        let bare = b(BARE_CLASS, false, 500.0, 20.0).expect("bare ground inland");
+        assert!(!bare_kind(bare).0);
+        assert!(b(80, false, 20.0, 3.0).is_some(), "a water pixel on the shore band's land");
+        assert!(b(80, false, 500.0, 3.0).is_none(), "inland water classes keep theirs");
+        assert!(b(80, false, 20.0, 0.5).is_none(), "the waterline behind the rock keeps its own");
+        assert!(b(50, false, 20.0, 3.0).is_none(), "built ground in the band is open_ground's");
+        // a mapped green, water or beach keeps its tone
+        assert!(b(BARE_CLASS, true, 500.0, 20.0).is_none());
+        assert!(bs(50, true, 4.0, 2.0, 0.5).is_none());
+        // the tones read back: soil bare, weedy weedy, rock rock
+        assert!(!bare_kind(hex(BARE_SOIL)).0 && bare_kind(hex(BARE_SOIL)).1 < 0.05);
+        assert!(bare_kind(hex(BARE_WEEDY)).1 > 0.95 && !bare_kind(hex(BARE_WEEDY)).0);
+        assert!(bare_kind(hex(RIPRAP)).0);
+        // half a bare vertex blended with paving still reads as bare, not rock
+        let half = mix(hex(BARE_SOIL), hex(ASPHALT), 0.5);
+        assert!(!bare_kind(half).0, "{half:?}");
+        // the shore band's built ground is drawn as inland's with the switch, left alone without it
+        assert!(open_ground_in(false, 0.0, 0.0, 50, None, Some(10.0), Some(5.0), 0.0).is_none());
+        if let Some(g) = grid() {
+            let s = eo_data::groundscale::scale();
+            let (x, z) = (g.x0 as f64 + g.nx as f64 * g.cell as f64 * 0.5, g.z0 as f64 + g.nz as f64 * g.cell as f64 * 0.5);
+            if sample(g, x, z, false).is_some() {
+                assert!(open_ground_in(true, x * s, z * s, 50, None, Some(10.0), Some(5.0), 0.0).is_some(), "the band's built ground takes a tone with the switch");
+            }
+        }
     }
 
     #[test]

@@ -64,6 +64,62 @@ pub fn pack_normal(n: Vec3) -> [i8; 4] {
     [(n.x * 127.0).round() as i8, (n.y * 127.0).round() as i8, (n.z * 127.0).round() as i8, 0]
 }
 
+/// The steps of a refined component inside one 8-bit step (`pack_normal_fine`).
+pub const NORMAL_FINE_STEPS: i32 = 14;
+
+/// (`--car-materials`) `pack_normal`, and in the spare fourth byte what the
+/// 8-bit components left: an 8-bit normal is off by up to 0.3 degrees,
+/// vertex to vertex at random, which a mirror-like lacquer doubles into
+/// ripples in its reflections (a dented-can look at a few metres). The two
+/// components smaller than the largest (by the 8-bit values, the lowest
+/// axis first on a tie) carry their residual in fourteenths of a step
+/// (`c = (e1 + 7) + 15 (e2 + 7)`, 0..224, stored as `c - 112` below 112 and
+/// `c - 111` from it: never 0, which stays the people's "no refinement",
+/// nor -128); the largest follows from unit length with its 8-bit sign
+/// (`unpack_normal_fine`; agents_draw.wgsl `ag_car_normal`). At worst about
+/// 0.04 degrees (the 8-bit normal's 0.37). xyz are `pack_normal`'s own, so a
+/// reader of xyz alone sees the normal it saw before.
+pub fn pack_normal_fine(n: Vec3) -> [i8; 4] {
+    let mut q = pack_normal(n);
+    let n = n.normalize_or_zero();
+    if n == Vec3::ZERO {
+        return q;
+    }
+    let (i, j) = normal_fine_axes([q[0], q[1], q[2]]);
+    let e = |k: usize| ((n[k] * 127.0 - q[k] as f32) * NORMAL_FINE_STEPS as f32).round().clamp(-7.0, 7.0) as i32;
+    let c = (e(i) + 7) + 15 * (e(j) + 7);
+    q[3] = (if c < 112 { c - 112 } else { c - 111 }) as i8;
+    q
+}
+
+/// The two refined axes of `pack_normal_fine`: all but the largest 8-bit magnitude (the lowest axis wins a tie).
+fn normal_fine_axes(q: [i8; 3]) -> (usize, usize) {
+    let a = q.map(|c| (c as i32).abs());
+    let k = if a[0] >= a[1] && a[0] >= a[2] { 0 } else if a[1] >= a[2] { 1 } else { 2 };
+    match k {
+        0 => (1, 2),
+        1 => (0, 2),
+        _ => (0, 1),
+    }
+}
+
+/// The normal `pack_normal_fine` packed, as agents_draw.wgsl `ag_car_normal`
+/// reads it (a spare byte of 0: the 8-bit normal, unrefined).
+pub fn unpack_normal_fine(p: [i8; 4]) -> Vec3 {
+    let q = [p[0], p[1], p[2]];
+    if p[3] == 0 {
+        return Vec3::new(q[0] as f32, q[1] as f32, q[2] as f32).normalize_or_zero();
+    }
+    let c = p[3] as i32 + if p[3] < 0 { 112 } else { 111 };
+    let (i, j) = normal_fine_axes(q);
+    let k = 3 - i - j;
+    let mut n = [0f32; 3];
+    n[i] = (q[i] as f32 + ((c % 15) - 7) as f32 / NORMAL_FINE_STEPS as f32) / 127.0;
+    n[j] = (q[j] as f32 + ((c / 15) - 7) as f32 / NORMAL_FINE_STEPS as f32) / 127.0;
+    n[k] = (1.0 - n[i] * n[i] - n[j] * n[j]).max(0.0).sqrt() * if q[k] < 0 { -1.0 } else { 1.0 };
+    Vec3::from(n).normalize_or_zero()
+}
+
 /// Lamp colours from `HERO_LAMP` (linear).
 #[derive(Clone, Debug)]
 pub struct LampColours {
@@ -123,8 +179,166 @@ fn material_of(m: &gltf::Material, lamps: &LampColours) -> AgentMaterial {
     }
 }
 
+// ---- (`--car-materials`) what each material is, for the cars' own shading
+// (eo-render agents_draw.wgsl `ag_car_*`), and the plates' own coordinates.
+
+/// The material's role sits in these bits of its flags (above the agent
+/// flags `M_*`, below nothing draw.wgsl reads): 0 none (as before).
+pub const M_ROLE_SHIFT: u32 = 20;
+pub const M_ROLE_MASK: u32 = 0xf << M_ROLE_SHIFT;
+/// VehicleGlass: the windscreen, side and rear glass.
+pub const ROLE_GLASS: u32 = 1;
+/// VehicleGlassTint: privacy glass (darker).
+pub const ROLE_GLASS_TINT: u32 = 2;
+/// VehicleTyre.
+pub const ROLE_TYRE: u32 = 3;
+/// VehiclePlate: the licence plates (their texture coordinates are the
+/// plate's own, 0..1 across as the plate is read and 0..1 up).
+pub const ROLE_PLATE: u32 = 4;
+/// VehicleChrome, VehicleMirror.
+pub const ROLE_CHROME: u32 = 5;
+/// The clear and coloured covers over the lamps (`*Lens*`).
+pub const ROLE_LENS: u32 = 6;
+/// The cabin: VehicleInterior, VehicleInteriorTrim, the seats, the floor and the screen.
+pub const ROLE_INTERIOR: u32 = 7;
+/// The wheels: VehicleAlloy, VehicleAlloyDark, VehicleWheelSteel.
+pub const ROLE_WHEEL: u32 = 8;
+/// The black plastics: VehicleTrimBlack, VehicleTrimGloss, VehicleTrimSatin.
+pub const ROLE_TRIM: u32 = 9;
+/// VehicleLampReflector: the chrome bowls inside the lamps.
+pub const ROLE_REFLECTOR: u32 = 10;
+/// VehicleEmergencyBlue, VehicleEmergencyRed: a patrol car's light bar.
+pub const ROLE_EMERGENCY: u32 = 11;
+/// VehicleBrakeDisc, VehicleCaliper.
+pub const ROLE_BRAKE: u32 = 12;
+/// The liveries (`VehicleLivery*`): body panels painted in a fixed colour.
+pub const ROLE_LIVERY: u32 = 13;
+/// (`--car-panels`) A badge: a `Badge_*` emblem in VehicleChrome, thin across
+/// its face (eo-render agents_draw.wgsl `ag_car_badge`); its texture
+/// coordinates are its own disc's, as a plate's are (`cook_body_opts`).
+pub const ROLE_BADGE: u32 = 14;
+/// Bump when `role_of`, the plates' coordinates, the normals' refinement or
+/// the contact shapes change (part of the library's cache key).
+pub const CAR_MATERIALS_VERSION: u32 = 3;
+/// Bump when the panels' normal filter or the badges change (`--car-panels`;
+/// part of the library's cache key with it).
+pub const CAR_PANELS_VERSION: u32 = 1;
+
+/// (`--car-panels`) The paint's normal filter (`filter_panel_normals`): a
+/// neighbour within this radius (m) is averaged in, weighted by its share of
+/// the surface and a Gaussian of this sigma (m), unless its normal turns from
+/// the vertex's by more than the crease (degrees): a character line, a panel's
+/// edge or a fillet tighter than that keeps its turn.
+pub const PANEL_FILTER_RADIUS_M: f32 = 0.1;
+pub const PANEL_FILTER_SIGMA_M: f32 = 0.05;
+pub const PANEL_FILTER_CREASE_DEG: f32 = 20.0;
+
+/// (`--car-panels`) The bodies' panels pulled taut: each selected vertex's
+/// normal the area-weighted Gaussian mean of the normals round it on the same
+/// side of every crease (`PANEL_FILTER_*`). The fleet's bodies are panel-cut
+/// meshes of a few centimetres' tessellation whose vertex normals wander from
+/// a smooth surface's by a degree or two (vertex to vertex; up to 6 degrees on
+/// a boot lid), which a lacquer mirrors at twice the angle: the street's
+/// reflection broke into patches across a door, and the panels read as
+/// crumpled under a low sun. The mean over a few centimetres keeps every
+/// curvature wider than the radius (a panel's crown, a wheel arch's flare) and
+/// every crease past the threshold, and drops the tessellation's wander.
+/// `areas` is each vertex's share of its triangles' area; a vertex with no
+/// neighbour on its side (or no area round it) keeps its normal.
+pub fn filter_panel_normals(positions: &[Vec3], normals: &mut [Vec3], areas: &[f32], select: &[bool]) {
+    let r = PANEL_FILTER_RADIUS_M;
+    let cos_crease = PANEL_FILTER_CREASE_DEG.to_radians().cos();
+    let inv_2s2 = 1.0 / (2.0 * PANEL_FILTER_SIGMA_M * PANEL_FILTER_SIGMA_M);
+    let cell = |p: Vec3| ((p.x / r).floor() as i32, (p.y / r).floor() as i32, (p.z / r).floor() as i32);
+    let mut grid: std::collections::HashMap<(i32, i32, i32), Vec<u32>> = std::collections::HashMap::new();
+    for (i, p) in positions.iter().enumerate() {
+        if select[i] {
+            grid.entry(cell(*p)).or_default().push(i as u32);
+        }
+    }
+    let source: Vec<Vec3> = normals.to_vec();
+    for i in 0..positions.len() {
+        if !select[i] || source[i] == Vec3::ZERO {
+            continue;
+        }
+        let (p, n) = (positions[i], source[i]);
+        let c = cell(p);
+        let mut sum = Vec3::ZERO;
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    let Some(list) = grid.get(&(c.0 + dx, c.1 + dy, c.2 + dz)) else { continue };
+                    for &j in list {
+                        let j = j as usize;
+                        let d2 = (positions[j] - p).length_squared();
+                        if d2 > r * r || source[j].dot(n) < cos_crease {
+                            continue;
+                        }
+                        sum += source[j] * (areas[j] * (-d2 * inv_2s2).exp());
+                    }
+                }
+            }
+        }
+        if sum.length_squared() > 0.0 {
+            normals[i] = sum.normalize();
+        }
+    }
+}
+
+/// Whether a node is a badge's emblem (`ROLE_BADGE`): a `Badge_*` mesh thin
+/// across its face (its own z under a quarter of its width and height), not a
+/// bar or a band.
+fn badge_disc(name: &str, lo: Vec3, hi: Vec3) -> bool {
+    let size = hi - lo;
+    name.starts_with("Badge_") && size.z < 0.25 * size.x.min(size.y) && size.x > 0.0 && size.y > 0.0
+}
+
+/// The role of a fleet material by its name (0: none of the roles).
+pub fn role_of(name: &str) -> u32 {
+    match name {
+        "VehicleGlass" => ROLE_GLASS,
+        "VehicleGlassTint" => ROLE_GLASS_TINT,
+        "VehicleTyre" => ROLE_TYRE,
+        "VehiclePlate" => ROLE_PLATE,
+        "VehicleChrome" | "VehicleMirror" => ROLE_CHROME,
+        "VehicleInterior" | "VehicleInteriorTrim" | "VehicleSeatInsert" | "VehicleSeatFabric" | "VehicleFloor" | "VehicleScreen" => ROLE_INTERIOR,
+        "VehicleAlloy" | "VehicleAlloyDark" | "VehicleWheelSteel" => ROLE_WHEEL,
+        "VehicleTrimBlack" | "VehicleTrimGloss" | "VehicleTrimSatin" => ROLE_TRIM,
+        "VehicleLampReflector" => ROLE_REFLECTOR,
+        "VehicleEmergencyBlue" | "VehicleEmergencyRed" => ROLE_EMERGENCY,
+        "VehicleBrakeDisc" | "VehicleCaliper" => ROLE_BRAKE,
+        n if n.starts_with("VehicleLivery") => ROLE_LIVERY,
+        n if n.contains("Lens") => ROLE_LENS,
+        _ => 0,
+    }
+}
+
+/// The role a material's flags carry (0: none, or a library cooked without `--car-materials`).
+pub fn role_of_flags(flags: u32) -> u32 {
+    (flags & M_ROLE_MASK) >> M_ROLE_SHIFT
+}
+
 /// Parse a verified body GLB.
 pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
+    cook_body_with(bytes, lamps, false)
+}
+
+/// `cook_body_opts` without the panels.
+pub fn cook_body_with(bytes: &[u8], lamps: &LampColours, car_materials: bool) -> Result<CookedBody> {
+    cook_body_opts(bytes, lamps, car_materials, false)
+}
+
+/// `cook_body`, and with `car_materials` (`--car-materials`) each material's
+/// role in its flags (`role_of`) and each licence plate's own coordinates in
+/// its vertices' texture coordinates: u 0..1 across the plate as it is read
+/// (left to right seen from in front of it: the front plate's +x, the rear
+/// plate's -x, the body's +x being its left flank), v 0..1 bottom to top,
+/// from the plate mesh's own bounds (every fleet plate is a 12 x 6 in box).
+/// With `panels` too (`--car-panels`) the paint's normals are filtered
+/// (`filter_panel_normals`) and each badge's emblem (`badge_disc`) takes the
+/// badge role in a material of its own, its disc's coordinates in its uv.
+pub fn cook_body_opts(bytes: &[u8], lamps: &LampColours, car_materials: bool, panels: bool) -> Result<CookedBody> {
+    let panels = panels && car_materials;
     let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref();
     let doc = &gltf.document;
@@ -135,6 +349,8 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
     // (node, parent world, moving-part tag inherited)
     let mut stack: Vec<(gltf::Node, Mat4, u32)> = scene.nodes().map(|n| (n, Mat4::IDENTITY, 0)).collect();
     let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+    // (`--car-panels`) each vertex's normal before its packing, for the panels' filter
+    let mut normals_f: Vec<Vec3> = vec![];
     while let Some((node, parent, inherited)) = stack.pop() {
         let world = parent * Mat4::from_cols_array_2d(&node.transform().matrix());
         let name = node.name().unwrap_or("");
@@ -174,9 +390,27 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
             });
             let positions: Vec<[f32; 3]> = reader.read_positions().ok_or_else(|| anyhow!("primitive without POSITION"))?.collect();
             let normals: Option<Vec<[f32; 3]>> = reader.read_normals().map(|n| n.collect());
+            // (`--car-panels`) a badge's emblem: the chrome in a material of its own with the badge role
+            let (mut plo, mut phi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+            for q in &positions {
+                plo = plo.min(Vec3::from(*q));
+                phi = phi.max(Vec3::from(*q));
+            }
+            let badge = panels && p.material().name() == Some("VehicleChrome") && badge_disc(name, plo, phi);
             let local = match p.material().index() {
+                Some(i) if badge => *mat_index.entry(usize::MAX - 1 - i).or_insert_with(|| {
+                    let mut m = material_of(&p.material(), lamps);
+                    m.flags |= ROLE_BADGE << M_ROLE_SHIFT;
+                    out.materials.push(m);
+                    out.material_names.push(p.material().name().unwrap_or("").to_string());
+                    out.materials.len() as u32 - 1
+                }),
                 Some(i) => *mat_index.entry(i).or_insert_with(|| {
-                    out.materials.push(material_of(&p.material(), lamps));
+                    let mut m = material_of(&p.material(), lamps);
+                    if car_materials {
+                        m.flags |= role_of(p.material().name().unwrap_or("")) << M_ROLE_SHIFT;
+                    }
+                    out.materials.push(m);
                     out.material_names.push(p.material().name().unwrap_or("").to_string());
                     out.materials.len() as u32 - 1
                 }),
@@ -187,13 +421,43 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
                 }),
             };
             let blend = out.materials[local as usize].flags & F_BLEND != 0;
+            // (`--car-materials`) a plate's own coordinates, from its mesh's bounds (before the node's transform).
+            let plate = (car_materials && role_of_flags(out.materials[local as usize].flags) == ROLE_PLATE).then(|| {
+                let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+                for q in &positions {
+                    lo = lo.min(Vec3::from(*q));
+                    hi = hi.max(Vec3::from(*q));
+                }
+                (lo, (hi - lo).max(Vec3::splat(1e-4)), name.contains("Rear"))
+            });
             let base = out.vertices.len() as u32;
             for (i, p3) in positions.iter().enumerate() {
                 let wp = world.transform_point3(Vec3::from(*p3));
                 mn = mn.min(wp);
                 mx = mx.max(wp);
                 let n = normals.as_ref().map(|n| normal_m * Vec3::from(n[i])).unwrap_or(Vec3::Y);
-                out.vertices.push(AgentVertex { pos: wp.to_array(), normal: pack_normal(n), uv: [0, 0], joints: [0; 4], weights: [0; 4], tag: tag(local, part) });
+                let uv = match plate {
+                    Some((lo, size, rear)) => {
+                        let u = (p3[0] - lo.x) / size.x;
+                        let v = (p3[1] - lo.y) / size.y;
+                        let u = if rear { 1.0 - u } else { u };
+                        [(u.clamp(0.0, 1.0) * 65535.0).round() as u16, (v.clamp(0.0, 1.0) * 65535.0).round() as u16]
+                    }
+                    // (`--car-panels`) a badge's own disc, 0..1 across and up (before the node's transform)
+                    None if badge => {
+                        let size = (phi - plo).max(Vec3::splat(1e-4));
+                        let u = (p3[0] - plo.x) / size.x;
+                        let v = (p3[1] - plo.y) / size.y;
+                        [(u.clamp(0.0, 1.0) * 65535.0).round() as u16, (v.clamp(0.0, 1.0) * 65535.0).round() as u16]
+                    }
+                    None => [0, 0],
+                };
+                // (`--car-materials`) the normal's residual in its spare byte.
+                let normal = if car_materials { pack_normal_fine(n) } else { pack_normal(n) };
+                if panels {
+                    normals_f.push(n.normalize_or_zero());
+                }
+                out.vertices.push(AgentVertex { pos: wp.to_array(), normal, uv, joints: [0; 4], weights: [0; 4], tag: tag(local, part) });
             }
             let indices: Vec<u32> = match reader.read_indices() {
                 Some(ix) => ix.into_u32().map(|i| i + base).collect(),
@@ -208,7 +472,161 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
     }
     out.min = mn.to_array();
     out.max = mx.to_array();
+    if panels {
+        filter_body_panels(&mut out, &mut normals_f);
+    }
     Ok(out)
+}
+
+/// (`--car-panels`) `filter_panel_normals` over a cooked body's paint (the
+/// instance-painted material and the liveries, not a wheel's part), its
+/// vertices' areas from the opaque triangles; the filtered normals packed as
+/// `pack_normal_fine` packs them.
+fn filter_body_panels(out: &mut CookedBody, normals: &mut [Vec3]) {
+    let positions: Vec<Vec3> = out.vertices.iter().map(|v| Vec3::from(v.pos)).collect();
+    let select: Vec<bool> = out
+        .vertices
+        .iter()
+        .map(|v| {
+            let m = &out.materials[(v.tag & 0xffff) as usize];
+            (v.tag >> 16) & 0xff == 0 && (m.flags & M_PAINT != 0 || role_of_flags(m.flags) == ROLE_LIVERY)
+        })
+        .collect();
+    let mut areas = vec![0f32; positions.len()];
+    for t in out.opaque.chunks_exact(3) {
+        let (a, b, c) = (positions[t[0] as usize], positions[t[1] as usize], positions[t[2] as usize]);
+        let third = (b - a).cross(c - a).length() / 6.0;
+        for &i in t {
+            areas[i as usize] += third;
+        }
+    }
+    filter_panel_normals(&positions, normals, &areas, &select);
+    for (i, v) in out.vertices.iter_mut().enumerate() {
+        if select[i] {
+            v.normal = pack_normal_fine(normals[i]);
+        }
+    }
+}
+
+/// (`--car-contact`) The boxes a body's occlusion of the street round it is
+/// reckoned from (eo-render agents_contact.wgsl), in the body frame, metres:
+/// the lower body from its underside to the beltline, the upper body (the
+/// glasshouse, a van's or a truck's box) from there to the roof, and the
+/// tyres' width.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ContactShape {
+    /// Half the lower body's width (without the mirrors).
+    pub lower_half_w: f32,
+    /// The underside's height between the axles.
+    pub clearance: f32,
+    /// The lower body's ends along z (tail, nose).
+    pub z0: f32,
+    pub z1: f32,
+    /// The beltline: the foot of the side glass.
+    pub belt: f32,
+    /// Half the upper body's width, its ends along z and its top.
+    pub upper_half_w: f32,
+    pub uz0: f32,
+    pub uz1: f32,
+    pub top: f32,
+    /// Half a tyre's width.
+    pub tyre_half_w: f32,
+}
+
+/// The `p` quantile (0..1) of `v` (sorted in place); `d` when empty.
+fn quantile(v: &mut [f32], p: f32, d: f32) -> f32 {
+    if v.is_empty() {
+        return d;
+    }
+    v.sort_by(f32::total_cmp);
+    v[((v.len() - 1) as f32 * p).round() as usize]
+}
+
+/// The occluder boxes of a cooked body (`ContactShape`), from its vertices by
+/// material: the body is every part that is not a wheel part, glass, a
+/// mirror or the cabin. Quantiles, not extremes, so a stray vertex (an
+/// aerial, a mirror stalk, an exhaust tip) does not widen a box.
+pub fn contact_shape(b: &CookedBody) -> ContactShape {
+    let name = |v: &AgentVertex| b.material_names.get((v.tag & 0xffff) as usize).map(String::as_str).unwrap_or("");
+    let wheel = |v: &AgentVertex| (v.tag >> 16) & 0xff != 0;
+    let glass = |n: &str| n == "VehicleGlass" || n == "VehicleGlassTint";
+    let cabin = |n: &str| role_of(n) == ROLE_INTERIOR || n == "VehicleMirror";
+    let (lo, hi) = (Vec3::from(b.min), Vec3::from(b.max));
+    let (zc, len, height) = ((lo.z + hi.z) * 0.5, (hi.z - lo.z).max(0.5), hi.y.max(0.5));
+    let body: Vec<&AgentVertex> = b.vertices.iter().filter(|v| !wheel(v) && !glass(name(v)) && !cabin(name(v))).collect();
+    let mut under: Vec<f32> = body.iter().filter(|v| (v.pos[2] - zc).abs() < 0.25 * len).map(|v| v.pos[1]).collect();
+    let clearance = quantile(&mut under, 0.01, 0.18 * height.min(1.5)).max(0.05);
+    // (a low quantile: a bus's door glass reaches far below its windows)
+    let mut glass_y: Vec<f32> = b.vertices.iter().filter(|v| glass(name(v))).map(|v| v.pos[1]).collect();
+    let belt = quantile(&mut glass_y, 0.05, 0.55 * height).clamp(clearance + 0.2, height - 0.1);
+    let mut lx: Vec<f32> = body.iter().filter(|v| v.pos[1] < belt).map(|v| v.pos[0].abs()).collect();
+    let mut lz: Vec<f32> = body.iter().filter(|v| v.pos[1] < belt).map(|v| v.pos[2]).collect();
+    let lower_half_w = quantile(&mut lx, 0.99, hi.x.abs().max(lo.x.abs()) * 0.9);
+    let (z0, z1) = (quantile(&mut lz, 0.005, lo.z), quantile(&mut lz, 0.995, hi.z));
+    let upper: Vec<&AgentVertex> = b.vertices.iter().filter(|v| !wheel(v) && !cabin(name(v)) && v.pos[1] > belt + 0.05).collect();
+    let mut ux: Vec<f32> = upper.iter().map(|v| v.pos[0].abs()).collect();
+    let mut uz: Vec<f32> = upper.iter().map(|v| v.pos[2]).collect();
+    let mut uy: Vec<f32> = upper.iter().map(|v| v.pos[1]).collect();
+    let upper_half_w = quantile(&mut ux, 0.95, lower_half_w * 0.85).min(lower_half_w);
+    let (uz0, uz1) = (quantile(&mut uz, 0.01, z0 + 0.3 * len), quantile(&mut uz, 0.99, z1 - 0.3 * len));
+    let top = quantile(&mut uy, 0.995, height).max(belt + 0.1);
+    let mut tx: Vec<f32> = b.vertices.iter().filter(|v| name(v) == "VehicleTyre").map(|v| v.pos[0].abs()).collect();
+    let tyre_half_w = if tx.is_empty() { 0.11 } else { ((quantile(&mut tx, 1.0, 0.0) - quantile(&mut tx, 0.0, 0.0)) * 0.5).clamp(0.06, 0.25) };
+    ContactShape { lower_half_w, clearance, z0, z1, belt, upper_half_w, uz0, uz1, top, tyre_half_w }
+}
+
+/// `ContactShape` as the GPU model carries it (`GpuModel::pad` and the
+/// wheels' spare w; eo-render agents_contact.wgsl `ag_ct_shape`): pairs of
+/// signed millimetres in the pad words (lower half width and clearance, the
+/// lower ends, the beltline and the upper half width, the upper ends), the
+/// top in wheel 0's w and the tyres' half width in wheel 1's.
+pub fn contact_words(s: &ContactShape) -> ([u32; 4], [f32; 2]) {
+    let mm = |a: f32, b: f32| {
+        let q = |x: f32| ((x * 1000.0).round().clamp(-32767.0, 32767.0) as i16) as u16 as u32;
+        q(a) | (q(b) << 16)
+    };
+    ([mm(s.lower_half_w, s.clearance), mm(s.z0, s.z1), mm(s.belt, s.upper_half_w), mm(s.uz0, s.uz1)], [s.top, s.tyre_half_w])
+}
+
+/// (`--car-lamps`) Where a body's rear lamps are: the mean of the vertices of
+/// its tail and brake lamp materials (`M_TAIL`, `M_BRAKE`) behind `mid_z`,
+/// x as the distance from the centre line (the left lamp; the right one
+/// mirrors it), y up, z along, metres in the body frame. `parts` yields each
+/// vertex of the body's full level with its material's flags (a vertex once
+/// per triangle it is in, so a lamp's larger faces weigh more). None for a
+/// body without rear lamps.
+pub fn rear_lamp<'a>(parts: impl Iterator<Item = (&'a AgentVertex, u32)>, mid_z: f32) -> Option<[f32; 3]> {
+    let (mut s, mut n) = ([0f64; 3], 0u32);
+    for (v, flags) in parts {
+        if flags & (M_TAIL | M_BRAKE) != 0 && v.pos[2] < mid_z {
+            s[0] += v.pos[0].abs() as f64;
+            s[1] += v.pos[1] as f64;
+            s[2] += v.pos[2] as f64;
+            n += 1;
+        }
+    }
+    (n > 0).then(|| s.map(|c| (c / n as f64) as f32))
+}
+
+/// The packing of `rear_lamp` in a model's spare words (eo-render
+/// agents_lamps.wgsl `lt_rear_lamp_at`): the lamp's z in wheel 2's w, its x
+/// and y in centimetres as `x * REAR_LAMP_PACK + y` in wheel 3's w (an exact
+/// integer in an f32; 0 there means no lamp).
+pub const REAR_LAMP_PACK: f32 = 512.0;
+
+pub fn rear_lamp_words(p: [f32; 3]) -> [f32; 2] {
+    let x = (p[0] * 100.0).round().clamp(0.0, 511.0);
+    let y = (p[1] * 100.0).round().clamp(1.0, REAR_LAMP_PACK - 1.0);
+    [p[2], x * REAR_LAMP_PACK + y]
+}
+
+/// `rear_lamp_words` read back (as the shader reads them; None for 0).
+pub fn rear_lamp_from_words(w: [f32; 2]) -> Option<[f32; 3]> {
+    if w[1] <= 0.0 {
+        return None;
+    }
+    let xi = (w[1] / REAR_LAMP_PACK).floor();
+    Some([xi / 100.0, (w[1] - xi * REAR_LAMP_PACK) / 100.0, w[0]])
 }
 
 /// A painted box over a body's bounds: the last distance level, and the

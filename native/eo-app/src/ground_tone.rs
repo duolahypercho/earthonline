@@ -212,7 +212,12 @@ pub fn ground_tone<'a>(cover: Option<&'a GroundCover>, water: Option<&'a WaterDa
         let park = cover.tone_name_at(x, z).and_then(|n| cover.tone_at(x, z).map(|c| (n, c)));
         let class = land.map(|l| l.class_at(x, z)).unwrap_or(0);
         let shore = water.map(|w| w.field.signed_at(x, z).abs());
-        if let Some(c) = open_ground.sample(x, z, class, park, shore, elev.sample(x, z).map(|h| h - eo_water::SEA_LEVEL_Y), slope) {
+        let above_sea = elev.sample(x, z).map(|h| h - eo_water::SEA_LEVEL_Y);
+        // (`--bare-ground`) bare ground and the revetments' rock, marked for the city shader
+        if let Some(c) = eo_render::ground2::bare_ground(x, z, class, park.map(|p| p.0), shore, above_sea, slope) {
+            return Some(pack(c, eo_render::ground2::BARE_ALPHA));
+        }
+        if let Some(c) = open_ground.sample(x, z, class, park, shore, above_sea, slope) {
             return Some(pack(c, 255));
         }
         cover.tone_at(x, z).map(|c| pack(c, 255))

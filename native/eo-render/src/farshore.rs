@@ -280,6 +280,10 @@ fn upload_terrain(device: &wgpu::Device, queue: &wgpu::Queue, t: &eo_farshore::F
 
 /// The far layer's shader as composed for its pipeline.
 fn shader_source() -> String {
+    crate::look::sf_select(&shader_parts()) // the natural-detail blocks (`// sf:`, `--hill-cover`) compiled in now
+}
+
+fn shader_parts() -> String {
     format!(
         "const FS_DEPTH_K: f32 = {:e};\n{}\n{}\n{}\n{}",
         eo_farshore::DEPTH_K,
@@ -842,10 +846,17 @@ mod tests {
     #[test]
     fn the_shader_validates_with_and_without_the_look() {
         use wgpu::naga;
-        for cinematic in [false, true] {
-            let f = crate::look::ShaderFeatures { cinematic, ..crate::look::ShaderFeatures::NONE };
+        for (cinematic, nature) in [(false, 0), (true, 0), (false, crate::look::NATURE_HILLS), (false, crate::look::NATURE_HILL_RELIEF), (true, crate::look::NATURE_HILLS | crate::look::NATURE_HILL_RELIEF), (true, crate::look::NATURE_ALL)] {
+            let f = crate::look::ShaderFeatures { cinematic, nature, ..crate::look::ShaderFeatures::NONE };
             crate::look::with_shader_features(f, || {
                 let src = shader_source();
+                // (`--hill-cover`) its block in with its bit only, the lighting it replaces out
+                assert_eq!(src.contains("fn fs_cover("), nature & crate::look::NATURE_HILLS != 0);
+                assert_eq!(src.contains("lit = alb * (key + rim + irr * ao) / FS_PI;"), nature & crate::look::NATURE_HILLS == 0);
+                // (`--hill-relief`) the relief and its hook with its bit only
+                assert_eq!(src.contains("fn fs_relief("), nature & crate::look::NATURE_HILL_RELIEF != 0);
+                assert_eq!(src.contains("let n = fs_relief(p, "), nature & crate::look::NATURE_HILL_RELIEF != 0);
+                assert!(!src.contains("// sf:"));
                 let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("farshore.wgsl: {}", e.emit_to_string(&src)));
                 naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).expect("farshore.wgsl validates");
                 let ty = module.types.iter().find(|(_, t)| t.name.as_deref() == Some("FarU")).expect("FarU").1;

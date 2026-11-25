@@ -103,6 +103,20 @@ pub fn enabled() -> bool {
     !OFF.load(Ordering::Relaxed) && std::env::var_os(OFF_ENV).is_none_or(|v| v.is_empty() || v == "0")
 }
 
+static STEADY: AtomicBool = AtomicBool::new(false);
+
+/// `--people-motion` (off by default): the people's heads held steady in the
+/// bake (`rocketbox::steady_head`, the library's `CookOptions::steady_heads`)
+/// and a texting walker's phone put to the ear. `--no-people-motion` cooks
+/// and feeds as before.
+pub fn set_steady_heads(on: bool) {
+    STEADY.store(on, Ordering::Relaxed);
+}
+
+pub fn steady_heads() -> bool {
+    STEADY.load(Ordering::Relaxed)
+}
+
 /// The 100STYLE styles walked (their forward walk, `<Style>_FW`), in loop
 /// order. Picked from the 100 for everyday street walking; the phone ones
 /// walk the sim's walkers on a phone. Downloaded and left out: Old (its
@@ -257,6 +271,53 @@ pub const ROLES: [Role; 16] = [
     role("photo", 3, Family::Photo, "f-idle-neutral-01", "m-idle-neutral-01", 5.0, 5.0, 3.0, 20.0).with(Edit::Selfie),
     role("sit", 3, Family::Sit, "f-crouch-idle", "m-crouch-idle", 1.0, 1.0, 4.0, 15.0),
 ];
+
+/// (`--people-idles`) The standing repertoire past `ROLES`' three neutral
+/// idles and two waits, whose arms all hang at the sides (elbows bent about
+/// 20 degrees, the hands at the hip: `tests/people_motion.rs` prints it):
+/// windows of the Rocketbox takes where people stand otherwise. Hands on
+/// the hips, hands resting at the front or the pockets, the forearms raised
+/// in front; looking about (the head turning to what passes); a long stand
+/// whose window holds its weight shifts (the pelvis swaying 8-18 cm between
+/// the feet); a hand to the face or the head; waiting with the hands in
+/// front, looking about or fidgeting. Each window measured across its take
+/// (elbow bend, hand height and the pelvis's sway per 4 s), inside both
+/// clips and clear of their held first and last poses. All in slot 1 after
+/// `ROLES`' loops. Nothing in a hand: the takes that hold a bag, a drink, a
+/// paper, an umbrella, headphones or a camera are left out, as no prop is
+/// drawn.
+pub const MORE_IDLES: [Role; 10] = [
+    role("hips", 1, Family::Idle, "f-idle-angry-01", "m-idle-angry-01", 9.0, 12.5, 7.0, 10.0),
+    role("hands-rest", 1, Family::Idle, "f-idle-waiting-01", "m-idle-waiting-01", 17.0, 9.0, 10.0, 10.0),
+    role("hands-front", 1, Family::Idle, "f-idle-neutral-06", "m-idle-waiting-02", 4.5, 8.4, 4.0, 16.0),
+    role("look-about", 1, Family::Idle, "f-idle-look-around-01", "m-idle-look-around-01", 0.3, 0.3, 3.2, 20.0),
+    role("stand-long", 1, Family::Idle, "f-idle-waiting-01", "m-idle-neutral-06", 30.0, 12.0, 10.0, 10.0),
+    role("touch-face", 1, Family::Idle, "f-idle-touch-face-01", "m-idle-touch-face-02", 0.4, 0.4, 4.0, 16.0),
+    role("scratch-head", 1, Family::Idle, "f-idle-scratch-head-01", "m-idle-scratch-head-01", 0.3, 0.3, 2.9, 22.0),
+    role("wait-look", 1, Family::Wait, "f-idle-look-around-02", "m-idle-look-around-02", 0.25, 0.25, 2.7, 24.0),
+    role("wait-hands", 1, Family::Wait, "f-idle-neutral-06", "m-idle-waiting-02", 20.5, 24.4, 3.8, 17.0),
+    role("wait-fidget", 1, Family::Wait, "f-idle-nervous-03", "m-idle-nervous-03", 0.5, 0.5, 5.0, 12.0),
+];
+
+/// The standing loops a cook bakes, in order: `ROLES`, and with
+/// `--people-idles` (`more`) `MORE_IDLES` after them (so the loops of the
+/// cook without it keep their places and frames).
+pub fn roles(more: bool) -> Vec<Role> {
+    ROLES.iter().chain(MORE_IDLES.iter().filter(|_| more)).copied().collect()
+}
+
+static MORE: AtomicBool = AtomicBool::new(false);
+
+/// `--people-idles` (off by default): the standing repertoire `MORE_IDLES`
+/// is baked with `ROLES` (the library's `CookOptions::more_idles`).
+/// `--no-people-idles` cooks as before.
+pub fn set_more_idles(on: bool) {
+    MORE.store(on, Ordering::Relaxed);
+}
+
+pub fn more_idles() -> bool {
+    MORE.load(Ordering::Relaxed)
+}
 
 /// The clip files a role reads.
 pub fn clip_file(id: &str) -> String {
@@ -880,6 +941,10 @@ pub struct MotionMeta {
     pub notes: Vec<String>,
     /// Parts that could not be used, and why.
     pub fallback: Vec<String>,
+    /// (`--people-motion`) the heads were held steady in the bake; the feed
+    /// then also puts a texting walker's phone to the ear (no phone is drawn
+    /// in a hand).
+    pub steady: bool,
 }
 
 impl MotionMeta {
@@ -1009,7 +1074,11 @@ pub fn standing_family(activity: u16, flags: u32, id: u32) -> Family {
 /// The standing loop for this walker now (drawn once per family), or None
 /// when the slots hold no loops.
 pub fn standing(m: &MotionMeta, w: &mut WalkerMotion, activity: u16, flags: u32, id: u32) -> Option<(usize, usize)> {
-    let fam = standing_family(activity, flags, id);
+    let mut fam = standing_family(activity, flags, id);
+    if m.steady && fam == Family::Text {
+        // (`--people-motion`) the texting clip looks down at a phone no one is drawn holding.
+        fam = Family::Call;
+    }
     let i = fam as usize;
     if let Some((s, l)) = w.loops[i] {
         return Some((s as usize, l as usize));
@@ -1104,6 +1173,28 @@ mod tests {
         let old = MotionMeta::default();
         assert_eq!(old.walk_anim(5, 0.25), 0.25);
         assert_eq!(old.clip_phase(1, 3, 1.75), 0.75);
+    }
+
+    /// (`--people-motion`) a texting walker takes a call instead (no phone is
+    /// drawn in a hand); without it, the texting loop as before.
+    #[test]
+    fn steady_texters_take_a_call() {
+        let mut m = meta();
+        m.loops[3] = vec![
+            LoopMeta { role: "call".into(), family: Family::Call, first: 0, frames: 100, seconds: 10.0, ..Default::default() },
+            LoopMeta { role: "text".into(), family: Family::Text, first: 101, frames: 100, seconds: 10.0, ..Default::default() },
+        ];
+        // walkers whose phone draw is a text (activity 3)
+        let texters: Vec<u32> = (0..200).filter(|&id| standing_family(3, 0, id) == Family::Text).collect();
+        assert!(!texters.is_empty());
+        for &id in &texters {
+            let mut w = WalkerMotion::default();
+            assert_eq!(standing(&m, &mut w, 3, 0, id), Some((3, 1)), "texting as before");
+            m.steady = true;
+            let mut w = WalkerMotion::default();
+            assert_eq!(standing(&m, &mut w, 3, 0, id), Some((3, 0)), "a call");
+            m.steady = false;
+        }
     }
 
     #[test]

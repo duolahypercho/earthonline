@@ -7,6 +7,24 @@
 // neighbourhood, luminance-weighted blend. The result is the frame post
 // tone-maps, the next frame's history, and the previous frame the wet
 // ground's reflection reads.
+//
+// (`--cine-camera`, `SF_CAMERA` compiled in) its alpha carries the pixel's
+// distance from the eye for the camera's depth of field: 2 + metres (the sky
+// 65504; an alpha under 2 is a frame without it). Nothing else reads the
+// alpha; compiled out it stays 1.
+//
+// (`--camera-resolve`, `SF_CAM_RESOLVE` compiled in; cine_post.rs
+// `CAM_BIT_RESOLVE`) the frames accumulate in the unjittered image: the
+// history is read where the camera's motion alone moved the pixel's point (not
+// its jitter), the first frames after a cut are averaged evenly, and a still
+// pixel's clipping box is `CAM_RESOLVE_GAMMA` deviations wide so coverage
+// thinner than a pixel that the jitter moves (an edge, a wire, a frond's tip)
+// accumulates. (A hole an alpha-tested canopy shows in every jitter phase is the
+// material's, not the resolve's.)
+
+/// (`--camera-resolve`) a still pixel's clipping box, in standard deviations of
+/// its 3 x 3 neighbourhood (the model's: 1.25 still, 0.75 for a moving agent).
+const CAM_RESOLVE_GAMMA: f32 = 2.0;
 
 @group(0) @binding(0) var<uniform> look: Look;
 @group(0) @binding(1) var<uniform> skyu: Sky;
@@ -165,6 +183,14 @@ fn rs_history(uv: vec2<f32>) -> vec3<f32> {
     return max(r / wsum, vec3<f32>(0.0));
 }
 
+/// The resolved pixel and (`SF_CAMERA`) its distance for the camera's depth of field.
+fn rs_out(c: vec3<f32>, dist: f32) -> vec4<f32> {
+    if (SF_CAMERA) {
+        return vec4<f32>(c, select(65504.0, min(2.0 + dist, 65000.0), dist >= 0.0));
+    }
+    return vec4<f32>(c, 1.0);
+}
+
 @fragment
 fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let dims = vec2<i32>(textureDimensions(rs_hdr));
@@ -265,7 +291,7 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         c = vec3<f32>(0.0);
     }
     if (skyu.taa.x < 0.5 || skyu.taa.y < 0.5) {
-        return vec4<f32>(c, 1.0);
+        return rs_out(c, dist);
     }
     // Where this pixel was last frame.
     let v = textureLoad(rs_vel, p, 0).xy;
@@ -274,12 +300,22 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     if (v.x > 1000.0) {
         let pc = skyu.prev_vp * vec4<f32>(skyu.eye.xyz + rel, 1.0);
         prev_uv = vec2<f32>(pc.x / pc.w * 0.5 + 0.5, 0.5 - pc.y / pc.w * 0.5);
+        if (SF_CAM_RESOLVE) {
+            // (`--camera-resolve`) the camera's motion of the point alone, without this frame's
+            // jitter: `rel` is the point the jittered pixel shows, and `prev_vp` (unjittered)
+            // puts it half a pixel or so off the pixel even when nothing moved; read there, the
+            // history was resampled at a random sub-pixel offset every frame and blurred. The
+            // agents' velocity below is unjittered at both ends already.
+            let cc = skyu.vp * vec4<f32>(skyu.eye.xyz + rel, 1.0);
+            let cur_uv = vec2<f32>(cc.x / cc.w * 0.5 + 0.5, 0.5 - cc.y / cc.w * 0.5);
+            prev_uv = uv + (prev_uv - cur_uv);
+        }
     } else {
         prev_uv = uv - v;
         moving = 1.0;
     }
     if (any(prev_uv < vec2<f32>(0.0)) || any(prev_uv > vec2<f32>(1.0))) {
-        return vec4<f32>(c, 1.0);
+        return rs_out(c, dist);
     }
     // Neighbourhood moments (YCoCg, range-compressed).
     var m1 = vec3<f32>(0.0);
@@ -303,7 +339,16 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
     m1 = m1 / 9.0;
     let sigma = sqrt(max(m2 / 9.0 - m1 * m1, vec3<f32>(0.0)));
-    let gamma = mix(1.25, 0.75, moving);
+    // the pixel's motion across the screen (px; with `--camera-resolve` the jitter is not motion).
+    let speed = length((uv - prev_uv) * vec2<f32>(dims));
+    var gamma = mix(1.25, 0.75, moving);
+    if (SF_CAM_RESOLVE) {
+        // (`--camera-resolve`) a still pixel's box widened: an edge, a wire or a frond's tip
+        // thinner than a pixel is in this frame's sample or not as the jitter moves, and a box
+        // from this frame alone clipped the history back to whichever side the sample fell
+        // on (a stair-stepped edge); past half a pixel of motion the box is the model's again.
+        gamma = mix(mix(CAM_RESOLVE_GAMMA, 1.25, smoothstep(0.05, 0.5, speed)), 0.75, moving);
+    }
     let lo = m1 - gamma * sigma;
     let hi = m1 + gamma * sigma;
     var h = rs_ycocg(rs_tm(rs_history(prev_uv)));
@@ -318,8 +363,13 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
     let cur = rs_ycocg(rs_tm(c));
     // More of the new frame while the pixel moves fast across the screen.
-    let speed = length((uv - prev_uv) * vec2<f32>(dims));
-    let a = mix(skyu.taa.z, 0.35, clamp(speed / 40.0, 0.0, 1.0) * 0.5 + moving * 0.15);
+    var a = mix(skyu.taa.z, 0.35, clamp(speed / 40.0, 0.0, 1.0) * 0.5 + moving * 0.15);
+    if (SF_CAM_RESOLVE) {
+        // (`--camera-resolve`) the first frames after a cut averaged evenly (frame n weighs
+        // 1 / (n + 1)) until the steady weight takes over: the first, unresolved frame no
+        // longer stands for a tenth of the picture twenty frames on.
+        a = max(a, 1.0 / (skyu.taa.y + 1.0));
+    }
     let outc = rs_itm(rs_rgb(mix(h, cur, a)));
-    return vec4<f32>(max(outc, vec3<f32>(0.0)), 1.0);
+    return rs_out(max(outc, vec3<f32>(0.0)), dist);
 }

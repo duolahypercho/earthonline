@@ -508,6 +508,9 @@ fn street_surface(in: VOut, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -
         // weathering (`--grime`, weathering.wgsl): aged walks, chipped kerbs, a patched and sealed carriageway.
         wx_street(&s, in.world, in.rel, cls, in.aux.y * 6.35, dpx, dpy);
     }
+    if (SF_STREET_PBR) {
+        sp_street(&s, in.world, in.rel, cls, in.aux.y * 6.35, n_geom, dpx, dpy, in.color); // the physically based street (`--street-pbr`, street_pbr.wgsl)
+    }
     sky_wet_street(&s, in.world, n_geom, in.aux.y * 6.35, !concrete); // wet ground, puddles, rain rings
     return s;
 }
@@ -1532,8 +1535,22 @@ fn shade(in: VOut) -> vec4<f32> {
     let v = normalize(frame.cam_pos.xyz - in.world);
     gg3_sand_slope = select(0.0, in.aux.y * GG3_SAND_SLOPE_FULL, in.aux.y > 0.004);
     var n = face;
-    if (dot(in.normal, in.normal) > 0.25) {
-        n = normalize(in.normal);
+    var n_in = in.normal;
+    // (`--facade-weather`) a marked kit wall piece's normal y byte is its depth under the sill (kit.rs `weather_marks`; the face is upright).
+    let fw_mark = SF_FACADE_WEATHER && (objects[in.object].kind & 255u) == 5u && (m.flags & F_GLASS) == 0u && (u32(frame.copy_step.y) & 256u) == 0u && fw_marked(in.aux.y);
+    if (fw_mark) {
+        n_in.y = 0.0;
+    }
+    // (`--window-depth`) an upright kit pane's normal y byte is how deep it stands in its reveal, across
+    // and up (kit.rs `glass_depths`: 4 bits each, WD_DEPTH_STEP_M a step).
+    var wd_depth = vec2<f32>(0.0);
+    if (SF_WINDOW_DEPTH && (objects[in.object].kind & 255u) == 5u && (m.flags & F_GLASS) != 0u && dot(in.normal.xz, in.normal.xz) > 0.25) {
+        let wb = u32(i32(round(in.normal.y * 127.0))) & 255u;
+        wd_depth = vec2<f32>(f32(wb & 15u), f32(wb >> 4u)) * WD_DEPTH_STEP_M;
+        n_in.y = 0.0;
+    }
+    if (dot(n_in, n_in) > 0.25) {
+        n = normalize(n_in);
     }
     // Solid sand and shells keep their outward normal across a grazing crest.
     // A ribbon of eelgrass, like the other thin geometry, shades both sides.
@@ -1657,6 +1674,10 @@ fn shade(in: VOut) -> vec4<f32> {
                         wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
                     }
                 }
+                if (SF_STREET_PBR && paint_kind == 7u) {
+                    sp_paint_wear(&s, in.world, in.aux.y * 6.35, dpx, dpy); // (`--street-pbr`) worn to the road, cracked with it
+                    sp_paint_wet(&s); // (`--street-pbr`, street_pbr.wgsl) the markings wet with the street
+                }
             } else {
                 s.rough = ST_CONCRETE_ROUGHNESS;
                 s.env = ENV_SIDEWALK;
@@ -1668,11 +1689,59 @@ fn shade(in: VOut) -> vec4<f32> {
     let cc0_sand = cc0_terrain && (m.flags & LM_F_WET_GROUND) != 0u && in.aux.x < 253.5;
     // the terrain surface pass's ground (its vertices' alpha GG3_MATERIAL_ALPHA): cc0.wgsl gg3_terrain
     let gg3_ground = GG3_MATERIALS && cc0_terrain && abs(in.aux.x - GG3_MATERIAL_ALPHA) < 0.5;
+    let cc0_plain = cc0_terrain && !cc0_sand && !gg3_ground;
     if (gg3_ground) {
         gg3_terrain(&s, in.world, n, dpx, dpy, in.aux.y);
-    } else if (cc0_terrain && !cc0_sand) {
+    }
+// sf:BARE+
+    var nb_w = vec3<f32>(0.0);
+    if (cc0_plain) {
+        nb_w = nt_bare_weight(s.albedo, in.aux.x); // (`--bare-ground`) a vertex marked bare ground or rock (ground2.rs `bare_ground`)
+    }
+// sf:end
+// sf:TURF+
+    var nt_w = vec2<f32>(0.0);
+    if (cc0_plain) {
+        nt_w = nt_turf_weight(s.albedo); // (`--turf`) the grass in the tone, before the scans
+    }
+// sf:end
+// sf:COVER+
+    var nc_w = vec2<f32>(0.0);
+    if (cc0_plain) {
+        nc_w = nt_cover_weight(s.albedo); // (`--ground-cover`) the hills' cover in the tone, before the scans
+    }
+// sf:end
+// sf:TURF&BARE+
+    nt_w = nt_w * (1.0 - nb_w.x); // (`--bare-ground`) its tones are not grass
+// sf:end
+// sf:COVER&BARE+
+    nc_w.x = nc_w.x * (1.0 - nb_w.x);
+// sf:end
+// sf:BARE-
+    if (cc0_plain) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
+// sf:end
+// sf:BARE+
+    if (cc0_plain && nb_w.x < 0.999) {
+        cc0_ground(&s, in.world, n, dpx, dpy); // (`--bare-ground`) not under the bare ground and the rock: they draw their own
+    }
+// sf:end
+// sf:TURF+
+    if (cc0_plain) {
+        nt_turf(&s, nt_w, in.world, n, dpx, dpy); // (`--turf`) the grass as a canopy (landmarks_surface.wgsl)
+    }
+// sf:end
+// sf:COVER+
+    if (cc0_plain) {
+        nt_cover(&s, nc_w, in.world, n, dpx, dpy); // (`--ground-cover`) grass, brush, groves and chert (landmarks_surface.wgsl)
+    }
+// sf:end
+// sf:BARE+
+    if (cc0_plain && nb_w.x > 0.0) {
+        nt_bare(&s, nb_w, in.world, n, dpx, dpy); // (`--bare-ground`) gravel, fines and weeds; a revetment's rock (landmarks_surface.wgsl)
+    }
+// sf:end
     if (CITY_CLASS != CITY_GENERAL && lm_kind(m.flags) != 0u) { // (the landmark class's own pipeline, or the one pipeline)
         lm_surface(&s, m, in.world, n, dpx, dpy); // landmark-surface.js, the seawall's concrete
     } else if ((m.flags & LM_F_WET_GROUND) != 0u && (objects[in.object].kind & 255u) == 1u) {
@@ -1782,8 +1851,10 @@ fn shade(in: VOut) -> vec4<f32> {
     // the pane's colour mixes to the room's albedo by its share and gives up
     // 70 % of its metalness there, by night the lit room is its emission).
     let room = (m.flags >> 8u) & 7u;
+    // the normal the light takes as the surface's own (a `--facade-glass` pane's: its bow and tilt).
+    var n_light = n;
     if ((m.flags & F_GLASS) != 0u && room != 0u && kit_object && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
-        let ng_out = select(face, normalize(in.normal), dot(in.normal, in.normal) > 0.25);
+        let ng_out = select(face, normalize(n_in), dot(n_in, n_in) > 0.25);
         if (sl_level() != 0u) {
             wx_window_life_pre(vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room); // stage W5 (`--street-life`, weathering.wgsl): the wall beside, sill plants, a vacant shop
         }
@@ -1803,6 +1874,40 @@ fn shade(in: VOut) -> vec4<f32> {
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
+        if (fg_on()) {
+            // (`--facade-glass`) the pane as glass is: a dielectric whose two
+            // faces each reflect (F0 0.04 each, Schlick: the base layer and the
+            // clearcoat layer), never the room's colour as a metal's tint; opaque
+            // over its room, which shows through what the faces do not reflect
+            // (`r.day.w`, rooms.wgsl), tinted a little by the glass (the kit's
+            // glass colour is a blended pane's look, not its transmission); each pane on its own
+            // normal (rooms.wgsl `rm_pane_normal`), so its reflection and the
+            // sun's glint break pane by pane.
+            let tint = mix(vec3<f32>(1.0), m.base.rgb / max(max(m.base.r, max(m.base.g, m.base.b)), 1e-3), FG_GLASS_TINT);
+            s.albedo = r.day.xyz * r.day.w * tint;
+            s.metal = 0.0;
+            s.rough = FG_ROUGH;
+            s.alpha = 1.0;
+            m.emissive.w = 1.0;
+            rm_emit = r.night * tint;
+            n_light = rm_pane_normal(vec4<f32>(in.color, in.aux.y), in.world, ng_out);
+            if (dot(n_light, v) < 0.0) {
+                n_light = -n_light;
+            }
+            s.n = n_light;
+        }
+        if (SF_WINDOW_DEPTH && max(wd_depth.x, wd_depth.y) > 0.01) {
+            // (`--window-depth`) the reveal round the pane (rooms.wgsl `wd_pane`): the sun only through the
+            // opening (over the key light, look_light.wgsl `fr_sun_vis`), the sky the room behind keeps, and
+            // the reveal in the glass (`wd_refl`, read with the canyon's `cg_apply`)
+            let wd = wd_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, n_light, v, wd_depth, max(length(dpx), length(dpy)));
+            fr_sun_vis = wd.x;
+            s.albedo = s.albedo * wd.y;
+        }
+        if (SF_CANYON_GLASS && cg_on()) {
+            // (`--canyon-glass`) the street canyon the pane reflects (rooms.wgsl `cg_canyon`; look_light.wgsl reads it)
+            cg_canyon(in.world, ng_out, reflect(-v, n_light), distance(frame.cam_pos.xyz, in.world));
+        }
         if (wx_level() != 0u || sl_level() != 0u) {
             wx_window(&s, &m, vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room, dpx, dpy); // stage W5: dirty glass (`--grime`); stickers, scratched tags (`--street-life`)
         }
@@ -1821,7 +1926,7 @@ fn shade(in: VOut) -> vec4<f32> {
         fc_on = sgn.mode != 0u;
     }
     if (fc_on) {
-        rm_emit = rm_emit + fc.emit * fc_lit(fc.q, fc.n, fc.roll) * select(1.0, FC_CINE_SIGN_GAIN, SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC));
+        rm_emit = rm_emit + fc.emit * fc_lit(fc.q, fc.n, fc.roll) * select(1.0, FC_CINE_SIGN_GAIN, SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC)) * lk_practical_gain(); // (`--night-photometry`: the signs' gain)
     }
     if (house_bit(objects[in.object].kind, GRAVEL_BIT)) {
         // Granitic fines and larger chips share one world-space surface across
@@ -2152,6 +2257,10 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);
+    if (SF_FACADE_WEATHER && kit_object && (m.flags & F_GLASS) == 0u && !fc_on && !sgn_on && fw_on()) {
+        // (`--facade-weather`) the run-off under each window, the soiled foot (facade_age.wgsl)
+        fw_apply(&s, m, in.world, n, in.object, select(-1.0, in.aux.y * 127.0, fw_mark), cc0_daux * 127.0, in.normal.y * 6.35, dpx, dpy);
+    }
     if (sl_level() != 0u && kit_object && (m.flags & F_GLASS) == 0u) {
         sl_kit_wall(&s, in.world, n, in.object, dpx, dpy); // street life (`--street-life`): graffiti, buffs, posters at the building line
     }
@@ -2276,7 +2385,7 @@ fn shade(in: VOut) -> vec4<f32> {
     if (street_kind == 6u || street_kind == 7u || street_kind == 2u) {
         rm_emit += s.albedo * lk_far_street_light(in.world, frame.cam_pos.xyz);
     }
-    return look_light(s, m, v, in.world, n, in.object);
+    return look_light(s, m, v, in.world, n_light, in.object);
 }
 
 @fragment

@@ -92,6 +92,9 @@ pub const P_GLB_MAPS: u32 = 1 << 14;
 pub const P_BIG: u32 = 1 << 15;
 /// a leaf (back-lit transmission).
 pub const P_LEAF: u32 = 1 << 16;
+/// (`--luminaires`) a luminaire's lit glass (props_draw.wgsl `pr_lamp_glass`);
+/// its material's `emissive` carries `[kind, area, height, share]` (`luminaire_sockets`).
+pub const P_LAMP_GLOW: u32 = 1 << 20;
 /// Bits 24..25: the lens index (0 red, 1 amber, 2 green); clear of draw.wgsl's and the facade's flag bits.
 pub const P_LENS_SHIFT: u32 = 24;
 
@@ -224,6 +227,104 @@ pub(crate) struct Glb {
     pub(crate) uvs: Vec<[f32; 2]>,
     pub(crate) indices: Vec<u32>,
     pub(crate) maps: [Option<(usize, usize, Vec<u8>)>; 3],
+    /// (`--luminaires`) the vertex ranges (first, count) of the primitives
+    /// whose material emits (a luminaire's `lamp_glass`): the glass its lamp
+    /// lights. The loader draws them with the rest unless the cook splits them out.
+    pub(crate) glow: Vec<(u32, u32)>,
+}
+
+/// (`--luminaires`) A luminaire's lit glass as separate parts (a twin post's
+/// two lanterns, a cobra head's one lens): the glow primitives' vertices
+/// gathered into boxes that touch (a lantern's faces each have their own
+/// vertices), each part's model-space box (min, max). Its centre is where the
+/// lamp's light stands.
+pub(crate) fn glow_parts(g: &Glb) -> Vec<([f32; 3], [f32; 3])> {
+    const TOUCH_M: f32 = 0.05;
+    let mut boxes: Vec<([f32; 3], [f32; 3])> = vec![];
+    for &(first, n) in &g.glow {
+        // each triangle of the range a box; merged below
+        for t in g.indices.chunks_exact(3) {
+            if t.iter().all(|&i| i >= first && i < first + n) {
+                let mut mn = [f32::MAX; 3];
+                let mut mx = [f32::MIN; 3];
+                for &i in t {
+                    let p = g.positions[i as usize];
+                    for a in 0..3 {
+                        mn[a] = mn[a].min(p[a]);
+                        mx[a] = mx[a].max(p[a]);
+                    }
+                }
+                boxes.push((mn, mx));
+            }
+        }
+    }
+    let touch = |a: &([f32; 3], [f32; 3]), b: &([f32; 3], [f32; 3])| (0..3).all(|k| a.0[k] <= b.1[k] + TOUCH_M && b.0[k] <= a.1[k] + TOUCH_M);
+    loop {
+        let mut merged = false;
+        let mut i = 0;
+        while i < boxes.len() {
+            let mut j = i + 1;
+            while j < boxes.len() {
+                if touch(&boxes[i], &boxes[j]) {
+                    let b = boxes.swap_remove(j);
+                    for k in 0..3 {
+                        boxes[i].0[k] = boxes[i].0[k].min(b.0[k]);
+                        boxes[i].1[k] = boxes[i].1[k].max(b.1[k]);
+                    }
+                    merged = true;
+                } else {
+                    j += 1;
+                }
+            }
+            i += 1;
+        }
+        if !merged {
+            break;
+        }
+    }
+    boxes.sort_by(|a, b| a.0[0].total_cmp(&b.0[0]));
+    boxes
+}
+
+/// (`--luminaires`) A luminaire's glass parts as its lamp's sockets: each
+/// part's centre (model metres) and the shading the glass takes (props_draw.wgsl
+/// `pr_lamp_glass`): `[kind, area, height, share]`, kind 1 a lantern's frosted
+/// panes seen from the side (area its side's projected width x height), kind 2
+/// a flat lens facing down (area its plan), the part's centre height, and the
+/// part's share of the post's light.
+pub fn luminaire_sockets(parts: &[([f32; 3], [f32; 3])]) -> Vec<([f32; 3], [f32; 4])> {
+    let n = parts.len().max(1) as f32;
+    parts
+        .iter()
+        .map(|(mn, mx)| {
+            let c = [(mn[0] + mx[0]) * 0.5, (mn[1] + mx[1]) * 0.5, (mn[2] + mx[2]) * 0.5];
+            let (w, h, d) = (mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+            let flat = h < 0.25 * w.min(d);
+            let params = if flat { [2.0, (w * d).max(1e-3), c[1], 1.0 / n] } else { [1.0, (w.max(d) * h).max(1e-3), c[1], 1.0 / n] };
+            (c, params)
+        })
+        .collect()
+}
+
+/// (`--luminaires`) The sockets of the district lights' GLBs (`lampCobra`,
+/// `lampBanner`, `lampHistoric`) present in the checkout, by model (eo-app
+/// props: their lights stand at the sockets). A kind without its GLB, or a
+/// GLB without lit glass, has none (its light stays at the JS head).
+pub fn district_light_sockets(repo: &Path, js: &JsProps) -> Vec<(eo_props::Model, Vec<([f32; 3], [f32; 4])>)> {
+    district_light_sockets_with(repo, |name| js.street_prop(name).ok().cloned())
+}
+
+/// `district_light_sockets` with the street props read by `prop` (kind -> file).
+pub fn district_light_sockets_with(repo: &Path, prop: impl Fn(&str) -> Option<eo_props::data::StreetProp>) -> Vec<(eo_props::Model, Vec<([f32; 3], [f32; 4])>)> {
+    use eo_props::Model;
+    [("lampCobra", Model::LampCobra), ("lampBanner", Model::LampBanner), ("lampHistoric", Model::LampHistoric)]
+        .into_iter()
+        .filter_map(|(name, model)| {
+            let g = read_glb(repo, &prop(name)?).ok()?;
+            let s = luminaire_sockets(&glow_parts(&g));
+            (!s.is_empty()).then_some((model, s))
+        })
+        .collect()
 }
 
 /// Read a hash-verified GLB: the default scene's meshes in world frame, and
@@ -234,7 +335,7 @@ pub(crate) fn read_glb(repo: &Path, prop: &eo_props::data::StreetProp) -> Result
     let bytes = eo_assets::glb::read_verified(&path, &asset)?;
     let gltf = gltf::Gltf::from_slice(&bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref().ok_or_else(|| anyhow!("GLB without a binary chunk"))?;
-    let mut g = Glb { positions: vec![], normals: vec![], uvs: vec![], indices: vec![], maps: [None, None, None] };
+    let mut g = Glb { positions: vec![], normals: vec![], uvs: vec![], indices: vec![], maps: [None, None, None], glow: vec![] };
     let scene = gltf.default_scene().or_else(|| gltf.scenes().next()).ok_or_else(|| anyhow!("no scene"))?;
     let mut stack: Vec<(gltf::Node, glam::Mat4)> = scene.nodes().map(|n| (n, glam::Mat4::IDENTITY)).collect();
     // A v2 file's blended primitives (the shelter's glazing) are left out: this loader draws
@@ -252,6 +353,9 @@ pub(crate) fn read_glb(repo: &Path, prop: &eo_props::data::StreetProp) -> Result
                 let base = g.positions.len() as u32;
                 let pos: Vec<[f32; 3]> = r.read_positions().ok_or_else(|| anyhow!("no positions"))?.collect();
                 let n = pos.len();
+                if prim.material().emissive_factor().iter().any(|e| *e > 0.0) {
+                    g.glow.push((base, n as u32)); // (`--luminaires`) a luminaire's lit glass
+                }
                 g.positions.extend(pos.iter().map(|p| m.transform_point3(glam::Vec3::from(*p)).to_array()));
                 match r.read_normals() {
                     Some(it) => g.normals.extend(it.map(|q| (nm * glam::Vec3::from(q)).normalize_or_zero().to_array())),
@@ -479,6 +583,10 @@ impl PropLibrary {
         // inputs as before the switch (its source bytes above changed with it anyway).
         if x.stand_ins {
             h.update(b"stand-ins");
+        }
+        // (`--luminaires`) the lamps' glass split out only when on (off: the key as before).
+        if x.luminaires {
+            h.update(b"luminaires");
         }
         // The boats only when drawn (`--no-boats`: the key over the inputs before them).
         if let Some(bodies) = x.boats {

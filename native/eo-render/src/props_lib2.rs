@@ -93,6 +93,10 @@ pub struct LibExtras<'a> {
     /// The moored boats' bodies (`eo_props::boats`; eo-app `--no-boats` leaves them out):
     /// render models `BOAT_BASE + i`, the three levels from the body's three GLBs.
     pub boats: Option<&'a [eo_props::boats::Body]>,
+    /// (`--luminaires`) the district lights' GLBs draw their lit glass with a
+    /// material of its own (`P_LAMP_GLOW`). Off (the default): one material as
+    /// before; `PropLibrary::key_with` hashes it only when on.
+    pub luminaires: bool,
 }
 
 /// What `cook_extras` reports back to the library.
@@ -428,6 +432,26 @@ fn cluster(g: &Glb, cell: f32) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, 
     (pos, nrm, uvs, idx)
 }
 
+/// (`--luminaires`) `add_mesh` with the glow primitives' vertices on `mg`, their
+/// colour carrying the glass's shading `params` ([kind, area, height, share];
+/// props_draw.wgsl `pr_lamp_glass`): r area / 0.5 m^2, g height / 10 m, b share,
+/// a 64 a lantern, 128 a lens (every other vertex's alpha is 255).
+fn add_mesh_glow(b: &mut Builder, m: u32, mg: u32, g: &crate::props_lib::Glb, params: [f32; 4]) {
+    let base = b.v.len() as u32;
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let colour = [q(params[1] / 0.5), q(params[2] / 10.0), q(params[3]), if params[0] > 1.5 { 128 } else { 64 }];
+    for k in 0..g.positions.len() {
+        let lit = g.glow.iter().any(|&(f, n)| (k as u32) >= f && (k as u32) < f + n);
+        let i = b.vert(g.positions[k], g.normals[k], g.uvs[k], [255, 255, 255], if lit { mg } else { m });
+        if lit {
+            b.v[i as usize].color = colour;
+        }
+    }
+    for t in g.indices.chunks_exact(3) {
+        b.tri(false, base + t[0], base + t[1], base + t[2]);
+    }
+}
+
 fn add_mesh(b: &mut Builder, m: u32, pos: &[[f32; 3]], nrm: &[[f32; 3]], uvs: &[[f32; 2]], idx: &[u32]) {
     let base = b.v.len() as u32;
     for k in 0..pos.len() {
@@ -518,9 +542,20 @@ fn load_glb(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str) -> 
 }
 
 /// A GLB kind: level 0 the GLB, levels 1 and 2 clustered at 1/24 and 1/9 of its diagonal.
-fn glb_model(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str, id: u32, lod: [f32; 4], cast: u32) -> bool {
+fn glb_model(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str, id: u32, lod: [f32; 4], cast: u32, glow: bool) -> bool {
     let Some((g, layer)) = load_glb(out, repo, js, name) else { return false };
     let m = glb_mat(out.materials, layer);
+    // (`--luminaires`) a district light's lit glass on a material of its own: the GLB's
+    // maps, `P_LAMP_GLOW`, and its glass's shading (`luminaire_sockets`; one part's,
+    // the parts of a post being alike) in `emissive`.
+    let sockets = if glow { crate::props_lib::luminaire_sockets(&crate::props_lib::glow_parts(&g)) } else { vec![] };
+    let m_glow = sockets.first().map(|(_, params)| {
+        let k = glb_mat(out.materials, layer);
+        let mat = &mut out.materials[k as usize];
+        mat.flags |= crate::props_lib::P_LAMP_GLOW;
+        mat.emissive = *params;
+        k
+    });
     let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
     for p in &g.positions {
         for a in 0..3 {
@@ -529,7 +564,10 @@ fn glb_model(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str, id
         }
     }
     let diag = ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt();
-    add_mesh(&mut out.b, m, &g.positions, &g.normals, &g.uvs, &g.indices);
+    match m_glow {
+        Some(mg) => add_mesh_glow(&mut out.b, m, mg, &g, sockets[0].1),
+        None => add_mesh(&mut out.b, m, &g.positions, &g.normals, &g.uvs, &g.indices),
+    }
     let m0 = out.finish();
     // A v2 file (eo_props::props_v2) is built to the v1 slot's budget and keeps its thin
     // members (lamp arms, crossarms) that clustering erases: level 1 is the file itself, and
@@ -552,6 +590,11 @@ fn glb_model(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str, id
     out.set(id, [m0, m1, m2], lod, cast, 0.0);
     true
 }
+
+/// The JS near ring (`STREET_FURNITURE_RINGS[0].radius`, m): the walk's kinds, the
+/// district lights among them, are drawn to it (sky_fx.wgsl, `--luminaires`: a lamp's
+/// sprite takes its core back as its fixture's lit glass stops being drawn).
+pub const NEAR_RING_M: f32 = 120.0;
 
 /// A v2 file up to this many triangles is its own far level (no clustering).
 const V2_FAR_FULL_TRIANGLES: usize = 2000;
@@ -582,7 +625,7 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
 
     // --- furniture kinds with a GLB (STREET_FURNITURE_KINDS heights decide the cascades).
     // (kind, model, LOD edges [0->1, 1->2, unused, cut-off], kind height m)
-    let near = 120.0; // the JS near ring (`STREET_FURNITURE_RINGS[0].radius`)
+    let near = NEAR_RING_M;
     let glbs: [(&str, Model, [f32; 4], f32); 18] = [
         ("hydrant", Model::Hydrant, [16.0, 45.0, 0.0, near], 0.8),
         ("parkingMeter", Model::ParkingMeter, [16.0, 45.0, 0.0, near], 1.3),
@@ -621,7 +664,8 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
         None
     };
     for (name, model, lod, h) in glbs {
-        if !glb_model(out, repo, js, name, model as u32, lod, cascades_for(h)) {
+        let glow = x.luminaires && matches!(model, Model::LampCobra | Model::LampBanner | Model::LampHistoric);
+        if !glb_model(out, repo, js, name, model as u32, lod, cascades_for(h), glow) {
             let drawn = x.stand_ins && {
                 let (pm, cx) = stand_kit(&mut stand, out, js, x, [m_paint, m_metal, m_matte]);
                 stand_in(out, &pm, &cx, name, model as u32, lod, cascades_for(h))
@@ -932,19 +976,19 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
         // (`x.stand_ins`); without that, the plain pole as before and no arm or lantern.
         if x.stand_ins {
             for (name, id, lod, cast) in [("utilityPole", OH_DIST_POLE, [40.0, 120.0, 0.0, 360.0], 3), ("cobraArm", OH_COBRA_ARM, [30.0, 90.0, 0.0, 200.0], 2), ("lantern", OH_LANTERN, [20.0, 50.0, 0.0, 120.0], 1)] {
-                if !glb_model(out, repo, js, name, id, lod, cast) {
+                if !glb_model(out, repo, js, name, id, lod, cast, false) {
                     let (pm, cx) = stand_kit(&mut stand, out, js, x, [m_paint, m_metal, m_matte]);
                     stand_in(out, &pm, &cx, name, id, lod, cast);
                 }
             }
         } else {
-            if !glb_model(out, repo, js, "utilityPole", OH_DIST_POLE, [40.0, 120.0, 0.0, 360.0], 3) {
+            if !glb_model(out, repo, js, "utilityPole", OH_DIST_POLE, [40.0, 120.0, 0.0, 360.0], 3, false) {
                 out.b.cylinder([0.0; 3], 0.0, 11.7, 0.2, 0.14, 6, srgb_hex("#5a4a3a"), m_matte, true);
                 let n = out.finish();
                 out.set(OH_DIST_POLE, [n, n, n], [360.0, 360.0, 0.0, 360.0], 3, 0.0);
             }
-            glb_model(out, repo, js, "cobraArm", OH_COBRA_ARM, [30.0, 90.0, 0.0, 200.0], 2);
-            glb_model(out, repo, js, "lantern", OH_LANTERN, [20.0, 50.0, 0.0, 120.0], 1);
+            glb_model(out, repo, js, "cobraArm", OH_COBRA_ARM, [30.0, 90.0, 0.0, 200.0], 2, false);
+            glb_model(out, repo, js, "lantern", OH_LANTERN, [20.0, 50.0, 0.0, 120.0], 1, false);
         }
         // The overhead's controller cabinet: the furniture's cabinet mesh, scaled by its size.
         out.models[OH_CABINET as usize] = out.models[Model::SignalCabinet as usize];

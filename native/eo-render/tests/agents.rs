@@ -160,7 +160,7 @@ fn car_detail_draws_a_far_body_and_keeps_more_near_cars_whole() {
     let ctx = ctx();
     let paths = eo_data::DataPaths::discover().expect("repo data");
     let people = eo_agents::library::PeopleSource::from_env();
-    let opts = eo_agents::library::CookOptions { far_body: true };
+    let opts = eo_agents::library::CookOptions { far_body: true, ..Default::default() };
     let lib = Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &people, opts).expect("agent library with far bodies");
     let boxed = library();
     assert_eq!(lib.meshes.len(), boxed.meshes.len(), "the far bodies take the boxes' mesh slots");
@@ -298,4 +298,135 @@ fn a_car_in_a_bore_is_lit_by_the_bore_not_the_sun() {
     let (x, y) = project(&cam, Vec3::new(5.0, 0.0, -3.0));
     let k = (y.min(H - 1) * W + x.min(W - 1)) as usize;
     assert!((lit[k] - bore[k]).abs() <= 0.02 * lit[k].max(1e-3), "the ground beside: {} vs {}", lit[k], bore[k]);
+}
+
+/// `--car-materials`: with every shader feature compiled in (the tests'
+/// default, so the agents' pipelines carry the cars' own shading and Apple's
+/// compiler takes them), a library cooked with the roles draws the frame of
+/// the plain library while the level is 0, and with the level on the car's
+/// pixels change and nothing else does.
+#[test]
+fn car_materials_change_the_car_alone_and_nothing_while_off() {
+    let ctx = ctx();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let people = eo_agents::library::PeopleSource::Off;
+    let cook = |car_materials| Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &people, eo_agents::library::CookOptions { car_materials, ..Default::default() }).expect("agent library");
+    let (plain, roles) = (cook(false), cook(true));
+    // A sedan side-on 7 m north of the camera, and the camera looking at it.
+    let cam = Camera::new(Vec3::new(0.0, 1.5, 0.0), 0.0, -0.08, W as f32 / H as f32);
+    let shot = |lib: &Library, level: u8| {
+        let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+        slab(&mut v, &mut i, &mut o);
+        let mut r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+        let options = eo_render::look::LookOptions { car_materials: level, ..r.look.options };
+        r.look.set_options(&ctx.device, options);
+        r.attach_agents(&ctx, lib).unwrap();
+        let a = r.agents.get().unwrap();
+        a.upload(&ctx.queue, &[car(lib, "sedan", Vec3::new(0.0, 0.0, -7.0), std::f32::consts::FRAC_PI_2)]);
+        render(&ctx, &r, &cam, 2)
+    };
+    let (base, off, on) = (shot(&plain, 0), shot(&roles, 0), shot(&roles, 1));
+    let differ = |a: &[f32], b: &[f32]| a.iter().zip(b).filter(|(x, y)| (*x - *y).abs() > 1e-3 * (1.0 + x.abs())).count();
+    assert_eq!(differ(&base, &off), 0, "level 0: the roles and the plates' coordinates draw nothing");
+    let changed = differ(&base, &on);
+    assert!(changed > 200, "level 1 changes the car ({changed} pixels)");
+    // Only pixels round the car: the slab's far corners are untouched.
+    let corner = |img: &[f32]| (0..20).flat_map(|y| (0..20).map(move |x| y * W as usize + x)).chain((0..20).flat_map(|y| (0..20).map(move |x| (H as usize - 1 - y) * W as usize + W as usize - 1 - x))).map(|k| img[k]).collect::<Vec<_>>();
+    assert_eq!(differ(&corner(&base), &corner(&on)), 0, "nothing but the car changes");
+}
+
+/// `--car-contact`: the cars' occlusion of the street (agents_contact.wgsl,
+/// a pass of its own) darkens the slab at a car's foot and leaves the slab a
+/// few metres off as it was; without the switch no pass is made. (The
+/// screen-space occlusion is off here: the pass takes only what it left.)
+#[test]
+fn car_contact_darkens_the_street_at_the_car_alone() {
+    let ctx = ctx();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let people = eo_agents::library::PeopleSource::Off;
+    let lib = Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &people, eo_agents::library::CookOptions { car_materials: true, ..Default::default() }).expect("agent library");
+    // A sedan side-on 7 m north of the camera (its nose to +x), the camera 3 m up looking down at it.
+    let cam = Camera::new(Vec3::new(0.0, 3.0, 0.0), 0.0, -0.35, W as f32 / H as f32);
+    let shot = |contact: u8| {
+        let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+        slab(&mut v, &mut i, &mut o);
+        let mut r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+        // (the screen-space occlusion off: where it already took the car's share the pass takes no more)
+        let options = eo_render::look::LookOptions { car_contact: contact, ao: false, ..r.look.options };
+        r.look.set_options(&ctx.device, options);
+        r.attach_agents(&ctx, &lib).unwrap();
+        let a = r.agents.get().unwrap();
+        a.upload(&ctx.queue, &[car(&lib, "sedan", Vec3::new(0.0, 0.0, -7.0), std::f32::consts::FRAC_PI_2)]);
+        let made = a.contact_reads(&Targets::new(&ctx.device, W, H, wgpu::TextureFormat::Rgba8UnormSrgb, 1).depth);
+        (render(&ctx, &r, &cam, 2), made)
+    };
+    let ((off, made_off), (on, made_on)) = (shot(0), shot(1));
+    assert!(!made_off && made_on, "the pass is made with the switch alone");
+    let shape = eo_agents::vehicles::contact_shape(&eo_agents::vehicles::cook_body_with(&eo_agents::catalog::read_verified(&paths.repo_root, &eo_agents::catalog::AgentsJs::load().unwrap().vehicles["sedan"].lods[0].asset()).unwrap(), &eo_agents::vehicles::LampColours::from_js(&eo_agents::catalog::AgentsJs::load().unwrap()), true).unwrap());
+    // the slab 5 cm out from the sill on the camera's side, along the car's
+    // middle, and 10 cm in under the sill: darker (by the share of their light
+    // that is the sky's: this slab is lit mostly by the key), under the sill most.
+    let at = |p: Vec3| {
+        let (x, y) = project(&cam, p);
+        let k = (y.min(H - 1) * W + x.min(W - 1)) as usize;
+        on[k] / off[k].max(1e-6)
+    };
+    let foot = at(Vec3::new(0.3, 0.0, -7.0 + shape.lower_half_w + 0.05));
+    let under = at(Vec3::new(0.3, 0.0, -7.0 + shape.lower_half_w - 0.1));
+    eprintln!("the slab at the car's foot keeps {foot}, under the sill {under}");
+    assert!(foot < 0.99 && under < foot, "the slab at the car's foot keeps {foot}, under the sill {under}");
+    // the slab's far corners (tens of metres off) are untouched.
+    let corner = |img: &[f32]| (0..20).flat_map(|y| (0..20).map(move |x| (H as usize - 1 - y) * W as usize + x)).map(|k| img[k]).collect::<Vec<_>>();
+    let (a, b) = (corner(&off), corner(&on));
+    assert!(a.iter().zip(&b).all(|(p, q)| (p - q).abs() <= 1e-3 * (1.0 + p.abs())), "the far slab changed");
+}
+
+/// `--car-finish`: compiled in but at level 0 the frame is the one without it
+/// (bit-identical, the one pipeline); at level 1 the car alone changes, drawn
+/// with a person beside it by the cars' and the people's own pipelines (their
+/// meshes held apart in the library: `person_mesh_split`), the person as before.
+#[test]
+fn car_finish_changes_the_car_alone_and_nothing_while_off() {
+    let ctx = ctx();
+    let lib = library();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let roles = Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &eo_agents::library::PeopleSource::Off, eo_agents::library::CookOptions { car_materials: true, ..Default::default() }).expect("agent library");
+    let lib = if lib.meta.people_models.is_empty() { roles } else { lib };
+    if !lib.meta.people_models.is_empty() {
+        let k = eo_render::agents::person_mesh_split(&lib).expect("the bodies' meshes come before the people's");
+        assert!(k > 0 && k < lib.meshes.len() as u32);
+    }
+    let cam = Camera::new(Vec3::new(0.0, 1.5, 0.0), 0.0, -0.08, W as f32 / H as f32);
+    let all = eo_render::look::ShaderFeatures::ALL;
+    let shot = |finish: bool, level: u8| {
+        eo_render::look::with_shader_features(eo_render::look::ShaderFeatures { car_finish: finish, ..all }, || {
+            let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+            slab(&mut v, &mut i, &mut o);
+            let mut r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+            let options = eo_render::look::LookOptions { car_materials: 1, car_finish: level, ..r.look.options };
+            r.look.set_options(&ctx.device, options);
+            r.attach_agents(&ctx, &lib).unwrap();
+            let a = r.agents.get().unwrap();
+            let mut agents = vec![car(&lib, "sedan", Vec3::new(0.0, 0.0, -7.0), std::f32::consts::FRAC_PI_2)];
+            if !lib.meta.people_models.is_empty() {
+                agents.push(person(&lib, Vec3::new(-3.0, 0.0, -5.0), 0.0));
+            }
+            a.upload(&ctx.queue, &agents);
+            render(&ctx, &r, &cam, 2)
+        })
+    };
+    let (base, off, on) = (shot(false, 0), shot(true, 0), shot(true, 1));
+    let differ = |a: &[f32], b: &[f32]| a.iter().zip(b).filter(|(x, y)| (*x - *y).abs() > 1e-3 * (1.0 + x.abs())).count();
+    assert_eq!(differ(&base, &off), 0, "level 0: the finish draws nothing");
+    let changed = differ(&base, &on);
+    assert!(changed > 50, "level 1 changes the car ({changed} pixels)");
+    let region = |img: &[f32], x0: u32, x1: u32| (0..H).flat_map(|y| (x0..x1).map(move |x| (y * W + x) as usize)).map(|k| img[k]).collect::<Vec<_>>();
+    // the person, left of the car (its own pipeline): as before
+    if !lib.meta.people_models.is_empty() {
+        let (px, _) = project(&cam, Vec3::new(-3.0, 0.9, -5.0));
+        let (x0, x1) = (px.saturating_sub(12), (px + 12).min(W));
+        assert_eq!(differ(&region(&base, x0, x1), &region(&on, x0, x1)), 0, "the person is drawn as before");
+    }
+    let corner = |img: &[f32]| (0..20).flat_map(|y| (0..20).map(move |x| (H as usize - 1 - y) * W as usize + W as usize - 1 - x)).map(|k| img[k]).collect::<Vec<_>>();
+    assert_eq!(differ(&corner(&base), &corner(&on)), 0, "nothing but the car changes");
 }

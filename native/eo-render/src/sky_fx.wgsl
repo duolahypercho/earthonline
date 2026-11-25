@@ -71,6 +71,16 @@ fn fx_luminaire(l: FxLight) -> vec4<f32> {
     return vec4<f32>(l.pos, l.intensity);
 }
 
+/// (`--night-photometry`; sky_lights.wgsl `lt_emit`) a street luminaire's
+/// intensity toward the eye over its nadir's, carried in its record's fraction
+/// (1: as before, a globe or a landmark's lamp, or the switch off).
+fn fx_eye_share(l: FxLight) -> f32 {
+    if (!SF_NIGHT_PHOTOMETRY) {
+        return 1.0;
+    }
+    return 1.0 - fract(l.pad);
+}
+
 @vertex
 fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> FxOut {
     var out: FxOut;
@@ -110,7 +120,12 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     }
     // The core never under 1.5 px (its energy kept), the halo a few metres.
     let px = fx_pixel_m(z);
-    let core = max(FX_LENS_M, 1.5 * px);
+    var core = max(FX_LENS_M, 1.5 * px);
+    if (SF_LUMINAIRES && (u32(l.pad) & 4u) != 0u) {
+        // (`--luminaires`) a lantern drawn with its panes lit: the core is its lamp seen
+        // through the clear glass (`LUM_LANTERN_LAMP_M`), its energy kept, the frame round it seen
+        core = max(LUM_LANTERN_LAMP_M, 1.5 * px);
+    }
     let halo = (1.2 + 2.5 * (skyu.bloom_w2.w - 1.0)) * max(1.0, core / FX_LENS_M);
     let size = max(core, halo);
     let c = fx_corner(vi);
@@ -121,8 +136,11 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     let pull = fx_clip(p - normalize(rel) * min(size, 2.0));
     out.clip.z = pull.z / pull.w * out.clip.w;
     out.uv = c * size;
-    // Luminance of the lens: the intensity over its projected area.
-    let lens = lum.w / (FX_LENS_M * FX_LENS_M * 3.14159) * (FX_LENS_M / core) * (FX_LENS_M / core);
+    // Luminance of the lens: the intensity over its projected area (`--night-photometry`: toward the eye).
+    let eye = fx_eye_share(l);
+    // (`--luminaires`: over a fixture drawn with its glass lit, the core is the lamp seen
+    // through its clear panes or the glare of its lens, props_draw.wgsl `pr_lamp_glass`)
+    let lens = lum.w * eye / (FX_LENS_M * FX_LENS_M * 3.14159) * (FX_LENS_M / core) * (FX_LENS_M / core);
     out.color = vec4<f32>(l.color * lens, core);
     // z: (lighting, `--lit-fog`) the share of the lamp's air light the lit fog's
     // volume already draws, not added twice: within the clusters' far depth, and
@@ -134,7 +152,14 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
         let below = select(smoothstep(0.0, FX_LIT_FOG_BELOW_SIN, (head.y - skyu.eye.y) / max(length(rel), 1e-3)), 1.0, l.kind == 2u);
         fogged = below * (1.0 - smoothstep(FX_LIT_FOG_FADE * skyu.cluster.y, skyu.cluster.y, z));
     }
-    out.extra = vec4<f32>(halo, lum.w, fogged, 0.0);
+    // (`--night-photometry`; eo-sky `night_photometry::far_air_light_share`) past the distance
+    // where the halo stops shrinking on screen, its air light keeps single scattering's
+    // 1 / distance at a fixed angle (the far lamps down a long street no longer sum to a wedge).
+    var air = lum.w;
+    if (SF_NIGHT_PHOTOMETRY && look.fog.z > 0.0) {
+        air = air * eye * FX_LENS_M / core;
+    }
+    out.extra = vec4<f32>(halo, air, fogged, 0.0);
     return out;
 }
 
@@ -196,7 +221,7 @@ fn glare_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
     if (l.kind != 1u) {
         let lum = fx_luminaire(l);
         head = lum.xyz;
-        inten = lum.w;
+        inten = lum.w * fx_eye_share(l); // (`--night-photometry`: toward the eye)
     }
     let rel = head - skyu.eye.xyz;
     let z = dot(rel, skyu.cam_fwd.xyz);
@@ -334,7 +359,7 @@ fn glitter_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) 
     var out: FxOut;
     out.clip = vec4<f32>(0.0, 0.0, -1.0, 1.0);
     let l = fx_lights[ii];
-    if (vi >= 6u || (l.kind != 0u && l.kind != 3u) || u32(l.pad) < 2u || !sky_on(skyu.flags.x, SKY_SPRITES)) {
+    if (vi >= 6u || (l.kind != 0u && l.kind != 3u) || (u32(l.pad) & 2u) == 0u || !sky_on(skyu.flags.x, SKY_SPRITES)) { // (bit 1: by the water; bit 2 `--luminaires`)
         return out;
     }
     // The lens, as the luminaire sprite draws it.

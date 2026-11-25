@@ -576,7 +576,100 @@ struct Res {
     fill_bgs: Vec<wgpu::BindGroup>,
     mip_bgs: Vec<Vec<wgpu::BindGroup>>,
     lobe_bgs: Vec<wgpu::BindGroup>,
+    /// (`--probe-sky`) the frame's sky and the GGX levels, made only with SF_PROBE_SKY compiled in.
+    sky: Option<SkyFill>,
     bytes: u64,
+}
+
+/// (`--probe-sky`, the reflect track) The probe grid's sky fill and GGX
+/// levels (probe_sky.wgsl): per slot, the fill's bind group and one per level 1...
+struct SkyFill {
+    fill: wgpu::ComputePipeline,
+    prefilter: wgpu::ComputePipeline,
+    fill_bgs: Vec<wgpu::BindGroup>,
+    pre_bgs: Vec<Vec<wgpu::BindGroup>>,
+}
+
+/// (`--probe-sky`) The volume's sky along a direction (sky_volume.wgsl
+/// `vol_atmo_gain`, `vol_atmo_sky` and what they read: `VOL_CINE_AUREOLE_KEEP`,
+/// `vol_cine_on`), cut out of that file so the probes' sky is the frame's.
+pub(crate) fn atmo_source() -> String {
+    const V: &str = include_str!("sky_volume.wgsl");
+    let a = V.find("/// the atmosphere's sky radiance along a direction").expect("sky_volume.wgsl: vol_atmo_gain");
+    let b = a + V[a..].find("// (`--look cinematic`, the cinematic look plan's stage L4").expect("sky_volume.wgsl: the end of vol_atmo_sky");
+    let k = V.find("const VOL_CINE_AUREOLE_KEEP").expect("sky_volume.wgsl: VOL_CINE_AUREOLE_KEEP");
+    let k_end = k + V[k..].find('\n').expect("a line");
+    let c = V.find("fn vol_cine_on() -> bool {").expect("sky_volume.wgsl: vol_cine_on");
+    let c_end = c + V[c..].find("\n}\n").expect("vol_cine_on's end") + 3;
+    format!("// cut from sky_volume.wgsl by probe_grid.rs atmo_source\n{}\n{}\n{}", &V[k..k_end], &V[c..c_end], &V[a..b])
+}
+
+/// (`--probe-sky`) The sky fill's and the GGX levels' module: the look's
+/// common code, probe_fill.wgsl (its bindings and the faces' basis), the
+/// volume's sky (`atmo_source`), probe_sky.wgsl.
+pub(crate) fn sky_source() -> String {
+    format!("{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("probe_fill.wgsl"), atmo_source(), include_str!("probe_sky.wgsl"))
+}
+
+impl SkyFill {
+    /// The pipelines and every slot's bind groups (`level_view(slot, m)`: level m of a slot's six faces; `below(slot, m)`: its levels 0..m).
+    fn new(
+        d: &wgpu::Device,
+        r: &crate::Renderer,
+        lv: Level,
+        raw_all: &wgpu::TextureView,
+        level_view: &dyn Fn(u32, u32) -> wgpu::TextureView,
+        below: &dyn Fn(u32, u32) -> wgpu::TextureView,
+    ) -> Self {
+        let cs = wgpu::ShaderStages::COMPUTE;
+        let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: cs, ty, count: None };
+        let tex = |dim| wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: dim, multisampled: false };
+        let uni = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None };
+        let bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("probe-sky-bgl"),
+            entries: &[
+                entry(0, uni),
+                entry(1, tex(wgpu::TextureViewDimension::D2Array)),
+                entry(2, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: crate::probe::PROBE_FORMAT, view_dimension: wgpu::TextureViewDimension::D2Array }),
+                entry(4, tex(wgpu::TextureViewDimension::D2)),
+                entry(5, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                entry(6, uni),
+                entry(7, tex(wgpu::TextureViewDimension::D2Array)),
+            ],
+        });
+        let src = sky_source();
+        let m = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("probe-sky"), source: wgpu::ShaderSource::Wgsl(src.into()) });
+        let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("probe-sky-layout"), bind_group_layouts: &[Some(&bgl)], immediate_size: 0 });
+        let pipe = |e: &str| d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(e), layout: Some(&layout), module: &m, entry_point: Some(e), compilation_options: Default::default(), cache: None });
+        let lin = d.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("probe-sky-linear"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+        let (view, _) = r.look.sky.atmo_tables();
+        let bg = |dst: &wgpu::TextureView, levels: &wgpu::TextureView| {
+            d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("probe-sky-bg"),
+                layout: &bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: r.look.look_buffer().as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(raw_all) },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(dst) },
+                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(view) },
+                    wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(&lin) },
+                    wgpu::BindGroupEntry { binding: 6, resource: r.look.sky.uniform.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(levels) },
+                ],
+            })
+        };
+        let slots = lv.slots as u32;
+        let fill_bgs = (0..slots).map(|s| bg(&level_view(s, 0), raw_all)).collect();
+        let pre_bgs = (0..slots).map(|s| (1..lv.mips).map(|m| bg(&level_view(s, m), &below(s, m))).collect()).collect();
+        crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, (slots * lv.mips) as u64);
+        Self { fill: pipe("ps_fill"), prefilter: pipe("ps_prefilter"), fill_bgs, pre_bgs }
+    }
 }
 
 #[derive(Default)]
@@ -723,8 +816,20 @@ impl ProbeGridGpu {
             lobe_bgs.push(fbg(&level_view(s, 3), &level_view(s, lv.mips - 1), s));
         }
         crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, (lv.slots as u32 * (lv.mips + 1)) as u64);
+        // (`--probe-sky`) the frame's sky and the GGX levels, with SF_PROBE_SKY compiled in.
+        let below = |slot: u32, m: u32| {
+            cubes.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                base_mip_level: 0,
+                mip_level_count: Some(m),
+                base_array_layer: 6 * slot,
+                array_layer_count: Some(6),
+                ..Default::default()
+            })
+        };
+        let sky = crate::look::shader_features().probe_sky.then(|| SkyFill::new(d, r, lv, &raw_all, &level_view, &below));
         let bytes = lv.bytes();
-        let res = Res { level: lv, _cubes: cubes, _raw: raw, raw_layers, depth, table, fill_bgs, mip_bgs, lobe_bgs, bytes };
+        let res = Res { level: lv, _cubes: cubes, _raw: raw, raw_layers, depth, table, fill_bgs, mip_bgs, lobe_bgs, sky, bytes };
         if self.res.set(res).is_err() {
             return 0;
         }
@@ -806,14 +911,27 @@ impl ProbeGridGpu {
             let s = job.slot as usize;
             let size = res.level.face;
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("probe-grid-fill"), timestamp_writes: tw });
-            pass.set_pipeline(fill);
-            pass.set_bind_group(0, &res.fill_bgs[s], &[]);
-            pass.dispatch_workgroups(size.div_ceil(8), size.div_ceil(8), 6);
-            pass.set_pipeline(mip);
-            for m in 1..res.level.mips {
-                let ms = (size >> m).max(1);
-                pass.set_bind_group(0, &res.mip_bgs[s][(m - 1) as usize], &[]);
-                pass.dispatch_workgroups(ms.div_ceil(8), ms.div_ceil(8), 6);
+            if let Some(k) = res.sky.as_ref().filter(|_| r.look.options.sky.probe_sky) {
+                // (`--probe-sky`) the frame's sky where nothing was drawn, then the GGX levels
+                pass.set_pipeline(&k.fill);
+                pass.set_bind_group(0, &k.fill_bgs[s], &[]);
+                pass.dispatch_workgroups(size.div_ceil(8), size.div_ceil(8), 6);
+                pass.set_pipeline(&k.prefilter);
+                for m in 1..res.level.mips {
+                    let ms = (size >> m).max(1);
+                    pass.set_bind_group(0, &k.pre_bgs[s][(m - 1) as usize], &[]);
+                    pass.dispatch_workgroups(ms.div_ceil(8), ms.div_ceil(8), 6);
+                }
+            } else {
+                pass.set_pipeline(fill);
+                pass.set_bind_group(0, &res.fill_bgs[s], &[]);
+                pass.dispatch_workgroups(size.div_ceil(8), size.div_ceil(8), 6);
+                pass.set_pipeline(mip);
+                for m in 1..res.level.mips {
+                    let ms = (size >> m).max(1);
+                    pass.set_bind_group(0, &res.mip_bgs[s][(m - 1) as usize], &[]);
+                    pass.dispatch_workgroups(ms.div_ceil(8), ms.div_ceil(8), 6);
+                }
             }
             pass.set_pipeline(lobe);
             pass.set_bind_group(0, &res.lobe_bgs[s], &[]);
@@ -849,6 +967,18 @@ mod tests {
             }
         }
         max
+    }
+
+    #[test]
+    fn the_probe_sky_takes_the_volumes_own_sky_function() {
+        // (`--probe-sky`) the cut holds the volume's sky and what it reads, and nothing past it
+        let a = atmo_source();
+        for name in ["fn vol_atmo_gain(", "fn vol_atmo_sky(", "const VOL_CINE_AUREOLE_KEEP", "fn vol_cine_on("] {
+            assert_eq!(a.matches(name).count(), 1, "{name}");
+        }
+        assert!(!a.contains("VOL_CINE_HAZE_H_M") && !a.contains("@group"), "only the sky function and its two names");
+        let s = sky_source();
+        assert!(s.contains("fn ps_fill(") && s.contains("fn ps_prefilter(") && s.contains("fn fill("), "the grid's own entries beside the single probe's");
     }
 
     #[test]

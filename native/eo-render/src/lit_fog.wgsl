@@ -152,6 +152,9 @@ fn lf_light_visibility(index: u32, li: LfLight, p: vec3<f32>) -> f32 {
 /// it, `sigma` the fog's extinction there, `rmin` the nearest a light is held
 /// to (the froxel's own size: it stands for its whole cell).
 fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32, sigma: f32, rmin: f32) -> vec3<f32> {
+    if (SF_LAMP_BOUNCE && li.kind == LF_BOUNCE_KIND) {
+        return vec3<f32>(0.0); // (`--lamp-bounce`) a pool's bounce stands under the street: it lights no fog
+    }
     // where the light leaves its luminaire: a props street light's (kind 3) source stands `size` m
     // over its head (the JS practical's lift, which widens the pool), its intensity carrying the
     // pool gain (1 + lift)^2 (sky_fx `fx_luminaire`): the fog glows round the head, not over it.
@@ -195,6 +198,18 @@ fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32
         let hl = normalize(vec2<f32>(lt.x, lt.z) + vec2<f32>(1e-6, 0.0));
         let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
         shape = vert * smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
+    } else if (SF_CAR_LAMPS && li.kind == SF_REAR_LAMP_KIND) {
+        shape = sf_rear_lamp_shape(lt, li.dir); // (`--car-lamps`) a car's rear lamp lights the fog behind it, not round it
+    } else if ((SF_SIGNAL_SPILL || SF_REAR_LAMPS) && (li.kind == NT_SIGNAL_KIND || li.kind == NT_REAR_KIND)) {
+        // (`--signal-spill`, `--rear-lamps`) a signal lens's or rear lamp's lobe (eo-sky lights
+        // `SIGNAL_LOBE`, `REAR_LOBE`): the haze glows in its beam, not round it every way.
+        // A signal's beam is clear near its lens (as on the surfaces, sky_light.wgsl: what
+        // stood there would hide the lens), so a head hidden behind a trunk or a pole
+        // leaves no glow floating in front of it; its lens's own glow is the camera's.
+        // (round 2 integration: the two kinds by name, so the cars' rear lamps of
+        // `--car-lamps` and the lamp streaks' records keep their own shapes)
+        let sig = li.kind == NT_SIGNAL_KIND;
+        shape = nt_lobe(lt, li.dir, select(NT_REAR_V, NT_SIGNAL_V, sig), select(NT_REAR_H, NT_SIGNAL_H, sig)) * select(1.0, smoothstep(0.75 * NT_SIGNAL_CLEAR_M, NT_SIGNAL_CLEAR_M, dist), sig);
     }
     if (shape <= 0.0) {
         return vec3<f32>(0.0);

@@ -56,6 +56,7 @@ struct AgModel {
     joints: u32,
     wheel_radius: f32,
     driver_door: vec4<f32>,
+    pad: vec4<u32>,
 };
 
 struct AgMesh {

@@ -371,6 +371,36 @@ pub struct HlodGpu {
 pub const CULL_WGSL: &str = include_str!("hlod_cull.wgsl");
 pub const DRAW_WGSL: &str = include_str!("hlod_draw.wgsl");
 
+/// The far layer's draw as the pipelines compose it: `DRAW_WGSL`, and with
+/// the far facades compiled in (`--far-facades`, look.rs `ShaderFeatures`)
+/// the flat varying that carries an untextured wall's first corner and the
+/// cell's lowest point (hlod_draw.wgsl `fb_facade`); with the far relief
+/// (`--far-relief`) the varying that carries a district roof's distances to
+/// its footprint's box (hlod_district.rs `roof_frame_words`, hlod_draw.wgsl
+/// `fr_roof`); off, the source as before.
+pub fn draw_wgsl() -> String {
+    let f = crate::look::shader_features();
+    let mut s = DRAW_WGSL.to_string();
+    if f.far_facades {
+        s = s
+            .replace("    // @ff-corner-field\n", "    @location(12) @interpolate(flat) ff_corner: vec4<f32>,\n")
+            .replace("    // @ff-corner-out\n", "    out.ff_corner = vec4<f32>(pos, hl_cells_d[entry].min.y);\n")
+            .replace("    return vec4<f32>(in.world, in.world.y - 10.0); // @ff-corner-read\n", "    return in.ff_corner;\n");
+    }
+    if f.far_relief {
+        // (`--far-relief`) a district roof ring's distances to its footprint's box (hlod_district.rs
+        // `roof_frame_words`), in metres at the ring's step; a cell's or a wall's are never read.
+        s = s
+            .replace("    // @fr-roof-field\n", "    @location(13) fr_d: vec4<f32>,\n")
+            .replace(
+                "    // @fr-roof-out\n",
+                "    out.fr_d = select(vec4<f32>(-1.0), vec4<f32>(f32(nrm & 255u), f32((nrm >> 8u) & 255u), f32((nrm >> 16u) & 255u), f32(nrm >> 24u)) * (0.25 * f32(1u << ((uvw >> 27u) & 3u))), district);\n",
+            )
+            .replace("    return vec4<f32>(-1.0); // @fr-roof-read\n", "    return in.fr_d;\n");
+    }
+    s
+}
+
 /// The pages are BC3 (set by `HlodGpu::new` from the device's features; the
 /// workers compress for it).
 pub static PAGES_BC: AtomicBool = AtomicBool::new(false);
@@ -493,7 +523,7 @@ impl HlodGpu {
                 wgpu::BindGroupEntry { binding: 4, resource: top_buf.as_entire_binding() },
             ],
         });
-        let dm = module("hlod_draw.wgsl", format!("{}\n{}{DRAW_WGSL}", crate::look::city_shader_source_far(), far_constants_wgsl(&i.opts))); // + the switches // the far layer's city shader (lighting: the ambient plane only)
+        let dm = module("hlod_draw.wgsl", format!("{}\n{}{}", crate::look::city_shader_source_far(), far_constants_wgsl(&i.opts), draw_wgsl())); // + the switches // the far layer's city shader (lighting: the ambient plane only)
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-draw-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&draw_bgl)], immediate_size: 0 });
         let attrs = [
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },

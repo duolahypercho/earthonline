@@ -12,7 +12,7 @@ use crate::catalog::{AgentsJs, read_verified};
 use crate::motion::MotionRoots;
 use crate::people::{Atlas, CookedTier};
 use crate::rocketbox;
-use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, cook_body, far_body};
+use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, contact_shape, contact_words, cook_body_opts, far_body};
 use crate::{AgentMaterial, AgentVertex, CLASS_PERSON, CLASS_VEHICLE, CLIPS, GpuMesh, GpuModel, LODS, M_ATLAS, NO_MESH};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -21,8 +21,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+/// (`--people-motion`) Bump when `rocketbox::steady_head` changes (part of the key with the option on).
+pub const STEADY_HEADS_VERSION: u32 = 1;
+/// (`--people-idles`) Bump when `motion::MORE_IDLES` changes (part of the key with the option on).
+pub const MORE_IDLES_VERSION: u32 = 1;
 /// Bump when the cooked layout or the cook changes.
-pub const COOK_VERSION: u32 = 7; // -> 7 (the selfie's phone, `Meta::phone_model`, and the vehicles' driver-door rig; each had taken 6 apart)
+pub const COOK_VERSION: u32 = 8; // -> 8 (GpuModel carries both driver_door and pad)
 const MAGIC: &[u8; 4] = b"EOAL";
 /// People tiers in LOD slot order.
 pub const PERSON_TIERS: [&str; LODS] = ["hero", "near", "mid", "far"];
@@ -99,6 +103,25 @@ pub struct CookOptions {
     /// three-box stand-in. Off: the box, and the library and its cache key
     /// are as before.
     pub far_body: bool,
+    /// `--car-materials`: each vehicle material's role in its flags, the
+    /// licence plates' own coordinates and the normals' refinement
+    /// (eo-agents `vehicles::cook_body_with`), and each body's occluder boxes
+    /// (`vehicles::contact_shape`, read by `--car-contact`) in its model's
+    /// spare words. Off: the library and its cache key are as before.
+    pub car_materials: bool,
+    /// `--car-panels` (with `car_materials`): the paint's normals filtered taut
+    /// and the badges' emblems in a role and coordinates of their own
+    /// (eo-agents `vehicles::cook_body_opts`). Off: the library and its cache
+    /// key are as before.
+    pub car_panels: bool,
+    /// `--people-motion`: the people's heads held steady in the bake
+    /// (`rocketbox::steady_head`), and the feed's motion choices that go
+    /// with it (`motion::MotionMeta::steady`). Off: the bake and the cache
+    /// key are as before.
+    pub steady_heads: bool,
+    /// `--people-idles`: the standing repertoire `motion::MORE_IDLES` baked
+    /// after `motion::ROLES`' loops. Off: the bake and the cache key are as before.
+    pub more_idles: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -196,6 +219,16 @@ fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &M
         h.update(FAR_BODY_ERROR_M.to_le_bytes());
         h.update((FAR_BODY_TRIANGLES as u64).to_le_bytes());
     }
+    // (`--car-materials`) the roles and the plates' coordinates; nothing added without them.
+    if opts.car_materials {
+        h.update(b"car-materials");
+        h.update(crate::vehicles::CAR_MATERIALS_VERSION.to_le_bytes());
+        // (`--car-panels`) the panels' filter and the badges; nothing added without them.
+        if opts.car_panels {
+            h.update(b"car-panels");
+            h.update(crate::vehicles::CAR_PANELS_VERSION.to_le_bytes());
+        }
+    }
     // Which vehicle files this checkout holds (a body left out of it is not drawn).
     for b in js.vehicles.values() {
         for l in &b.lods {
@@ -204,6 +237,22 @@ fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &M
     }
     if let PeopleSource::Rocketbox(_) = people {
         h.update(b"rocketbox");
+        // (`--people-motion`) the steady heads; nothing added without them, so that key is as before.
+        if opts.steady_heads && motions.any() {
+            h.update(b"steady-heads");
+            h.update(STEADY_HEADS_VERSION.to_le_bytes());
+            for x in rocketbox::NOD_MEAN.iter().chain(&rocketbox::NOD_FRAME).chain(std::iter::once(&rocketbox::NOD_NECK_SHARE)) {
+                h.update(x.to_le_bytes());
+            }
+        }
+        // (`--people-idles`) the wider standing repertoire; nothing added without it.
+        if opts.more_idles && motions.any() {
+            h.update(b"more-idles");
+            h.update(MORE_IDLES_VERSION.to_le_bytes());
+            for r in &crate::motion::MORE_IDLES {
+                h.update(format!("{}|{}|{}|{}|{}|{}|{}|{}|{:?}", r.name, r.slot, r.female, r.male, r.start_s, r.start_m, r.seconds, r.fps, r.family).as_bytes());
+            }
+        }
         h.update(rocketbox::COOK_VERSION.to_le_bytes());
         h.update(rocketbox::Manifest::digest().as_bytes());
         // which motions are cooked in.
@@ -348,7 +397,7 @@ impl Library {
         let mesh = self.meshes.len() as u32 - 1;
         let m = self.models.len() as u32;
         // The quad spans [-1, 1] in x and z; the instance scale is its half size in metres.
-        self.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: [0.0; 3], radius: std::f32::consts::SQRT_2, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, driver_door: [0.0; 4] });
+        self.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: [0.0; 3], radius: std::f32::consts::SQRT_2, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, driver_door: [0.0; 4], pad: [0; 4] });
         self.meta.model_names.push("contact".into());
         self.meta.contact_model = Some(m);
     }
@@ -359,6 +408,30 @@ impl Library {
 
     pub fn triangles(&self, mesh: u32) -> u32 {
         self.meta.mesh_triangles.get(mesh as usize).copied().unwrap_or(0)
+    }
+
+    /// (`--car-lamps`) The models with each vehicle's rear lamps
+    /// (`vehicles::rear_lamp` over its full level, opaque and transparent
+    /// parts) in its spare words (`vehicles::rear_lamp_words`: wheel 2's and
+    /// 3's w); every other model, and a body without rear lamps, as loaded.
+    /// Made at load (the library and its cache are unchanged).
+    pub fn models_with_rear_lamps(&self) -> Vec<GpuModel> {
+        let mut out = self.models.clone();
+        for m in out.iter_mut().filter(|m| m.class == crate::CLASS_VEHICLE) {
+            let Some(mesh) = self.meshes.get(m.meshes[0] as usize) else { continue };
+            let range = |first: u32, count: u32| (first as usize..(first + count) as usize).filter_map(|k| self.indices.get(k));
+            let parts = range(mesh.first_index, mesh.index_count).chain(range(mesh.glass_first, mesh.glass_count)).filter_map(|&i| {
+                let v = self.vertices.get((mesh.base_vertex + i as i32) as usize)?;
+                let flags = self.materials.get((v.tag & 0xffff) as usize)?.flags;
+                Some((v, flags))
+            });
+            if let Some(p) = crate::vehicles::rear_lamp(parts, m.center[2]) {
+                let w = crate::vehicles::rear_lamp_words(p);
+                m.wheel[2][3] = w[0];
+                m.wheel[3][3] = w[1];
+            }
+        }
+        out
     }
 }
 
@@ -406,7 +479,7 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
                 let lamps = &lamps;
                 s.spawn(move || {
                     c.iter()
-                        .map(|(id, k, l)| (id.clone(), *k, read_verified(repo_root, &l.asset()).and_then(|b| cook_body(&b, lamps)).with_context(|| l.url.clone())))
+                        .map(|(id, k, l)| (id.clone(), *k, read_verified(repo_root, &l.asset()).and_then(|b| cook_body_opts(&b, lamps, opts.car_materials, opts.car_panels)).with_context(|| l.url.clone())))
                         .collect::<Vec<_>>()
                 })
             })
@@ -464,11 +537,21 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
             let p = p.unwrap_or([0.0; 3]);
             wheel[w] = [p[0], p[1], p[2], 0.0];
         }
+        // (`--car-materials`) the body's occluder boxes for the ground round it (`--car-contact`), in the spare words.
+        let mut pad = [0u32; 4];
+        if opts.car_materials {
+            if let Some(src) = lods.iter().flatten().next() {
+                let (words, extra) = contact_words(&contact_shape(src));
+                pad = words;
+                wheel[0][3] = extra[0];
+                wheel[1][3] = extra[1];
+            }
+        }
         let c = [(min[0] + max[0]) / 2.0, (min[1] + max[1]) / 2.0, (min[2] + max[2]) / 2.0];
         let r = ((max[0] - min[0]).powi(2) + (max[1] - min[1]).powi(2) + (max[2] - min[2]).powi(2)).sqrt() / 2.0;
         let m = b.lib.models.len() as u32;
         let driver_door = lods.iter().flatten().find_map(|lod| lod.driver_door).map_or([0.0; 4], |door| door.pivot_and_angle);
-        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, driver_door });
+        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, driver_door, pad });
         b.lib.meta.model_names.push(id.clone());
         b.lib.meta.vehicle_models.insert(id.clone(), m);
     }
@@ -480,7 +563,7 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
     match people {
         PeopleSource::Rocketbox(root) => {
             let t = Instant::now();
-            match cook_rocketbox(&mut b, root, motions) {
+            match cook_rocketbox(&mut b, root, motions, opts.steady_heads, opts.more_idles) {
                 Ok(res) => {
                     atlas_res = res;
                     b.lib.meta.people_source = "rocketbox".into();
@@ -507,7 +590,7 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
         let c = [(pb.min[0] + pb.max[0]) / 2.0, (pb.min[1] + pb.max[1]) / 2.0, (pb.min[2] + pb.max[2]) / 2.0];
         let r = (0..3).map(|k| (pb.max[k] - pb.min[k]).powi(2)).sum::<f32>().sqrt() / 2.0;
         let m = b.lib.models.len() as u32;
-        b.lib.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, driver_door: [0.0; 4] });
+        b.lib.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, driver_door: [0.0; 4], pad: [0; 4] });
         b.lib.meta.model_names.push("phone".into());
         b.lib.meta.phone_model = Some(m);
     }
@@ -526,13 +609,13 @@ pub const MAX_MESHES: usize = 511;
 /// Rocketbox clips and the 100STYLE walks (both are needed: there is no other
 /// motion). The player's body is the first pool avatar. Returns the atlas
 /// side. Nothing is appended to the library unless at least one avatar cooked.
-fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result<u32> {
+fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots, steady: bool, more_idles: bool) -> Result<u32> {
     let manifest = rocketbox::Manifest::load()?;
     // The licence travels with the copy: no LICENSES.md (as the manifest pins it), no people.
     rocketbox::read_verified(root, &manifest, "LICENSES.md").context("the copy's LICENSES.md")?;
     // The motions first: without them nothing could move the avatars.
     let mut motion = crate::motion::MotionMeta::default();
-    let mo = motion_sources(motions, &mut motion)?;
+    let mo = motion_sources(motions, &mut motion, more_idles)?;
     let budget = MAX_MESHES.saturating_sub(b.lib.meshes.len()) / LODS;
     let wanted = manifest.avatars.iter().filter(|a| a.pool).count();
     let pool = rocketbox::pool(&manifest, budget);
@@ -602,7 +685,7 @@ fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result
         })
         .collect();
     let skels: Vec<&rocketbox::BipSkeleton> = group_first.iter().map(|&i| &grouped[i].0.skeleton).collect();
-    let (segs, tables) = bake_groups(&skels, &female, &mo, &mut motion, &mut b.lib.meta.missing);
+    let (segs, tables) = bake_groups(&skels, &female, &mo, &mut motion, &mut b.lib.meta.missing, steady);
     let mut kept = vec![];
     for (av, g) in grouped {
         match &tables[g] {
@@ -641,7 +724,7 @@ fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result
         let c = [(mn[0] + mx[0]) / 2.0, (mn[1] + mx[1]) / 2.0, (mn[2] + mx[2]) / 2.0];
         let r = ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt() / 2.0 + 0.3;
         let m = b.lib.models.len() as u32;
-        b.lib.models.push(GpuModel { meshes, wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_PERSON, skeleton: at, joints: rocketbox::JOINTS.len() as u32, wheel_radius: 0.0, driver_door: [0.0; 4] });
+        b.lib.models.push(GpuModel { meshes, wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_PERSON, skeleton: at, joints: rocketbox::JOINTS.len() as u32, wheel_radius: 0.0, driver_door: [0.0; 4], pad: [0; 4] });
         b.lib.meta.model_names.push(av.id.clone());
         b.lib.meta.people_models.push(m);
         b.lib.meta.family_heights.push(av.height);
@@ -676,7 +759,7 @@ fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result
 enum SegKind {
     /// A 100STYLE walk (index into the loaded cycles).
     Style(usize),
-    /// A `motion::ROLES` loop.
+    /// A `motion::roles` loop.
     Role(usize),
 }
 
@@ -692,11 +775,14 @@ struct Seg {
 struct MotionSources {
     clips: HashMap<String, crate::motion::RbClip>,
     styles: Vec<crate::motion::StyleCycle>,
+    /// The standing loops baked (`motion::roles`).
+    roles: Vec<crate::motion::Role>,
 }
 
 /// Both motion sources, or why the people cannot move.
-fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> Result<MotionSources> {
-    use crate::motion::{Manifest, ROLES, STYLES, load_rb_clip};
+fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta, more_idles: bool) -> Result<MotionSources> {
+    use crate::motion::{Manifest, STYLES, load_rb_clip};
+    let roles = crate::motion::roles(more_idles);
     if !crate::motion::enabled() {
         bail!("the Rocketbox motions are switched off (--no-rocketbox-motions), and nothing else moves the people");
     }
@@ -705,7 +791,7 @@ fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> 
     let clips = (|| -> Result<HashMap<String, crate::motion::RbClip>> {
         let m = Manifest::clips()?;
         m.read(clips_root, "LICENSES.md").context("the copy's LICENSES.md")?;
-        let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| r.clips()).collect();
+        let mut ids: Vec<&str> = roles.iter().flat_map(|r| r.clips()).collect();
         ids.sort_unstable();
         ids.dedup();
         let loaded: Vec<Result<crate::motion::RbClip>> = std::thread::scope(|s| ids.iter().map(|id| s.spawn(|| load_rb_clip(clips_root, &m, id))).collect::<Vec<_>>().into_iter().map(|h| h.join().expect("motion clip thread")).collect());
@@ -742,15 +828,15 @@ fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> 
         Ok(v)
     })()
     .context("the 100STYLE walks")?;
-    Ok(MotionSources { clips, styles })
+    Ok(MotionSources { clips, styles, roles })
 }
 
 /// the stretches of every table, in order: one walk loop a style in slot 0,
-/// the `ROLES` loops of each standing slot after it.
+/// the `motion::roles` loops of each standing slot after it.
 fn layout(mo: &MotionSources) -> Vec<Seg> {
     let mut segs: Vec<Seg> = (0..mo.styles.len()).map(|i| Seg { slot: 0, kind: SegKind::Style(i), frames: crate::motion::WALK_FRAMES + 1 }).collect();
     for slot in 1..CLIPS {
-        for (i, r) in crate::motion::ROLES.iter().enumerate().filter(|(_, r)| r.slot == slot) {
+        for (i, r) in mo.roles.iter().enumerate().filter(|(_, r)| r.slot == slot) {
             segs.push(Seg { slot, kind: SegKind::Role(i), frames: (r.seconds * r.fps).round() as u32 + 1 });
         }
     }
@@ -759,25 +845,30 @@ fn layout(mo: &MotionSources) -> Vec<Seg> {
 
 /// every group's table over the layout, the motion meta filled for it. None
 /// for a group that cannot be baked (its people are left out).
-fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSources, meta: &mut crate::motion::MotionMeta, missing: &mut Vec<String>) -> (Vec<Seg>, Vec<Option<Vec<[f32; 4]>>>) {
-    use crate::motion::{LoopMeta, ROLES, StyleMeta};
+fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSources, meta: &mut crate::motion::MotionMeta, missing: &mut Vec<String>, steady: bool) -> (Vec<Seg>, Vec<Option<Vec<[f32; 4]>>>) {
+    use crate::motion::{LoopMeta, StyleMeta};
     use rocketbox::BakeSrc;
+    let roles = &mo.roles;
     let segs = layout(mo);
     let mut tables = vec![];
     let mut strides: Vec<Vec<Option<(f32, f32)>>> = vec![];
     for (g, sk) in skels.iter().enumerate() {
-        let clip_of = |r: usize| mo.clips.get(if female[g] { ROLES[r].female } else { ROLES[r].male });
-        let layer_of = |r: usize| ROLES[r].layer(female[g]).and_then(|(id, _)| mo.clips.get(id));
-        let relaxed = clip_of(0).and_then(|c| rocketbox::relaxed_hands(sk, c, &ROLES[0]).ok());
+        let clip_of = |r: usize| mo.clips.get(if female[g] { roles[r].female } else { roles[r].male });
+        let layer_of = |r: usize| roles[r].layer(female[g]).and_then(|(id, _)| mo.clips.get(id));
+        let relaxed = clip_of(0).and_then(|c| rocketbox::relaxed_hands(sk, c, &roles[0]).ok());
         let srcs: Option<Vec<BakeSrc>> = segs
             .iter()
             .map(|s| match s.kind {
                 SegKind::Style(i) => Some(BakeSrc::Style { cycle: &mo.styles[i] }),
-                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &ROLES[r], frames: s.frames, layer: layer_of(r) }),
+                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &roles[r], frames: s.frames, layer: layer_of(r) }),
             })
             .collect();
-        match srcs.ok_or_else(|| anyhow!("a role's clip is missing")).and_then(|srcs| rocketbox::bake_list(sk, &srcs, relaxed.as_deref())) {
+        match srcs.ok_or_else(|| anyhow!("a role's clip is missing")).and_then(|srcs| rocketbox::bake_list_opts(sk, &srcs, relaxed.as_deref(), steady)) {
             Ok(bk) => {
+                if g == 0 && steady {
+                    let moved: Vec<String> = segs.iter().zip(&bk.nods).filter_map(|(s, n)| n.filter(|(a, b)| (a - b).abs() > 0.5).map(|(a, b)| format!("{} {a:+.0} -> {b:+.0}", match s.kind { SegKind::Style(i) => mo.styles[i].name.clone(), SegKind::Role(r) => roles[r].name.to_string() }))).collect();
+                    meta.notes.push(format!("steady heads (mean nod, degrees down): {}", moved.join(", ")));
+                }
                 tables.push(Some(bk.rows));
                 strides.push(bk.strides);
             }
@@ -789,6 +880,7 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
         }
     }
     meta.walk = "100style".into();
+    meta.steady = steady;
     meta.standing = "rocketbox".into();
     meta.group_female = female.to_vec();
     meta.group_bind = skels.iter().map(|sk| sk.pos.iter().map(|p| p.to_array()).collect()).collect();
@@ -819,7 +911,7 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
     let mut first = [0u32; CLIPS];
     for s in &segs {
         if let SegKind::Role(r) = s.kind {
-            let role = &ROLES[r];
+            let role = &roles[r];
             meta.loops[s.slot].push(LoopMeta { role: role.name.into(), family: role.family, first: first[s.slot], frames: s.frames - 1, seconds: role.seconds, female: role.female.into(), male: role.male.into() });
         }
         first[s.slot] += s.frames;

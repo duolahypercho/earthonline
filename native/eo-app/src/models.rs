@@ -217,6 +217,14 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     // the sea bed's habitats (`--underwater-habitats`, `--cove-detail`, `--black-point-intertidal`): with a seabed object in the world.
     let features = eo_render::look::ShaderFeatures { seabed: objects.iter().any(|o| o.kind & 255 == eo_render::scene::ObjectKind::Seabed as u32), ..features };
     let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
+    // the facades track's switches (`--facade-glass`, `--far-facades`, `--facade-weather`, `--canyon-glass`; off: compiled out, the frame as before).
+    features.facade_glass |= eo_render::facade::glass_from_args();
+    features.far_facades |= eo_render::facade::far_from_args();
+    features.facade_weather |= eo_render::facade::weather_from_args();
+    features.canyon_glass |= eo_render::facade::canyon_from_args();
+    features.far_relief |= eo_render::facade::far_relief_from_args(); // (`--far-relief`: no runtime gate, so only with its switch)
+    features.facade_patina |= eo_render::facade::patina_from_args(); // (`--facade-patina`: no runtime gate, so only with its switch)
+    features.window_depth |= eo_render::facade::window_depth_from_args(); // (`--window-depth`: no runtime gate, so only with its switch)
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
             "lx" => features.lx_bits = u32::MAX,
@@ -234,6 +242,19 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "landmark_access" => features.landmark_access = true,
             "seabed" => features.seabed = true,
             "cove_sediment" => features.cove_sediment = true,
+            "facade_glass" => features.facade_glass = true,
+            "far_facades" => features.far_facades = true,
+            "facade_weather" => features.facade_weather = true,
+            "canyon_glass" => features.canyon_glass = true,
+            "far_relief" => features.far_relief = true,
+            "facade_patina" => features.facade_patina = true,
+            "window_depth" => features.window_depth = true,
+            "street_pbr" => features.street_pbr = true, // (`--street-pbr`)
+            "wet_surfaces" => features.wet_surfaces = true, // (`--wet-surfaces`)
+            "screen_reflect" => features.screen_reflect = true, // (`--screen-reflect`)
+            "probe_sky" => features.probe_sky = true, // (`--probe-sky`)
+            "wet_relief" => features.wet_relief = true, // (`--wet-relief`)
+            "lamp_streaks" => features.lamp_streaks = true, // (`--lamp-streaks`)
             _ => {}
         }
     }
@@ -242,6 +263,23 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     features.rt_reflect = args.look.lighting.rt_reflect && ctx.ray_query;
     if (args.look.lighting.rt_gi || args.look.lighting.rt_reflect) && !ctx.ray_query {
         eprintln!("rt-gi, rt-reflect: off: {} ({:?}) offers no inline ray queries here (Metal with EXPERIMENTAL_RAY_QUERY only); the rig's ambient light and reflections as before", ctx.info.name, ctx.info.backend);
+    }
+    features.street_pbr |= crate::street_pbr(); // the street's physically based surface (`--street-pbr`; no runtime gate, so only with its switch)
+    // the street track's round-2 passes (`--street-wear`, `--street-glare`, `--street-aggregate`, `--plaza-setts`, `--walk-relief`; no runtime gate, so only with their switches)
+    if crate::street_wear() {
+        features.street |= eo_render::look::STREET_WEAR;
+    }
+    if crate::street_glare() {
+        features.street |= eo_render::look::STREET_GLARE;
+    }
+    if crate::street_aggregate() {
+        features.street |= eo_render::look::STREET_AGGREGATE;
+    }
+    if crate::plaza_setts() {
+        features.street |= eo_render::look::PLAZA_SETTS;
+    }
+    if crate::walk_relief() {
+        features.street |= eo_render::look::WALK_RELIEF; // (`--walk-relief`)
     }
     eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(

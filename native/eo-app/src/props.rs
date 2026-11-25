@@ -88,11 +88,14 @@ pub struct Props2Args {
     /// Street props v2 (eo-props `props_v2`) in place of the v1 files; `--no-street-props-v2`
     /// (or `--no-props2`) keeps the v1 manifest (its absent files drawn as before).
     pub street_v2: bool,
+    /// (`--luminaires`, main.rs) the district lights' lamps at their GLBs' glass (a twin
+    /// post's two lanterns), the glass drawn lit. Off (the default): the JS heads as before.
+    pub luminaires: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false }
     }
 }
 
@@ -101,7 +104,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -123,6 +126,17 @@ impl Props2Args {
     }
 }
 
+/// (`--signal-spill`) the vehicle signal heads whose lit lens is a light, within this
+/// distance of the eye (m; the clusters shade to `sky::CLUSTER_FAR_M`).
+const SIGNAL_SPILL_NEAR_M: f32 = 250.0;
+/// (`--signal-spill`) the signal head GLB's lens centres (props_lib `signalHead`,
+/// public/assets/street-props/signalHead-v2.glb: lens_red y 0.199..0.501, lens_amber
+/// -0.151..0.151, lens_green -0.501..-0.199, their faces at z 0.008..0.028), red,
+/// yellow, green, and the light in front of them past the visor's mouth (~0.25 m), so
+/// the head's own visor and housing take none of the beam.
+const SIGNAL_LENS_Y_M: [f32; 3] = [0.35, 0.0, -0.35];
+const SIGNAL_LENS_Z_M: f32 = 0.3;
+
 /// the library facts the tile workers need.
 #[derive(Clone, Default)]
 struct LibFacts {
@@ -131,6 +145,9 @@ struct LibFacts {
     sign_variants: usize,
     /// the ground the vegetation and hill rock stand on (None: none planted).
     veg: Option<Arc<vegetation::VegGround>>,
+    /// (`--luminaires`) the district lights' sockets by model (eo-render
+    /// `props_lib::district_light_sockets`; empty without the switch).
+    sockets: Vec<(Model, Vec<([f32; 3], [f32; 4])>)>,
 }
 
 #[derive(Clone)]
@@ -231,6 +248,8 @@ pub struct PropsRuntime {
     lamp_free: Vec<u32>,
     lamp_next: u32,
     lamp_src: HashMap<u32, LiveRef>,
+    /// (`--signal-spill`) a vehicle signal head's channel: its instance's position, yaw and scale.
+    lamp_heads: HashMap<u32, ([f32; 3], f32, [f32; 3])>,
     lamp_words: Vec<u32>,
     parked_cam: Option<Vec3>,
     parked_dirty: bool,
@@ -278,6 +297,7 @@ impl PropsRuntime {
             lamp_free: vec![],
             lamp_next: 0,
             lamp_src: HashMap::new(),
+            lamp_heads: HashMap::new(),
             lamp_words: vec![],
             parked_cam: None,
             parked_dirty: true,
@@ -348,8 +368,10 @@ impl PropsRuntime {
                     let bodies = (p2.boats && fleet.is_some())
                         .then(|| eo_props::boats::load_bodies(&paths.repo_root).map_err(|e| eprintln!("props: boats not drawn ({e:#})")).ok())
                         .flatten();
-                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins, boats: bodies.as_deref() };
+                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins, boats: bodies.as_deref(), luminaires: p2.luminaires };
                     let lib = PropLibrary::load_full(&paths.repo_root, &js, lens, &extras, dome, cache.as_deref())?;
+                    // (`--luminaires`) the district lights' sockets from their GLBs' glass.
+                    let sockets = if p2.luminaires { eo_render::props_lib::district_light_sockets(&paths.repo_root, &js) } else { vec![] };
                     // what stands in for an absent GLB: the procedural model (`--stand-ins`) or the grey proxy.
                     let drawn = if p2.stand_ins { "procedural stand-in drawn (--stand-ins)" } else { "grey proxy drawn (--stand-ins draws a procedural model)" };
                     for m in &lib.missing {
@@ -387,7 +409,7 @@ impl PropsRuntime {
                         let land = eo_data::LandCover::load(&paths).map_err(|e| eprintln!("vegetation: land cover not read ({e:#}); classes from the greens only")).ok();
                         Arc::new(vegetation::VegGround::new(g, world.street.clone(), land, veg_water, veg_switches, &paths.repo_root))
                     });
-                    let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg };
+                    let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg, sockets };
                     // one boat per occupied berth, its waterline on the still sea (where the docks float),
                     // bow along the berth's heading (the model's +Z turned by yaw lies along (sin yaw, cos yaw)).
                     // the fleet at rest, in its order (eo-app boats.rs poses it each frame unless `--no-boat-motion`);
@@ -640,6 +662,7 @@ impl PropsRuntime {
                     }
                     for l in lamps {
                         self.lamp_src.remove(&l);
+                        self.lamp_heads.remove(&l);
                         self.lamp_free.push(l);
                     }
                     self.parked_dirty = true;
@@ -704,6 +727,10 @@ impl PropsRuntime {
                         None => continue,
                     };
                     pack.instances[i as usize].lamp = ch;
+                    if matches!(live, LiveRef::Vehicle { .. }) {
+                        let g = &pack.instances[i as usize];
+                        self.lamp_heads.insert(ch, (g.pos, g.yaw, g.scale));
+                    }
                     self.lamp_src.insert(ch, live);
                     lamps.push(ch);
                 }
@@ -790,6 +817,33 @@ impl PropsRuntime {
         }
         if len > 0 {
             gpu.write_lamps(&ctx.queue, &self.lamp_words);
+        }
+        if renderer.look.sky.options().signal_spill {
+            // (`--signal-spill`) the lit lens of each vehicle signal head near the eye as a light
+            // (eo-render sky.rs `set_signal_lights`): the signal head GLB's lenses stand 0.35 m
+            // apart down its face (red, yellow, green), on its +z face.
+            let mut lenses: Vec<(f32, ([f32; 3], [f32; 3], u32))> = self
+                .lamp_heads
+                .iter()
+                .filter_map(|(ch, (pos, yaw, scale))| {
+                    let aspect = *self.lamp_words.get(*ch as usize)?;
+                    if aspect > 2 {
+                        return None;
+                    }
+                    let d = (Vec3::from(*pos) - eye).length();
+                    if d > SIGNAL_SPILL_NEAR_M {
+                        return None;
+                    }
+                    let (sn, cs) = yaw.sin_cos();
+                    let rot = |v: [f32; 3]| [v[0] * cs + v[2] * sn, v[1], -v[0] * sn + v[2] * cs];
+                    let off = rot([0.0, SIGNAL_LENS_Y_M[aspect as usize] * scale[1], SIGNAL_LENS_Z_M * scale[2]]);
+                    let axis = Vec3::from(rot([0.0, -0.05, 1.0])).normalize().to_array();
+                    Some((d, ([pos[0] + off[0], pos[1] + off[1], pos[2] + off[2]], axis, aspect)))
+                })
+                .collect();
+            lenses.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let lenses: Vec<_> = lenses.into_iter().map(|(_, l)| l).collect();
+            renderer.look.sky.set_signal_lights(&ctx.queue, &lenses);
         }
         self.stats.lamp_channels = self.lamp_src.len();
         let ms = t0.elapsed().as_secs_f64() * 1e3;
@@ -1193,6 +1247,9 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             _ => (p.model as u32, p.scale),
         };
         let i = instances.len() as u32;
+        // (`--lamp-units`, `--luminaires`) a district light's unit seed (its lights carry the same):
+        // its glass is lit as its lamp is (props_draw.wgsl `pr_lamp_glass`); 0 for every other kind.
+        let district = matches!(p.model, Model::LampCobra | Model::LampBanner | Model::LampHistoric);
         instances.push(GpuPropInstance {
             pos: [p.pos[0] as f32, p.pos[1] as f32, p.pos[2] as f32],
             yaw: p.yaw as f32,
@@ -1201,7 +1258,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             variant: p.variant as u32,
             lamp: 0,
             slope,
-            pad: 0,
+            pad: if district { eo_sky::lamp_units::seed_of(p.pos) } else { 0 },
         });
         match p.live {
             Live::None => {}
@@ -1226,21 +1283,44 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     // none otherwise): lit round the clock in the tunnel lamps' colour
     // (eo-render structures.rs `TUNNEL_LAMP_FLAG`), kept with `--no-furniture` too.
     let bore: Vec<[f64; 3]> = world.tunnel_lights(key).iter().map(|l| l.pos).collect();
+    // (`--luminaires`) a district light's post (its yaw and scale) by its foot, for its sockets.
+    let posts: Vec<&eo_props::Prop> = if facts.sockets.is_empty() { vec![] } else { props.iter().filter(|p| matches!(p.model, Model::LampCobra | Model::LampBanner | Model::LampHistoric)).collect() };
+    let gpu = |l: &eo_props::furniture::LampLight, in_bore: bool, share: f32| GpuLampLight {
+        pos: [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32],
+        range: l.range_m,
+        colour: if in_bore { eo_render::structures::TUNNEL_LAMP_LINEAR } else { l.colour_linear },
+        intensity: l.intensity,
+        angle: l.angle,
+        penumbra: l.penumbra,
+        decay: l.decay,
+        source_lift: l.source_lift_m,
+        kind: l.kind as u32,
+        // the tunnel flag; (`--lamp-units`) the unit's seed from its post's foot; (`--luminaires`)
+        // the lantern's share of the post's light (f32 bits, 0: the whole), read only with their switches.
+        pad: [if in_bore { eo_render::structures::TUNNEL_LAMP_FLAG } else { 0 }, if in_bore { 0 } else { eo_sky::lamp_units::seed_of(l.base) }, if share < 1.0 { share.to_bits() } else { 0 }],
+    };
     let lights: Vec<GpuLampLight> = lights
         .iter()
         .map(|l| (l, bore.contains(&l.pos)))
         .filter(|(_, in_bore)| p2.furniture || *in_bore)
-        .map(|(l, in_bore)| GpuLampLight {
-            pos: [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32],
-            range: l.range_m,
-            colour: if in_bore { eo_render::structures::TUNNEL_LAMP_LINEAR } else { l.colour_linear },
-            intensity: l.intensity,
-            angle: l.angle,
-            penumbra: l.penumbra,
-            decay: l.decay,
-            source_lift: l.source_lift_m,
-            kind: l.kind as u32,
-            pad: [if in_bore { eo_render::structures::TUNNEL_LAMP_FLAG } else { 0 }, 0, 0],
+        .flat_map(|(l, in_bore)| {
+            // (`--luminaires`) the lamp at each socket of its post's GLB glass (a twin post's two
+            // lanterns, each with its share), the light's optics from the socket's height.
+            let post = (!in_bore).then(|| posts.iter().find(|p| (p.pos[0] - l.base[0]).abs() < 0.05 && (p.pos[2] - l.base[2]).abs() < 0.05)).flatten();
+            let sockets = post.and_then(|p| facts.sockets.iter().find(|(m, _)| *m == p.model).map(|(_, s)| (*p, s)));
+            match sockets {
+                Some((p, s)) => s
+                    .iter()
+                    .map(|(c, params)| {
+                        let (sn, cs) = p.yaw.sin_cos();
+                        let (x, y, z) = (c[0] as f64 * p.scale[0] as f64, c[1] as f64 * p.scale[1] as f64, c[2] as f64 * p.scale[2] as f64);
+                        // three.js rotation.y: (x cos + z sin, y, -x sin + z cos)
+                        let head = [p.pos[0] + x * cs + z * sn, p.pos[1] + y, p.pos[2] - x * sn + z * cs];
+                        gpu(&world.furniture().luminaire(head, l.base, y, l.kind), false, params[3])
+                    })
+                    .collect::<Vec<_>>(),
+                None => vec![gpu(l, in_bore, 1.0)],
+            }
         })
         .collect();
     // the street overhead of this tile.
@@ -1367,11 +1447,12 @@ impl PropsRuntime {
 
 /// Settle-time helper: the parked cars for this camera into the agents, one frozen agent pump.
 pub fn sync_parked(ctx: &GpuContext, renderer: &Renderer, props: &mut PropsRuntime, agents: &mut crate::agents::AgentRuntime, cam: &eo_render::camera::Camera) {
-    if !props.on {
-        return;
+    let focus = crate::agents::AgentRuntime::focus_of(cam.eye, cam.forward());
+    if props.on {
+        agents.parked = props.parked_agents(agents.lib.as_deref(), cam.eye).to_vec();
+        agents.pump(ctx, renderer, focus, 0.0);
     }
-    agents.parked = props.parked_agents(agents.lib.as_deref(), cam.eye).to_vec();
-    agents.pump(ctx, renderer, crate::agents::AgentRuntime::focus_of(cam.eye, cam.forward()), 0.0);
+    agents.settle(ctx, renderer, focus, 120.0); // `--crowd`: a cut's street, settled (nothing without it)
 }
 
 // ---- one runtime for the modes that hold their GPU state behind shared references (window, agents captures)

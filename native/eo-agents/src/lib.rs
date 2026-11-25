@@ -82,7 +82,7 @@ pub const CLASS_PERSON: u32 = 1;
 /// near, mid, far tier.
 pub const LODS: usize = 4;
 
-/// One model: a vehicle body or a person (128 bytes).
+/// One model: a vehicle body or a person (144 bytes).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable, PartialEq)]
 pub struct GpuModel {
@@ -99,8 +99,11 @@ pub struct GpuModel {
     pub wheel_radius: f32,
     /// Driver-door hinge position in body space and signed maximum angle.
     pub driver_door: [f32; 4],
+    /// Vehicles (`--car-materials` / `--car-contact`): occluder boxes; people
+    /// (`--people-contact` / `--people-capsules`): contact anchor range.
+    pub pad: [u32; 4],
 }
-const _: () = assert!(std::mem::size_of::<GpuModel>() == 128);
+const _: () = assert!(std::mem::size_of::<GpuModel>() == 144);
 
 /// One agent instance as the GPU reads it (64 bytes), world space.
 #[repr(C)]
@@ -203,8 +206,8 @@ pub const M_ATLAS: u32 = 1 << 15;
 pub const M_RIM: u32 = 1 << 16;
 /// A ground-contact patch (`rig::contact_body`): the glass pass darkens the
 /// ground under it by the share of its light one box of a body takes away
-/// (eo-render `agents_draw.wgsl` `ag_contact`).
-pub const M_CONTACT: u32 = 1 << 20;
+/// (eo-render `agents_draw.wgsl` `ag_contact`). Above `vehicles::M_ROLE_MASK` (bits 20..23).
+pub const M_CONTACT: u32 = 1 << 24;
 
 /// sRGB byte to linear.
 pub fn srgb_to_linear(c: f32) -> f32 {

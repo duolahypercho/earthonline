@@ -53,8 +53,24 @@ fn hash(a: u32) -> u32 {
     x ^ (x >> 15)
 }
 
+/// (`--far-palms`) The species of the survey's palms: drawn as palms
+/// (hlod_trees.wgsl `ft_palm`, `FT_PALM`) from where the street props' palms
+/// fade out. Without the switch they keep species 0, a round crown.
+pub const FAR_PALM: u32 = 7;
+
+/// (`--far-palms`) A palm's fronds reach this share of its height (the street
+/// props' palm, palm-v2.glb: 4.4 of its 10 model metres, at 4-6 m up): a far
+/// palm's card is at least that wide, as the near palm it takes over from,
+/// where the survey gives no crown (its 2.2 m default drew half-size crowns).
+pub const FAR_PALM_REACH: f32 = 0.44;
+
 /// The street trees of the survey on the ground `ground` gives.
 pub fn street_trees(js: &eo_props::JsProps, ground: &dyn Fn(f64, f64) -> f64) -> Vec<FarTree> {
+    street_trees_with(js, ground, false)
+}
+
+/// `street_trees`, with the palms as `FAR_PALM` when `palms` (`--far-palms`).
+pub fn street_trees_with(js: &eo_props::JsProps, ground: &dyn Fn(f64, f64) -> f64, palms: bool) -> Vec<FarTree> {
     let t = &js.trees;
     let n = if t.stride > 0 { t.data.len() / t.stride } else { 0 };
     let mut out = Vec::with_capacity(n);
@@ -72,10 +88,12 @@ pub fn street_trees(js: &eo_props::JsProps, ground: &dyn Fn(f64, f64) -> f64) ->
         };
         let height = if height > 1.0 { height } else { dh };
         let crown = if crown > 0.5 { (crown * 0.5).min(height * 0.6) } else { dc };
+        let crown = if palms && form == "palm" { crown.max(FAR_PALM_REACH * height) } else { crown };
         let h = hash(i as u32 ^ 0x51ed);
         let g = 70 + (h % 30) as u8;
         let tint = if form == "palm" { rgb(78, 96, 52) } else { rgb(52 + (h >> 8) as u8 % 16, g + 20, 40 + (h >> 16) as u8 % 14) };
-        out.push(FarTree { pos: [x as f32, ground(x, z) as f32, z as f32], height, crown, tint, seed: h, species: (match form { "pollard" => 4, "mature" => 5, "round" => 6, _ => 0 }) << SPECIES_MODEL_SHIFT });
+        let species = ((match form { "pollard" => 4, "mature" => 5, "round" => 6, _ => 0 }) << SPECIES_MODEL_SHIFT) | if palms && form == "palm" { FAR_PALM } else { 0 };
+        out.push(FarTree { pos: [x as f32, ground(x, z) as f32, z as f32], height, crown, tint, seed: h, species });
     }
     out
 }
@@ -302,7 +320,7 @@ impl FarTreeList {
         match cove_canopy::bake(root, &js.consts["vegetationAtlas"]) {
             Ok(levels) => {
                 for t in &mut self.trees {
-                    if t.species >> SPECIES_MODEL_SHIFT != 0 && (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64)) {
+                    if t.species >> SPECIES_MODEL_SHIFT != 0 && (t.species & SPECIES_FORM_MASK) != FAR_PALM && (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64)) {
                         t.species |= SPECIES_BAKED;
                     }
                 }
@@ -379,12 +397,12 @@ pub fn draw_shader_source(fallback: bool, late_discard: bool) -> String {
     } else {
         "fn ft_index(ii: u32) -> u32 { return ii; }\n"
     };
-    format!(
+    crate::look::sf_select(&format!(
         "{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\nconst FT_FORM_MASK: u32 = {SPECIES_FORM_MASK}u;\nconst FT_BAKED: u32 = {SPECIES_BAKED}u;\nconst FT_MODEL_SHIFT: u32 = {SPECIES_MODEL_SHIFT}u;\n{WGSL}\n{index}const FT_LATE_DISCARD: bool = {late_discard};\n",
         crate::look::city_shader_source_far(),
         cove_canopy::VIEWS,
         cove_canopy::LAYERS
-    )
+    ))
 }
 
 /// Instances the buffer holds (the city has about 155,000).

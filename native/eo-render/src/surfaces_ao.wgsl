@@ -89,13 +89,21 @@ fn ao_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let right = normalize(cross(fwd, vec3<f32>(0.0, 1.0, 0.0)));
     let up = cross(right, fwd);
     // Reach in pixels: 4 m at this depth, at most 48 half-res texels (or the sky visibility's).
-    let far = look.ao_params.w > 0.5;
+    let far = (u32(look.ao_params.w + 0.5) & 8u) != 0u;
     let radius = select(AO_RADIUS_M, AO_FAR_RADIUS_M, far);
     let steps = select(AO_STEPS, AO_FAR_STEPS, far);
     let focal = 1.0 / look.ao_params.y; // tan(fov/2) inverse x half height in pixels (CPU)
     let reach = min(radius * focal / max(vd, 0.1), select(AO_MAX_REACH_PX, AO_FAR_REACH_PX, far));
+    // (`--sun-bounce`) the sunlit surfaces' bounce from the far sun map
+    // (surfaces_ao_sun.wgsl), beyond the near field the horizon search below
+    // gathers where it runs; its own noise, turned per frame.
+    var sun_b = vec3<f32>(0.0);
+    if (SF_SUN_BOUNCE) {
+        let sn = fract(52.9829189 * fract(dot(vec2<f32>(hp) + look.post2.w * 5.588238, vec2<f32>(0.00583715, 0.06711056))));
+        sun_b = ao_sun_bounce(P + look.cam_pos.xyz, N, sn * 2.0 * LK_PI, fract(sn * 11.7 + 0.61), reach >= 2.0);
+    }
     if (reach < 2.0) {
-        textureStore(ao_out, hp, vec4<f32>(0.0, 0.0, 0.0, 1.0));
+        textureStore(ao_out, hp, vec4<f32>(sun_b, 1.0));
         return;
     }
     // Interleaved gradient noise, rotated per frame.
@@ -183,5 +191,5 @@ fn ao_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         vis = 1.0;
     }
     vis = 1.0 - AO_INTENSITY * (1.0 - vis);
-    textureStore(ao_out, hp, vec4<f32>(bounce, vis));
+    textureStore(ao_out, hp, vec4<f32>(bounce + sun_b, vis));
 }

@@ -82,12 +82,14 @@ fn hand_to_head(rows: &[[f32; 4]], sk: &BipSkeleton, f: usize) -> f32 {
 fn manifests_pin_the_sources() {
     let c = Manifest::clips().unwrap();
     assert_eq!(c.files.iter().filter(|f| f.path.starts_with("objects/")).count(), 326, "every Rocketbox in-place clip is listed");
-    for r in ROLES {
+    // (`--people-idles` adds `MORE_IDLES` after `ROLES`.)
+    for r in motion::roles(true) {
         for id in r.clips() {
             assert!(c.file(&motion::clip_file(id)).is_some(), "{id} has no digest");
         }
         assert!(r.fps * r.seconds >= 60.0 && r.slot >= 1 && r.slot <= 3, "{}", r.name);
     }
+    assert_eq!(motion::roles(false).len(), ROLES.len(), "without --people-idles the roles are as before");
     for f in [Family::Idle, Family::Wait, Family::Talk, Family::Listen, Family::Call, Family::Text, Family::Wave, Family::Point, Family::Sit, Family::Photo] {
         assert!(ROLES.iter().any(|r| r.family == f), "no loop for {f:?}");
     }
@@ -131,11 +133,20 @@ fn clips_and_walks_on_every_group() {
     let Some(cp) = copies() else { return };
     let cm = Manifest::clips().unwrap();
     let sm = Manifest::styles().unwrap();
-    let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| r.clips()).collect();
+    // every role, `--people-idles`' `MORE_IDLES` with them.
+    let roles = motion::roles(true);
+    let mut ids: Vec<&str> = roles.iter().flat_map(|r| r.clips()).collect();
     ids.sort_unstable();
     ids.dedup();
     let clips: Vec<motion::RbClip> = ids.iter().map(|id| motion::load_rb_clip(&cp.clips, &cm, id).unwrap_or_else(|e| panic!("{id}: {e:#}"))).collect();
     let clip = |id: &str| clips.iter().find(|c| c.id == id).unwrap();
+    // Each window inside its clips, clear of the held last pose.
+    for r in &roles {
+        for (id, start) in [(r.female, r.start_s), (r.male, r.start_m)] {
+            let c = clip(id);
+            assert!(start >= 0.2 && c.start + motion::role_needs_s(r, id) <= c.clip.duration, "{} {id}: window {start}+{} s in a {:.2} s clip", r.name, r.seconds, c.clip.duration);
+        }
+    }
     let mut styles: Vec<motion::StyleCycle> = STYLES.iter().filter_map(|(s, p)| motion::load_style(&cp.styles, &sm, s, *p).ok()).collect();
     motion::level_heads(&mut styles);
     let gs = groups(&cp.people);
@@ -145,8 +156,8 @@ fn clips_and_walks_on_every_group() {
         let female = id.contains("female");
         let relaxed = rocketbox::relaxed_hands(sk, clip(if female { ROLES[0].female } else { ROLES[0].male }), &ROLES[0]).unwrap();
         let mut srcs: Vec<BakeSrc> = styles.iter().map(|c| BakeSrc::Style { cycle: c }).collect();
-        let role_frames: Vec<u32> = ROLES.iter().map(|r| (r.seconds * r.fps).round() as u32 + 1).collect();
-        for (r, role) in ROLES.iter().enumerate() {
+        let role_frames: Vec<u32> = roles.iter().map(|r| (r.seconds * r.fps).round() as u32 + 1).collect();
+        for (r, role) in roles.iter().enumerate() {
             srcs.push(BakeSrc::Clip { clip: clip(if female { role.female } else { role.male }), role, frames: role_frames[r], layer: role.layer(female).map(|(id, _)| clip(id)) });
         }
         let b = rocketbox::bake_list(sk, &srcs, Some(&relaxed)).unwrap();
@@ -194,7 +205,11 @@ fn clips_and_walks_on_every_group() {
                     if let BakeSrc::Clip { role, .. } = s {
                         if role.family == Family::Idle {
                             assert!(median(bend) > 8.0, "{id} {}: the elbows hang straight", role.name);
-                            assert!(median(hand_y) < 0.0, "{id} {}: a hand above the pelvis", role.name);
+                            // (`--people-idles`' stances with the hands at the hips or in
+                            // front, and a hand to the face or the head: the stance itself)
+                            if !matches!(role.name, "hips" | "hands-rest" | "hands-front" | "touch-face" | "scratch-head") {
+                                assert!(median(hand_y) < 0.0, "{id} {}: a hand above the pelvis", role.name);
+                            }
                         }
                         if role.family == Family::Call {
                             assert!(median(ear.clone()) < 0.12, "{id} {}: the knuckles are {:.3} m from the ear", role.name, median(ear));
@@ -322,6 +337,81 @@ fn plain_walks_look_ahead() {
         println!("{s:<16} source trunk {:+.1} head {:+.1} | bake trunk {bt:+.1} ({:+.1} on the idle), head-to-eye {bh:+.1} ({:+.1})", st / 32.0, sh / 32.0, bt - ti, bh - hi);
         if ["Neutral", "HandsInPockets", "Proud", "Followed"].contains(&s) {
             assert!((bh - hi).abs() < 10.0 && (bt - ti).abs() < 6.0, "{s}: head {:+.1}, trunk {:+.1} degrees off the idle", bh - hi, bt - ti);
+        }
+    }
+}
+
+/// (`--people-motion`) Every walk and standing loop on each proportion group
+/// with the heads held steady (`rocketbox::steady_head`): the loop's mean nod
+/// within `NOD_MEAN`'s limits and every frame within `NOD_FRAME`'s; the
+/// call loops keep the hand at the ear; the rest of the body is untouched.
+#[test]
+fn steady_heads_look_ahead() {
+    let Some(cp) = copies() else { return };
+    let cm = Manifest::clips().unwrap();
+    let sm = Manifest::styles().unwrap();
+    let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| r.clips()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let clips: Vec<motion::RbClip> = ids.iter().map(|id| motion::load_rb_clip(&cp.clips, &cm, id).unwrap()).collect();
+    let clip = |id: &str| clips.iter().find(|c| c.id == id).unwrap();
+    let mut styles: Vec<motion::StyleCycle> = STYLES.iter().filter_map(|(s, p)| motion::load_style(&cp.styles, &sm, s, *p).ok()).collect();
+    motion::level_heads(&mut styles);
+    let head = idx("Bip01 Head");
+    let nod_at = |rows: &[[f32; 4]], f: usize| -> f32 {
+        let n = JOINTS.len();
+        let r = &rows[(f * n + head) * 3..(f * n + head) * 3 + 3];
+        // the bind's forward (+Z) through the frame's rotation
+        let fz = Vec3::new(r[0][2], r[1][2], r[2][2]).normalize();
+        (-fz.y).asin().to_degrees()
+    };
+    for (id, sk) in &groups(&cp.people) {
+        let female = id.contains("female");
+        let relaxed = rocketbox::relaxed_hands(sk, clip(if female { ROLES[0].female } else { ROLES[0].male }), &ROLES[0]).unwrap();
+        let mut srcs: Vec<BakeSrc> = styles.iter().map(|c| BakeSrc::Style { cycle: c }).collect();
+        for role in ROLES.iter() {
+            srcs.push(BakeSrc::Clip { clip: clip(if female { role.female } else { role.male }), role, frames: (role.seconds * role.fps).round() as u32 + 1, layer: role.layer(female).map(|(id, _)| clip(id)) });
+        }
+        let plain = rocketbox::bake_list(sk, &srcs, Some(&relaxed)).unwrap();
+        let steady = rocketbox::bake_list_opts(sk, &srcs, Some(&relaxed), true).unwrap();
+        println!("== {id}");
+        let mut f0 = 0;
+        for (i, s) in srcs.iter().enumerate() {
+            let (name, n) = match s {
+                BakeSrc::Style { cycle } => (cycle.name.clone(), motion::WALK_FRAMES as usize + 1),
+                BakeSrc::Clip { role, frames, .. } => (role.name.to_string(), *frames as usize),
+            };
+            let before: Vec<f32> = (f0..f0 + n - 1).map(|f| nod_at(&plain.rows, f)).collect();
+            let after: Vec<f32> = (f0..f0 + n - 1).map(|f| nod_at(&steady.rows, f)).collect();
+            let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+            let span = |v: &[f32]| (v.iter().cloned().fold(f32::MAX, f32::min), v.iter().cloned().fold(f32::MIN, f32::max));
+            let (b0, b1) = span(&before);
+            let (a0, a1) = span(&after);
+            println!("  {name:<16} nod mean {:+6.1} ({b0:+6.1} .. {b1:+6.1})  steady {:+6.1} ({a0:+6.1} .. {a1:+6.1})  {:?}", mean(&before), mean(&after), steady.nods[i]);
+            assert!(mean(&after) <= rocketbox::NOD_MEAN[1] + 0.5 && mean(&after) >= -rocketbox::NOD_MEAN[3] - 0.5, "{id} {name}: mean nod {}", mean(&after));
+            assert!(a1 <= rocketbox::NOD_FRAME[1] + 0.5 && a0 >= -rocketbox::NOD_FRAME[3] - 0.5, "{id} {name}: nod {a0} .. {a1}");
+            // Below the neck nothing moves.
+            for f in f0..f0 + n {
+                for k in 0..JOINTS.len() {
+                    if ["Bip01 Neck", "Bip01 Head", "Bip01 MJaw", "Bip01 LEye", "Bip01 REye"].contains(&JOINTS[k].0) {
+                        continue;
+                    }
+                    assert!((at(&plain.rows, sk, f, k) - at(&steady.rows, sk, f, k)).length() < 1e-4, "{id} {name}: {} moved", JOINTS[k].0);
+                }
+            }
+            if let BakeSrc::Clip { role, .. } = s {
+                if role.family == Family::Call {
+                    let ear: Vec<f32> = (f0..f0 + n).map(|f| hand_to_head(&steady.rows, sk, f)).collect();
+                    assert!(median(ear.clone()) < 0.12, "{id} {}: the knuckles are {:.3} m from the ear", role.name, median(ear));
+                }
+            }
+            if let BakeSrc::Style { cycle } = s {
+                if cycle.phone {
+                    let ear: Vec<f32> = (f0..f0 + n).map(|f| hand_to_head(&plain.rows, sk, f)).collect();
+                    println!("    phone walk: knuckles to the nearer ear, median {:.3} m", median(ear));
+                }
+            }
+            f0 += n;
         }
     }
 }

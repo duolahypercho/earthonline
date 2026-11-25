@@ -292,11 +292,221 @@ pub struct LookOptions {
     /// high and hyper tiers turn on. Its shader code sits behind `SF_CINEMATIC`
     /// (`ShaderFeatures::cinematic`); the sky reads `SkyOptions::cinematic`.
     pub look: eo_look::cinematic::LookProfile,
+    /// The sun's first bounce off the sunlit walls round each point
+    /// (`--sun-bounce`; surfaces_ao_sun.wgsl, eo-look `sun_bounce`): the
+    /// occlusion pass gathers it from the far sun map's ring 1 as a reflective
+    /// shadow map, each sunlit wall's radiance less the rig's stand-in for it,
+    /// into the bounce channel. Needs `lighting.far_shadows` and `ao`. Off: the
+    /// frame as before (its code is compiled out, `ShaderFeatures::sun_bounce`).
+    pub sun_bounce: bool,
+    /// The occlusion's multi-bounce at each surface's own diffuse albedo, per
+    /// channel, on the indirect diffuse (`--ao-albedo`; surfaces_ao_use.wgsl
+    /// `ao_multi_bounce_albedo`) instead of the JS's single albedo of 0.7.
+    /// Off: the frame as before (compiled out, `ShaderFeatures::ao_albedo`).
+    pub ao_albedo: bool,
+    /// The sun's penumbra (`--soft-shadows`; look_light.wgsl
+    /// `lk_cascade_soft`, eo-look `penumbra`): the cascades' comparison
+    /// filtered over the sun's disc (0.5334 degrees) at the distance of the
+    /// edge that casts it, found from the casters' depth round the point. Off:
+    /// the frame as before (compiled out, `ShaderFeatures::soft_shadows`).
+    pub soft_shadows: bool,
+    /// The screen-space indirect light (`--screen-gi`; surfaces_ao_gi.wgsl,
+    /// surfaces_ao_gi_filter.wgsl, eo-look `screen_gi`): the occlusion pass
+    /// as a visibility-bitmask gather out to 12 m (each sample a surface of
+    /// some thickness, so a rail or a pole hides only its own sliver), blended
+    /// into a reprojected history and filtered over its plane, its bounce
+    /// the light of the walls and streets round each point in place of the
+    /// rig's. Needs `ao`. Off: the frame as before (the gather, the history
+    /// and the filter are compiled out, `ShaderFeatures::screen_gi`).
+    pub screen_gi: bool,
+    /// The light of what hides the sky (`--occluder-light`; ambient.wgsl
+    /// `amb_irradiance`, eo-look `occluder`): with the ambient volume, the
+    /// blocked sky is lit by the shaded walls' own exitance (their sky, the
+    /// street below them and each other) instead of the rig's sunlit-street
+    /// lobe, the street's lobe keeps its sky part only as far as the street
+    /// sees the sky, and the sun bounce adds a sunlit wall's sun part whole.
+    /// Off: the frame as before (compiled out, `ShaderFeatures::occluder_light`).
+    pub occluder_light: bool,
+    /// The environment's colour from the sky the frame paints (`--dome-env`;
+    /// eo-look `env_sh_with_dome_colour`): the environment SH every lit
+    /// surface reads for its diffuse environment and its rough reflections
+    /// (the shaders' `lk_sh`) keeps the analytic dome's light and takes the
+    /// painted dome's colour (the haze's grey low sky, not the analytic deep
+    /// blue). CPU only, nothing in the shaders; off: the frame as before.
+    pub dome_env: bool,
+    /// The cars' materials and lamps (`--car-materials`; agents_draw.wgsl
+    /// `ag_car_*`, eo-agents `CookOptions::car_materials`): 0 off (the frame
+    /// as before), 1 on. Its shader code sits behind `SF_CAR_MATERIALS`
+    /// (`ShaderFeatures::car_materials`); the agents read the level from
+    /// their parameters (agents.rs `AgParams::misc.y`).
+    pub car_materials: u8,
+    /// The cars' occlusion of the street round them (`--car-contact`;
+    /// eo-render agents_contact.rs and .wgsl, a pass of its own after the city
+    /// pass, made only when on): 0 off (no pass, the agents' module as
+    /// before), 1 on.
+    pub car_contact: u8,
+    /// The cars' reflections of the street's brightest lights at any distance
+    /// (`--car-reflections`; agents_draw.wgsl `ag_car_far_lights`, with
+    /// `--car-materials` only): 0 off (the frame as before), 1 on. Its shader
+    /// code sits behind `SF_CAR_REFLECTIONS` (`ShaderFeatures::car_reflections`).
+    pub car_reflections: u8,
+    /// The cars' lamps as a driver works them and as lights of the street
+    /// (`--car-lamps`; agents_draw.wgsl `ag_lamp`, agents_lamps.wgsl in the
+    /// light gather, with `--car-materials` only): 0 off (the frame as before),
+    /// 1 on. Its shader code sits behind `SF_CAR_LAMPS` (`ShaderFeatures::car_lamps`).
+    pub car_lamps: u8,
+    /// The cars in the wet (`--car-wet`; agents_contact.wgsl `ag_ct_wet`, with
+    /// `--car-materials` and `--car-contact`): 0 off (the frame as before), 1 on.
+    /// Its shader code sits behind `SF_CAR_WET` (`ShaderFeatures::car_wet`).
+    pub car_wet: u8,
+    /// The cars' finish as the street wears it (`--car-finish`; agents_draw.wgsl
+    /// `ag_car_finish_*`, with `--car-materials`): metallic flake glinting in the
+    /// sun and orange peel in the lacquer, the road's film up the lower body,
+    /// dust on the roof, bonnet and glass, faded lacquer on old cars, green-grey
+    /// automotive glass over a dim cabin, rain beading on the bodies and glass:
+    /// 0 off (the frame as before), 1 on. Its shader code sits behind
+    /// `SF_CAR_FINISH` (`ShaderFeatures::car_finish`).
+    pub car_finish: u8,
+    /// The natural-detail shading (`NATURE_*` bits; eo-app `--foliage-light`,
+    /// `--temporal-lod-fade`, `--turf`, `--palm-detail`, `--hill-cover`, `--ground-cover`, `--bare-ground`,
+    /// `--palm-variety`, `--crown-light`, `--far-palms`, `--prop-far-shadow`, `--hill-relief`, `--leaf-shade`,
+    /// `--wet-foliage`, `--lawn-albedo`): 0 (the default) is the frame as before,
+    /// and each bit's shader code is compiled out while it is off (`sf_select`).
+    pub nature: u32,
 }
+
+/// `--foliage-light`: leaves and palm fronds pass light through (props_draw.wgsl
+/// `pr_foliage`, hlod_trees.wgsl `ft_foliage`).
+pub const NATURE_FOLIAGE: u32 = 1;
+/// `--temporal-lod-fade`: the level cross-fades' dither moves every frame, so the
+/// temporal anti-aliasing resolves it to a blend (props_draw.wgsl, hlod_trees.wgsl).
+pub const NATURE_LOD_FADE: u32 = 2;
+/// `--turf`: lawns shaded as a grass canopy (landmarks_surface.wgsl `nt_turf`).
+pub const NATURE_TURF: u32 = 4;
+/// `--palm-detail`: the palms' trunk relief and crown shading (props_draw.wgsl `pr_palm`).
+pub const NATURE_PALM: u32 = 8;
+/// `--hill-cover`: the far hills' vegetation cover (farshore.wgsl `fs_cover`).
+pub const NATURE_HILLS: u32 = 16;
+/// `--ground-cover`: the city's hills and wild parks as a mosaic of grass, brush,
+/// groves and chert, their crowns drawn or shared out by the geometric-optical model
+/// (landmarks_surface.wgsl `nt_cover`), and their tones without the per-vertex
+/// jitter (ground2.rs `hill_tone`).
+pub const NATURE_COVER: u32 = 32;
+/// `--bare-ground`: WorldCover's bare ground and the shore's revetments drawn as
+/// gravel, fines and weeds, and as riprap with its tide zones (landmarks_surface.wgsl
+/// `nt_bare`), the vertices marked by ground2.rs `bare_ground`.
+pub const NATURE_BARE: u32 = 64;
+/// `--palm-variety`: each palm its own crown, skirt, fruit and trunk (props_draw.wgsl
+/// `pr_palm_variety`).
+pub const NATURE_PALM_VARIETY: u32 = 128;
+/// `--crown-light`: the far trees' crowns lit as a volume of leaves (Ross's area
+/// scattering phase function, the sun's and the sky's Beer-Lambert paths through
+/// the crown; hlod_trees.wgsl `ft_crown`) at measured leaf reflectances.
+pub const NATURE_CROWN: u32 = 256;
+/// `--far-palms`: the survey's palms drawn as palms past the street props' palms
+/// (hlod_trees.wgsl `ft_palm`; hlod_trees.rs `FAR_PALM`), not as round crowns
+/// over them.
+pub const NATURE_FAR_PALMS: u32 = 512;
+/// `--prop-far-shadow`: the street props past the sun cascades take the far sun
+/// map, sampled per vertex (props_draw.wgsl `pr_far_sun`, look_light.wgsl
+/// `lk_far_vertex`), where they stood unshadowed.
+pub const NATURE_PROP_FAR: u32 = 1024;
+/// `--hill-relief`: the far hills' gullies and spurs under the height field's
+/// 40 m lattice, bending its normal (farshore.wgsl `fs_relief`).
+pub const NATURE_HILL_RELIEF: u32 = 2048;
+/// `--leaf-shade`: the street lights without a shadow map of their own (shop
+/// windows, the lamps' ground bounce, headlamps) reach a palm's or a street
+/// tree's leaves through the crown's leaf area between them (Beer-Lambert over
+/// the light's path through the crown; sky_light.wgsl `sky_leaf_t`, set by
+/// props_draw.wgsl), and the light through a leaf takes the transmittance over
+/// reflectance of each display primary's band (props_draw.wgsl `PR_LEAF_T_OVER_R`).
+pub const NATURE_LEAF_SHADE: u32 = 4096;
+/// `--wet-foliage`: in the rain the leaves carry drops and a film (darker, a
+/// glossier lobe where the water stands) and the bark soaks (the albedo
+/// halved on the palms' fibre, rain tracks down the trunk; props_draw.wgsl `pr_wet_leaf`, `pr_wet_bark`).
+pub const NATURE_WET_FOLIAGE: u32 = 8192;
+/// `--lawn-albedo` (with `--turf`): a mown lawn's tone held to a measured turf's
+/// luminance, 0.06-0.10 (landmarks_surface.wgsl `NT_TURF_LUM`).
+pub const NATURE_LAWN_ALBEDO: u32 = 16384;
+/// `--street-wear` (the street track, round 2; street_pbr.wgsl `sw_*`): the
+/// carriageway's distress as laid out by its causes (transverse and lane-joint
+/// cracks, fatigue cracking in the wheel paths, sealed with meandering tar
+/// snakes) in place of the weathering's crack web, the oil drips as a field of
+/// spots down the lane, and utility patches of one pour.
+pub const STREET_WEAR: u32 = 1;
+/// `--street-glare` (street_pbr.wgsl `sg_*`): the polished binder on the
+/// aggregate's tops as a smooth layer over the rough road, its share growing
+/// toward grazing as the texture's valleys are masked (the low-sun glare down
+/// a road, the wheel paths brightest); the kerb arris and the setts' crowns too.
+pub const STREET_GLARE: u32 = 2;
+/// `--street-aggregate` (street_pbr.wgsl `sa_*`): the hot mix's coarse stones
+/// near the eye, each its rock, its top worn out of the binder film and
+/// polished (most in the wheel paths), its faces tilted and its arris falling
+/// into the mastic, every term over the layout's mean; the asphalt scans'
+/// blotchy relief gives way to it.
+pub const STREET_AGGREGATE: u32 = 4;
+/// `--plaza-setts` (street_pbr.wgsl `ss_*`): the grey-stone plazas' cobble
+/// scan with its joints filled to a level of their own along each stretch
+/// (sand, packed grit and soil, moss; the parallax ray stops on the fill),
+/// each sett's wear over the tops, the crowns cleaned and polished by soles.
+pub const PLAZA_SETTS: u32 = 8;
+/// `--walk-relief` (street_pbr.wgsl `wr_*`): the kerbs cast in segments
+/// (joints on the walk's scoring lines, each its pour, nose and yaw), spalled
+/// at random along the arris, a silt line at their foot; the walk's tooled
+/// joints in relief between slabs settled each to its own height (the lip,
+/// the groove, the noses, box-filtered across the joint).
+pub const WALK_RELIEF: u32 = 16;
+/// Every natural-detail bit.
+pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER | NATURE_BARE | NATURE_PALM_VARIETY | NATURE_CROWN | NATURE_FAR_PALMS | NATURE_PROP_FAR | NATURE_HILL_RELIEF | NATURE_LEAF_SHADE | NATURE_WET_FOLIAGE | NATURE_LAWN_ALBEDO;
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { blender_camera: false, cove_daylight: false, shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_parts_off: 0, water_optics: false, ocean_life: false, ocean_reef: false, dive_detail: false, coastal_habitat: false, reef_kelp: false, reef_canopy_light: false, dive_daylight: false, reef_materials: false, reef_rocks: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self {
+            blender_camera: false,
+            cove_daylight: false,
+            shadow_map: shadow::MAP_SIZE,
+            shadows: true,
+            ao: true,
+            facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER,
+            water: true,
+            water_features: crate::water::FEAT_ALL,
+            water_parts_off: 0,
+            water_optics: false,
+            ocean_life: false,
+            ocean_reef: false,
+            dive_detail: false,
+            coastal_habitat: false,
+            reef_kelp: false,
+            reef_canopy_light: false,
+            dive_daylight: false,
+            reef_materials: false,
+            reef_rocks: false,
+            dive_exposure: false,
+            cove_detail: false,
+            cove_canopy: false,
+            cove_sediment: false,
+            sky: Default::default(),
+            cc0: crate::cc0::RUN_DEFAULT,
+            lighting: LightingOptions::OFF,
+            shadow_slope_bias: false,
+            grime: 0,
+            street_life: 0,
+            photo_finish: 0,
+            look: eo_look::cinematic::LookProfile::Default,
+            sun_bounce: false,
+            ao_albedo: false,
+            soft_shadows: false,
+            screen_gi: false,
+            occluder_light: false,
+            dome_env: false,
+            car_materials: 0,
+            car_contact: 0,
+            car_reflections: 0,
+            car_lamps: 0,
+            car_wet: 0,
+            car_finish: 0,
+            nature: 0,
+        } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -426,6 +636,28 @@ struct AoTarget {
     z_view: wgpu::TextureView,
     /// The compute bind group for one (depth texture, HDR texture) pair.
     bind: Option<(wgpu::Texture, wgpu::Texture, wgpu::BindGroup)>,
+    /// (`--screen-gi`) the gather's scratch target, the history and its depth, and their groups.
+    gi: Option<AoGiTarget>,
+}
+
+/// (`--screen-gi`) the gather writes `tmp` (raw + history blend) and the
+/// view depth (`z_view`); the filter reads them into `ao_view`; then `tmp`
+/// and `z_view` are copied into the history the next gather reads.
+struct AoGiTarget {
+    tmp: wgpu::TextureView,
+    hist: wgpu::TextureView,
+    hist_z: wgpu::TextureView,
+    filter_bind: wgpu::BindGroup,
+    /// The gather's group for one (depth texture, HDR texture) pair.
+    bind: Option<(wgpu::Texture, wgpu::Texture, wgpu::BindGroup)>,
+}
+
+/// (`--screen-gi`) the gather and filter pipelines (only when compiled in).
+struct AoGiPipelines {
+    gather: wgpu::ComputePipeline,
+    gather_bgl: wgpu::BindGroupLayout,
+    filter: wgpu::ComputePipeline,
+    filter_bgl: wgpu::BindGroupLayout,
 }
 
 /// What a frame's physical daylight was made for: the hour, the haze density and the weight (f64
@@ -585,10 +817,11 @@ impl LightingBindings {
         ]
     }
 
-    /// The layout entries (fragment only).
+    /// The layout entries (fragment only; with `--prop-far-shadow` the far sun
+    /// map also to the vertex stage, where the props sample it: `far_map_stages`).
     pub(crate) fn layout_entries() -> [wgpu::BindGroupLayoutEntry; 8] {
         let fs = wgpu::ShaderStages::FRAGMENT;
-        let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: fs, ty, count: None };
+        let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: if binding == B_FAR_SHADOW_MAP { far_map_stages() } else { fs }, ty, count: None };
         let tex = |sample_type, view_dimension| wgpu::BindingType::Texture { sample_type, view_dimension, multisampled: false };
         let float = wgpu::TextureSampleType::Float { filterable: true };
         let table = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None };
@@ -603,6 +836,13 @@ impl LightingBindings {
             e(B_SHOP_FRONTS, table),
         ]
     }
+}
+
+/// The stages that see the far sun map and the shadow comparison sampler (group 1
+/// bindings 12 and 2): the fragment stage, and with `--prop-far-shadow`
+/// (`NATURE_PROP_FAR`) the vertex stage too (props_draw.wgsl `pr_far_sun`).
+pub(crate) fn far_map_stages() -> wgpu::ShaderStages {
+    if shader_features().nature & NATURE_PROP_FAR != 0 { wgpu::ShaderStages::VERTEX_FRAGMENT } else { wgpu::ShaderStages::FRAGMENT }
 }
 
 pub struct LookGpu {
@@ -650,6 +890,10 @@ pub struct LookGpu {
     // occlusion + bounce.
     ao_pipeline: wgpu::ComputePipeline,
     ao_bgl: wgpu::BindGroupLayout,
+    /// (`--sun-bounce`) the occlusion pass has the sun bounce compiled in: its binding 5 is the far sun map.
+    ao_sun: bool,
+    /// (`--screen-gi`) the gather and its filter, when compiled in.
+    ao_gi: Option<AoGiPipelines>,
     ao_sampler: wgpu::Sampler,
     ao_dummy: (wgpu::TextureView, wgpu::TextureView),
     ao: Mutex<Option<AoTarget>>,
@@ -675,6 +919,8 @@ pub struct LookGpu {
     /// the prior exposure (the incident meter's target) this frame's meter pass bins about.
     meter_prior: Mutex<f64>,
     state: Mutex<State>,
+    /// (`--dome-env`) the environment SH with the painted dome's colour, by the frame's own (hour, SH bits).
+    dome_env: Mutex<Option<((u64, [[u64; 3]; 9]), [eo_look::math::Rgb; 9])>>,
     pub(crate) cmp_sampler: wgpu::Sampler, // pub(crate)
     pub(crate) device: wgpu::Device, // pub(crate) (the probe rebinds group 0)
     /// the sky, weather, night lights and camera finish passes.
@@ -754,8 +1000,13 @@ impl ShadowLevels {
 pub fn shadow_wgsl(levels: ShadowLevels) -> String {
     let (c, b, f) = levels.parts();
     format!(
-        "// generated by look.rs shadow_wgsl\nconst LK_SHADOW_CASCADES: bool = {c};\nconst LK_SHADOW_BLEND: bool = {b};\nconst LK_SHADOW_FAR: bool = {f};\nconst LK_CASCADE_BLEND_BAND: f32 = {:.6};\n",
-        shadow::CASCADE_BLEND_BAND
+        "// generated by look.rs shadow_wgsl\nconst LK_SHADOW_CASCADES: bool = {c};\nconst LK_SHADOW_BLEND: bool = {b};\nconst LK_SHADOW_FAR: bool = {f};\nconst LK_CASCADE_BLEND_BAND: f32 = {:.6};\nconst LK_SHADOW_SOFT: bool = {};\nconst LK_SUN_PRE: bool = false;\n",
+        shadow::CASCADE_BLEND_BAND,
+        // (`--soft-shadows`) the penumbra's search and filter in the full variant only: the
+        // props' cut-out pipeline stands at the edge of what Apple's compiler takes, and with
+        // them failed (XPC_ERROR_CONNECTION_INTERRUPTED, measured); props keep the tent.
+        // LK_SUN_PRE (look_light.wgsl `lk_sun_pre`): false here; the agents' module turns it on.
+        levels == ShadowLevels::Full
     )
 }
 
@@ -853,14 +1104,157 @@ pub struct ShaderFeatures {
     /// `SF_COVE_SEDIMENT`: draw.wgsl's call into landmarks_surface.wgsl
     /// `lm_cove_sediment`).
     pub cove_sediment: bool,
+    /// The kit glazing as a two-surface dielectric pane over its room, with the
+    /// rooms' office depth, ceilings and window coverings (`--facade-glass`;
+    /// draw.wgsl, rooms.wgsl `SF_FACADE_GLASS`; eo-render `facade::glass_from_args`).
+    pub facade_glass: bool,
+    /// The far layer's facades and roofs (`--far-facades`; hlod_draw.wgsl
+    /// `SF_FAR_FACADES`; eo-render `facade::far_from_args`).
+    pub far_facades: bool,
+    /// The kit walls' run-off under each window and their soiled foot
+    /// (`--facade-weather`; draw.wgsl, facade_age.wgsl `SF_FACADE_WEATHER`;
+    /// eo-render `facade::weather_from_args`).
+    pub facade_weather: bool,
+    /// The street canyon in the kit glass: the sky over the opposite roofline,
+    /// the opposite facades in sun or shade and the street, cast from the
+    /// ambient volume's canyon (`--canyon-glass`; draw.wgsl, look_light.wgsl,
+    /// rooms.wgsl `SF_CANYON_GLASS`; eo-render `facade::canyon_from_args`).
+    pub canyon_glass: bool,
+    /// The far layer's construction depth (`--far-relief`; hlod_draw.wgsl `SF_FAR_RELIEF`,
+    /// hlod.rs `draw_wgsl`, hlod_district.rs roof frames; eo-render `facade::far_relief_from_args`):
+    /// compiled in only with the switch (`ALL` leaves it out: no runtime gate), and then always on.
+    pub far_relief: bool,
+    /// The kit walls' ageing laid on the building instead of tiled blocks (`--facade-patina`;
+    /// facade_age.wgsl, cc0.wgsl `SF_FACADE_PATINA`; eo-render `facade::patina_from_args`):
+    /// compiled in only with the switch (`ALL` leaves it out: no runtime gate), and then always on.
+    pub facade_patina: bool,
+    /// The reveal round every kit pane: its sun shade, the sky it hides from the room and its
+    /// reflection in the glass (`--window-depth`; draw.wgsl, rooms.wgsl `SF_WINDOW_DEPTH`; eo-render
+    /// `facade::window_depth_from_args`): compiled in only with the switch (`ALL` leaves it out: no
+    /// runtime gate), and then always on.
+    pub window_depth: bool,
+    /// The street's physically based surface pass (`--street-pbr`; street_pbr.wgsl,
+    /// `SF_STREET_PBR`): compiled in only with the switch (eo-app sets it; the look's
+    /// options do not carry it, and `ALL` leaves it out), and then always on.
+    pub street_pbr: bool,
+    /// The street track's round-2 passes (`STREET_*` bits: `--street-wear`,
+    /// `--street-glare`, `--street-aggregate`, `--plaza-setts`, `--walk-relief`;
+    /// `SF_STREET_WEAR`, `SF_STREET_GLARE`, `SF_STREET_AGGREGATE`, `SF_PLAZA_SETTS`,
+    /// `SF_WALK_RELIEF`): as `street_pbr`,
+    /// compiled in only with their switches (eo-app sets them; `ALL` leaves them out).
+    pub street: u32,
+    /// The sun bounce (`--sun-bounce`; `SF_SUN_BOUNCE`): the occlusion pass's
+    /// gather (surfaces_ao_sun.wgsl, its binding 5; `ao_shader_source`).
+    pub sun_bounce: bool,
+    /// The occlusion's multi-bounce at the surface's albedo (`--ao-albedo`; `SF_AO_ALBEDO`, look_light.wgsl).
+    pub ao_albedo: bool,
+    /// The sun's penumbra (`--soft-shadows`; `SF_SOFT_SHADOWS`, look_light.wgsl `lk_cascade_soft`).
+    pub soft_shadows: bool,
+    /// The screen-space indirect light (`--screen-gi`; `SF_SCREEN_GI`): the
+    /// occlusion pass's gather, history and filter (`ao_shader_source`, `ao_gi_filter_source`).
+    pub screen_gi: bool,
+    /// The light of what hides the sky (`--occluder-light`; `SF_OCCLUDER_LIGHT`,
+    /// ambient.wgsl `amb_irradiance`, surfaces_ao_sun.wgsl's stand-in).
+    pub occluder_light: bool,
+    /// The wet surfaces (`--wet-surfaces`; sky_light.wgsl `sky_w2_on`, `SF_WET_SURFACES`).
+    pub wet_surfaces: bool,
+    /// The screen-space reflection's second generation (`--screen-reflect`; sky_light.wgsl `sky_sr_on`, `SF_SCREEN_REFLECT`).
+    pub screen_reflect: bool,
+    /// The probe grid's sky as the frame draws it and its GGX levels (`--probe-sky`;
+    /// probe_sky.wgsl, `SF_PROBE_SKY`): its pipelines are made only with it.
+    pub probe_sky: bool,
+    /// The water the street's relief holds and the film by the surface under it
+    /// (`--wet-relief`; sky_light.wgsl `sky_wr_*`, `SF_WET_RELIEF`; over `--wet-surfaces`).
+    pub wet_relief: bool,
+    /// The cars' rear lamps as streak lights on the wet street (`--lamp-streaks`;
+    /// sky_light.wgsl `sky_ls_*`, `SF_LAMP_STREAKS`; the gather's pick, sky_lamp_streaks.wgsl,
+    /// and its words after the streak list made only with it; under the cinematic look).
+    pub lamp_streaks: bool,
+    /// The camera model under the cinematic look (`--cine-camera`; `SF_CAMERA`; cine_post.rs):
+    /// its passes are made only with it, and its lines in the post and bloom shaders sit behind it.
+    pub camera: bool,
+    /// The camera model's later features compiled in (`cine_post::CAM_BIT_*`: `--camera-tone`,
+    /// `--white-balance`, `--lens-halation`, `--camera-sharpen`, `--lens-flare`,
+    /// `--camera-resolve` (`SF_CAM_RESOLVE` here: the resolve's shader), `--camera-print`;
+    /// cine_post.rs `SF_CAM_*`), only with the model.
+    /// New code: `ALL` leaves it out, as the shaders were before it.
+    pub camera_bits: u32,
+    /// The cars' materials and lamps (`--car-materials`; `SF_CAR_MATERIALS`,
+    /// agents_draw.wgsl `ag_car_*`): compiled into the agents' pipelines only.
+    pub car_materials: bool,
+    /// The cars' reflections of the street's brightest lights (`--car-reflections`;
+    /// `SF_CAR_REFLECTIONS`, agents_draw.wgsl `ag_car_far_lights`): the agents' pipelines only.
+    pub car_reflections: bool,
+    /// The cars' lamps (`--car-lamps`; `SF_CAR_LAMPS`, agents_draw.wgsl `ag_lamp`, the
+    /// light gather's `LT_CAR_LAMPS`, agents.rs `car_lamps_wgsl`). New code with no
+    /// runtime test in the gather: `ALL` leaves it out.
+    pub car_lamps: bool,
+    /// The cars in the wet (`--car-wet`; `SF_CAR_WET`, agents_contact.wgsl). `ALL` leaves it out.
+    pub car_wet: bool,
+    /// The cars' worn finish (`--car-finish`; `SF_CAR_FINISH`, agents_draw.wgsl). `ALL` leaves it out.
+    pub car_finish: bool,
+    /// The night's photometric scale (`--night-photometry`; `SF_NIGHT_PHOTOMETRY`):
+    /// the practicals' gain on the emission the shaders carry in the rig's units.
+    pub night_photometry: bool,
+    /// Each street lamp's pool as a bounce light (`--lamp-bounce`; `SF_LAMP_BOUNCE`,
+    /// sky.rs `lamp_bounce_wgsl`'s `LT_LAMP_BOUNCE`).
+    pub lamp_bounce: bool,
+    /// The city sky's stars by its limiting magnitude (`--urban-sky`; `SF_URBAN_SKY`).
+    pub urban_sky: bool,
+    /// Office storeys behind the glass (`--office-floors`; `SF_OFFICE_FLOORS`, rooms.wgsl).
+    pub office_floors: bool,
+    /// Lit homes and shops seen from the night street (`--room-depth`; `SF_ROOM_DEPTH`, rooms.wgsl).
+    pub room_depth: bool,
+    /// The street lamps as units (`--lamp-units`; `SF_LAMP_UNITS`: each switched on by its own
+    /// control, its output, colour bin and faults; sky_lights.wgsl, hlod_lights.wgsl, props_draw.wgsl).
+    pub lamp_units: bool,
+    /// The luminaires' own optics (`--luminaires`; `SF_LUMINAIRES`: the lamp in its lantern
+    /// or lens, the glass lit by it, no sprite orb where the fixture is drawn).
+    pub luminaires: bool,
+    /// The vehicles' rear lamps as lights (`--rear-lamps`; `SF_REAR_LAMPS`, sky_lights.wgsl).
+    pub rear_lamps: bool,
+    /// The signals' lit lenses as lights (`--signal-spill`; `SF_SIGNAL_SPILL`, sky_lights.wgsl).
+    pub signal_spill: bool,
+    /// Lit homes on the lamps' photometric scale (`--lit-rooms`; `SF_LIT_ROOMS`, rooms.wgsl).
+    pub lit_rooms: bool,
+    /// The overhead wires lit as the scene's surfaces (`--wire-light`; `SF_WIRE_LIGHT`, props_wires.wgsl).
+    pub wire_light: bool,
+    /// The natural-detail bits compiled in (`NATURE_*`; their `// sf:` blocks, `sf_select`).
+    /// New code with no runtime test: `ALL` leaves it out, as the shaders were before it.
+    pub nature: u32,
 }
 
 impl ShaderFeatures {
-    /// Every feature compiled in (the shaders as before stage P1).
-    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true, rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: true, blender_camera: true, player_contact: true, photo_mode: true, landmark_access: true, far_facade: true, seabed: true, cove_sediment: true };
+    /// Every feature compiled in (the shaders as before stage P1). The street's
+    /// physically based pass stays out: it has no runtime gate, so compiling it in
+    /// turns it on; it comes in only with its switch (`--street-pbr`). So do the
+    /// natural-detail bits (`nature`: new code with no runtime test).
+    pub const ALL: Self = Self {
+        lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true,
+        rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: true, blender_camera: true, player_contact: true, photo_mode: true, landmark_access: true, far_facade: true, seabed: true, cove_sediment: true,
+        facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, far_relief: false, facade_patina: false, window_depth: false, // the facades track
+        street_pbr: false, street: 0, // the street track
+        sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, occluder_light: true, // the light track
+        wet_surfaces: true, screen_reflect: true, probe_sky: true, wet_relief: true, lamp_streaks: true, // the reflect track
+        camera: true, camera_bits: 0, // the camera track
+        car_materials: true, car_reflections: true, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
+        night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, wire_light: true, // the night track
+        nature: 0, // the nature track
+    };
     /// No opt-in feature compiled in (the default frame's pipelines: the
-    /// features on by default, `phys_sky` and `ap_lut`, stay in).
-    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false, rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, far_facade: true, seabed: false, cove_sediment: false };
+    /// features on by default, `phys_sky`, `ap_lut` and `far_facade`, stay in).
+    pub const NONE: Self = Self {
+        lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false,
+        rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, far_facade: true, seabed: false, cove_sediment: false,
+        facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, far_relief: false, facade_patina: false, window_depth: false, // the facades track
+        street_pbr: false, street: 0, // the street track
+        sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, // the light track
+        wet_surfaces: false, screen_reflect: false, probe_sky: false, wet_relief: false, lamp_streaks: false, // the reflect track
+        camera: false, camera_bits: 0, // the camera track
+        car_materials: false, car_reflections: false, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
+        night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, wire_light: false, // the night track
+        nature: 0, // the nature track
+    };
 
     /// The features the look's options ask for, with the world's (`structures`,
     /// `tunnels`, `facade_clutter`: eo-app's `--structures`, `--tunnels`,
@@ -887,6 +1281,44 @@ impl ShaderFeatures {
             far_facade: eo_kit::far_facade::enabled(),
             seabed: false,
             cove_sediment: o.cove_sediment && o.cove_detail,
+            facade_glass: false,
+            far_facades: false,
+            facade_weather: false,
+            canyon_glass: false,
+            far_relief: false,
+            facade_patina: false,
+            window_depth: false,
+            street_pbr: false,
+            street: 0,
+            sun_bounce: o.sun_bounce,
+            ao_albedo: o.ao_albedo,
+            soft_shadows: o.soft_shadows,
+            screen_gi: o.screen_gi,
+            occluder_light: o.occluder_light,
+            wet_surfaces: o.sky.wet_surfaces,
+            screen_reflect: o.sky.screen_reflect,
+            probe_sky: o.sky.probe_sky,
+            wet_relief: o.sky.wet_relief,
+            lamp_streaks: o.sky.lamp_streaks,
+            camera: o.look.is_cinematic() && o.sky.cine_camera,
+            camera_bits: if o.look.is_cinematic() && o.sky.cine_camera { o.sky.cam_bits & crate::cine_post::CAM_BITS_ALL } else { 0 },
+            car_materials: o.car_materials > 0,
+            car_reflections: o.car_materials > 0 && o.car_reflections > 0,
+            car_lamps: o.car_materials > 0 && o.car_lamps > 0,
+            car_wet: o.car_materials > 0 && o.car_wet > 0,
+            car_finish: o.car_materials > 0 && o.car_finish > 0,
+            night_photometry: o.sky.night_photometry,
+            lamp_bounce: o.sky.lamp_bounce,
+            urban_sky: o.sky.urban_sky,
+            office_floors: o.sky.office_floors,
+            room_depth: o.sky.room_depth,
+            lamp_units: o.sky.lamp_units,
+            luminaires: o.sky.luminaires,
+            rear_lamps: o.sky.rear_lamps,
+            signal_spill: o.sky.signal_spill,
+            lit_rooms: o.sky.lit_rooms,
+            wire_light: o.sky.wire_light,
+            nature: o.nature & NATURE_ALL,
         }
     }
 
@@ -943,16 +1375,242 @@ impl ShaderFeatures {
         l.sky.ap_lut &= self.ap_lut;
         l.blender_camera &= self.blender_camera;
         l.cove_sediment &= self.cove_sediment;
+        l.sun_bounce &= self.sun_bounce;
+        l.ao_albedo &= self.ao_albedo;
+        l.soft_shadows &= self.soft_shadows;
+        l.screen_gi &= self.screen_gi;
+        l.occluder_light &= self.occluder_light;
+        if !self.wet_surfaces {
+            l.sky.wet_surfaces = false;
+        }
+        if !self.screen_reflect {
+            l.sky.screen_reflect = false;
+        }
+        l.sky.probe_sky &= self.probe_sky;
+        l.sky.wet_relief &= self.wet_relief;
+        l.sky.lamp_streaks &= self.lamp_streaks;
+        l.sky.cine_camera &= self.camera;
+        l.sky.cam_bits &= self.camera_bits;
+        if !self.car_materials {
+            l.car_materials = 0;
+        }
+        if !self.car_reflections {
+            l.car_reflections = 0;
+        }
+        if !self.car_lamps {
+            l.car_lamps = 0;
+        }
+        if !self.car_wet {
+            l.car_wet = 0;
+        }
+        if !self.car_finish {
+            l.car_finish = 0;
+        }
+        l.sky.night_photometry &= self.night_photometry;
+        l.sky.lamp_bounce &= self.lamp_bounce;
+        l.sky.urban_sky &= self.urban_sky;
+        l.sky.office_floors &= self.office_floors;
+        l.sky.room_depth &= self.room_depth;
+        l.sky.lamp_units &= self.lamp_units;
+        l.sky.luminaires &= self.luminaires;
+        l.sky.rear_lamps &= self.rear_lamps;
+        l.sky.signal_spill &= self.signal_spill;
+        l.sky.lit_rooms &= self.lit_rooms;
+        l.sky.wire_light &= self.wire_light;
+        l.nature &= self.nature;
         l
     }
 
     /// The generated constants (look_common_source; every shader on the look's common code reads them).
     pub fn wgsl(&self) -> String {
         format!(
-            "\n// generated by look.rs ShaderFeatures::wgsl (stage P1: what is off is compiled out)\nconst SF_LX_BITS: u32 = {}u;\nconst SF_GRIME: bool = {};\nconst SF_STREET_LIFE: bool = {};\nconst SF_STRUCTURES: bool = {};\nconst SF_TUNNELS: bool = {};\nconst SF_SHOP_LIGHT: bool = {};\nconst SF_FACADE_CLUTTER: bool = {};\nconst SF_CINEMATIC: bool = {};\nconst SF_PHYS_SKY: bool = {};\nconst SF_AP_LUT: bool = {};\nconst SF_HOUSE: bool = {};\nconst SF_BLENDER_CAMERA: bool = {};\nconst SF_PLAYER_CONTACT: bool = {};\nconst SF_PHOTO_MODE: bool = {};\nconst SF_LANDMARK_ACCESS: bool = {};\nconst SF_FAR_FACADE: bool = {};\nconst SF_SEABED: bool = {};\nconst SF_COVE_SEDIMENT: bool = {};\n",
-            self.lx_bits, self.grime, self.street_life, self.structures, self.tunnels, self.shop_light, self.facade_clutter, self.cinematic, self.phys_sky, self.ap_lut, self.house, self.blender_camera, self.player_contact, self.photo_mode, self.landmark_access, self.far_facade, self.seabed, self.cove_sediment
+            "\n// generated by look.rs ShaderFeatures::wgsl (stage P1: what is off is compiled out)\nconst SF_LX_BITS: u32 = {}u;\n{}{}{}",
+            self.lx_bits,
+            [
+                ("SF_GRIME", self.grime),
+                ("SF_STREET_LIFE", self.street_life),
+                ("SF_STRUCTURES", self.structures),
+                ("SF_TUNNELS", self.tunnels),
+                ("SF_SHOP_LIGHT", self.shop_light),
+                ("SF_FACADE_CLUTTER", self.facade_clutter),
+                ("SF_CINEMATIC", self.cinematic),
+                ("SF_PHYS_SKY", self.phys_sky),
+                ("SF_AP_LUT", self.ap_lut),
+                ("SF_HOUSE", self.house),
+                ("SF_BLENDER_CAMERA", self.blender_camera),
+                ("SF_PLAYER_CONTACT", self.player_contact),
+                ("SF_PHOTO_MODE", self.photo_mode),
+                ("SF_LANDMARK_ACCESS", self.landmark_access),
+                ("SF_FAR_FACADE", self.far_facade),
+                ("SF_SEABED", self.seabed),
+                ("SF_COVE_SEDIMENT", self.cove_sediment),
+                // the facades track
+                ("SF_FACADE_GLASS", self.facade_glass),
+                ("SF_FAR_FACADES", self.far_facades),
+                ("SF_FACADE_WEATHER", self.facade_weather),
+                ("SF_CANYON_GLASS", self.canyon_glass),
+                ("SF_FAR_RELIEF", self.far_relief),
+                ("SF_FACADE_PATINA", self.facade_patina),
+                ("SF_WINDOW_DEPTH", self.window_depth),
+                // the street track
+                ("SF_STREET_PBR", self.street_pbr),
+                ("SF_STREET_WEAR", self.street & STREET_WEAR != 0),
+                ("SF_STREET_GLARE", self.street & STREET_GLARE != 0),
+                ("SF_STREET_AGGREGATE", self.street & STREET_AGGREGATE != 0),
+                ("SF_PLAZA_SETTS", self.street & PLAZA_SETTS != 0),
+                ("SF_WALK_RELIEF", self.street & WALK_RELIEF != 0),
+                // the light track
+                ("SF_SUN_BOUNCE", self.sun_bounce),
+                ("SF_AO_ALBEDO", self.ao_albedo),
+                ("SF_SOFT_SHADOWS", self.soft_shadows),
+                ("SF_SCREEN_GI", self.screen_gi),
+                ("SF_OCCLUDER_LIGHT", self.occluder_light),
+                // the reflect track
+                ("SF_WET_SURFACES", self.wet_surfaces),
+                ("SF_SCREEN_REFLECT", self.screen_reflect),
+                ("SF_PROBE_SKY", self.probe_sky),
+                ("SF_WET_RELIEF", self.wet_relief),
+                ("SF_LAMP_STREAKS", self.lamp_streaks),
+                // the camera track
+                ("SF_CAMERA", self.camera),
+                ("SF_CAM_RESOLVE", self.camera && self.camera_bits & crate::cine_post::CAM_BIT_RESOLVE != 0),
+                // the vehicles track
+                ("SF_CAR_MATERIALS", self.car_materials),
+                ("SF_CAR_REFLECTIONS", self.car_reflections),
+                ("SF_CAR_LAMPS", self.car_lamps),
+                ("SF_CAR_WET", self.car_wet),
+                ("SF_CAR_FINISH", self.car_finish),
+                // the night track
+                ("SF_NIGHT_PHOTOMETRY", self.night_photometry),
+                ("SF_LAMP_BOUNCE", self.lamp_bounce),
+                ("SF_URBAN_SKY", self.urban_sky),
+                ("SF_OFFICE_FLOORS", self.office_floors),
+                ("SF_ROOM_DEPTH", self.room_depth),
+                ("SF_LAMP_UNITS", self.lamp_units),
+                ("SF_LUMINAIRES", self.luminaires),
+                ("SF_REAR_LAMPS", self.rear_lamps),
+                ("SF_SIGNAL_SPILL", self.signal_spill),
+                ("SF_LIT_ROOMS", self.lit_rooms),
+                ("SF_WIRE_LIGHT", self.wire_light),
+            ]
+            .iter()
+            .map(|(name, on)| format!("const {name}: bool = {on};\n"))
+            .collect::<String>(),
+            penumbra_wgsl() + &occluder_wgsl() + &crate::sky::lamp_units_wgsl_with(self.lamp_units), // (`--lamp-units`) the units' functions (LU_ON its compile flag)
+            crate::agents::rear_lamp_look_wgsl() // (`--car-lamps`) the rear lamps' kind and field, read only behind SF_CAR_LAMPS
         )
     }
+}
+
+/// (`--soft-shadows`) the penumbra's constants (eo-look `penumbra`; read only
+/// behind `SF_SOFT_SHADOWS`, declared in every set so the code compiles either way).
+fn penumbra_wgsl() -> String {
+    use eo_look::penumbra as p;
+    let f = |v: f64| format!("{v:.8}");
+    format!(
+        "const PS_TAN_DIAMETER: f32 = {};\nconst PS_MAX_SPREAD_M: f32 = {};\nconst PS_MIN_CASTER_M: f32 = {};\nconst PS_MAX_RADIUS_TEXELS: f32 = {};\nconst PS_TENT_TEXELS: f32 = {};\nconst PS_MAX_PLANE_SLOPE: f32 = {};\nconst PS_SEARCH_TAPS: u32 = {}u;\nconst PS_FILTER_TAPS: u32 = {}u;\nconst PS_SUBPIXEL_PX: f32 = {};\n",
+        f(p::tan_diameter()),
+        f(p::MAX_SPREAD_M),
+        f(p::MIN_CASTER_M),
+        f(p::MAX_RADIUS_TEXELS),
+        f(p::TENT_TEXELS),
+        f(p::MAX_PLANE_SLOPE),
+        p::SEARCH_TAPS,
+        p::FILTER_TAPS,
+        f(p::SUBPIXEL_PX)
+    ) + &vogel_wgsl("PS_SEARCH_DISC", p::SEARCH_TAPS)
+        + &vogel_wgsl("PS_FILTER_DISC", p::FILTER_TAPS)
+}
+
+/// (`--occluder-light`) the constants of the light of what hides the sky (eo-look
+/// `occluder`; read only behind `SF_OCCLUDER_LIGHT`, declared in every set).
+fn occluder_wgsl() -> String {
+    use eo_look::occluder as o;
+    let f = |v: f64| format!("{v:.8}");
+    format!(
+        "const OL_WALL_ALBEDO: vec3<f32> = vec3<f32>({}, {}, {});\nconst OL_GROUND_SKY_H_M: f32 = {};\nconst OL_SIDE_OPEN: f32 = {};\nconst OL_MIN_STREET_SKY: f32 = {};\nconst OL_MAX_STREET_SKY: f32 = {};\nconst OL_SKIP_SHARE: f32 = {};\nconst OL_DECK_ALBEDO: f32 = {};\nconst OL_LID_R0: f32 = {};\nconst OL_LID_R1: f32 = {};\nconst OL_AGENTS_OCCLUDER: f32 = {};\n",
+        f(o::WALL_ALBEDO[0]),
+        f(o::WALL_ALBEDO[1]),
+        f(o::WALL_ALBEDO[2]),
+        f(o::GROUND_SKY_H_M),
+        f(o::SIDE_OPEN),
+        f(o::MIN_STREET_SKY),
+        f(o::MAX_STREET_SKY),
+        f(o::SKIP_SHARE),
+        f(o::DECK_ALBEDO),
+        f(o::LID_R0),
+        f(o::LID_R1),
+        f(o::AGENTS_OCCLUDER)
+    )
+}
+
+/// (`--soft-shadows`) a Vogel disc of `n` taps as a constant array (eo-look
+/// `penumbra::vogel_disc`): the shader turns it with one rotation a pixel.
+fn vogel_wgsl(name: &str, n: u32) -> String {
+    let taps = eo_look::penumbra::vogel_disc(n).iter().map(|p| format!("vec2<f32>({:.8}, {:.8})", p[0], p[1])).collect::<Vec<_>>().join(", ");
+    format!("const {name}: array<vec2<f32>, {n}> = array<vec2<f32>, {n}>({taps});\n")
+}
+
+/// (`--night-photometry`) the look uniform's `fog.z`: the practicals' gain
+/// at the frame's sun, 0 with the switch off (the uniform as before).
+fn night_gain(on: bool, f: &LookFrame) -> f32 {
+    if on { eo_sky::night_photometry::practical_gain(f.model.sun.altitude_deg) as f32 } else { 0.0 }
+}
+
+/// A shader file's natural-detail blocks for the features compiled in now: the
+/// lines between `// sf:NAME+` and `// sf:end` are kept only with the bit NAME
+/// (`FOLIAGE`, `LOD_FADE`, `TURF`, `PALM`, `HILLS`, `COVER`, `BARE`, `PALM_VARIETY`, `CROWN`, `FAR_PALMS`, `PROP_FAR`, `HILL_RELIEF`, `LEAF_SHADE`, `WET_FOLIAGE`, `LAWN_ALBEDO`: `NATURE_*`) in, those between `// sf:NAME-`
+/// and `// sf:end` only without it, and the marker lines are dropped (`NAME|OTHER`:
+/// either bit; `NAME&OTHER`: both; `!NAME`: without it; blocks do not nest). With every
+/// bit out the text is the file as it was before the bits existed, so a shader
+/// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
+/// before, and with a bit in it holds its code alone, not the code it replaces.
+pub fn sf_select(src: &str) -> String {
+    let f = shader_features();
+    let on = |name: &str| match name {
+        "FOLIAGE" => f.nature & NATURE_FOLIAGE != 0,
+        "LOD_FADE" => f.nature & NATURE_LOD_FADE != 0,
+        "TURF" => f.nature & NATURE_TURF != 0,
+        "PALM" => f.nature & NATURE_PALM != 0,
+        "HILLS" => f.nature & NATURE_HILLS != 0,
+        "COVER" => f.nature & NATURE_COVER != 0,
+        "BARE" => f.nature & NATURE_BARE != 0,
+        "PALM_VARIETY" => f.nature & NATURE_PALM_VARIETY != 0,
+        "CROWN" => f.nature & NATURE_CROWN != 0,
+        "FAR_PALMS" => f.nature & NATURE_FAR_PALMS != 0,
+        "PROP_FAR" => f.nature & NATURE_PROP_FAR != 0,
+        "HILL_RELIEF" => f.nature & NATURE_HILL_RELIEF != 0,
+        "LEAF_SHADE" => f.nature & NATURE_LEAF_SHADE != 0,
+        "WET_FOLIAGE" => f.nature & NATURE_WET_FOLIAGE != 0,
+        "LAWN_ALBEDO" => f.nature & NATURE_LAWN_ALBEDO != 0,
+        _ => false,
+    };
+    // `A|B`: either bit in (code two features share); `A&B`: both (code that joins them);
+    // `!A`: the bit out (`A&!B`: code of A's that B replaces).
+    let term = |t: &str| t.strip_prefix('!').map_or_else(|| on(t), |n| !on(n));
+    let any_on = |names: &str| names.split('|').any(|n| n.split('&').all(term));
+    let mut out = String::with_capacity(src.len());
+    let mut keep = true;
+    for line in src.split_inclusive('\n') {
+        if let Some(rest) = line.trim().strip_prefix("// sf:") {
+            if rest == "end" {
+                keep = true;
+                continue;
+            }
+            if let Some(names) = rest.strip_suffix('+') {
+                keep = any_on(names);
+                continue;
+            }
+            if let Some(names) = rest.strip_suffix('-') {
+                keep = !any_on(names);
+                continue;
+            }
+        }
+        if keep {
+            out.push_str(line);
+        }
+    }
+    out
 }
 
 static SHADER_FEATURES: std::sync::RwLock<ShaderFeatures> = std::sync::RwLock::new(ShaderFeatures::ALL);
@@ -1052,7 +1710,31 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// binds stand-ins), so their output is the same and their fragment shaders,
 /// at the edge of what Apple's compiler takes, have room for the probe grid
 /// (probe_grid.wgsl, compiled in everywhere but the far layer).
+/// (`--leaf-shade`) The props' city shader: the crown's transmittance in the
+/// lights' loop (sky_light.wgsl `SKY_LEAF_ON`) is compiled into the props'
+/// module alone; every other pipeline keeps the const false, so its loop
+/// compiles as before (measured, r2i3: with the hook in every city pipeline
+/// the city overview's early draw took about 1 ms more by day, when no light
+/// runs; with it in the props' alone, nothing measurable).
+pub fn props_city_source(src: String) -> String {
+    src.replace("const SKY_LEAF_ON: bool = false;", "const SKY_LEAF_ON: bool = true;")
+}
+
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
+    let s = sf_select(&city_shader_parts(ambient, shadow, single_probe)); // the natural-detail blocks (`// sf:`) of the features compiled in
+    if ambient == crate::ambient::ShaderLevels::Plane {
+        // (`--occluder-light`) the plane-only pipelines (the far layer, the props) keep the
+        // stand-in for the blocked sky: on Apple's GPU `hlod-draw` failed to build with the
+        // light of what hides the sky in it (r2i1; in r2i3 too, nothing read but the plane),
+        // and `prop-cutout` with the test suite's feature set (r2i3, tests/props.rs, in every
+        // shape tried, the agents' stand-in set first included), though it built with the
+        // round's: XPC_ERROR_CONNECTION_INTERRUPTED.
+        return s.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+    }
+    s
+}
+
+fn city_shader_parts(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
     format!(
         "{}\n{}\n{}\n{}\n{}\n{}\n{}",
         draw_wgsl(shader_features().house), // the playable house's varyings with SF_HOUSE only
@@ -1063,7 +1745,7 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         include_str!("facade_age.wgsl"),             // facade
         crate::facade::facade_constants_wgsl()        // facade
     ) + "\n" + &crate::rooms::wgsl_constants() + include_str!("rooms.wgsl")
-        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
+        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + &crate::sky_reflect::sky_light_source(single_probe || shadow != ShadowLevels::Full) // sky (the reflect track's switches' code out of the agents' variant, sky_reflect.rs)
         + "\n" + LOOK_EXT_WGSL // group 1 bindings 12-18
         + "\n" + crate::far_shadow::WGSL + &shadow_wgsl(shadow) // the far sun shadow map's lookup and the variant's shadow parts (lighting)
         + "\n" + &crate::ambient::wgsl(ambient) // the ambient volume's sampling (lighting)
@@ -1075,6 +1757,7 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         + "\n" + include_str!("fitted_finish.wgsl") + "\n" + include_str!("window_optics.wgsl") + "\n" + include_str!("porch_light.wgsl") // the playable house (`--house-*`; every term behind SF_HOUSE)
         + "\n" + include_str!("weathering.wgsl") + &crate::weathering::wgsl() // the weathering level (`--grime`; every term behind it)
         + "\n" + include_str!("street_life.wgsl") + &crate::street_life::wgsl() // street life (`--street-life`; every term behind it)
+        + "\n" + include_str!("street_pbr.wgsl") + &crate::street_pbr::wgsl() // the street's physically based surface (`--street-pbr`; every call behind SF_STREET_PBR)
         + &crate::structures::wgsl() // the grade-separated roads' concrete (draw.wgsl kind 12)
         + &format!("\n// generated by look.rs city_shader_source_variant_probes\nconst FA_PROBE_SHADER: bool = {single_probe};\n") // the single probe's lookups (lighting)
         + CITY_CLASS_ALL_WGSL // every class's surface (draw.wgsl `CITY_CLASS`; `city_shader_source_class` picks one)
@@ -1102,6 +1785,64 @@ pub fn camera_wgsl_at(group: u32, lut: u32, sampler: u32) -> String {
         .replace("CAM_BIND_LUT", &lut.to_string())
         .replace("CAM_BIND_SAMP", &sampler.to_string())
         + &format!("const CAM_LOG2_MID: f32 = {mid:.8};\nconst CAM_LO_EV: f32 = {lo:.8};\nconst CAM_INV_SPAN: f32 = {inv:.8};\nconst CAM_N: f32 = {n:.1};\n")
+}
+
+/// The occlusion pass's shader (surfaces_ao.wgsl on the look's common code)
+/// and, with `ShaderFeatures::sun_bounce`, the sun bounce's gather
+/// (surfaces_ao_sun.wgsl, eo-look `sun_bounce`'s constants); without it a
+/// stub that gathers nothing, compiled out with `SF_SUN_BOUNCE`.
+pub fn ao_shader_source() -> String {
+    let mut s = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
+    if shader_features().sun_bounce {
+        use eo_look::sun_bounce as sb;
+        let f = |v: f64| format!("{v:.8}");
+        let v3 = |v: [f64; 3]| format!("vec3<f32>({}, {}, {})", f(v[0]), f(v[1]), f(v[2]));
+        s.push_str("\n// generated by look.rs ao_shader_source (eo-look sun_bounce)\n");
+        s.push_str(&format!("const SB_SAMPLES: i32 = {};\nconst SB_SAMPLES_WITH_HISTORY: i32 = {};\n", sb::SAMPLES, sb::SAMPLES_WITH_HISTORY));
+        for (n, v) in [("SB_RADIUS_M", sb::RADIUS_M), ("SB_MIN_DIST2", sb::MIN_DIST2_M2), ("SB_GROUND_COS", sb::GROUND_COS), ("SB_MIN_SUN_COS", sb::MIN_SUN_COS), ("SB_GOLDEN_ANGLE", sb::GOLDEN_ANGLE), ("SB_MAX_SLOPE", sb::MAX_SLOPE)] {
+            s.push_str(&format!("const {n}: f32 = {};\n", f(v)));
+        }
+        s.push_str(&format!("const SB_WALL_ALBEDO: vec3<f32> = {};\n", v3(sb::WALL_ALBEDO)));
+        s.push_str(include_str!("surfaces_ao_sun.wgsl"));
+    } else {
+        s.push_str("\nfn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool) -> vec3<f32> {\n    return vec3<f32>(0.0);\n}\n");
+        if shader_features().screen_gi {
+            s.push_str("var<private> sb_near_m: f32 = AO_RADIUS_M;\nvar<private> sb_samples: i32 = 0;\nconst SB_SAMPLES_WITH_HISTORY: i32 = 0;\n");
+        }
+    }
+    if shader_features().screen_gi {
+        // (`--screen-gi`) the gather (eo-look `screen_gi`'s constants).
+        s.push_str(&gi_constants());
+        s.push_str(include_str!("surfaces_ao_gi.wgsl"));
+    }
+    s
+}
+
+/// (`--screen-gi`) eo-look `screen_gi`'s constants for the gather and the filter.
+fn gi_constants() -> String {
+    use eo_look::screen_gi as g;
+    let f = |v: f64| format!("{v:.8}");
+    let mut s = String::from("\n// generated by look.rs gi_constants (eo-look screen_gi)\n");
+    s.push_str(&format!("const GI_SLICES: u32 = {}u;\nconst GI_STEPS: u32 = {}u;\nconst GI_SECTORS: u32 = {}u;\n", g::SLICES, g::STEPS, g::SECTORS));
+    for (n, v) in [
+        ("GI_RADIUS_M", g::RADIUS_M),
+        ("GI_MAX_REACH_SHARE", g::MAX_REACH_SHARE),
+        ("GI_THICKNESS_M", g::THICKNESS_M),
+        ("GI_THICKNESS_PER_M", g::THICKNESS_PER_M),
+        ("GI_THICKNESS_SHARE", g::THICKNESS_SHARE),
+        ("GI_HISTORY_WEIGHT", g::HISTORY_WEIGHT),
+        ("GI_FILTER_PLANE_M", g::FILTER_PLANE_M),
+        ("GI_FILTER_PLANE_REL", g::FILTER_PLANE_REL),
+        ("GI_MAX_DIFFUSE_ALBEDO", g::MAX_DIFFUSE_ALBEDO),
+    ] {
+        s.push_str(&format!("const {n}: f32 = {};\n", f(v)));
+    }
+    s
+}
+
+/// (`--screen-gi`) the occlusion pass's spatial filter (its own module).
+pub fn ao_gi_filter_source() -> String {
+    format!("{}\n{}", gi_constants(), include_str!("surfaces_ao_gi_filter.wgsl"))
 }
 
 /// look_common.wgsl with (surfaces) the street field's constants (GF_*), from
@@ -1256,6 +1997,11 @@ pub struct LookInit<'a> {
 
 /// a half-resolution occlusion target (storage-written, sampled).
 fn ao_texture(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32)) -> wgpu::TextureView {
+    ao_texture_with(device, format, size, wgpu::TextureUsages::empty())
+}
+
+/// An occlusion target with `extra` usages besides storage and sampling (`--screen-gi`'s copies).
+fn ao_texture_with(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32), extra: wgpu::TextureUsages) -> wgpu::TextureView {
     device
         .create_texture(&wgpu::TextureDescriptor {
             label: Some("ao"),
@@ -1264,7 +2010,7 @@ fn ao_texture(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u3
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING | extra,
             view_formats: &[],
         })
         .create_view(&Default::default())
@@ -1344,7 +2090,7 @@ impl LookGpu {
             entries: &[
                 entry(0, vf, ubuf),
                 entry(1, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }),
-                entry(2, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
+                entry(2, far_map_stages(), wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
                 // occlusion + bounce result, its depth, a clamped linear sampler.
                 entry(3, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 entry(4, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
@@ -1393,18 +2139,21 @@ impl LookGpu {
         let window_optics = buffer("empty-window-optics", 16, wgpu::BufferUsages::STORAGE);
         let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist, &lighting_stand_ins, &window_optics));
         // the occlusion + bounce compute.
-        let ao_src = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
+        let ao_src = ao_shader_source();
+        let ao_sun = shader_features().sun_bounce;
         let ao_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surfaces_ao.wgsl"), source: wgpu::ShaderSource::Wgsl(ao_src.into()) });
-        let ao_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ao-bgl"),
-            entries: &[
-                entry(0, cs, ubuf),
-                entry(1, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
-                entry(2, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
-                entry(3, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
-                entry(4, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_Z_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
-            ],
-        });
+        let mut ao_entries = vec![
+            entry(0, cs, ubuf),
+            entry(1, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+            entry(2, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+            entry(3, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
+            entry(4, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_Z_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
+        ];
+        if ao_sun {
+            // (`--sun-bounce`) the far sun map (ring 1's layer read with textureLoad).
+            ao_entries.push(entry(5, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }));
+        }
+        let ao_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("ao-bgl"), entries: &ao_entries });
         let ao_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("ao-layout"), bind_group_layouts: &[Some(&ao_bgl)], immediate_size: 0 });
         let ao_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("ao_main"),
@@ -1413,6 +2162,42 @@ impl LookGpu {
             entry_point: Some("ao_main"),
             compilation_options: Default::default(),
             cache: None,
+        });
+        // (`--screen-gi`) the gather (the same module, its history bound at 6-8) and the filter.
+        let ao_gi = shader_features().screen_gi.then(|| {
+            let mut entries = ao_entries.clone();
+            entries.push(entry(6, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }));
+            entries.push(entry(7, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }));
+            entries.push(entry(8, cs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)));
+            let gather_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("ao-gi-bgl"), entries: &entries });
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("ao-gi-layout"), bind_group_layouts: &[Some(&gather_bgl)], immediate_size: 0 });
+            let gather = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("ao_gi_main"),
+                layout: Some(&layout),
+                module: &ao_module,
+                entry_point: Some("ao_gi_main"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+            let filter_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surfaces_ao_gi_filter.wgsl"), source: wgpu::ShaderSource::Wgsl(ao_gi_filter_source().into()) });
+            let filter_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("ao-gi-filter-bgl"),
+                entries: &[
+                    entry(0, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                    entry(1, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                    entry(2, cs, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: AO_FORMAT, view_dimension: wgpu::TextureViewDimension::D2 }),
+                ],
+            });
+            let filter_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("ao-gi-filter-layout"), bind_group_layouts: &[Some(&filter_bgl)], immediate_size: 0 });
+            let filter = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("ao_gi_filter"),
+                layout: Some(&filter_layout),
+                module: &filter_module,
+                entry_point: Some("ao_gi_filter"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+            AoGiPipelines { gather, gather_bgl, filter, filter_bgl }
         });
 
         // Shadow cull.
@@ -1498,7 +2283,7 @@ impl LookGpu {
         let depth_pipeline_sloped = depth_with("shadow-depth (slope bias)", wgpu::DepthBiasState { constant: 0, slope_scale: SLOPE_BIAS_SCALE, clamp: SLOPE_BIAS_CLAMP });
 
         // Sky (inside the city pass: same targets and sample count).
-        let sky_src = format!("{}\n{}", look_common_source(), include_str!("look_sky.wgsl"));
+        let sky_src = format!("{}\n{}\n{}", look_common_source(), crate::sky::urban_sky_wgsl(), include_str!("look_sky.wgsl")); // (`--urban-sky`) the stars' constants
         let sky_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("look_sky.wgsl"), source: wgpu::ShaderSource::Wgsl(sky_src.into()) });
         // + the sky uniform (moon, stars).
         let look_only_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("look-only-bgl"), entries: &[entry(0, vf, ubuf), entry(1, vf, ubuf)] });
@@ -1613,6 +2398,8 @@ impl LookGpu {
             shadow_array,
             ao_pipeline,
             ao_bgl,
+            ao_sun,
+            ao_gi,
             ao_sampler,
             ao_dummy,
             ao: Mutex::new(None),
@@ -1632,6 +2419,7 @@ impl LookGpu {
             cam_switches,
             meter,
             meter_prior: Mutex::new(1.0),
+            dome_env: Mutex::new(None), // (`--dome-env`)
             state: Mutex::new(State {
                 hour: DEFAULT_HOUR,
                 transfer: None,
@@ -1739,7 +2527,7 @@ impl LookGpu {
         let lighting = self.lighting_bound.lock().unwrap().clone();
         // main_bg[p] is bound while the resolve writes history p: it reads history 1 - p.
         let bg = |p: usize| {
-            let prev = self.sky.history_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone());
+            let prev = self.sky.reflect_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone()); // (`--screen-reflect`: with its mip chain)
             Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &lighting, &self.window_optics)
         };
         *self.main_bg.lock().unwrap() = [bg(0), bg(1)];
@@ -1779,6 +2567,14 @@ impl LookGpu {
     /// Binding 12: the far sun shadow map (a depth 2D array, a layer per ring); None the stand-in.
     pub fn set_far_shadow_map(&self, map: Option<&wgpu::TextureView>) {
         self.edit_lighting(|b, s| b.far_shadow_map = map.unwrap_or(&s.far_shadow_map).clone());
+        if self.ao_sun {
+            if let Some(t) = self.ao.lock().unwrap().as_mut() {
+                t.bind = None; // (`--sun-bounce`) the occlusion pass's group binds the map
+                if let Some(g) = t.gi.as_mut() {
+                    g.bind = None; // (`--screen-gi`) and so does the gather's
+                }
+            }
+        }
         self.sky.set_far_shadow_map(map); // (stage L4) the golden haze's shade past the cascades
     }
 
@@ -1845,24 +2641,92 @@ impl LookGpu {
         let mut created = false;
         let mut ao = self.ao.lock().unwrap();
         if ao.as_ref().map(|t| t.size) != Some(size) {
-            *ao = Some(AoTarget { size, ao_view: ao_texture(&self.device, AO_FORMAT, size), z_view: ao_texture(&self.device, AO_Z_FORMAT, size), bind: None });
+            // (`--screen-gi`) the view depth is copied into the history: its target can be a copy's source.
+            let z_extra = if self.ao_gi.is_some() { wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::empty() };
+            let ao_view = ao_texture(&self.device, AO_FORMAT, size);
+            let z_view = ao_texture_with(&self.device, AO_Z_FORMAT, size, z_extra);
+            let gi = self.ao_gi.as_ref().map(|p| {
+                let tmp = ao_texture_with(&self.device, AO_FORMAT, size, wgpu::TextureUsages::COPY_SRC);
+                let hist = ao_texture_with(&self.device, AO_FORMAT, size, wgpu::TextureUsages::COPY_DST);
+                let hist_z = ao_texture_with(&self.device, AO_Z_FORMAT, size, wgpu::TextureUsages::COPY_DST);
+                let filter_bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("ao-gi-filter-bg"),
+                    layout: &p.filter_bgl,
+                    entries: &[
+                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&tmp) },
+                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&z_view) },
+                        wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&ao_view) },
+                    ],
+                });
+                AoGiTarget { tmp, hist, hist_z, filter_bind, bind: None }
+            });
+            *ao = Some(AoTarget { size, ao_view, z_view, bind: None, gi });
             created = true;
         }
         let t = ao.as_mut().unwrap();
-        let ht = hdr.texture();
-        if t.bind.as_ref().is_none_or(|(d, h, _)| d != dt || h != ht) {
-            crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 1);
-            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("ao-bg"),
-                layout: &self.ao_bgl,
-                entries: &[
+        // (`--screen-gi`) the gather, its filter and the history's copies, in place of the 4 m search.
+        if let (Some(p), Some(g), true) = (self.ao_gi.as_ref(), t.gi.as_mut(), self.options.screen_gi) {
+            let ht = hdr.texture();
+            if g.bind.as_ref().is_none_or(|(d, h, _)| d != dt || h != ht) {
+                crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 1);
+                let far = self.ao_sun.then(|| self.lighting_bound.lock().unwrap().far_shadow_map.clone());
+                let mut entries = vec![
                     wgpu::BindGroupEntry { binding: 0, resource: self.look_buf.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(depth) },
                     wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(hdr) },
-                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&t.ao_view) },
+                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&g.tmp) },
                     wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&t.z_view) },
-                ],
-            });
+                ];
+                if let Some(f) = far.as_ref() {
+                    entries.push(wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(f) });
+                }
+                entries.push(wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&g.hist) });
+                entries.push(wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&g.hist_z) });
+                entries.push(wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.ao_sampler) });
+                let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("ao-gi-bg"), layout: &p.gather_bgl, entries: &entries });
+                g.bind = Some((dt.clone(), ht.clone(), bg));
+            }
+            let tw0 = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_AO), end_of_pass_write_index: None });
+            let tw1 = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: None, end_of_pass_write_index: Some(b + Q_AO + 1) });
+            {
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("ao gi"), timestamp_writes: tw0 });
+                pass.set_pipeline(&p.gather);
+                pass.set_bind_group(0, &g.bind.as_ref().unwrap().2, &[]);
+                pass.dispatch_workgroups(size.0.div_ceil(8), size.1.div_ceil(8), 1);
+            }
+            {
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("ao gi filter"), timestamp_writes: tw1 });
+                pass.set_pipeline(&p.filter);
+                pass.set_bind_group(0, &g.filter_bind, &[]);
+                pass.dispatch_workgroups(size.0.div_ceil(8), size.1.div_ceil(8), 1);
+            }
+            let extent = wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 };
+            enc.copy_texture_to_texture(g.tmp.texture().as_image_copy(), g.hist.texture().as_image_copy(), extent);
+            enc.copy_texture_to_texture(t.z_view.texture().as_image_copy(), g.hist_z.texture().as_image_copy(), extent);
+            drop(ao);
+            if created {
+                self.rebuild_main_bg();
+            }
+            let mut st = self.state.lock().unwrap();
+            st.ao_made = st.cur_cam.map(|(vp, eye, fwd, _)| (vp, eye, fwd));
+            return;
+        }
+        let ht = hdr.texture();
+        if t.bind.as_ref().is_none_or(|(d, h, _)| d != dt || h != ht) {
+            crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 1);
+            // (`--sun-bounce`) the far sun map bound now (or its stand-in); `set_far_shadow_map` drops this group.
+            let far = self.ao_sun.then(|| self.lighting_bound.lock().unwrap().far_shadow_map.clone());
+            let mut entries = vec![
+                wgpu::BindGroupEntry { binding: 0, resource: self.look_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(depth) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(hdr) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&t.ao_view) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&t.z_view) },
+            ];
+            if let Some(f) = far.as_ref() {
+                entries.push(wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(f) });
+            }
+            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("ao-bg"), layout: &self.ao_bgl, entries: &entries });
             t.bind = Some((dt.clone(), ht.clone(), bg));
         }
         {
@@ -1879,9 +2743,17 @@ impl LookGpu {
         st.ao_made = st.cur_cam.map(|(vp, eye, fwd, _)| (vp, eye, fwd));
     }
 
+    /// (`--screen-reflect`, the reflect track) the occlusion pass's half-resolution
+    /// view depth (group 1 binding 4, `lk_ao_z`), once made: the reflection
+    /// pyramid's Hi-Z is built from it (sky_reflect.rs).
+    pub(crate) fn ao_z_view(&self) -> Option<wgpu::TextureView> {
+        self.ao.lock().unwrap().as_ref().map(|t| t.z_view.clone())
+    }
+
     /// Bytes of the occlusion targets, once they exist.
     pub fn ao_bytes(&self) -> u64 {
-        self.ao.lock().unwrap().as_ref().map(|t| t.size.0 as u64 * t.size.1 as u64 * (8 + 4)).unwrap_or(0)
+        // (`--screen-gi`) + the scratch target and the history (8 + 8 + 4 bytes a texel).
+        self.ao.lock().unwrap().as_ref().map(|t| t.size.0 as u64 * t.size.1 as u64 * (8 + 4 + if t.gi.is_some() { 20 } else { 0 })).unwrap_or(0)
     }
 
     /// Group 1 of the city pipelines.
@@ -2002,6 +2874,18 @@ impl LookGpu {
         self.post_source.store(r.map(|p| p as u32 + 1).unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// (bench captures) The look's and the sky's frame counters move on to the
+    /// next multiple of `period` (sky.rs `align_frame_phase`; here the grain's
+    /// and the photo finish's phase), so a capture's frames do not depend on
+    /// its settle's length.
+    pub fn align_frame_phase(&self, period: u32) {
+        {
+            let mut s = self.state.lock().unwrap();
+            s.frame_index = (s.frame_index / period + 1).wrapping_mul(period);
+        }
+        self.sky.align_frame_phase(period);
+    }
+
     /// The clock (hours, 0..24); the sky model and light rig follow on the next update.
     pub fn set_time_of_day(&self, hour: f64) {
         let mut s = self.state.lock().unwrap();
@@ -2099,6 +2983,31 @@ impl LookGpu {
     /// the moon key, the night exposure; eo-sky `frame::look_frame`), rebuilt
     /// when the weather moves; with every stage off, the JS clear frame as before.
     pub fn frame(&self) -> LookFrame {
+        let f = self.frame_built();
+        if self.options.dome_env {
+            return self.with_dome_env(f); // (`--dome-env`)
+        }
+        f
+    }
+
+    /// (`--dome-env`) the frame's environment SH with the painted dome's colour
+    /// (eo-look `env_sh_with_dome_colour`), integrated once per frame built.
+    fn with_dome_env(&self, mut f: LookFrame) -> LookFrame {
+        let key = (f.hour.to_bits(), f.env_sh.map(|c| c.map(f64::to_bits)));
+        let mut c = self.dome_env.lock().unwrap();
+        if let Some((k, sh)) = c.as_ref() {
+            if *k == key {
+                f.env_sh = *sh;
+                return f;
+            }
+        }
+        let sh = eo_look::env_sh_with_dome_colour(&f.model, &f.env_sh);
+        *c = Some((key, sh));
+        f.env_sh = sh;
+        f
+    }
+
+    fn frame_built(&self) -> LookFrame {
         let opts = self.sky.options(); // sky
         let legacy = opts == crate::sky::SkyOptions::off();
         let w = if legacy { None } else { Some(self.sky.weather()) };
@@ -2124,6 +3033,8 @@ impl LookGpu {
                 if let Some(tm) = terms.as_mut() {
                     self.light_weather_frame(&mut s, &opts, &w, true, &mut f, tm);
                 }
+                Self::lamp_units(opts.lamp_units, &f, terms.as_mut()); // (`--lamp-units`)
+                self.night_photometry(opts.night_photometry, &mut f, terms.as_mut()); // (`--night-photometry`)
                 s.frame = Some(f);
                 s.terms = terms;
             }
@@ -2143,6 +3054,8 @@ impl LookGpu {
                 }
                 let (mut f, mut terms) = eo_sky::frame::look_frame_from_with(&s.sky_base.as_ref().unwrap().3, &c, t, fo);
                 self.light_weather_frame(&mut s, &opts, &w, false, &mut f, &mut terms);
+                Self::lamp_units(opts.lamp_units, &f, Some(&mut terms)); // (`--lamp-units`)
+                self.night_photometry(opts.night_photometry, &mut f, Some(&mut terms)); // (`--night-photometry`)
                 s.frame = Some(f);
                 s.terms = Some(terms);
             }
@@ -2257,6 +3170,30 @@ impl LookGpu {
         // only the night solve's share moves (the day part is the frame's, stage L4's included).
         t.exposure_target += eo_sky::night::cinematic_night_shift(f);
         f.exposure = t.exposure_target;
+    }
+
+    /// (`--night-photometry`) the night on one photometric scale on a frame
+    /// `frame` has built (after `cinematic_night`): the lamps' units per lux
+    /// with the practicals' gain and the exposure's night share metered on the
+    /// lit street (eo-sky `night_photometry::apply`). Nothing without the switch.
+    /// (`--lamp-units`) the share of the city's lamp units switched on
+    /// (eo-sky `lamp_units::population_on`: none in sun, all by the blue hour,
+    /// earlier under cloud) in place of the JS's one dimmer; the shaders turn
+    /// each unit on or off by it (`lu_factor`).
+    fn lamp_units(on: bool, f: &LookFrame, terms: Option<&mut eo_sky::SkyTerms>) {
+        if !on {
+            return;
+        }
+        let Some(t) = terms else { return };
+        t.lamps_on = eo_sky::lamp_units::population_on(f.model.sun.altitude_deg, t.weather.profile.brightness);
+    }
+
+    fn night_photometry(&self, on: bool, f: &mut LookFrame, terms: Option<&mut eo_sky::SkyTerms>) {
+        if !on {
+            return;
+        }
+        let Some(t) = terms else { return };
+        eo_sky::night_photometry::apply(f, t, self.options.look.is_cinematic());
     }
 
     /// the weather and night terms of the frame in force (None with every sky stage off).
@@ -2432,14 +3369,16 @@ impl LookGpu {
             // with the atmosphere tables the volume pass carries the aerial
             // perspective (sky_volume `vol_aerial`) for the city, the far land and
             // the sea: the range fog every pass applies is pushed out of reach.
-            fog: if atmo_ap { [1.0e7, 2.0e7, 0.0, 0.0] } else { [f.aerial.near as f32, f.aerial.far as f32, 0.0, 0.0] },
+            // z: (`--night-photometry`) the practicals' gain (eo-sky `night_photometry::practical_gain`; 0 without it).
+            fog: { let g = night_gain(self.sky.options().night_photometry && terms.is_some(), &f); if atmo_ap { [1.0e7, 2.0e7, g, 0.0] } else { [f.aerial.near as f32, f.aerial.far as f32, g, 0.0] } },
             fog_color: v4(fog, 0.0),
             cam_pos: [cam.eye.x, cam.eye.y, cam.eye.z, 1.0],
             cam_fwd: [fwd.x, fwd.y, fwd.z, 0.0],
             inv_view_proj: inv.to_cols_array_2d(),
             cascade_vp: [cascades[0].view_proj, cascades[1].view_proj, cascades[2].view_proj],
             cascade_split: [split_far[0] as f32, split_far[1] as f32, split_far[2] as f32, fade_start as f32],
-            cascade_bias: cascades.map(|c| [c.normal_bias as f32, (-c.depth_bias_m / c.depth_range) as f32, c.texel_world as f32, 0.0]),
+            // w (`--soft-shadows`, while it runs) the cascade's light-space depth range, metres.
+            cascade_bias: cascades.map(|c| [c.normal_bias as f32, (-c.depth_bias_m / c.depth_range) as f32, c.texel_world as f32, if self.options.soft_shadows { c.depth_range as f32 } else { 0.0 }]),
             sun: v4(m.sun.dir(), fld.state.sun_e),
             beta_r: v4(fld.state.beta_r, fld.state.horizon_up),
             beta_m: v4(fld.state.beta_m, fld.state.g),
@@ -2474,8 +3413,13 @@ impl LookGpu {
                 if ao_made.is_some() { 1.0 } else { 0.0 },
                 1.0 / focal_px,
                 std::env::var("EO_LOOK_DEBUG").or_else(|_| std::env::var("EO_AO_DEBUG")).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
-                // the canyon-scale sky visibility (surfaces_ao.wgsl `AO_FAR_*`)
-                if self.sky.options().sky_vis { 1.0 } else { 0.0 },
+                // the occlusion's additions that run: bit 0 (`--sun-bounce`) the gather (it reads
+                // ring 1 of the far sun map, in the occlusion pass), bit 1 (`--ao-albedo`) the albedo's multi-bounce,
+                // bit 2 (`--occluder-light`) the light of what hides the sky, bit 3 (`--sky-vis`) the canyon-scale sky visibility.
+                (if self.ao_sun && self.options.sun_bounce && self.options.ao && self.options.lighting.far_shadows > 0 { 1.0 } else { 0.0 })
+                    + if self.options.ao_albedo { 2.0 } else { 0.0 }
+                    + if self.options.occluder_light { 4.0 } else { 0.0 }
+                    + if self.sky.options().sky_vis { 8.0 } else { 0.0 },
             ],
             field: {
                 // makeGroundField's practicals ramps on the sun's altitude (dry, model exposure 1).
@@ -2545,7 +3489,7 @@ impl LookGpu {
             let (lamps, dome) = terms.map(|t| (t.lamps_on, t.weather.profile.brightness)).unwrap_or((0.0, 1.0));
             let photo = (self.options.photo_finish > 0).then(|| crate::photo::params(self.options.photo_finish, frame_index, out_size, cam, m.sun.altitude_deg, lamps, dome));
             let overcast = terms.map(|t| t.weather.profile.overcast).unwrap_or(0.0);
-            c.write(queue, photo.as_ref(), m.sun.altitude_deg, f.hour, overcast);
+            c.write(queue, photo.as_ref(), m.sun.altitude_deg, f.hour, overcast, crate::sky::camera_on(&self.sky.options())); // (`--cine-camera`)
         }
         let mut planes = [[0f32; 4]; 18];
         for (c, cas) in cascades.iter().enumerate() {
@@ -2925,6 +3869,10 @@ impl LookGpu {
                 label: Some("scene-meter (off)"),
                 timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + crate::Q_SCENE_METER), end_of_pass_write_index: Some(b + crate::Q_SCENE_METER + 1) }),
             });
+        }
+        // (`--cine-camera`) the camera model's meter over the post's source, before the pass reads it.
+        if let (Some(c), true) = (&self.cine, self.options.look.is_cinematic()) {
+            c.encode_camera(enc, self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize);
         }
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
         let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {

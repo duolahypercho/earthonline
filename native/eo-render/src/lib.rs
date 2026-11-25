@@ -17,6 +17,7 @@
 //! `GpuContext::draw_lists` for the precedence.
 
 pub mod agents; // agents
+mod agents_contact; // (`--car-contact`) the cars' occlusion of the street round them
 pub mod alloc;
 pub mod ambient; // the ambient volume (lighting)
 pub mod ambient_bake; // the ambient volume's sky-visibility bake (lighting)
@@ -68,6 +69,7 @@ pub mod rt_scene; // the traced scene every ray-traced pass shares (`--rt-gi`, `
 pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
 pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
 pub mod sky; // sky
+mod sky_reflect; // (`--screen-reflect`) the histories' mip chain (the reflect track)
 pub mod smooth_time; // the drawn hour following the clock (`--smooth-time`)
 pub mod street;
 pub mod structures; // grade-separated roads (`--structures`)
@@ -77,6 +79,7 @@ pub mod upload;
 pub mod view_detail;
 pub mod weathering; // surface weathering that reads (`--grime`, stage W1)
 pub mod street_life; // litter, graffiti, posters (`--street-life`, stage W2b)
+pub mod street_pbr; // the street's physically based surface (`--street-pbr`)
 pub mod seabed;
 pub mod ocean_life;
 pub mod draw_ranges; // the fixed-slot lists drawn in conservative ranges
@@ -2283,7 +2286,7 @@ impl Renderer {
                 (Some(p), true) => [p.x, p.y, p.z, 1.0],
                 _ => [0.0; 4],
             },
-            copy_step: [if self.multiplier > 1 { scene::COPY_STEP_M } else { 0.0 }, (self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) | facade::grime_bits(self.look.options.grime) | facade::street_life_bits(self.look.options.street_life)) as f32, 0.0, self.cc0.run_bits() as f32], // y = switches (+ the weathering and street-life levels, none by default); w = its switches
+            copy_step: [if self.multiplier > 1 { scene::COPY_STEP_M } else { 0.0 }, (self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) | facade::grime_bits(self.look.options.grime) | facade::street_life_bits(self.look.options.street_life) | facade::track_run_bits()) as f32, 0.0, self.cc0.run_bits() as f32], // y = switches (+ the weathering and street-life levels, none by default); w = its switches
         };
         queue.write_buffer(&self.frame_buf, 0, bytemuck::bytes_of(&frame));
         // the probe's face for this frame (compacted lists only).
@@ -2667,6 +2670,8 @@ impl Renderer {
         let keep_depth = keep_depth || wire_overlay;
         // photo mode's depth of field reads it after the sky passes.
         let keep_depth = keep_depth || (self.photo_mode.active() && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1);
+        // (`--car-contact`) the cars' occlusion of the street reads it after the city pass.
+        let keep_depth = keep_depth || self.agents.get().is_some_and(|a| a.contact_reads(depth));
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
         let frame_ranges = self.frame_ranges.lock().unwrap().clone(); // (fixed-slot lists) this frame's ranges
         // with occlusion on the city is two passes, the early
@@ -2939,6 +2944,9 @@ impl Renderer {
             lighting::empty_span(enc, lts, lighting::Q_RT_REFLECT, "rt-reflect (off)");
             lighting::empty_span(enc, lts, lighting::Q_RT_COMPOSITE, "rt-composite (off)");
             lighting::empty_span(enc, lts, lighting::Q_CITY_REST, "city rest (in the city pass)");
+        }
+        if let Some(a) = self.agents.get() {
+            a.encode_contact(enc, &self.look, &hdr, depth); // (`--car-contact`) the street round the cars, before the water and the occlusion pass
         }
         // the FFT (+ the plain patch cull), the frame copy and the water
         // pass, the city's and the agents' glass drawn over it in the same pass.

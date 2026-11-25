@@ -281,6 +281,187 @@ fn fs_water(world: vec3<f32>, v: vec3<f32>, irr: vec3<f32>) -> vec3<f32> {
     return sky * fres + body * (1.0 - fres) + spec;
 }
 
+// sf:HILLS+
+// ---- the hills' vegetation cover (`--hill-cover`; this block is in the shader only with it) ----
+// The Coast Ranges' hills are a mosaic, not a smooth tone: golden annual grass
+// on the ridges and the south faces, dark oak and bay woodland in the folds and on
+// the north faces with sharp edges against the grass, coyote brush and chaparral
+// in clumps and up the gullies, rock on the ridges and the steepest faces. The
+// mosaic's edges come from the drivers the layer had (the cook's wood class, the
+// valleys, the north faces) broken by fractal noise from 300 m down to the pixel
+// (each octave faded where a pixel spans it, so it never shimmers), and the
+// gullies run down the fall line.
+//
+// A wood seen from afar is not a dark paint either: it is crowns over grass, and
+// what the eye gets depends on where the sun and the eye stand (Li and Strahler's
+// geometric-optical model, 1992): a Boolean scatter of spheroid crowns (oaks:
+// radius 4.5 m, centres 7 m up, 4 m half height; scrub: 1.2 m, 1 m, 0.9 m) whose
+// cover sets the gap probability exp(-L sec t') on each path; the eye sees sunlit
+// crown, shaded crown, sunlit grass and shaded grass in the shares the model gives
+// (the grass both lit and seen through the gaps of both paths, with their overlap
+// at the hotspot: the sun at the eye's back hides every shadow). So a wood and a
+// brushy face go dark and textured under a low sun and away from the hotspot, and
+// the open grass between them stays bright.
+struct FsCover {
+    sun: vec3<f32>, // the albedo the direct light sees
+    sky: vec3<f32>, // the albedo the sky light sees
+};
+
+// fractal value noise (0..1) over octaves `s0` m and finer (x0.37 each), each faded to its mean where a pixel (`fp` m) spans it.
+fn fs_fbm(p: vec2<f32>, s0: f32, octaves: i32, fp: f32) -> f32 {
+    var sum = 0.0;
+    var norm = 0.0;
+    var a = 1.0;
+    var sc = s0;
+    for (var i = 0; i < octaves; i = i + 1) {
+        let k = 1.0 - smoothstep(0.6 * sc, 1.8 * sc, fp);
+        let q = p / sc + vec2<f32>(f32(i) * 7.31, f32(i) * 3.17);
+        sum = sum + a * mix(0.5, fs_noise(q), k);
+        norm = norm + a;
+        a = a * 0.6;
+        sc = sc * 0.37;
+    }
+    return sum / norm;
+}
+
+// sec of the equivalent sphere's angle for a spheroid of half height b over radius r (Li-Strahler t').
+fn fs_sec_eq(tan_t: f32, br: f32) -> vec2<f32> {
+    let t = br * tan_t;
+    return vec2<f32>(sqrt(1.0 + t * t), t); // sec t', tan t'
+}
+
+// The geometric-optical shares for one crown layer of leaf-area-like density `lam` (= -ln gap at nadir):
+// x background sunlit and seen, y background seen, z crown seen, w crown seen sunlit.
+fn fs_go(lam: f32, tan_i: f32, tan_v: f32, cos_phi: f32, sin_phi: f32, br: f32, hb: f32) -> vec4<f32> {
+    let i = fs_sec_eq(tan_i, br);
+    let v = fs_sec_eq(tan_v, br);
+    let d2 = max(i.y * i.y + v.y * v.y - 2.0 * i.y * v.y * cos_phi, 0.0);
+    let x = i.y * v.y * sin_phi;
+    let cos_t = clamp(hb * sqrt(d2 + x * x) / (i.x + v.x), -1.0, 1.0);
+    let t = acos(cos_t);
+    let overlap = (t - sin(t) * cos_t) * (i.x + v.x) / FS_PI;
+    let pv = exp(-lam * v.x);
+    let kg = exp(-lam * (i.x + v.x - overlap));
+    // the sunlit share of the crowns the eye sees: a sphere's lit part toward the eye
+    // ((1 + cos of the phase) / 2), less the mutual shade of a closed canopy's lower crowns
+    let ci = 1.0 / i.x;
+    let cv = 1.0 / v.x;
+    let cos_xi = ci * cv + i.y * ci * v.y * cv * cos_phi;
+    let lit = 0.5 * (1.0 + cos_xi) * mix(1.0, 0.55, 1.0 - exp(-lam * i.x));
+    return vec4<f32>(kg, pv, 1.0 - pv, (1.0 - pv) * lit);
+}
+
+fn fs_cover(p: vec2<f32>, n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, fp: f32, wood_in: f32, slope: f32, valley: f32, north: f32, dry: f32, urban: f32, marsh: f32, shore: f32) -> FsCover {
+    // the mosaic
+    let open = (1.0 - urban) * (1.0 - marsh);
+    let edge = clamp(fp / 90.0, 0.06, 0.35);
+    let d = fs_fbm(p, 300.0, 5, fp) - 0.5;
+    let wood = smoothstep(0.5 - edge, 0.5 + edge, wood_in + 0.55 * d) * open;
+    // gullies down the fall line (streaks 90 m long, 14 m across) and brush clumps
+    let fall = n.xz / max(length(n.xz), 1e-4);
+    let q = vec2<f32>(dot(p, fall), dot(p, vec2<f32>(-fall.y, fall.x)));
+    let gully = fs_fbm(q / vec2<f32>(6.5, 1.0), 14.0, 3, fp) * smoothstep(0.12, 0.35, slope);
+    let clumps = fs_fbm(p + vec2<f32>(91.0, 17.0), 60.0, 4, fp);
+    let south = clamp(-north, 0.0, 1.0);
+    var brush = 0.35 * smoothstep(0.25, 0.6, slope) + 0.5 * smoothstep(0.55, 0.68, gully + 0.25 * smoothstep(0.5, 0.7, valley)) + 0.15 * south * smoothstep(0.3, 0.7, slope);
+    brush = smoothstep(0.5 - edge, 0.5 + edge, brush * 0.7 + clumps * 0.55 - 0.12) * (1.0 - wood) * open;
+    // rock on the ridges and the steep faces, and the trails' bare soil
+    let rk = fs_fbm(p + vec2<f32>(13.0, 57.0), 80.0, 4, fp);
+    let rock = smoothstep(0.62, 0.72, rk + 0.35 * smoothstep(0.3, 0.9, slope) + 0.2 * smoothstep(0.42, 0.28, valley)) * (1.0 - wood) * open;
+    // the grass: drier on the south faces and the ridges, greener in the swales
+    let dry_g = clamp(dry + 0.22 * south - 0.18 * smoothstep(0.5, 0.7, valley), 0.0, 1.0);
+    let tone = 0.82 + 0.36 * fs_fbm(p + vec2<f32>(41.0, 5.0), 120.0, 4, fp);
+    var grass = mix(vec3<f32>(0.065, 0.100, 0.034), vec3<f32>(0.230, 0.172, 0.092), dry_g) * tone;
+    grass = mix(grass, vec3<f32>(0.165, 0.152, 0.128), rock * 0.85); // weathered sandstone and greywacke
+    grass = mix(grass, vec3<f32>(0.065, 0.075, 0.048), marsh);
+    let town = vec3<f32>(0.092, 0.094, 0.088) * (0.75 + 0.55 * fs_fbm(p + vec2<f32>(3.0, 77.0), 200.0, 4, fp));
+    let bg = mix(grass, town, urban);
+    // the crowns' colours: oak and bay dark olive (darker on the north faces), brush grey-olive
+    let oak = mix(vec3<f32>(0.040, 0.050, 0.028), vec3<f32>(0.026, 0.036, 0.023), clamp(north, 0.0, 1.0)) * (0.85 + 0.3 * clumps);
+    let scrub = vec3<f32>(0.062, 0.064, 0.042) * (0.9 + 0.2 * clumps);
+    // cover fractions within each patch (a closed wood ~0.85 with gaps where it thins; brush ~0.7)
+    let thin = fs_fbm(p + vec2<f32>(7.0, 29.0), 25.0, 3, fp);
+    let f_oak = clamp(wood * (0.62 + 0.4 * thin), 0.0, 0.95);
+    let f_brush = clamp(brush * (0.5 + 0.35 * thin), 0.0, 0.9);
+    let lam_t = -log(1.0 - f_oak);
+    let lam_s = -log(1.0 - f_brush);
+    // the sun and the eye in the ground's frame
+    let ci = clamp(dot(n, l), 0.02, 1.0);
+    let cv = clamp(dot(n, v), 0.02, 1.0);
+    let tan_i = sqrt(1.0 - ci * ci) / ci;
+    let tan_v = sqrt(1.0 - cv * cv) / cv;
+    let lt = l - n * dot(n, l);
+    let vt = v - n * dot(n, v);
+    let cos_phi = clamp(dot(lt, vt) / max(length(lt) * length(vt), 1e-4), -1.0, 1.0);
+    let sin_phi = sqrt(max(1.0 - cos_phi * cos_phi, 0.0));
+    let go_t = fs_go(lam_t, tan_i, tan_v, cos_phi, sin_phi, 4.0 / 4.5, 7.0 / 4.0);
+    let go_s = fs_go(lam_s, tan_i, tan_v, cos_phi, sin_phi, 0.9 / 1.2, 1.0 / 0.9);
+    // the layers together: the grass seen (and lit) through both; the crowns seen in proportion
+    let kg = go_t.x * go_s.x;
+    let pv = go_t.y * go_s.y;
+    let seen_c = 1.0 - pv;
+    let w_t = go_t.z / max(go_t.z + go_s.z, 1e-4);
+    let crown = mix(scrub, oak, w_t);
+    let lit_c = mix(go_s.w / max(go_s.z, 1e-4), go_t.w / max(go_t.z, 1e-4), w_t);
+    // the sky over the grass among the crowns: what the crowns overhead leave open
+    let gap_up = exp(-(lam_t + lam_s));
+    var c: FsCover;
+    c.sun = seen_c * lit_c * crown + kg * bg;
+    c.sky = seen_c * crown + pv * bg * (0.5 + 0.5 * gap_up);
+    // the shore itself (the last metres above the sea) as the layer drew it
+    let sh = vec3<f32>(0.045, 0.046, 0.042);
+    c.sun = mix(c.sun, sh, shore);
+    c.sky = mix(c.sky, sh, shore);
+    return c;
+}
+
+// sf:end
+// sf:HILL_RELIEF+
+// ---- the hills' relief under the height field's lattice (`--hill-relief`; in the shader only with it) ----
+// The far land's heights are a 40 m lattice (eo-farshore's cook of the 1 arc-second
+// DEM, about 30 m), and its normal is taken over two texels, so a Coast Range
+// hillside shades as a smooth plane: the gullies that run down every face (a
+// drainage density of 5 to 10 km per square km, so a channel every 100 to 200 m,
+// rills between them every few tens of metres) and the spurs between them, which
+// are what a low sun and the haze pick out on a real hill, are gone. They are put
+// back as a height field below the lattice's reach: V-shaped channels down the
+// fall line with rounded spurs between (value noise folded about its median,
+// stretched 5:1 down the slope), three scales 160, 56 and 20 m across, 10, 4
+// and 1.5 m deep (side slopes of about 0.25 to 0.3, 14 to 17 degrees: a
+// ravine's walls run 20 to 35), deeper on the steeper faces and none on the
+// flats, each faded to nothing where a pixel spans it.
+// Its slope (central differences a pixel's footprint apart) bends the lattice's
+// normal, which the light, the mosaic's north faces and the crowns' model take.
+fn fs_relief_h(p: vec2<f32>, fall: vec2<f32>, fp: f32) -> f32 {
+    let q = vec2<f32>(dot(p, fall), dot(p, vec2<f32>(-fall.y, fall.x)));
+    var h = 0.0;
+    var w = 160.0;
+    var a = 10.0;
+    for (var k = 0; k < 3; k = k + 1) {
+        let fade = 1.0 - smoothstep(0.3 * w, 0.9 * w, fp);
+        let nz = fs_noise(vec2<f32>(q.x / (5.0 * w), q.y / w) + vec2<f32>(f32(k) * 5.3 + 11.0, f32(k) * 1.7 + 3.0));
+        h = h + fade * a * (abs(2.0 * nz - 1.0) - 0.5);
+        w = w * 0.35;
+        a = a * 0.4;
+    }
+    return h;
+}
+
+// The lattice's normal `n0` (slope `slope`) bent by the relief at p (`fp` m a pixel).
+fn fs_relief(p: vec2<f32>, n0: vec3<f32>, fp: f32, slope: f32) -> vec3<f32> {
+    let amp = smoothstep(0.04, 0.2, slope) * (0.6 + 0.8 * smoothstep(0.15, 0.6, slope));
+    if (amp <= 0.0 || fp > 150.0) {
+        return n0;
+    }
+    let fall = n0.xz / max(length(n0.xz), 1e-4);
+    let d = max(fp, 3.0);
+    let gx = (fs_relief_h(p + vec2<f32>(d, 0.0), fall, fp) - fs_relief_h(p - vec2<f32>(d, 0.0), fall, fp)) / (2.0 * d);
+    let gz = (fs_relief_h(p + vec2<f32>(0.0, d), fall, fp) - fs_relief_h(p - vec2<f32>(0.0, d), fall, fp)) / (2.0 * d);
+    let ny = max(n0.y, 0.05);
+    return normalize(vec3<f32>(n0.x / ny - amp * gx, 1.0, n0.z / ny - amp * gz));
+}
+
+// sf:end
 @fragment
 fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
     let h = i.hr.x;
@@ -301,8 +482,14 @@ fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
     let e = fu.lod.x * exp2(floor(mip));
     let hx = fs_h(p + vec2<f32>(e, 0.0), mip) - fs_h(p - vec2<f32>(e, 0.0), mip);
     let hz = fs_h(p + vec2<f32>(0.0, e), mip) - fs_h(p - vec2<f32>(0.0, e), mip);
+// sf:HILL_RELIEF-
     let n = normalize(vec3<f32>(-hx / (2.0 * e), 1.0, -hz / (2.0 * e)));
     let slope = length(vec2<f32>(hx, hz)) / (2.0 * e);
+// sf:end
+// sf:HILL_RELIEF+
+    let slope = length(vec2<f32>(hx, hz)) / (2.0 * e);
+    let n = fs_relief(p, normalize(vec3<f32>(-hx / (2.0 * e), 1.0, -hz / (2.0 * e))), fp, slope); // (`--hill-relief`)
+// sf:end
     let c = textureSampleLevel(fs_class, fs_samp, fs_uv(p), max(mip - 1.0, 0.0));
     let urban = c.r;
     let lake = c.g;
@@ -356,7 +543,16 @@ fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
         // the sky light a valley or the foot of a slope does not see (the cook's
         // horizon-based sky visibility)
         let ao = pow(mix(0.15, 1.0, sky_vis), 2.0);
+// sf:HILLS-
         lit = alb * (key + rim + irr * ao) / FS_PI;
+// sf:end
+// sf:HILLS+
+        // (`--hill-cover`) the mosaic and its crowns, lit as the geometric-optical model sees them
+        let shore = smoothstep(fu.frame.z + 4.0, fu.frame.z + 0.5, h) * (1.0 - lake);
+        let wood_in = 1.4 * wood + 0.6 * smoothstep(0.52, 0.72, valley) + 0.45 * smoothstep(0.1, 0.7, north) - 0.3 * smoothstep(0.47, 0.32, valley);
+        let cv = fs_cover(p, n, v, l, fp, wood_in, slope, valley, north, dry, urban, marsh, shore);
+        lit = (cv.sun * key + cv.sky * (rim + irr * ao)) / FS_PI;
+// sf:end
         // The built-up flats by night: an even warm glow standing in for their lights (no lighting data).
         let lamps = skyu.night.x;
         if (lamps > 0.0) {

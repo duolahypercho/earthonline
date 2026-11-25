@@ -332,6 +332,8 @@ impl Oracle {
                         .and_then(|e| e.crossing_arc)
                         .filter(|v| *v > 0.0)
                         .unwrap_or(crate::consts::CROSSING_SETBACK_M),
+                    no_crossing: false,
+                    zebra_only: false,
                 };
                 FootwayBuild {
                     points: pts(&f.points),
@@ -356,7 +358,7 @@ impl Oracle {
         let mut tiles: Vec<TileKey> = n.lanes.iter().map(|l| TileKey::of(l.points[0], l.points[1])).collect();
         tiles.sort();
         tiles.dedup();
-        NetworkBuild { tiles, lanes, footways, foot_nodes, junctions, segments, merge_max_lateral_m }
+        NetworkBuild { tiles, lanes, footways, foot_nodes, junctions, segments, merge_max_lateral_m, footway_activity: vec![] }
     }
 }
 

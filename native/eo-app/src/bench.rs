@@ -2082,11 +2082,33 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     out["stand_ins"] = crate::quality::stand_ins_json(args); // procedural models for absent prop GLBs (`--stand-ins`)
     out["surveyed_furniture"] = crate::quality::surveyed_furniture_json(args); // the furniture walk's mode (`--surveyed-furniture`)
     out["tree_basins"] = crate::quality::tree_basins_json(args); // the street trees' basins (`--tree-basins`)
+    out["street_pbr"] = serde_json::json!(crate::street_pbr()); // the street's physically based surface (`--street-pbr`)
+    out["street_wear"] = serde_json::json!(crate::street_wear()); // the carriageway's distress by its causes (`--street-wear`)
+    out["street_aggregate"] = serde_json::json!(crate::street_aggregate()); // the hot mix's stones near the eye (`--street-aggregate`)
+    out["plaza_setts"] = serde_json::json!(crate::plaza_setts()); // the setts' joints filled, their wear and polished crowns (`--plaza-setts`)
+    out["walk_relief"] = serde_json::json!(crate::walk_relief()); // the kerbs' segments and spalls, the walk's joints in relief (`--walk-relief`)
+    out["street_glare"] = serde_json::json!(crate::street_glare()); // the polished binder's layer toward grazing (`--street-glare`)
+    out["quay_fill"] = serde_json::json!(crate::quay_fill()); // the promenade paved on to the street's walk (`--quay-fill`)
     out["car_detail"] = crate::quality::car_detail_json(args); // far bodies and nearer full-detail cars (`--car-detail`)
     out["photo_finish"] = crate::quality::photo_finish_json(args); // the camera, the air, the lens (`--photo-finish`)
     out["facade_clutter"] = crate::quality::facade_clutter_json(args); // fire escapes, awnings, signs (`--facade-clutter`)
     out["shop_light"] = crate::quality::shop_light_json(args, eo_render::shop_lights::census().as_ref()); // lit shop windows (`--shop-light`)
     out["look_profile"] = crate::quality::look_profile_json(args); // the look profile (`--look cinematic`)
+    out["cine_camera"] = json!({ "on": args.look.sky.cine_camera && args.look.look.is_cinematic() }); // the camera model (`--cine-camera`)
+    {
+        // (camera track, round 2) the model's later features (`--camera-tone`, `--white-balance`, `--lens-halation`,
+        // `--camera-sharpen`, `--lens-flare`, `--camera-resolve`, `--camera-print`)
+        let on = args.look.sky.cine_camera && args.look.look.is_cinematic();
+        let bit = |b: u32| on && args.look.sky.cam_bits & b != 0;
+        use eo_render::cine_post::{CAM_BIT_FLARE, CAM_BIT_HALATION, CAM_BIT_PRINT, CAM_BIT_RESOLVE, CAM_BIT_SHARPEN, CAM_BIT_TONE, CAM_BIT_WB};
+        out["cine_camera"]["camera_tone"] = json!(bit(CAM_BIT_TONE));
+        out["cine_camera"]["white_balance"] = json!(bit(CAM_BIT_WB));
+        out["cine_camera"]["lens_halation"] = json!(bit(CAM_BIT_HALATION));
+        out["cine_camera"]["camera_sharpen"] = json!(bit(CAM_BIT_SHARPEN));
+        out["cine_camera"]["lens_flare"] = json!(bit(CAM_BIT_FLARE));
+        out["cine_camera"]["camera_resolve"] = json!(bit(CAM_BIT_RESOLVE));
+        out["cine_camera"]["camera_print"] = json!(bit(CAM_BIT_PRINT));
+    }
     if renderer.far_shadow.attached() {
         // the far sun shadow maps (`--far-shadows`): rings, bytes, what they drew over the run.
         let s = renderer.far_shadow.stats();
@@ -2375,6 +2397,14 @@ fn clear_path_frame(seg: &Segment, i: usize, total: usize) -> (usize, Option<Str
     }
 }
 
+/// The period every capture's frames start on a multiple of (`capture`): a
+/// multiple of every frame-seeded period (the jitter's 8, the grain's 64, the
+/// lit fog's 1024, the photo seed's 4096, the clouds' 4 x 4096). The counter
+/// only moves forward to it: a fixed restart value made a capture's last frame
+/// stamp equal the card before's, and the lit fog's composite took that card's
+/// volume when its own passes were skipped (no lamp lit).
+const CAPTURE_PHASE_PERIOD: u32 = 1 << 14;
+
 pub(crate) fn capture(
     ctx: &GpuContext,
     renderer: &Renderer,
@@ -2407,6 +2437,12 @@ pub(crate) fn capture(
         }
         draw(ctx, renderer, attach, resolve, depth, cam);
     }
+    // The frames below start at one fixed frame phase (TAA jitter, the
+    // frame-seeded jitter of the reflections, lit fog and volume, the grain):
+    // the settle before them renders as many frames as its wall-clock bound
+    // allowed, and a phase carried from it made two runs of one card differ
+    // by a sub-pixel shift and their noise (the night cards' run-to-run floor).
+    renderer.look.align_frame_phase(CAPTURE_PHASE_PERIOD);
     for _ in 0..20 {
         draw(ctx, renderer, attach, resolve, depth, cam);
     }

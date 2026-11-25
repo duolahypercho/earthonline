@@ -100,6 +100,14 @@ pub struct LaneBuild {
 pub struct FootEndBuild {
     pub kerb_trim: f64,
     pub crossing_arc: f64,
+    /// (`--crowd`, `NativeSource::with_crossings`) no crosswalk is mapped at
+    /// this end's crossing band: the street is crossed here only on a signal.
+    /// False (crossed as the JS crosses) unless the crosswalks are known.
+    pub no_crossing: bool,
+    /// (`--people-crosswalks`, `NativeSource::with_zebras`) the band is the
+    /// drawn zebra's, and `no_crossing` (no zebra drawn across this end)
+    /// holds at a signal too. False as before.
+    pub zebra_only: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -146,6 +154,9 @@ pub struct NetworkBuild {
     /// Widest sideways step a through lane's one continuation may take as a merge
     /// (`THROUGH_MERGE_MAX_LATERAL_M` = caMetric('travel-lane-clearance-at-bulbout-auto-sf')).
     pub merge_max_lateral_m: f64,
+    /// What fronts each of `footways` (`--crowd`; `NativeSource::with_frontage`):
+    /// empty (every footway's activity zero, the network as before) without a survey.
+    pub footway_activity: Vec<crate::consts::FootActivity>,
 }
 
 // ---------------------------------------------------------------- runtime
@@ -210,6 +221,10 @@ pub struct FootEnd {
     pub node: u32,
     pub kerb_trim: f64,
     pub crossing_arc: f64,
+    /// `FootEndBuild::no_crossing`.
+    pub no_crossing: bool,
+    /// `FootEndBuild::zebra_only`.
+    pub zebra_only: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -226,6 +241,8 @@ pub struct Footway {
     pub cross: FootwayId,
     pub ends: [FootEnd; 2],
     pub routable: bool,
+    /// What fronts it (`--crowd`; zero without a frontage survey).
+    pub activity: crate::consts::FootActivity,
 }
 
 #[derive(Clone, Debug)]
@@ -460,15 +477,15 @@ impl Network {
             }
         }
         let mut foot_ids: Vec<FootwayId> = Vec::with_capacity(build.footways.len());
-        for fb in build.footways.iter() {
+        for (k, fb) in build.footways.iter().enumerate() {
             let cum = geom::cumulative(&fb.points);
             let length = *cum.last().unwrap_or(&0.0);
             let mid = fb.points[fb.points.len() / 2];
             let tile = fb.tile.unwrap_or_else(|| TileKey::of(mid[0], mid[1]));
             let segment = self.intern(&fb.segment);
             let mut ends = [
-                FootEnd { node: NONE, kerb_trim: fb.ends[0].kerb_trim, crossing_arc: fb.ends[0].crossing_arc },
-                FootEnd { node: NONE, kerb_trim: fb.ends[1].kerb_trim, crossing_arc: fb.ends[1].crossing_arc },
+                FootEnd { node: NONE, kerb_trim: fb.ends[0].kerb_trim, crossing_arc: fb.ends[0].crossing_arc, no_crossing: fb.ends[0].no_crossing, zebra_only: fb.ends[0].zebra_only },
+                FootEnd { node: NONE, kerb_trim: fb.ends[1].kerb_trim, crossing_arc: fb.ends[1].crossing_arc, no_crossing: fb.ends[1].no_crossing, zebra_only: fb.ends[1].zebra_only },
             ];
             if let Some(keys) = &fb.node_keys {
                 for (e, end) in ends.iter_mut().enumerate() {
@@ -490,6 +507,7 @@ impl Network {
                 cross: NONE,
                 ends,
                 routable: fb.node_keys.is_some(),
+                activity: build.footway_activity.get(k).copied().unwrap_or_default(),
             };
             let id = if let Some(free) = self.free_footways.pop() {
                 self.footways[free as usize] = fw;

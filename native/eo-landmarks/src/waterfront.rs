@@ -78,6 +78,24 @@ pub const PIER_MAX_SHORE_M: f64 = 400.0;
 pub const PIER_DILATE_M: f64 = 6.0;
 /// The paved strip at the wall's crest (the quay apron) and a pier's deck strip, landward of the waterline. Metres.
 pub const CAP_W_M: f64 = 8.0;
+/// The coping's landward width: where the apron starts behind the wall's face. Metres.
+pub const COPING_LAND_M: f64 = 0.42;
+/// (`--quay-fill`, `LandmarkSet::add_quay_fill`) how far past the apron the
+/// fill looks for the street's walk, the spacing of its stations along a wall
+/// edge, and how much lower than the paving either side the ground between
+/// must stand to be filled (the sunken strip; ground at the paving's level, or
+/// over it, is left as it is). Metres. INFERRED (the Embarcadero promenade
+/// runs from the seawall to the roadway's walk, Herb Caen Way, with no strip
+/// of open ground between).
+pub const FILL_REACH_M: f64 = 24.0;
+pub const FILL_STATION_M: f64 = 2.0;
+pub const FILL_SUNKEN_M: f64 = 0.15;
+/// The highest step between the apron and the walk the fill closes with a
+/// terrace and a step face (a seat wall's height and a little); a greater
+/// difference is left as it is. Metres. INFERRED.
+pub const FILL_STEP_MAX_M: f64 = 1.0;
+/// The apron kept clear at the coping where a fill's ramp starts out on it. Metres. INFERRED.
+pub const FILL_EDGE_CLEAR_M: f64 = 1.5;
 /// The press behind a wall: at most `sea + QUAY_PRESS_FOOT_M + QUAY_PRESS_SLOPE x d`, d metres inland
 /// of the waterline (the slope keeps the terrain's 8 m cells under the sea at the wall's foot).
 pub const QUAY_PRESS_FOOT_M: f64 = -0.6;
@@ -775,6 +793,12 @@ pub struct ShorePress {
 }
 
 impl ShorePress {
+    /// The walled and pier edges the press stands behind.
+    pub fn edges(&self) -> &[ShoreEdge] {
+        &self.edges
+    }
+
+
     pub fn new(sea: f64, edges: &[ShoreEdge], piers: &[Pier]) -> Self {
         let cell = 32.0;
         let reach = CAP_W_M + 2.0;

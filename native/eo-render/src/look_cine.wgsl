@@ -10,14 +10,7 @@
 @group(0) @binding(6) var cine_lut: texture_3d<f32>;
 @group(0) @binding(7) var cine_samp: sampler;
 @group(0) @binding(8) var<uniform> cine: Cine;
-
-struct Cine {
-    // x the bloom's share of the bright part (eo-look `CINE_BLOOM_SHARE`); y 1 where photo
-    // mode added the bloom before this pass (compiled out without it: SF_PHOTO_MODE); zw unused
-    bloom: vec4<f32>,
-    // x the display vignette, y the table's scale, z its offset (a texel centre); w unused
-    grade: vec4<f32>,
-};
+// (`Cine` is cine_post.rs `CINE_STRUCT_WGSL`.)
 
 /// The tone curve (eo-look `grade::curve`): scene value -> display linear.
 fn cn_curve(x: f32) -> f32 {
@@ -63,6 +56,10 @@ fn cn_bright(c: vec3<f32>) -> vec3<f32> {
 @fragment
 fn cine_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let dims = vec2<f32>(textureDimensions(hdr));
+    // (`--cine-camera`) the camera model (look_cine_camera.wgsl; compiled out without it).
+    if (SF_CAMERA && cine.cam0.w > 0.5) {
+        return cine_camera(pos.xy, dims);
+    }
     let lens = photo.lens.x >= 1.0;
     var c: vec3<f32>;
     if (lens) {
