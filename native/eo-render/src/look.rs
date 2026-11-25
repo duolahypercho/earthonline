@@ -1244,10 +1244,10 @@ impl ShaderFeatures {
         car_materials: true, car_reflections: true, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, wire_light: true, // the night track
         nature: 0, // the nature track
-        volumetric_clouds: false, weather_fx: false,
+        volumetric_clouds: true, weather_fx: false,
     };
     /// No opt-in feature compiled in (the default frame's pipelines: the
-    /// features on by default, `phys_sky`, `ap_lut` and `far_facade`, stay in).
+    /// features on by default, `phys_sky`, `ap_lut`, `far_facade` and `volumetric_clouds`, stay in).
     pub const NONE: Self = Self {
         lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false,
         rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, far_facade: true, seabed: false, cove_sediment: false,
@@ -1259,7 +1259,7 @@ impl ShaderFeatures {
         car_materials: false, car_reflections: false, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, wire_light: false, // the night track
         nature: 0, // the nature track
-        volumetric_clouds: false, weather_fx: false,
+        volumetric_clouds: true, weather_fx: false,
     };
 
     /// The features the look's options ask for, with the world's (`structures`,

@@ -1222,7 +1222,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
             let span = s_end - s_start;
             if (span > 450.0) {
-                let sn = 8;
+                let sn = 6;
                 let map_span = SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL;
                 let sun_el_w = smoothstep(0.025, 0.070, sh_l.y);
                 var air_tot = 0.0;
@@ -1269,9 +1269,9 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     let shaft_contrast = 0.28 + 0.72 * smoothstep(0.02, 0.28, shadow_frac);
                     let humid_boost = 1.0 + 0.65 * smoothstep(0.5, 4.0, skyu.wet.z);
                     let aer_s = max(skyu.atmo3.y, 0.000055) * mix(0.72, 1.12, smoothstep(0.35, 0.08, sh_l.y)) * humid_boost;
-                    // Chappuis rose-amber warmth keeps golden-hour sunbeams pure peach-gold (zero olive-green).
+                    // Pure golden-amber warmth keeps low-sun sunbeams luminous gold (zero olive, zero pink).
                     let low_sh = smoothstep(0.26, 0.04, sh_l.y);
-                    let e_shaft = cl_sun(max(eye.y + 150.0, 20.0)) * heavy * mix(vec3<f32>(1.0), vec3<f32>(1.14, 0.86, 0.82), low_sh);
+                    let e_shaft = cl_sun(max(eye.y + 150.0, 20.0)) * heavy * mix(vec3<f32>(1.0), vec3<f32>(1.12, 0.96, 0.68), low_sh);
                     let shaft_rad = e_shaft * (ph_s * el_w * shaft_contrast * broken_w * aer_s * lit_acc);
                     L = L + T * min(shaft_rad, e_shaft * 0.095);
                 }
@@ -1303,20 +1303,20 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let day_hi = smoothstep(0.22, 0.58, cl_l.y) * (1.0 - strat * 0.82);
             let sun_cloud_bounce = cl_sun(0.5 * (base + top)) * ((mix(0.011, 0.022, day_hi) * max(cl_l.y, 0.0) + 0.008 * low_sun) * vc_beam * (1.0 - strat * 0.85) * mix(0.62, 1.15, back_w));
             let sun_ground_bounce = cl_sun(base) * ((mix(0.014, 0.032, day_hi) * max(cl_l.y, 0.0) + 0.007 * low_sun) * vc_beam * (1.0 - strat * 0.82));
-            // Selective molten coral-gold sunset ridge under-bounce (drives high-contrast fiery rims
-            // on exposed protruding ridges while deep recessed shadow bellies stay dark indigo-violet).
-            let sun_under = cl_sun(base) * (0.056 * low_sun * vc_beam * (1.0 - strat * 0.85) * (0.28 + 0.72 * max(cl_cs, 0.0)) * vec3<f32>(1.34, 0.78, 0.52));
-            // Warm lateral cloud-to-cloud bounce from adjacent sunlit towers onto exposed shaded cheeks.
-            let c2c_bounce = cl_sun(0.5 * (base + top)) * ((mix(0.020, 0.034, day_hi) * max(cl_l.y, 0.12) + 0.018 * low_sun) * vc_beam * (1.0 - strat * 0.85)) * mix(vec3<f32>(1.02, 0.99, 0.95), vec3<f32>(1.26, 0.82, 0.66), low_sun);
+            // Selective molten amber-gold sunset ridge under-bounce (drives high-contrast fiery rims
+            // on exposed protruding ridges while deep recessed shadow bellies stay dark steel-indigo).
+            let sun_under = cl_sun(base) * (0.092 * low_sun * vc_beam * (1.0 - strat * 0.85) * (0.24 + 0.76 * max(cl_cs, 0.0)) * vec3<f32>(1.30, 0.94, 0.36));
+            // Warm honey-gold lateral cloud-to-cloud bounce from adjacent sunlit towers onto exposed shaded cheeks.
+            let c2c_bounce = cl_sun(0.5 * (base + top)) * ((mix(0.020, 0.034, day_hi) * max(cl_l.y, 0.12) + 0.018 * low_sun) * vc_beam * (1.0 - strat * 0.85)) * mix(vec3<f32>(1.02, 0.99, 0.95), vec3<f32>(1.18, 0.96, 0.56), low_sun);
 
             let desat_w = mix(0.18, 0.04, low_sun) * day_or_gold;
             let top_gain = mix(mix(1.0, 0.92, night_w), mix(mix(1.02, 1.18, day_hi), 1.08, back_w), day_or_gold);
             let side_gain = mix(mix(1.0, 0.88, night_w), mix(mix(0.94, 1.14, day_hi), 0.96, back_w), day_or_gold);
             let bot_gain = mix(mix(1.0, 0.82, night_w), mix(mix(0.96, 1.24, day_hi), 0.82, back_w), day_or_gold);
 
-            // Deep twilight indigo-violet shadow ambient at golden hour creates authentic "fire vs. indigo"
-            // contrast against blazing sunlit gold/crimson rims (eliminates flat mid-tone peach-brown).
-            let sunset_cool = mix(vec3<f32>(1.0), vec3<f32>(0.84, 0.76, 1.24), low_sun * (1.0 - strat * 0.8));
+            // Clean twilight steel-indigo shadow ambient at golden hour (`R < G < B`, zero magenta cast)
+            // creates authentic "fire vs. indigo" contrast against blazing molten amber-gold rims.
+            let sunset_cool = mix(vec3<f32>(1.0), vec3<f32>(0.76, 0.85, 1.16), low_sun * (1.0 - strat * 0.8));
             let night_cool = mix(vec3<f32>(1.0), vec3<f32>(0.80, 0.88, 1.16), night_w * (1.0 - strat * 0.5));
             // At night, clouds scatter BOTH the zenith sky and the diffuse ambient metropolitan sky-dome
             // bounce (`SKY_GLOW_RGB` cooled to velvety midnight indigo-slate), preventing near-black ink
@@ -1332,47 +1332,47 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let sig_max = skyu.cloud1.x * skyu.cloud0.w * VC_DENSITY * mix(1.0, 0.64, night_w * (1.0 - strat * 0.7));
             // Step budget scales cleanly with `--sky-quality` (amb_base.w: 12 low / 18 default / 28 high).
             let q_steps = i32(skyu.amb_base.w);
-            let base_budget = select(select(46, 64, q_steps >= 16), 100, q_steps >= 24);
-            let max_steps_cu = select(select(base_budget, (base_budget * 3) / 4, t0 > 15000.0), base_budget / 2, t0 > 34000.0);
-            // Continuous marine fog & overcast stratus decks saturate optically in ~20 steps.
-            let max_steps = select(max_steps_cu, min(max_steps_cu, 30), strat > 0.45);
-            let is_day_lit = any(cl_sun(top) * vc_beam > vec3<f32>(0.001));
+            let base_budget = select(select(40, 54, q_steps >= 16), 92, q_steps >= 24);
+            let max_steps_cu = select(select(base_budget, (base_budget * 3) / 4, t0 > 14000.0), base_budget / 2, t0 > 30000.0);
+            // Continuous marine fog / overcast stratus decks saturate in ~26 steps; night clouds in ~38.
+            let max_steps = select(select(max_steps_cu, min(max_steps_cu, 38), night_w > 0.5), min(max_steps_cu, 26), strat > 0.45);
+            let is_day_lit = night_w < 0.5 && any(cl_sun(top) * vc_beam > vec3<f32>(0.001));
             let moon_key_w = clamp(skyu.sun_rad.w, 0.0, 1.0) * night_w;
             let twi_spike_soft = 1.0 - 0.58 * smoothstep(0.02, -0.05, skyu.atmo.y);
             var Tc = 1.0;
             var Lc = vec3<f32>(0.0);
             var tw = 0.0;
             var twt = 0.0;
-            let dt0 = clamp(18.0 + 0.0056 * t0 + 0.0125 * max(t0 - 13000.0, 0.0), 18.0, 980.0);
+            let dt0 = clamp(22.0 + 0.0068 * t0 + 0.0155 * max(t0 - 12000.0, 0.0), 22.0, 1150.0);
             var t = t0 + jit * dt0;
             var t_done = t;
             var fine = 0;
             var prev_skip = 0.0;
             var sun_held = vec3<f32>(-1.0);
             var ao_held = vec2<f32>(1.0, 0.55);
+            var hit_n = 0;
             for (var i = 0; i < max_steps; i = i + 1) {
                 if (t >= t1) {
                     break;
                 }
-                let dt_base = clamp(18.0 + 0.0056 * t + 0.0125 * max(t - 13000.0, 0.0), 18.0, 980.0);
-                // Crisp outer-skin step refinement (`Tc > 0.45`) keeps close swirling vapor rims razor-sharp.
-                let dt_skin = select(0.62, 0.52, Tc > 0.54 && t < 16000.0);
-                let dt = select(dt_base, dt_base * dt_skin, fine > 0 && Tc > 0.42 && t < 24000.0 && strat < 0.45);
+                let dt_base = clamp(22.0 + 0.0068 * t + 0.0155 * max(t - 12000.0, 0.0), 22.0, 1150.0);
+                // Crisp outer-skin step refinement on close daytime/golden-hour silhouettes (skipped at night).
+                let dt = select(dt_base, dt_base * 0.72, fine > 0 && Tc > 0.54 && t < 14000.0 && strat < 0.45 && night_w < 0.45);
                 let pp = eye + dir * t;
                 let ht = t * hl;
                 let pc = vec3<f32>(pp.x, pp.y + ht * ht / (2.0 * CL_EARTH_R), pp.z);
                 let fp = vol_footprint(t);
                 let lod = clamp(log2(max(fp, 1.0) / 20.0), 0.0, 3.0);
-                let fine_n = select(5, 3, t > 18000.0 || strat > 0.45);
+                let fine_n = select(4, 3, t > 15000.0 || strat > 0.45 || night_w > 0.5);
                 if (fine == 0) {
                     // Two-tier conservative empty-space skip; backsteps strictly within the just-skipped
                     // gap (never behind `t_done`, preventing double-integration or ping-pong terraces).
                     if (vc_envelope(pc, fp, 0.14) <= 0.001) {
-                        prev_skip = 3.6 * dt_base;
+                        prev_skip = 3.8 * dt_base;
                         t = t + prev_skip;
                         continue;
                     }
-                    let cm = select(2.2, 2.8, t > 22000.0);
+                    let cm = select(2.4, 3.0, t > 20000.0);
                     if (vc_shape(pc, fp, lod).x > 0.001) {
                         if (prev_skip > 0.0) {
                             fine = fine_n + 3;
@@ -1388,39 +1388,50 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     }
                 }
                 prev_skip = 0.0;
-                let want_f = Tc > 0.22 && strat < 0.45 && (is_day_lit || t < 14000.0);
-                let allow_m = (is_day_lit || low_sun > 0.05) && night_w < 0.45 && strat < 0.45 && Tc > 0.34;
+                let want_f = Tc > 0.25 && strat < 0.45 && (is_day_lit || t < 11000.0);
+                let allow_m = (is_day_lit || low_sun > 0.05) && night_w < 0.45 && strat < 0.45 && Tc > 0.42;
                 let s = vc_density(pc, t, fp, lod, want_f, allow_m);
                 if (s.x > 0.0012) {
                     fine = fine_n;
                     let sig = sig_max * s.x;
-                    // Altitude-stepped golden-hour sunset solar gradient (deep crimson-tangerine on lower
-                    // bellies climbing to blazing golden-champagne crowns) + gentle lunar silver-blue at night.
-                    let alt_grad = mix(vec3<f32>(1.20, 0.80, 0.62), vec3<f32>(1.14, 1.04, 0.86), smoothstep(0.12, 0.78, s.y));
+                    // Altitude-stepped golden-hour sunset solar gradient (fiery burnished tangerine-amber on
+                    // lower bellies climbing to luminous champagne-gold crowns) + lunar silver-blue at night.
+                    let alt_grad = mix(vec3<f32>(1.26, 0.90, 0.38), vec3<f32>(1.12, 1.05, 0.80), smoothstep(0.12, 0.78, s.y));
                     let sun_alt_tint = mix(vec3<f32>(1.0), alt_grad, low_sun * (1.0 - strat * 0.85));
                     let moon_tint = mix(vec3<f32>(1.0), vec3<f32>(1.95, 2.15, 2.65), moon_key_w);
                     let e_sun = cl_sun(pc.y) * vc_beam * sun_alt_tint * moon_tint;
                     var sun = vec3<f32>(0.0);
                     var sun_slope = 0.24;
                     var ao_res = ao_held;
-                    if (Tc < 0.16 && sun_held.x >= 0.0) {
-                        sun = sun_held;
-                    } else {
-                        if (night_w < 0.65) {
-                            ao_res = vc_sky_ao(pc, cl_l, s.y, t, fp, lod, sig_max, strat);
-                            ao_held = ao_res;
-                        }
-                        if (any(e_sun > vec3<f32>(0.0))) {
-                            var tl = vec3<f32>(340.0 * s.x * sig_max / max(cl_l.y, 0.14), 80.0 * s.x * sig_max, 0.24);
-                            if (t <= 122000.0 && (strat < 0.45 || t < 24000.0)) {
-                                tl = vc_light_tau(pc, cl_l, t, fp, lod, s.x, jit);
-                            }
-                            sun_slope = tl.z;
-                            let spike_w = twi_spike_soft * (1.0 - 0.65 * smoothstep(32000.0, 74000.0, t));
-                            let sub_top = ao_res.y * mix(1.0, 1.32 - 0.52 * s.z, day_hi);
-                            sun = e_sun * vc_ms(tl.x, tl.y, tl.z, s.w, sub_top, spike_w, cl_cs, low_sun, strat) * VC_SUN_GAIN;
-                        }
+                    if (night_w < 0.65 && Tc > 0.32 && (hit_n == 0 || (hit_n & 1) == 0)) {
+                        ao_res = vc_sky_ao(pc, cl_l, s.y, t, fp, lod, sig_max, strat);
+                        ao_held = ao_res;
                     }
+                    let reuse_sun = (Tc < 0.26 || (Tc < 0.55 && (hit_n & 1) == 1)) && sun_held.x >= 0.0;
+                    if (reuse_sun) {
+                        sun = sun_held;
+                    } else if (any(e_sun > vec3<f32>(0.0))) {
+                        var tl = vec3<f32>(340.0 * s.x * sig_max / max(cl_l.y, 0.14), 80.0 * s.x * sig_max, 0.24);
+                        if (night_w >= 0.55) {
+                            // Fast 2-tap lunar light march at night (saves ~2 ms on nocturnal waterfront).
+                            var tau_m = 110.0 * s.x;
+                            let qm = pc + cl_l * 340.0;
+                            if (qm.y < top && vc_envelope(qm, fp + 60.0, 0.12) > 0.001) {
+                                let sm = vc_shape(qm, fp + 60.0, min(lod + 0.7, 2.4));
+                                if (sm.x > 0.002) {
+                                    tau_m = tau_m + 460.0 * vc_vapor_curve(sm.x, sm.z, sm.y, smoothstep(0.08, 0.34, sm.y), sm.w, strat, t);
+                                }
+                            }
+                            tl = vec3<f32>(tau_m * sig_max, 80.0 * s.x * sig_max, 0.24);
+                        } else if (t <= 122000.0 && (strat < 0.45 || t < 24000.0)) {
+                            tl = vc_light_tau(pc, cl_l, t, fp, lod, s.x, jit);
+                        }
+                        sun_slope = tl.z;
+                        let spike_w = twi_spike_soft * (1.0 - 0.65 * smoothstep(32000.0, 74000.0, t));
+                        let sub_top = ao_res.y * mix(1.0, 1.32 - 0.52 * s.z, day_hi);
+                        sun = e_sun * vc_ms(tl.x, tl.y, tl.z, s.w, sub_top, spike_w, cl_cs, low_sun, strat) * VC_SUN_GAIN;
+                    }
+                    hit_n = hit_n + 1;
                     sun_held = sun;
                     // Restrain warm twilight `vol_extra_amb` inside deep golden-hour shadow cores so they stay
                     // rich indigo-violet while exposed edges & blue-hour clouds keep smooth rose-lavender glow.
@@ -1431,9 +1442,10 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                         let city_night = vec3<f32>(0.046, 0.035, 0.029) * city_w;
                         extra_a = mix(extra_a, city_night, night_w);
                     }
-                    // Smooth, broad rose-indigo twilight afterglow at blue hour (zero sharp crest rim).
+                    // Smooth twilight afterglow: warm peach-gold at golden hour, cool lavender-rose at blue hour.
                     let twi_dir = 0.32 + 0.68 * max(cl_cs, 0.0);
-                    let alpen = skyu.twi.xyz * vec3<f32>(1.12, 0.84, 0.96) * smoothstep(0.0, 0.65, s.y) * twi_dir * (0.42 + 0.58 * ao_res.x) * 0.24;
+                    let alpen_tint = mix(vec3<f32>(1.06, 0.94, 0.88), vec3<f32>(1.12, 0.96, 0.72), low_sun);
+                    let alpen = skyu.twi.xyz * alpen_tint * smoothstep(0.0, 0.65, s.y) * twi_dir * (0.42 + 0.58 * ao_res.x) * 0.22;
                     let amb = vc_ambient(vc_top + alpen, vc_side + alpen * 0.72, vc_bot + extra_a, sun_under, c2c_bounce, s.y, s.z, s.x, s.w, sun_slope, ao_res.x, low_sun, night_w, strat);
                     let ext = exp(-sig * dt);
                     let wgt = Tc * (1.0 - ext);
@@ -1441,7 +1453,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     tw = tw + wgt * t;
                     twt = twt + wgt;
                     Tc = Tc * ext;
-                    if (Tc < select(0.025, 0.055, t > 14000.0)) {
+                    if (Tc < select(0.035, 0.065, t > 12000.0)) {
                         Tc = 0.0;
                         break;
                     }
@@ -1466,11 +1478,11 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     let lod_b = clamp(log2(max(fp_b, 1.0) / 28.0), 0.8, 3.0);
                     let storm_w = smoothstep(6.0, 20.0, skyu.wet.z);
                     let rain_w = smoothstep(2.0, 8.0, skyu.wet.z);
-                    let nb = textureSampleLevel(cl_base, vol_rep, vec3<f32>(wb.x, base * 0.6, wb.y) / (VC_BASE_TILE * 1.35), lod_b);
+                    let nb = textureSampleLevel(cl_base, vol_rep, vec3<f32>(wb.x, base * 0.6, wb.y) / 3456.0, lod_b);
                     let wdir_b = normalize(skyu.wind.xy + vec2<f32>(1.0, 0.35) * 0.25);
                     let wperp_b = vec2<f32>(-wdir_b.y, wdir_b.x);
                     let roll_q = vec2<f32>(dot(wb, wdir_b) * 3.1, dot(wb, wperp_b) * 0.85);
-                    let nr = textureSampleLevel(cl_base, vol_rep, vec3<f32>(roll_q.x, base * 0.55, roll_q.y) / (VC_BASE_TILE * 1.45), max(lod_b, 1.0));
+                    let nr = textureSampleLevel(cl_base, vol_rep, vec3<f32>(roll_q.x, base * 0.55, roll_q.y) / 3712.0, max(lod_b, 1.0));
                     let roll_b = smoothstep(0.20, 0.80, 0.58 * nr.g + 0.42 * nr.b);
                     let nd = textureSampleLevel(vc_detail, vol_rep, vec3<f32>(wb.x, base * 0.78, wb.y) / 1120.0, clamp(log2(max(fp_b, 1.0) / 18.0), 0.6, 3.0));
                     let mammatus = smoothstep(0.20, 0.82, 0.55 * (1.0 - nd.r) + 0.45 * (1.0 - nd.b));
@@ -1785,7 +1797,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                         let qa_mid = pa_mid.xz + skyu.cloud2.xy * 0.5 + vec2<f32>(9600.0, -5400.0);
                         let fp_a = vol_footprint(ta_mid) * 0.5;
                         // Localized synoptic patch archipelago (leaves >=72% open blue sky, zero wall-to-wall veil).
-                        let am_uv = vec2<f32>(qa_mid.y, -qa_mid.x) / VC_WEATHER_TILE + vec2<f32>(0.29, 0.63);
+                        let am_uv = vec2<f32>(qa_mid.y, -qa_mid.x) / VC_HIGH_TILE + vec2<f32>(0.29, 0.63);
                         let am = textureSampleLevel(vc_weather, vol_rep, am_uv, clamp(log2(max(fp_a, 1.0) / 50.0), 0.0, 4.0));
                         let env_a = smoothstep(0.55, 0.85, 0.56 * am.r + 0.44 * am.g) * smoothstep(0.28, 0.70, am.b);
                         let elev_a = smoothstep(0.06, 0.24, dir.y);
@@ -1794,12 +1806,12 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                             let lod_ad = clamp(log2(max(fp_a, 1.0) / 42.0), 0.0, 3.0);
                             let e_sa = cl_sun(6750.0) * heavy;
                             let fwd_a = cl_hg(cl_cs, 0.66);
-                            let ph_a = 0.56 * (fwd_a / (1.0 + 0.46 * fwd_a)) + 0.44 * cl_hg(cl_cs, -0.22);
+                            let ph_a = 0.56 * (fwd_a / (1.0 + 0.68 * fwd_a)) + 0.44 * cl_hg(cl_cs, -0.22);
                             let top_la = dot(a_top, vec3<f32>(0.2126, 0.7152, 0.0722));
                             let side_la = dot(a_side, vec3<f32>(0.2126, 0.7152, 0.0722));
                             let alto_shd = mix(a_top, vec3<f32>(top_la) * vec3<f32>(0.93, 0.97, 1.05), 0.42 * day_d);
                             let alto_lit_a = mix(a_side, vec3<f32>(side_la) * vec3<f32>(0.99, 0.99, 1.02), 0.45 * day_d);
-                            let shadow_tint = mix(vec3<f32>(0.88, 0.93, 1.04), vec3<f32>(0.96, 0.84, 1.02), low_sun_d);
+                            let shadow_tint = mix(vec3<f32>(0.88, 0.93, 1.04), vec3<f32>(0.84, 0.90, 1.12), low_sun_d);
                             let l_xz = normalize(vec2<f32>(cl_l.x, cl_l.z) + vec2<f32>(1e-5, 0.0));
                             let step_a = mix(380.0, 240.0, smoothstep(0.05, 0.65, max(cl_l.y, 0.0)));
                             let dq_a = (l_xz * step_a) / 3200.0;
@@ -1820,8 +1832,10 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                                     -0.375 * qn.x + 0.875 * qn.y + flow_a.y,
                                 );
                                 let ad0 = textureSampleLevel(vc_detail, vol_rep, auv0, lod_ad);
-                                let band0 = 0.42 * ad0.b + 0.32 * ad0.r + 0.26 * ad0.a;
-                                let alto_d0 = env_a * v_prof * smoothstep(0.41, 0.80, band0);
+                                // Subtle altocumulus undulatus gravity-wave ripples (zero extra texture fetches).
+                                let wave_rip = 0.78 + 0.22 * sin(dot(qa_s, vec2<f32>(0.62, 0.78)) * 0.0022 + am.b * 5.0);
+                                let band0 = (0.42 * ad0.b + 0.32 * ad0.r + 0.26 * ad0.a) * wave_rip;
+                                let alto_d0 = env_a * v_prof * smoothstep(0.39, 0.78, band0);
                                 if (alto_d0 > 0.005) {
                                     // True 3D directional sun tap (offset horizontally AND vertically toward `cl_l`).
                                     let auv1 = vec3<f32>(
@@ -1834,7 +1848,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                                     let tau_a = (0.32 * alto_d0 + 1.72 * alto_d1) * mix(1.45, 2.25, low_sun_d);
                                     let crest = clamp((alto_d0 - alto_d1) * 2.15 + 0.35 + 0.30 * ha_frac, 0.0, 1.0);
                                     let ms_a = exp(-tau_a) * ph_a + (0.34 * exp(-0.42 * tau_a) + 0.14 * exp(-0.14 * tau_a)) / 12.566371;
-                                    let sunset_under = mix(vec3<f32>(1.0), vec3<f32>(1.20, 0.87, 0.82), low_sun_d * (0.40 + 0.60 * crest));
+                                    let sunset_under = mix(vec3<f32>(1.0), vec3<f32>(1.16, 0.96, 0.62), low_sun_d * (0.40 + 0.60 * crest));
                                     let amb_a = mix(alto_shd * shadow_tint * mix(0.74, 0.92, ha_frac), alto_lit_a * 1.04, 0.22 + 0.52 * crest);
                                     let twi_a = skyu.twi.xyz * (0.40 + 0.78 * crest + 0.48 * max(cl_cs, 0.0)) * mix(0.75, 1.38, low_sun_d);
                                     let ca = e_sa * ms_a * sunset_under * (VC_SUN_GAIN * 0.98) + amb_a + twi_a;
@@ -1853,8 +1867,9 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     }
                 }
 
-                // High-altitude 8.8 km gossamer fibrous cirrus / mare's-tail deck (exact 51.2 km wrap tiles:
-                // 25600 m, 10240 m, 3200 m). Whisper-thin jet-stream ice silk leaving open blue sky & stars crisp.
+                // High-altitude 8.8 km jet-stream fibrous cirrus fibratus / uncinus mare's-tail deck
+                // (exact 51.2 km wrap tiles: 25600 m, 10240 m, 3200 m). 5:1 jet-stretched ice filaments
+                // with gentle fallstreak hooks catch blazing high-altitude golden-hour light.
                 let fair_c = (1.0 - smoothstep(0.22, 0.68, strat)) * (1.0 - 0.85 * night_d);
                 if (fair_c > 0.005 && T > 0.004) {
                     let t = cl_hit(eye.y, dir, skyu.cloud1.y, false);
@@ -1862,26 +1877,32 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                         let p = eye + dir * t;
                         let qh = p.xz + skyu.cloud2.zw;
                         let fp_h = vol_footprint(t) * 0.65;
-                        let c_macro_raw = textureSampleLevel(vc_weather, vol_rep, qh / VC_WEATHER_TILE, clamp(log2(max(fp_h, 1.0) / 50.0), 0.0, 4.0)).a;
-                        let c_macro = smoothstep(0.16, 0.80, c_macro_raw);
+                        let c_macro_raw = textureSampleLevel(vc_weather, vol_rep, qh / VC_HIGH_TILE, clamp(log2(max(fp_h, 1.0) / 50.0), 0.0, 4.0)).a;
+                        let c_macro = smoothstep(0.15, 0.78, c_macro_raw);
                         if (c_macro > 0.004) {
                             let c_fine = textureSampleLevel(vc_weather, vol_rep, (qh + vec2<f32>(3200.0, -1900.0)) / 10240.0, clamp(log2(max(fp_h, 1.0) / 20.0), 0.0, 4.0)).a;
-                            let c_wisp = textureSampleLevel(vc_detail, vol_rep, vec3<f32>(qh.x, skyu.cloud1.y, qh.y) / 3200.0, clamp(log2(max(fp_h, 1.0) / 50.0), 0.0, 3.0)).b;
-                            let fil = c_macro * (0.26 + 0.74 * smoothstep(0.14, 0.82, c_fine)) * (0.44 + 0.56 * c_wisp);
-                            let a = clamp(fil * skyu.cloud1.z * 0.96 * fair_c * smoothstep(0.05, 0.22, dir.y), 0.0, 0.21);
+                            // Exact 51.2 km integer-periodic 5:1 jet-stream stretch (~18.4 deg WNW->ESE, wraps 3,1 / -5,15)
+                            // with curved uncinus fallstreak hooks and zero drift-wrap seam.
+                            let cj_along = dot(qh, vec2<f32>(0.75, 0.25));
+                            let cj_cross = dot(qh, vec2<f32>(-0.25, 0.75)) + (c_fine - 0.5) * 1200.0;
+                            let c_u = vec3<f32>(cj_along / 12800.0, skyu.cloud1.y / 3200.0, cj_cross / 2560.0);
+                            let c_wisp_s = textureSampleLevel(vc_detail, vol_rep, c_u, clamp(log2(max(fp_h, 1.0) / 40.0), 0.0, 3.0));
+                            let c_wisp = smoothstep(0.22, 0.86, 0.65 * c_wisp_s.b + 0.35 * c_wisp_s.a);
+                            let fil = c_macro * (0.24 + 0.76 * smoothstep(0.14, 0.80, c_fine)) * (0.28 + 0.72 * c_wisp);
+                            let a = clamp(fil * skyu.cloud1.z * 1.18 * fair_c * smoothstep(0.05, 0.22, dir.y), 0.0, 0.30);
                             if (a > 0.002) {
                                 let e_sun = cl_sun(skyu.cloud1.y) * heavy;
-                                let fwd_ice = cl_hg(cl_cs, 0.74);
-                                let halo_ice = fwd_ice / (1.0 + 0.52 * fwd_ice);
-                                let ice_phase = 0.50 * halo_ice + 0.26 * cl_hg(cl_cs, 0.34) + 0.24 * cl_hg(cl_cs, -0.20);
-                                let cirrus_tint = mix(vec3<f32>(1.0), vec3<f32>(1.16, 0.93, 0.88), low_sun_d);
-                                let twi_h = skyu.twi.xyz * (0.44 + 0.78 * max(cl_cs, 0.0)) * mix(0.85, 1.38, low_sun_d);
-                                let c = e_sun * (exp(-0.40 * a) * ice_phase + 0.30 * exp(-0.16 * a) / 12.566371) * cirrus_tint * (VC_SUN_GAIN * 0.64)
-                                    + a_top * mix(0.86, 0.64, low_sun_d) + twi_h;
+                                let fwd_ice = cl_hg(cl_cs, 0.76);
+                                let halo_ice = fwd_ice / (1.0 + 0.48 * fwd_ice);
+                                let ice_phase = 0.52 * halo_ice + 0.26 * cl_hg(cl_cs, 0.34) + 0.22 * cl_hg(cl_cs, -0.20);
+                                let cirrus_tint = mix(vec3<f32>(1.0), vec3<f32>(1.20, 0.96, 0.64), low_sun_d);
+                                let twi_h = skyu.twi.xyz * (0.48 + 0.82 * max(cl_cs, 0.0)) * mix(0.85, 1.48, low_sun_d);
+                                let c = e_sun * (exp(-0.38 * a) * ice_phase + 0.30 * exp(-0.16 * a) / 12.566371) * cirrus_tint * (VC_SUN_GAIN * 0.72)
+                                    + a_top * mix(0.84, 0.62, low_sun_d) + twi_h;
                                 let fh = exp(-t * (1.0 - 0.84 * abs(dir.y)) / 86000.0) * (1.0 - smoothstep(160000.0, 240000.0, t));
                                 let a_vis = a * fh;
                                 L = L + T * a_vis * c;
-                                T = T * (1.0 - 0.38 * a_vis);
+                                T = T * (1.0 - 0.42 * a_vis);
                             }
                         }
                     }
@@ -1989,10 +2010,9 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (atmo_on && dist < 1e8) {
         var ap = vol_aerial(dir, dist, eye.y);
         if (vc_on && vc_haze_shade > 0.001) {
-            // Cloud-shadowed coastal haze columns shift cool cerulean by day and pure rose-mauve-amber
-            // at golden hour (attenuating green slightly below red/blue eliminates olive-khaki horizon casts).
+            // Cloud-shadowed coastal haze columns shift cool cerulean by day and steel-twilight at golden hour.
             let low_hz = smoothstep(0.32, 0.04, skyu.atmo.y);
-            let hz_tint = mix(vec3<f32>(0.48, 0.58, 0.74), vec3<f32>(0.76, 0.60, 0.72), low_hz);
+            let hz_tint = mix(vec3<f32>(0.48, 0.58, 0.74), vec3<f32>(0.68, 0.68, 0.78), low_hz);
             ap = vec4<f32>(ap.rgb * mix(vec3<f32>(1.0), hz_tint, vc_haze_shade), ap.a);
         }
         if (cine) {
@@ -2034,10 +2054,10 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (low_sk > 0.001) {
                 let hor_band = smoothstep(0.24, 0.02, abs(dir.y));
                 let g_excess = max(a.g - max(a.r, a.b) * 0.90, 0.0);
-                a = vec3<f32>(a.r + g_excess * 0.30 * low_sk * hor_band, a.g - g_excess * 0.42 * low_sk * hor_band, a.b + g_excess * 0.14 * low_sk * hor_band);
+                a = vec3<f32>(a.r + g_excess * 0.28 * low_sk * hor_band, a.g - g_excess * 0.36 * low_sk * hor_band, a.b + g_excess * 0.08 * low_sk * hor_band);
             }
             if (vc_sky_shade > 0.001) {
-                let sk_tint = mix(vec3<f32>(0.72, 0.77, 0.86), vec3<f32>(0.90, 0.76, 0.86), low_sk);
+                let sk_tint = mix(vec3<f32>(0.72, 0.77, 0.86), vec3<f32>(0.82, 0.84, 0.94), low_sk);
                 a = a * mix(vec3<f32>(1.0), sk_tint, vc_sky_shade);
             }
         }

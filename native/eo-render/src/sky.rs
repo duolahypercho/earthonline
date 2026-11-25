@@ -360,9 +360,9 @@ pub struct SkyOptions {
     /// `sky_cine_streaks` reflects them). Off by default (its code and pass made
     /// only with `SF_LAMP_STREAKS`); off, the gather writes no rear lamp.
     pub lamp_streaks: bool,
-    /// (`--volumetric-clouds`) hyper-detailed multi-layer volumetric cloudscape
+    /// (`--no-volumetric-clouds` to disable) deep multi-layer volumetric cloudscape
     /// (64^3 curl-advected detail, 512^2 meteorological weather map, altocumulus/cirrus
-    /// and hemispherical water reflection dome). Off by default (`--no-volumetric-clouds` restores).
+    /// and hemispherical water reflection dome). On by default.
     pub volumetric_clouds: bool,
     /// (`--weather-fx`) physical rain/wind weather details (puddle pooling, capillary ripples,
     /// raindrop impact splash crowns/sparkles, wind-coupled tree/leaf motion). Off by default
@@ -491,7 +491,7 @@ impl Default for SkyOptions {
             probe_sky: false,
             wet_relief: false,
             lamp_streaks: false,
-            volumetric_clouds: false,
+            volumetric_clouds: true,
             weather_fx: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
