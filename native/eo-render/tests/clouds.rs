@@ -6,7 +6,7 @@
 //! noise is isotropic; slices made apart from each other step far more along one axis).
 //! `EO_CLOUD_NOISE_DUMP=<dir>` writes slices of each as PNG for a look.
 
-use eo_render::clouds::{BASE_RES, CURL_RES, CloudNoise, DETAIL_RES};
+use eo_render::clouds::{BASE_RES, CURL_RES, CloudNoise, DETAIL_RES, VOL_DETAIL_RES, VOL_WEATHER_RES, VolCloudNoise};
 use eo_render::{GpuContext, GpuOptions, read_mapped, wgpu};
 
 fn ctx() -> GpuContext {
@@ -139,4 +139,55 @@ fn the_cloud_noise_fills_its_range_tiles_and_has_no_layers() {
     let (m, var) = (s / n as f64, s2 / n as f64 - (s / n as f64).powi(2));
     eprintln!("curl x: mean {m:.3}, sd {:.3}", var.sqrt());
     assert!((m - 0.5).abs() < 0.05 && var.sqrt() > 0.05, "curl field: mean {m}, sd {}", var.sqrt());
+}
+
+#[test]
+fn the_volumetric_cloud_noise_fills_its_range_tiles_and_is_isotropic() {
+    let ctx = ctx();
+    let vol = VolCloudNoise::new(&ctx.device);
+    let mut enc = ctx.device.create_command_encoder(&Default::default());
+    {
+        let mut pass = enc.begin_compute_pass(&Default::default());
+        vol.encode(&mut pass);
+    }
+    ctx.queue.submit([enc.finish()]);
+    let detail = read(&ctx, &vol.detail, VOL_DETAIL_RES, VOL_DETAIL_RES);
+    let weather = read(&ctx, &vol.weather, VOL_WEATHER_RES, 1);
+    for c in 0..4 {
+        let (lo, hi, mean, seam, layer) = stats(&detail, VOL_DETAIL_RES as usize, c);
+        eprintln!("vol_detail channel {c}: {lo:.2}..{hi:.2} mean {mean:.2}, wrap/inner {seam:.2?}, axis step {layer:.4?}");
+        assert!(lo < 0.2 && hi > 0.8, "vol_detail channel {c} does not fill range: {lo}..{hi}");
+        assert!(mean > 0.2 && mean < 0.8, "vol_detail channel {c} mean {mean}");
+        for a in 0..3 {
+            assert!(seam[a] < 1.6, "vol_detail channel {c} has a seam on axis {a}: x{:.2}", seam[a]);
+        }
+        let (lmin, lmax) = (layer.iter().cloned().fold(1.0, f64::min), layer.iter().cloned().fold(0.0, f64::max));
+        assert!(lmax < 1.15 * lmin, "vol_detail channel {c} is anisotropic: {layer:.4?}");
+    }
+    let w = VOL_WEATHER_RES as usize;
+    let at2 = |x: usize, y: usize, c: usize| weather[(y * w + x) * 4 + c] as f64 / 255.0;
+    for c in 0..4 {
+        let (mut lo, mut hi, mut sum) = (1.0f64, 0.0f64, 0.0);
+        for i in 0..w * w {
+            let v = weather[i * 4 + c] as f64 / 255.0;
+            lo = lo.min(v);
+            hi = hi.max(v);
+            sum += v;
+        }
+        let mean = sum / (w * w) as f64;
+        let (mut wrap_x, mut in_x, mut wrap_y, mut in_y) = (0.0, 0.0, 0.0, 0.0);
+        for i in 0..w {
+            wrap_x += (at2(w - 1, i, c) - at2(0, i, c)).abs();
+            wrap_y += (at2(i, w - 1, c) - at2(i, 0, c)).abs();
+            for j in 0..(w - 1) {
+                in_x += (at2(j + 1, i, c) - at2(j, i, c)).abs();
+                in_y += (at2(i, j + 1, c) - at2(i, j, c)).abs();
+            }
+        }
+        let sx = (wrap_x / w as f64) / (in_x / ((w - 1) * w) as f64).max(1e-9);
+        let sy = (wrap_y / w as f64) / (in_y / ((w - 1) * w) as f64).max(1e-9);
+        eprintln!("vol_weather channel {c}: {lo:.2}..{hi:.2} mean {mean:.2}, wrap/inner [{sx:.2}, {sy:.2}]");
+        assert!(lo < 0.25 && hi > 0.75, "vol_weather channel {c} narrow range: {lo}..{hi}");
+        assert!(sx < 1.6 && sy < 1.6, "vol_weather channel {c} seam: [{sx:.2}, {sy:.2}]");
+    }
 }

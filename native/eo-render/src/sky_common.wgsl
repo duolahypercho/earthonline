@@ -121,6 +121,13 @@ const SKY_CINEMATIC: u32 = 131072u;
 // the damp street (`--weather damp`, stage L3; sky.rs `SKY_DAMP_BIT`): the film's drying
 // patches (sky_light.wgsl `sky_damp_left`); never set by another weather.
 const SKY_DAMP: u32 = 262144u;
+// (`--volumetric-clouds`, `--weather-fx`: carried in `skyu.cirrus.zw` because all 32 bits of `skyu.flags.x` are occupied)
+fn sky_vol_clouds_on(cirrus: vec4<f32>) -> bool {
+    return cirrus.z > 0.5;
+}
+fn sky_weather_fx_on(cirrus: vec4<f32>) -> bool {
+    return cirrus.w > 0.5;
+}
 
 /// World metres one cloud-sheet tile spans (eo-sky clouds.rs).
 const SKY_LOW_TILE: f32 = 3200.0;

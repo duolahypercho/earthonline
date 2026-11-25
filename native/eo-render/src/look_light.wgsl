@@ -427,7 +427,7 @@ var<private> lk_sun_pre: f32 = 1.0;
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
     if ((m.flags & F_GLASS) == 0u && s.env <= 0 && (!SF_HOUSE || room_enclosure < 0.5)) { // (not inside the house's rooms)
-        sky_wet_generic_at(&s, ng, world); // roofs, ground, walls, bodies in the rain (the street wets itself)
+        sky_wet_generic_at(&s, ng, world, object != 0u); // roofs, ground, walls, bodies in the rain (the street wets itself)
     }
     let n = s.n;
     let rough = s.rough;
@@ -503,7 +503,17 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         rim = rim * (1.0 - room_enclosure) * (1.0 - measured_wall); // (the house's enclosed and measured surfaces)
     }
     direct_d = direct_d + rim * diffuse / LK_PI;
+// sf:WEATHER_FX_FLOOR+
+    var rim_spec_w = select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR); // the rig's rim light draws no false sun in a water film
+    if (sky_weather_fx_on(skyu.cirrus) && skyu.wet.x > 0.05 && ng.y > 0.92) {
+        // Suppress the rig's synthetic rim-light glare on glossy rain puddles so storm puddles reflect the sky instead of a false white sun.
+        rim_spec_w = rim_spec_w * (1.0 - smoothstep(0.32, 0.06, rough) * skyu.wet.x);
+    }
+    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * rim_spec_w;
+// sf:end
+// sf:WEATHER_FX_FLOOR-
     direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR); // the rig's rim light draws no false sun in a water film
+// sf:end
 
     // Indirect diffuse.
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
@@ -665,7 +675,20 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     if SF_HOUSE && porch_field.z > 0. {
         lit = porch_lit(lit,world,n,v,diffuse,f0,rough);
     }
+// sf:WEATHER_FX_FLOOR+
+    let local_lit = sky_local_lights_ao(world, n, v, diffuse, f0, rough, ao); // street lamps, headlamps (`ao` and their shadows only with the light shadows on)
+    lit = lit + local_lit;
+    if (sky_weather_fx_on(skyu.cirrus) && sky_rain_spark > 0.001) {
+        // (`--weather-fx`) raindrop splash crowns & rebounding beads illuminated by
+        // the sky dome, sun/moon key and nearby streetlamps/headlights.
+        let sp_light = (irr / LK_PI) * 1.45 + look.hemi_sky.xyz * 0.28 + key * 0.9 + local_lit * 3.0;
+        lit = lit + sp_light * min(sky_rain_spark, 1.5);
+    }
+    sky_rain_spark = 0.0;
+// sf:end
+// sf:WEATHER_FX_FLOOR-
     lit = lit + sky_local_lights_ao(world, n, v, diffuse, f0, rough, ao); // street lamps, headlamps (`ao` and their shadows only with the light shadows on)
+// sf:end
     // the house's fitted finishes and waxed oak: their clear coats over the lit base
     if (SF_HOUSE && (objects[object].kind & FITTED_ROOM_BIT) != 0u && m.thin_absorption>0. && measured_room) {
         if (any(fitted_pendant_horizontal>vec3<f32>(0.))) {

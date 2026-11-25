@@ -15,6 +15,7 @@ struct LsPrMaterial {
 };
 
 const LS_PR_S_BIG: u32 = 32768u;
+const LS_PR_LEAF: u32 = 65536u;
 
 @group(2) @binding(0) var<uniform> pr: PrParams;
 @group(2) @binding(1) var<storage, read> pr_instances: array<PrInstance>;
@@ -34,9 +35,12 @@ fn ls_prop_vs(@builtin(vertex_index) v: u32) -> LsOut {
     let w = iv.x * 8u;
     let p = vec3<f32>(bitcast<f32>(ls_vtx[w]), bitcast<f32>(ls_vtx[w + 1u]), bitcast<f32>(ls_vtx[w + 2u]));
     let inst = pr_instances[rec.payload];
-    var o = ls_project(rec.tile, pr_world(inst, p, bitcast<f32>(ls_vtx[w + 7u])));
-    o.uv = unpack2x16unorm(ls_vtx[w + 4u]);
-    o.mat = vec2<u32>(ls_vtx[w + 6u], rec.flags);
+    let uv = unpack2x16unorm(ls_vtx[w + 4u]);
+    let mat_id = ls_vtx[w + 6u];
+    let is_leaf = (pr_materials[mat_id].flags & LS_PR_LEAF) != 0u;
+    var o = ls_project(rec.tile, pr_world_leaf(inst, p, uv, bitcast<f32>(ls_vtx[w + 7u]), is_leaf));
+    o.uv = uv;
+    o.mat = vec2<u32>(mat_id, rec.flags);
     return o;
 }
 

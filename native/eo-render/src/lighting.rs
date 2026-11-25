@@ -350,7 +350,7 @@ mod tests {
         let street = look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF;
         sets.push((
             "round 2: every track together".into(),
-            look::ShaderFeatures { far_relief: true, facade_patina: true, window_depth: true, street_pbr: true, street, car_lamps: true, car_wet: true, car_finish: true, camera_bits: crate::cine_post::CAM_BITS_ALL, nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL },
+            look::ShaderFeatures { far_relief: true, facade_patina: true, window_depth: true, street_pbr: true, street, car_lamps: true, car_wet: true, car_finish: true, camera_bits: crate::cine_post::CAM_BITS_ALL, nature: look::NATURE_ALL, volumetric_clouds: true, weather_fx: true, ..look::ShaderFeatures::ALL },
         ));
         sets
     }

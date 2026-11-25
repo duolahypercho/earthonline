@@ -73,6 +73,7 @@ pub const F_WIND: u32 = 2;
 pub const F_LEAF: u32 = 4;
 pub const F_DOMES: u32 = 8;
 pub const F_SIGNS: u32 = 16;
+pub const F_WEATHER_WIND: u32 = 32;
 /// Moored boats ride the harbour's chop (props_types.wgsl `pr_afloat`; eo-app `--no-boat-motion`).
 pub const F_AFLOAT: u32 = 64;
 pub const F_ALL: u32 = 31 | F_AFLOAT;
@@ -937,11 +938,24 @@ impl PropsGpu {
         let lens_gain = if look.options.look.is_cinematic() { 1.0 + (CINE_SIGNAL_LENS_GAIN - 1.0) * eo_sky::night::lamps_on(lf.model.sun.altitude_deg) as f32 } else { 1.0 };
         let aces = *self.lens_scale.lock().unwrap() * lens_gain;
         let counts = [self.high_water(), self.mesh_count, INSTANCE_CAPACITY, self.model_count];
-        let feat = self.features.load(Ordering::Relaxed);
-        let t = f32::from_bits(self.time_bits.load(Ordering::Relaxed));
+        let mut feat = self.features.load(Ordering::Relaxed);
+        let mut t = f32::from_bits(self.time_bits.load(Ordering::Relaxed));
         let w = self.wire_look;
-        // A light westerly (the bay breeze), amplitude 6 cm at the crown of a 1x tree.
-        let wind_dir = [0.94f32, 0.34];
+        // Default: a light westerly (the bay breeze), amplitude 6 cm at the crown of a 1x tree.
+        // Under `--weather-fx`, wind direction, gusting sway amplitude and normalized speed follow
+        // the live weather state (gentle bay breeze in clear air, brisk sway in rain, gale in storm).
+        let (wind_dir, wind_amp, wind_speed_norm, rain_milli) = if (feat & F_WIND) != 0 && look.sky.options().weather_fx {
+            feat |= F_WEATHER_WIND;
+            if t == 0.0 {
+                t = look.sky.world_time().rem_euclid(3600.0) as f32;
+            }
+            let wx = look.sky.weather();
+            let (d, a, sn) = weather_wind_params(&wx);
+            let rm = ((wx.rain_mm_h / 22.0).clamp(0.0, 1.0) * 1000.0).round() as u32;
+            (d, a, sn, rm)
+        } else {
+            ([0.94f32, 0.34], 0.06, 0.0, 0)
+        };
         let base = PrParams {
             planes,
             cam: [cam.eye.x, cam.eye.y, cam.eye.z, 0.0],
@@ -950,9 +964,9 @@ impl PropsGpu {
             view_proj: vp.to_cols_array_2d(),
             lens: [aces / exposure, self.alpha_test, t, self.face_count as f32],
             dome: self.dome,
-            wind: [wind_dir[0], wind_dir[1], 0.06, w.pixel_half_width_rad],
-            wire: [w.fade_near_m, w.fade_far_m, w.min_coverage, 0.0],
-            extra: [self.wire_high_water(), 0, 0, 0],
+            wind: [wind_dir[0], wind_dir[1], wind_amp, w.pixel_half_width_rad],
+            wire: [w.fade_near_m, w.fade_far_m, w.min_coverage, wind_speed_norm],
+            extra: [self.wire_high_water(), rain_milli, 0, 0],
         };
         // Run S: the cascades (+ the camera when there is no occlusion pass this frame).
         let cam_bits = if occlusion { 0 } else { 0b110001 };
@@ -1166,5 +1180,47 @@ impl PropsGpu {
         ctx.queue.submit([enc.finish()]);
         let w: Vec<u32> = bytemuck::pod_collect_to_vec(&crate::read_mapped(ctx, &staging)?);
         Ok(w[4])
+    }
+}
+
+/// Weather-coupled tree wind parameters `(dir_xz, sway_amp_m, speed_norm)` for `--weather-fx`:
+/// a gentle bay breeze on clear days, lively gusting sway in rain (`~4.5 m/s`), and strong
+/// downwind bend + whip in storms (`~12.2 m/s`).
+pub(crate) fn weather_wind_params(wx: &eo_sky::WeatherState) -> ([f32; 2], f32, f32) {
+    let wx_speed = wx.wind[0].hypot(wx.wind[1]);
+    let (dir, eff_speed) = if wx_speed > 0.25 {
+        ([(wx.wind[0] / wx_speed) as f32, (wx.wind[1] / wx_speed) as f32], wx_speed)
+    } else {
+        ([0.9403761f32, 0.34013605], 1.8)
+    };
+    let gust = wx.gust.clamp(0.5, 1.6);
+    let speed = eff_speed * gust;
+    let speed_norm = ((speed - 1.2) / 11.8).clamp(0.0, 1.0) as f32;
+    let rain_boost = ((wx.rain_mm_h / 22.0).clamp(0.0, 1.0) as f32) * 0.08;
+    let amp = 0.07 + 0.50 * speed_norm.powf(1.15) + rain_boost;
+    (dir, amp, speed_norm)
+}
+
+#[cfg(test)]
+mod wind_tests {
+    use super::*;
+
+    #[test]
+    fn weather_wind_scales_monotonically_from_clear_through_rain_to_storm() {
+        let clear = weather_wind_params(&eo_sky::weather::preset(eo_sky::Kind::Clear));
+        let drizzle = weather_wind_params(&eo_sky::weather::preset(eo_sky::Kind::Drizzle));
+        let light = weather_wind_params(&eo_sky::weather::preset(eo_sky::Kind::LightRain));
+        let sun = weather_wind_params(&eo_sky::weather::preset(eo_sky::Kind::SunRain));
+        let rain = weather_wind_params(&eo_sky::weather::preset(eo_sky::Kind::Rain));
+        let heavy = weather_wind_params(&eo_sky::weather::preset(eo_sky::Kind::HeavyRain));
+        let storm = weather_wind_params(&eo_sky::weather::preset(eo_sky::Kind::Storm));
+        for (dir, amp, norm) in [clear, drizzle, light, sun, rain, heavy, storm] {
+            let len = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
+            assert!((len - 1.0).abs() < 1e-4, "unit wind dir: {dir:?}");
+            assert!(amp.is_finite() && amp > 0.0);
+            assert!((0.0..=1.0).contains(&norm));
+        }
+        assert!(clear.1 < drizzle.1 && drizzle.1 < light.1 && light.1 < sun.1 && sun.1 < rain.1 && rain.1 < heavy.1 && heavy.1 < storm.1);
+        assert!(rain.1 >= 0.18 && heavy.1 >= 0.35 && storm.1 >= 0.50, "rain={} heavy={} storm={}", rain.1, heavy.1, storm.1);
     }
 }

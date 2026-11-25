@@ -499,8 +499,148 @@ fn sky_ripple(p: vec2<f32>) -> vec2<f32> {
     return select(vec2<f32>(0.0), d / max(r, 1e-4) * cos(x) * amp, r < 0.2);
 }
 
+// sf:WEATHER_FX_FLOOR+
+/// (`--weather-fx`) Raindrop impact splash & droplet sparkle intensity for the
+/// current floor fragment, written by `sky_wet_street` / `sky_wet_generic_at` and
+/// consumed + cleared by `look_light`.
+var<private> sky_rain_spark: f32 = 0.0;
+
+/// (`--weather-fx`) Standing water pooling across gutters, carriageways,
+/// sidewalks and horizontal floors as rainwater accumulates (`skyu.wet.y` +
+/// current rain rate). Returns (puddle_mask, water_depth, soaked_rim).
+fn sky_puddle_fx(p: vec2<f32>, kerb: f32, asphalt: bool) -> vec3<f32> {
+    let fill = clamp(skyu.wet.y + smoothstep(2.5, 20.0, skyu.wet.z) * 0.14, 0.0, 1.0);
+    if (fill <= 0.005) {
+        return vec3<f32>(0.0);
+    }
+    let n_lg = st_noise(p / 4.2 + vec2<f32>(7.3, 19.1));
+    let n_md = st_noise(p / 1.55 + vec2<f32>(31.7, 4.9));
+    let n_sm = st_noise(p / 0.52 + vec2<f32>(11.4, 27.3));
+    let topo = 0.50 * n_lg + 0.35 * n_md + 0.15 * n_sm;
+    let gutter = select(0.0, sky_drain(kerb) * 0.38, asphalt && kerb >= 0.0);
+    let basin = topo + gutter;
+    let thr = mix(0.92, 0.45, pow(fill, 0.52)) + select(0.05, 0.02, asphalt);
+    let pud = smoothstep(thr - 0.035, thr + 0.035, basin);
+    let depth = clamp((basin - thr) / 0.28, 0.0, 1.0) * pud;
+    let rim = smoothstep(thr - 0.14, thr - 0.01, basin) * (1.0 - pud);
+    return vec3<f32>(pud, depth, rim);
+}
+
+/// (`--weather-fx`) Subtle wind-driven capillary ripples drifting downwind
+/// across deeper standing puddles, faded out on grazing far views.
+fn sky_puddle_wind(p: vec2<f32>, t: f32, fp_g: f32) -> vec2<f32> {
+    let ws = length(skyu.wind.xy);
+    let vis = 1.0 - smoothstep(0.04, 0.14, fp_g);
+    if (ws < 1.5 || vis <= 0.001) {
+        return vec2<f32>(0.0);
+    }
+    let wd = skyu.wind.xy / ws;
+    let perp = vec2<f32>(-wd.y, wd.x);
+    let along = dot(p, wd);
+    let across = dot(p, perp);
+    let gain = smoothstep(1.5, 11.0, ws) * 0.024 * vis;
+    let p1 = along * 28.0 - t * (5.5 + ws * 0.9) + sin(across * 6.5) * 1.4;
+    let p2 = along * 46.0 - t * (8.5 + ws * 1.3) - sin(across * 11.0) * 1.1;
+    let dw = (cos(p1) * 0.65 + cos(p2) * 0.35) * gain;
+    return wd * dw + perp * (sin(p1 * 0.7 + across * 8.0) * gain * 0.25);
+}
+
+/// (`--weather-fx`) Raindrops impacting standing puddles and wet floors:
+/// three staggered scales of expanding capillary ripple rings on standing water,
+/// plus delicate impact splash crowns and parallaxed rebounding droplet sparkles
+/// on both puddles and wet pavement. Uses the grazing ground footprint (`fp_g`)
+/// so distant low-angle roadways stay mirror-smooth with zero ripple aliasing.
+/// Returns (slope_x, slope_z, sparkle).
+fn sky_rain_floor_fx(world: vec3<f32>, pud: f32, w: f32, v: vec3<f32>) -> vec3<f32> {
+    let rate = skyu.wet.z;
+    if (rate <= 0.1 || !sky_on(skyu.flags.x, SKY_RAIN)) {
+        return vec3<f32>(0.0);
+    }
+    let dist = length(world - skyu.eye.xyz);
+    let fp = max(dist * 2.0 * skyu.cluster.z * skyu.res.w, 1e-4);
+    let fp_g = fp / max(abs(v.y), 0.14);
+    if (fp_g > 0.24) {
+        return vec3<f32>(0.0);
+    }
+    let rain = smoothstep(0.15, 7.0, rate);
+    let heavy_r = smoothstep(5.0, 20.0, rate);
+    let t = skyu.wet.w;
+    let p = world.xz;
+    let view_par = v.xz / max(abs(v.y), 0.26);
+    // Natural rain intensity spectrum + passing spatial shower bands across city blocks.
+    let shower = 0.84 + 0.22 * sin(p.x * 0.031 + p.y * 0.023 - t * 0.45) * cos(p.x * 0.019 - p.y * 0.037 - t * 0.31);
+    let density = clamp((0.18 + 0.50 * rain + 0.26 * heavy_r) * shower, 0.08, 0.96);
+    let vigor = mix(0.75, 1.35, heavy_r);
+    var g = vec2<f32>(0.0);
+    var spark = 0.0;
+    for (var k = 0u; k < 3u; k = k + 1u) {
+        let sc = select(select(2.2, 3.6, k == 1u), 5.6, k == 2u);
+        let freq = select(select(1.12, 1.58, k == 1u), 2.25, k == 2u) * mix(0.85, 1.25, heavy_r);
+        let ring_vis = 1.0 - smoothstep(0.028 / (sc / 2.2), 0.095 / (sc / 2.2), fp_g);
+        let drop_vis = 1.0 - smoothstep(0.055, 0.20, fp_g);
+        if (ring_vis <= 0.001 && drop_vis <= 0.001) {
+            continue;
+        }
+        let q = p * sc + vec2<f32>(f32(k) * 0.43, f32(k) * 0.67);
+        let cell = floor(q);
+        let h = st_hash(cell * 1.7 + vec2<f32>(f32(k) * 19.3 + 3.1, f32(k) * 7.7 + 1.9));
+        let h2 = fract(h * 17.31);
+        let h3 = fract(h * 43.7);
+        if (fract(h * 89.3) > density) {
+            continue;
+        }
+        let centre = cell + vec2<f32>(0.22 + 0.56 * h, 0.22 + 0.56 * h2);
+        let phase = fract(t * freq + h * 7.3 + f32(k) * 0.37);
+        let d_m = (q - centre) / sc;
+        let r_m = length(d_m);
+        let size = (0.64 + 0.72 * h2) * mix(0.86, 1.22, heavy_r);
+        // Concentric ripples on standing water (and brief wet-film dimple outside).
+        if (ring_vis > 0.001) {
+            if (pud > 0.02) {
+                let x = (r_m - phase * 0.155 * size) * 86.0 / size;
+                let env = exp(-x * x * 0.075) * (1.0 - phase) * (1.0 - phase) * ring_vis * pud;
+                g = g + (d_m / max(r_m, 1e-4)) * (cos(x) * env * 0.56 * vigor);
+            } else if (phase < 0.15) {
+                let x = (r_m - phase * 0.065 * size) * 110.0 / size;
+                let env = exp(-x * x * 0.16) * (1.0 - phase / 0.15) * ring_vis * w * 0.12 * vigor;
+                g = g + (d_m / max(r_m, 1e-4)) * (cos(x) * env);
+            }
+        }
+        // Crisp gossamer splash crown + parallaxed rebounding droplet bead.
+        let crown_dur = mix(0.085, 0.115, pud);
+        let jet_end = mix(0.15, 0.21, pud);
+        if (drop_vis > 0.001 && phase < jet_end) {
+            let px_m = max(fp * 0.7, 0.0035);
+            var sp = 0.0;
+            if (phase < crown_dur) {
+                let ct = phase / crown_dur;
+                let cr_r = (0.004 + ct * mix(0.018, 0.026, pud)) * size;
+                let ang = atan2(d_m.y, d_m.x);
+                let asym = 0.65 + 0.35 * sin(ang * 3.0 + h * 23.0) * cos(ang * 5.0 - h2 * 17.0);
+                let rw = max(px_m * 1.05, 0.0038);
+                let dr = (r_m - cr_r) / rw;
+                sp = sp + exp(-dr * dr) * sin(ct * 3.14159) * asym * mix(0.55, 0.78, pud);
+            }
+            if (phase > 0.015 && phase < jet_end) {
+                let jt = (phase - 0.015) / (jet_end - 0.015);
+                let h_jet_m = mix(0.028, 0.048, pud) * size * sin(jt * 3.14159);
+                let p_jet = d_m + view_par * h_jet_m;
+                let bw = max(px_m * 0.95, 0.0045);
+                sp = sp + exp(-dot(p_jet, p_jet) / (bw * bw)) * sin(jt * 3.14159) * mix(1.05, 1.55, pud);
+            }
+            let sub_att = clamp(0.010 / max(px_m, 0.010), 0.38, 1.0);
+            spark = spark + sp * drop_vis * sub_att * vigor * (0.6 + 0.6 * h3);
+        }
+    }
+    return vec3<f32>(g.x, g.y, spark * rain * max(w, pud));
+}
+// sf:end
+
 /// Wet the street surface (the carriageway and the walk), before lighting.
 fn sky_wet_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>, kerb: f32, asphalt: bool) {
+// sf:WEATHER_FX_FLOOR+
+    sky_rain_spark = 0.0;
+// sf:end
     var w = skyu.wet.x;
     if (!sky_on(skyu.flags.x, SKY_WET) || w < 0.02) {
         return;
@@ -520,6 +660,55 @@ fn sky_wet_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>
         darken = select(SKY_CINE_WET_DARKEN.y, SKY_CINE_WET_DARKEN.x, asphalt);
         wet_rough = select(SKY_CINE_WET_ROUGH.y, SKY_CINE_WET_ROUGH.x, asphalt);
     }
+// sf:WEATHER_FX_FLOOR+
+    let fx = sky_weather_fx_on(skyu.cirrus);
+    var pud = 0.0;
+    var pud_depth = 0.0;
+    var pud_rim = 0.0;
+    if (n_geom.y > 0.95) {
+        if (fx) {
+            let pf = sky_puddle_fx(world.xz, kerb, asphalt);
+            pud = pf.x * w;
+            pud_depth = pf.y * w;
+            pud_rim = pf.z * w;
+        } else {
+            pud = sky_puddle(world.xz, select(-1.0, kerb, asphalt)) * w;
+        }
+        if (SF_STREET_PBR) {
+            pud = max(pud, sp_pond); // (`--street-pbr`, street_pbr.wgsl) the water the street's relief holds
+        }
+    }
+    if (cine && n_geom.y > 0.7) {
+        sky_streak_w = w;
+        sky_streak_pud = pud;
+    }
+    (*s).albedo = (*s).albedo * mix(1.0, darken, w) * (1.0 - 0.16 * pud_rim) * (1.0 - 0.2 * pud - 0.14 * pud_depth);
+    // The film's grazing sheet (street-surface-v2-render.js: the film floor
+    // mix(0.48, 0.05, grazeShare), grazeShare = smoothstep(0.26, 0.05, n.v)):
+    // seen low along the street the film is a mirror.
+    let v = normalize(skyu.eye.xyz - world);
+    let graze = smoothstep(0.26, 0.05, abs(dot(n_geom, v))) * select(0.0, 1.0, n_geom.y > 0.95);
+    let film = mix(wet_rough, 0.06, graze * 0.92);
+    let pud_rough = select(0.05, mix(0.045, 0.018, pud_depth), fx);
+    (*s).rough = mix(mix((*s).rough, film, w), pud_rough, pud);
+    // Relief filled by the film (reliefFill 0.75 / 0.70), flat in a puddle.
+    var n = normalize(mix((*s).n, n_geom, clamp(w * select(0.70, 0.75, asphalt) + pud, 0.0, 1.0)));
+    if (fx && n_geom.y > 0.92) {
+        if (pud_depth > 0.05) {
+            let fp_g = max(length(world - skyu.eye.xyz) * 2.0 * skyu.cluster.z * skyu.res.w, 1e-4) / max(abs(v.y), 0.14);
+            let wr = sky_puddle_wind(world.xz, skyu.wet.w, fp_g) * pud_depth;
+            n = normalize(n + vec3<f32>(wr.x, 0.0, wr.y));
+        }
+        let imp = sky_rain_floor_fx(world, pud, w, v);
+        n = normalize(n + vec3<f32>(imp.x, 0.0, imp.y));
+        sky_rain_spark = imp.z;
+    } else if (pud > 0.01) {
+        let sl = sky_ripple(world.xz) * pud;
+        n = normalize(n + vec3<f32>(sl.x, 0.0, sl.y));
+    }
+    (*s).n = n;
+// sf:end
+// sf:WEATHER_FX_FLOOR-
     var pud = 0.0;
     if (n_geom.y > 0.95) {
         pud = sky_puddle(world.xz, select(-1.0, kerb, asphalt)) * w;
@@ -546,11 +735,12 @@ fn sky_wet_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>
         n = normalize(n + vec3<f32>(sl.x, 0.0, sl.y));
     }
     (*s).n = n;
+// sf:end
 }
 
 /// `sky_wet_generic` at `world` (look_light): with `--wet-surfaces` the
 /// switch's porosity, puddles and wall runs (`sky_w2_generic`).
-fn sky_wet_generic_at(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
+fn sky_wet_generic_at(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>, allow_puddle: bool) {
     if (sky_w2_on()) {
         if (sky_on(skyu.flags.x, SKY_WET) && skyu.wet.x >= 0.02) {
             sky_w2_generic(s, ng, world);
@@ -558,6 +748,32 @@ fn sky_wet_generic_at(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>
         return;
     }
     sky_wet_generic(s, ng);
+// sf:WEATHER_FX_FLOOR+
+    sky_rain_spark = 0.0;
+    let w = skyu.wet.x;
+    if (allow_puddle && sky_on(skyu.flags.x, SKY_WET) && w >= 0.02 && sky_weather_fx_on(skyu.cirrus) && ng.y > 0.97) {
+        let pf = sky_puddle_fx(world.xz, -1.0, false);
+        // Keep standing mirror puddles off vegetated grass slopes; pool on flat plazas, decks and roofs.
+        let grass = smoothstep(0.015, 0.055, (*s).albedo.g - max((*s).albedo.r, (*s).albedo.b));
+        let hard = 1.0 - 0.85 * grass;
+        let pud = pf.x * w * hard;
+        let depth = pf.y * w * hard;
+        let rim = pf.z * w * hard;
+        let v = normalize(skyu.eye.xyz - world);
+        (*s).albedo = (*s).albedo * (1.0 - 0.14 * rim) * (1.0 - 0.2 * pud - 0.12 * depth);
+        (*s).rough = mix((*s).rough, mix(0.08, 0.04, depth), pud);
+        var n = normalize(mix((*s).n, ng, clamp(pud * 0.95, 0.0, 1.0)));
+        if (depth > 0.05) {
+            let fp_g = max(length(world - skyu.eye.xyz) * 2.0 * skyu.cluster.z * skyu.res.w, 1e-4) / max(abs(v.y), 0.14);
+            let wr = sky_puddle_wind(world.xz, skyu.wet.w, fp_g) * depth;
+            n = normalize(n + vec3<f32>(wr.x, 0.0, wr.y));
+        }
+        let imp = sky_rain_floor_fx(world, pud, w, v);
+        n = normalize(n + vec3<f32>(imp.x, 0.0, imp.y));
+        (*s).n = n;
+        sky_rain_spark = imp.z;
+    }
+// sf:end
 }
 
 /// Any other surface in the rain: roofs and ground soak (masonry darken 0.78,

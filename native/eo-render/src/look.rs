@@ -1222,6 +1222,10 @@ pub struct ShaderFeatures {
     /// The natural-detail bits compiled in (`NATURE_*`; their `// sf:` blocks, `sf_select`).
     /// New code with no runtime test: `ALL` leaves it out, as the shaders were before it.
     pub nature: u32,
+    /// Volumetric cloudscape (`--volumetric-clouds`; `SF_VOL_CLOUDS`, `// sf:VOL_CLOUDS`).
+    pub volumetric_clouds: bool,
+    /// Physical rain & wind surface FX (`--weather-fx`; `SF_WEATHER_FX`, `// sf:WEATHER_FX`).
+    pub weather_fx: bool,
 }
 
 impl ShaderFeatures {
@@ -1240,6 +1244,7 @@ impl ShaderFeatures {
         car_materials: true, car_reflections: true, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, wire_light: true, // the night track
         nature: 0, // the nature track
+        volumetric_clouds: false, weather_fx: false,
     };
     /// No opt-in feature compiled in (the default frame's pipelines: the
     /// features on by default, `phys_sky`, `ap_lut` and `far_facade`, stay in).
@@ -1254,6 +1259,7 @@ impl ShaderFeatures {
         car_materials: false, car_reflections: false, car_lamps: false, car_wet: false, car_finish: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, wire_light: false, // the night track
         nature: 0, // the nature track
+        volumetric_clouds: false, weather_fx: false,
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -1319,6 +1325,8 @@ impl ShaderFeatures {
             lit_rooms: o.sky.lit_rooms,
             wire_light: o.sky.wire_light,
             nature: o.nature & NATURE_ALL,
+            volumetric_clouds: o.sky.volumetric_clouds,
+            weather_fx: o.sky.weather_fx,
         }
     }
 
@@ -1418,6 +1426,8 @@ impl ShaderFeatures {
         l.sky.lit_rooms &= self.lit_rooms;
         l.sky.wire_light &= self.wire_light;
         l.nature &= self.nature;
+        l.sky.volumetric_clouds &= self.volumetric_clouds;
+        l.sky.weather_fx &= self.weather_fx;
         l
     }
 
@@ -1492,6 +1502,8 @@ impl ShaderFeatures {
                 ("SF_SIGNAL_SPILL", self.signal_spill),
                 ("SF_LIT_ROOMS", self.lit_rooms),
                 ("SF_WIRE_LIGHT", self.wire_light),
+                ("SF_VOL_CLOUDS", self.volumetric_clouds),
+                ("SF_WEATHER_FX", self.weather_fx),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
@@ -1566,6 +1578,10 @@ fn night_gain(on: bool, f: &LookFrame) -> f32 {
 /// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
 /// before, and with a bit in it holds its code alone, not the code it replaces.
 pub fn sf_select(src: &str) -> String {
+    sf_select_with(src, true)
+}
+
+fn sf_select_with(src: &str, weather_fx_floor: bool) -> String {
     let f = shader_features();
     let on = |name: &str| match name {
         "FOLIAGE" => f.nature & NATURE_FOLIAGE != 0,
@@ -1583,6 +1599,9 @@ pub fn sf_select(src: &str) -> String {
         "LEAF_SHADE" => f.nature & NATURE_LEAF_SHADE != 0,
         "WET_FOLIAGE" => f.nature & NATURE_WET_FOLIAGE != 0,
         "LAWN_ALBEDO" => f.nature & NATURE_LAWN_ALBEDO != 0,
+        "VOL_CLOUDS" => f.volumetric_clouds,
+        "WEATHER_FX" => f.weather_fx,
+        "WEATHER_FX_FLOOR" => f.weather_fx && weather_fx_floor,
         _ => false,
     };
     // `A|B`: either bit in (code two features share); `A&B`: both (code that joins them);
@@ -1721,7 +1740,7 @@ pub fn props_city_source(src: String) -> String {
 }
 
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
-    let s = sf_select(&city_shader_parts(ambient, shadow, single_probe)); // the natural-detail blocks (`// sf:`) of the features compiled in
+    let s = sf_select_with(&city_shader_parts(ambient, shadow, single_probe), single_probe); // the natural-detail and weather-fx blocks (`// sf:`) of the features compiled in (props and agents never puddle)
     if ambient == crate::ambient::ShaderLevels::Plane {
         // (`--occluder-light`) the plane-only pipelines (the far layer, the props) keep the
         // stand-in for the blocked sky: on Apple's GPU `hlod-draw` failed to build with the

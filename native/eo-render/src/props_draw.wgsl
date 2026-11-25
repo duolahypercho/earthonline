@@ -40,6 +40,8 @@ const PR_MEADOW_SOIL: u32 = 8388608u;
 @group(2) @binding(4) var<storage, read> pr_faces: array<vec4<f32>>;
 // Lens tone inputs: lit red, amber, green, then unlit; w of [0] the ACES scale.
 @group(2) @binding(5) var<uniform> pr_lens: array<vec4<f32>, 6>;
+// Props material flags (vertex-visible mirror of group 0's materials buffer).
+@group(2) @binding(8) var<storage, read> pr_materials: array<Material>;
 // the big array.
 @group(2) @binding(9) var pr_big: texture_2d_array<f32>;
 
@@ -77,7 +79,8 @@ fn prop_vs(
     let word = pr_visible[ii];
     let idx = word & PR_INDEX_MASK;
     let inst = pr_instances[idx];
-    let world = pr_world(inst, pos, sway);
+    let is_leaf = (pr_materials[material].flags & PR_LEAF) != 0u;
+    let world = pr_world_leaf(inst, pos, uv, sway, is_leaf);
     var out: PrOut;
     out.clip = frame.view_proj * vec4<f32>(world, 1.0);
     out.world = world;
@@ -681,7 +684,6 @@ fn pr_wet_bark(s: ptr<function, Surface>, w: f32, run: f32) {
 }
 // sf:end
 // sf:FOLIAGE|PALM+
-const PR_PALM: u32 = 7u; // eo_props::Model::Palm
 // the least n.v a leaf's shading normal keeps (it is seen, so it faces the eye)
 const PR_LEAF_NV_MIN: f32 = 0.1;
 // sf:end
@@ -1487,6 +1489,23 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         palm_leaf = pr_palm(&s, inst, in.local, in.uv, n, v, dpx, dpy, duvx, duvy, dlx, dly); // (`--palm-detail`)
     }
 // sf:end
+// sf:WEATHER_FX+
+    if ((m.flags & PR_LEAF) != 0u && sky_weather_fx_on(skyu.cirrus)) {
+        // Subtle normal shimmer in sync with leaf flutter so wet/sunlit leaves catch light as they wiggle.
+        let ws = pr.wire.w;
+        let lt = pr.lens.z * (6.5 + 8.5 * ws);
+        let lp = dot(in.local, vec3<f32>(5.3, 4.1, 6.2)) + in.uv.x * 3.1;
+        let tilt = (0.02 + 0.06 * ws) * sin(lt + lp);
+        s.n = normalize(s.n + vec3<f32>(pr.wind.x * tilt, tilt * 0.35, pr.wind.y * tilt));
+        if (skyu.wet.x > 0.05) {
+            // Rain-wetted foliage darkens slightly with a soft waxy cuticle sheen
+            // (kept well above the 0.36 SSR cutoff so leaf cards never mirror the sky).
+            let lw = skyu.wet.x;
+            s.albedo = s.albedo * mix(1.0, 0.86, lw);
+            s.rough = mix(s.rough, min(s.rough, 0.54), lw * 0.5);
+        }
+    }
+// sf:end
     s.rough = clamp(s.rough, 0.03, 1.0);
 // sf:CROWN+
     if ((m.flags & PR_LEAF) != 0u) {
@@ -1590,7 +1609,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let l = look.key_dir.xyz;
         let through = max(dot(-n, l), 0.0);
         let lobe = pow(max(dot(-v, l), 0.0), 6.0);
-        let sh = lk_shadow(in.world, n);
+        let sh = lk_shadow(in.world, n) * select(1.0, sky_cloud_transmittance(in.world), SF_VOL_CLOUDS && sky_vol_clouds_on(skyu.cirrus));
         let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
         let fog = lk_smooth(look.fog.x, look.fog.y, vd);
         let trans = look.key.xyz * s.albedo * (through * 0.35 + lobe * 0.6) * sh / LK_PI;

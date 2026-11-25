@@ -105,14 +105,20 @@ fn rc_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // This pixel's own fresh sample.
     let off = rc_offset(skyu.flags.y);
     let fresh = all((p % 2) == off);
+    let vc_on = sky_vol_clouds_on(skyu.cirrus);
     var cur = spatial;
+    var own_s = spatial;
+    let edge = smoothstep(0.02, 0.15, 1.0 - spatial.a) * (1.0 - smoothstep(0.5, 0.85, 1.0 - spatial.a));
     if (fresh) {
-        // 0.5 its own trace, 0.5 the depth-aware blend of the four round it (the
-        // march's per-trace noise at a pixel is uncorrelated with its neighbours': rim grain).
-        // up to 0.8 at a thin rim (the blend's cover 0.05-0.6): the speckle sat there
-        let own = textureLoad(rc_vol, clamp(p / 2, vec2<i32>(0), vd - 1), 0);
-        let edge = smoothstep(0.02, 0.15, 1.0 - spatial.a) * (1.0 - smoothstep(0.5, 0.85, 1.0 - spatial.a));
-        cur = mix(own, spatial, mix(0.5, 0.8, edge));
+        own_s = textureLoad(rc_vol, clamp(p / 2, vec2<i32>(0), vd - 1), 0);
+        // `--volumetric-clouds` preserves razor-crisp native 1080p fluid billows & wispy edges
+        // on every traced pixel, plus zero-ringing contrast refinement bounded inside `[lo, hi]`.
+        let blend = select(mix(0.5, 0.8, edge), mix(0.02, 0.10, edge), vc_on);
+        cur = mix(own_s, spatial, blend);
+        if (vc_on && nbox > 1.5 && (1.0 - spatial.a) > 0.02) {
+            let crisp = own_s + (own_s - spatial) * 0.16;
+            cur = clamp(mix(cur, crisp, 0.85), lo, hi);
+        }
     }
 
     var res = cur;
@@ -133,18 +139,39 @@ fn rc_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                         // neighbourhood every frame (that clamp is what left the rims' grain).
                         // (this frame's sub-pixel jitter taken out: the rays are jittered, `prev_vp` is not)
                         let mv = puv - uv + vec2<f32>(skyu.jitter.x * 0.5, -skyu.jitter.y * 0.5);
-                        let still = 1.0 - smoothstep(0.15, 0.6, length(mv * vec2<f32>(od)));
+                        let mv_px = length(mv * vec2<f32>(od));
+                        let still = 1.0 - smoothstep(0.15, 0.6, mv_px);
+                        if (vc_on && fresh && still < 0.99) {
+                            // Under fast pans, gently blend fresh edge pixels toward spatial to suppress
+                            // 1-frame blue-noise shimmer while keeping still frames razor-sharp 1080p.
+                            let move_blend = mix(mix(0.24, 0.42, edge), mix(0.06, 0.18, edge), still);
+                            cur = mix(own_s, spatial, move_blend);
+                        }
                         if (nbox > 0.0) {
                             // The traced samples' range, widened a little (the march's grain); wider
-                            // on a still view (only a moved cloud or a change of light needs it).
-                            let m = mix(0.15, 0.5, still) * (hi - lo) + mix(0.02, 0.06, still) * abs(hi);
+                            // on a still view, tighter during camera motion so cloud silhouettes never trail.
+                            let m_lo = select(0.15, 0.05, vc_on);
+                            let m_rel = select(0.02, 0.01, vc_on);
+                            let m = mix(m_lo, 0.5, still) * (hi - lo) + mix(m_rel, 0.06, still) * abs(hi);
                             h = clamp(h, lo - m, hi + m);
                         }
                         // A pixel is traced every fourth frame: its fresh sample weighs as one of
                         // the samples it has had since the cut (`taa.y` frames), then 0.2 (clouds:
                         // 0.08 on a still view, ~24 samples).
                         let n = max(skyu.taa.y / 4.0, 1.0);
-                        let a = select(0.06, max(mix(0.2, 0.08, still), 1.0 / (n + 1.0)), fresh);
+                        // Under `--volumetric-clouds`:
+                        //  * Still frames keep non-fresh pixels locked at 0.008 so full-res 1080p rims stay crisp.
+                        //  * Panning frames accelerate both non-fresh (`0.34..0.54`) and fresh (`0.38`) convergence
+                        //    and reject cloud-edge alpha disocclusions to eliminate 2x2 checkerboard ghosting.
+                        let fast = smoothstep(2.0, 8.0, mv_px);
+                        let vc_stale = mix(mix(0.34, 0.54, fast), 0.008, still);
+                        let stale_a = select(0.06, vc_stale, vc_on);
+                        let fresh_move = select(0.2, mix(0.38, 0.52, fast), vc_on);
+                        var a = select(stale_a, max(mix(fresh_move, 0.08, still), 1.0 / (n + 1.0)), fresh);
+                        if (vc_on && still < 0.7) {
+                            let alpha_jump = smoothstep(0.18, 0.45, abs(h.a - spatial.a)) * (1.0 - still);
+                            a = max(a, alpha_jump * 0.72);
+                        }
                         res = mix(h, cur, a);
                     }
                 }

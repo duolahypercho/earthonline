@@ -79,7 +79,27 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     let c = k[vi % 6u];
     let to_cam = normalize(vec2<f32>(-rel.x, -rel.z) + vec2<f32>(1e-5, 0.0));
     let right = vec3<f32>(-to_cam.y, 0.0, to_cam.x);
+// sf:WEATHER_FX+
+    var sway = vec3<f32>(0.0);
+    if (sky_weather_fx_on(skyu.cirrus) && c.y > 0.0) {
+        let wx_spd = length(skyu.wind.xy);
+        let wd = select(vec2<f32>(0.94, 0.34), skyu.wind.xy / max(wx_spd, 1e-4), wx_spd > 0.25);
+        let eff_spd = select(1.8, wx_spd, wx_spd > 0.25) * clamp(skyu.wind.z, 0.5, 1.6);
+        let ws = clamp((eff_spd - 1.2) / 11.8, 0.0, 1.0);
+        let amp = (0.07 + 0.50 * pow(ws, 1.15)) * (t.height / 8.0);
+        let wt = skyu.wet.w;
+        let adv = dot(t.pos.xz, wd) * 0.042;
+        let ph = f32(t.seed & 1023u) * 0.37;
+        let squall = 0.5 + 0.5 * sin(adv * 0.45 - wt * (0.42 + 0.65 * ws));
+        let wave = (0.30 + 0.58 * squall) * (0.55 * ws) + sin(adv - wt * (1.15 + 2.35 * ws) + ph * 0.35) * 0.72;
+        let d_xz = wd * (wave * amp * c.y * c.y);
+        sway = vec3<f32>(d_xz.x, -dot(d_xz, d_xz) / max(2.0 * t.height, 2.0), d_xz.y);
+    }
+    let p = t.pos + right * (c.x * t.crown) + vec3<f32>(0.0, c.y * t.height, 0.0) + sway;
+// sf:end
+// sf:WEATHER_FX-
     let p = t.pos + right * (c.x * t.crown) + vec3<f32>(0.0, c.y * t.height, 0.0);
+// sf:end
     out.clip = frame.view_proj * vec4<f32>(p, 1.0);
     out.world = p;
     out.uv = c;

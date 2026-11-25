@@ -959,7 +959,57 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // mm/h, sigma = 3.912 / V), lit by the sky under the deck. 8 samples to
     // 20 km. Only with rain on (rate over 0.5 mm/h).
     let rate = skyu.wet.z;
-    if (sky_on(bits, SKY_RAIN) && rate > 0.5 && skyu.cloud0.z > 0.75) {
+    let vc_on_e = sky_vol_clouds_on(skyu.cirrus);
+    if (vc_on_e && sky_on(bits, SKY_RAIN) && rate > 0.5 && skyu.cloud0.z > 0.75) {
+        // (`--volumetric-clouds`) Sweeping wind-driven rain curtains & low misty downpour veils:
+        // smoother overhead attenuation (`up`) keeps dramatic storm ceilings & volumetric scud
+        // clearly visible overhead while dense slanted rain sheets sweep across street canyons & Bay.
+        let base = skyu.cloud0.x;
+        var t1 = min(dist, 20000.0);
+        if (dir.y > 1e-3) {
+            t1 = min(t1, max(base - eye.y, 0.0) / dir.y);
+        }
+        if (t1 > 0.0 && eye.y < base) {
+            let storm_r = smoothstep(10.0, 22.0, rate);
+            let sig_r = 3.912 / mix(6200.0, 2100.0, clamp(rate / 22.0, 0.0, 1.0));
+            let flash_r = clamp(skyu.wind.w + select(0.0, 0.16, rate >= 19.0), 0.0, 1.0);
+            let amb = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.5) * 0.90
+                * (vec3<f32>(1.0) + vec3<f32>(0.55, 0.74, 1.25) * flash_r * 1.15);
+            let wdir = normalize(skyu.wind.xy + vec2<f32>(1e-4, 0.0));
+            let perp = vec2<f32>(-wdir.y, wdir.x);
+            var tp = 0.0;
+            for (var i = 0; i < 16; i = i + 1) {
+                let f = (f32(i) + jit) / 16.0;
+                let tt = t1 * f * sqrt(f);
+                let fn1 = (f32(i) + 1.0) / 16.0;
+                let tn = t1 * fn1 * sqrt(fn1);
+                let dt = tn - tp;
+                tp = tn;
+                let q = eye + dir * tt;
+                let below = max(base - q.y, 0.0);
+                let qs = q.xz - wdir * below * mix(0.35, 0.52, storm_r);
+                let c = textureSampleLevel(vol_sheet, vol_rep, (qs + skyu.cloud2.xy * 0.55) / 6000.0, 4.0);
+                let c2 = textureSampleLevel(vol_sheet, vol_rep, (qs + skyu.cloud2.xy * 0.85) / 1800.0, 2.2);
+                let streak = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(dot(qs, perp) / 520.0, below / 1500.0 + 0.37), 2.0).a;
+                let taper = 0.07 * clamp(below / max(base, 1.0), 0.0, 1.0);
+                let cell = smoothstep(0.36 + taper, 0.84 + taper, c.b * 0.46 + c.a * 0.22 + c2.g * 0.32) * (0.58 + 0.42 * streak);
+                // Low wind-driven mist sheets hugging street canyons & Bay during heavy downpours/storms.
+                let mist_h = exp(-max(q.y, 0.0) / 170.0) * smoothstep(6.0, 18.0, rate);
+                let mist_n = textureSampleLevel(vol_sheet, vol_rep, (q.xz + skyu.cloud2.xy * 1.15) / 960.0, 2.0).g;
+                let mist_sig = (0.00055 * mist_h) * smoothstep(0.22, 0.78, mist_n) * smoothstep(35.0, 240.0, tt);
+                let up = mix(1.0, mix(0.46, 0.26, storm_r), smoothstep(0.05, 0.28, dir.y));
+                let sig = sig_r * (0.12 + 2.05 * cell * cell) * up * smoothstep(base, base - 140.0, q.y) + mist_sig;
+                if (sig > 1e-6) {
+                    let a = 1.0 - exp(-sig * dt);
+                    let mist_share = mist_sig / sig;
+                    let shaft_col = mix(vec3<f32>(0.94, 0.99, 1.06), vec3<f32>(0.60, 0.67, 0.78), cell * (0.72 + 0.28 * storm_r));
+                    let mist_col = vec3<f32>(0.86, 0.92, 1.00);
+                    L = L + T * amb * mix(shaft_col, mist_col, mist_share * 0.65) * a;
+                    T = T * (1.0 - a);
+                }
+            }
+        }
+    } else if (sky_on(bits, SKY_RAIN) && rate > 0.5 && skyu.cloud0.z > 0.75) {
         let base = skyu.cloud0.x;
         var t1 = min(dist, 20000.0);
         if (dir.y > 1e-3) {
@@ -1022,6 +1072,55 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 }
             }
         }
+    } else if (vc_on_e && sky_on(bits, SKY_RAIN) && rate > 0.5 && skyu.cloud0.z > 0.20) {
+        // (`--volumetric-clouds`) Localized sunshower rain curtains / virga hanging specifically
+        // underneath thick dark cumulus shower bases (`bay-sunshower`, coverage 0.20..0.75):
+        // silky backlit silver-gold rain veils with zero rain falling from clear blue sky.
+        let base = skyu.cloud0.x;
+        var t1 = min(dist, 22000.0);
+        if (dir.y > 1e-3) {
+            t1 = min(t1, max(base - eye.y, 0.0) / dir.y);
+        }
+        if (t1 > 200.0 && eye.y < base) {
+            let sig_v = 3.912 / mix(7600.0, 2600.0, clamp(rate / 16.0, 0.0, 1.0));
+            let amb_v = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.5) * 0.92;
+            let cl_lv = cl_light_dir();
+            let cl_csv = dot(dir, cl_lv);
+            let e_sv = cl_sun(base * 0.5) * smoothstep(0.03, 0.18, skyu.cloud1.w);
+            let ph_v = 0.64 * cl_hg(cl_csv, 0.68) + 0.22 / 12.566371;
+            let wdir = normalize(skyu.wind.xy + vec2<f32>(1e-4, 0.0));
+            let perp = vec2<f32>(-wdir.y, wdir.x);
+            var tp = 0.0;
+            for (var i = 0; i < 14; i = i + 1) {
+                let f = (f32(i) + jit) / 14.0;
+                let tt = t1 * pow(f, 1.40);
+                let fn1 = (f32(i) + 1.0) / 14.0;
+                let tn = t1 * pow(fn1, 1.40);
+                let dt = tn - tp;
+                tp = tn;
+                let q = eye + dir * tt;
+                let below = max(base - q.y, 0.0);
+                let qs = q.xz - wdir * below * 0.30;
+                // Anchor every rain curtain strictly to a thick convective cumulus core overhead.
+                let wm_r = vc_weather_at(qs + skyu.cloud2.xy, qs, 260.0, 0.0);
+                let shower_core = smoothstep(0.32, 0.74, wm_r.x) * smoothstep(0.16, 0.60, wm_r.y);
+                if (shower_core > 0.005) {
+                    let streak = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(dot(qs, perp) / 840.0, below / 1900.0 + 0.21), 2.5).a;
+                    let gust_n = textureSampleLevel(vol_sheet, vol_rep, (qs + skyu.cloud2.xy * 0.85) / 2800.0, 2.5).g;
+                    // Graceful virga taper toward the Bay + smooth feather right below the cloud base.
+                    let virga_y = (0.44 + 0.56 * smoothstep(0.0, base * 0.88, q.y)) * smoothstep(base, base - 160.0, q.y);
+                    let cell_v = shower_core * smoothstep(0.16, 0.78, gust_n) * (0.62 + 0.38 * streak) * virga_y;
+                    let sig = sig_v * cell_v * mix(1.0, 0.50, smoothstep(0.12, 0.42, dir.y));
+                    if (sig > 1e-6) {
+                        let a = 1.0 - exp(-sig * dt);
+                        let sun_lit = e_sv * ph_v * vol_cloud_t(q) * 0.92;
+                        let col_v = amb_v * mix(vec3<f32>(0.90, 0.95, 1.04), vec3<f32>(0.65, 0.71, 0.84), cell_v) + sun_lit;
+                        L = L + T * col_v * a;
+                        T = T * (1.0 - a);
+                    }
+                }
+            }
+        }
     }
 
     // (C) clouds: the low deck, marched through its shell over the curved ground with the
@@ -1032,27 +1131,22 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // toward the set sun are added per sample, by position).
     let cl_l = cl_light_dir();
     let cl_cs = dot(dir, cl_l);
-    // `--cloud-depth-haze` (off by default until reviewed under the visual gate): over the
-    // ground (a pixel the aerial
-    // perspective below hazes) the low deck's cloud is held here and put in by the aerial
-    // step, hazed by its own depth and hiding the haze behind it. Composited before the
-    // aerial, a cloud 50 m off took the haze of the ground 20 km behind it and turned to a
-    // blue veil, cut along the horizon where the sky's pixels (no aerial) drew it solid.
-    // Not under a weather veil (`atmo3.x`: fog, drizzle, rain, storm): there the aerial's
-    // Koschmieder over the path under the deck's top is the deck in front of the ground,
-    // and with the march put in front of it the far hills seen from inside the fog went
-    // black and grainy; those frames stay as they were.
-    let cl_defer = sky_on(bits, SKY_CLOUD_DEPTH_HAZE) && atmo_on && dist < 1e8 && skyu.atmo3.x < 0.5;
+    let vc_on = sky_vol_clouds_on(skyu.cirrus);
+    // `--cloud-depth-haze` (off by default until reviewed under the visual gate; also active with
+    // `--volumetric-clouds` so elevated views over terrain and water haze clouds at their own depth):
+    let cl_defer = (sky_on(bits, SKY_CLOUD_DEPTH_HAZE) || vc_on) && atmo_on && dist < 1e8 && skyu.atmo3.x < 0.5;
     var cl_rad = vec3<f32>(0.0);
     var cl_a = 0.0;
     var cl_tm = 0.0;
+    var vc_haze_shade = 0.0;
+    var vc_sky_shade = 0.0;
     // under a heavy deck (rain, storm) no sun reaches the base or the high sheet
     let heavy = smoothstep(0.03, 0.18, skyu.cloud1.w);
     // (a cirrus day has no low deck: eo-sky clouds.rs `SkyState::Cirrus`)
     if (sky_on(bits, SKY_CLOUDS) && (skyu.cloud0.z > 0.0 || vol_cirrus_day() || (vol_ci2_on() && (skyu.cirrus.y > 0.0 || skyu.cloud1.z > 0.0)))) {
         let base = skyu.cloud0.x;
-        let top = skyu.cloud0.y;
-        let strat = cl_stratus();
+        let top = select(skyu.cloud0.y, vc_slab_top(), vc_on);
+        let strat = select(cl_stratus(), vc_stratus(), vc_on);
         // Where the ray is inside the shell (heights over the curved ground).
         var t0 = -1.0;
         var t1 = -1.0;
@@ -1075,17 +1169,26 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
         }
         if (t1 <= t0) {
-            t1 = t0 + 6000.0;
+            t1 = t0 + select(6000.0, 28000.0, vc_on);
         }
-        // (at most 16 km of the shell along a grazing ray, from at most 60 km out: past that the
-        // field has sunk into the horizon haze)
-        t1 = min(min(min(t1, t0 + 16000.0), 45000.0), dist); // (past 45 km the field is >85 % haze)
-        // no cumulus field unless EO_CUMULUS=1 (sky_clouds `cl_low_deck_on`)
-        let march = t0 >= 0.0 && t1 > t0 && t0 < 60000.0 && cl_low_deck_on();
-        let high = dist > 1e8 && dir.y > 0.0 && (skyu.cloud1.z > 0.0 || (vol_ci2_on() && skyu.cirrus.y > 0.0));
+        // Baseline stops at 45 km; `--volumetric-clouds` matches `hor_fade`'s exact zero range
+        // (86 km day / 38 km night) so grazing horizon rays never waste steps on fully faded clouds.
+        let vc_night_cut = smoothstep(0.08, 0.52, skyu.night.z);
+        let vc_max_span = mix(40000.0, 22000.0, vc_night_cut);
+        let vc_max_far = mix(88000.0, 40000.0, vc_night_cut);
+        let vc_max_entry = mix(85000.0, 38500.0, vc_night_cut);
+        let max_span = select(16000.0, vc_max_span, vc_on);
+        let max_far = select(45000.0, vc_max_far, vc_on);
+        let max_entry = select(60000.0, vc_max_entry, vc_on);
+        t1 = min(min(min(t1, t0 + max_span), max_far), dist);
+        // no cumulus field unless EO_CUMULUS=1 or `--volumetric-clouds` (sky_clouds `cl_low_deck_on`)
+        let march = t0 >= 0.0 && t1 > t0 && t0 < max_entry && cl_low_deck_on();
+        let high = dist > 1e8 && dir.y > 0.0 && (skyu.cloud1.z > 0.0 || (!vc_on && vol_ci2_on() && skyu.cirrus.y > 0.0));
         var a_top = skyu.amb_top.xyz;
         var a_side = skyu.amb_top.xyz;
         var a_bot = skyu.amb_base.xyz;
+        var sk_amb = a_top;
+        var sk_sun = a_top;
         if (atmo_on && (march || high)) {
             // made once a frame by the cloud-shadow pass (sky_clouds `cl_shadow_main`)
             let sk = ClSky(textureLoad(cl_shadow, vec2<i32>(0, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(1, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(2, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(3, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(4, 0), 0).gba);
@@ -1096,8 +1199,396 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let vh = normalize(dir.xz + vec2<f32>(1e-5, 0.0));
             a_side = mix(a_side, mix(sk.sun, sk.anti, 0.5 + 0.5 * dot(vh, lh)), skyu.atmo2.y);
             a_bot = mix(a_bot, skyu.amb_base.xyz * 0.4 + sk.amb * 0.5, skyu.atmo2.y);
+            sk_amb = mix(sk_amb, sk.amb, skyu.atmo2.y);
+            sk_sun = mix(sk_sun, sk.sun, skyu.atmo2.y);
         }
-        if (march) {
+        // Atmospheric crepuscular shafts & shadowed coastal haze curtains below the cloud base
+        // (`--volumetric-clouds`): 12 stratified steps out to 22 km combining luminous Mie
+        // forward-scattered sunbeams streaming through broken cloud gaps with cool darkened shadow
+        // corridors carved out of coastal haze across Bay, Pacific & sunshower views.
+        let sh_l = look.key_dir.xyz;
+        if (vc_on && sky_on(bits, SKY_SHAFTS) && sky_on(bits, SKY_CLOUD_SHADOWS) && atmo_on && strat < 0.85 && skyu.cloud0.z > 0.05 && sh_l.y > 0.025 && skyu.sun_rad.w < 0.5) {
+            let max_reach = 22000.0;
+            var s_start = 150.0;
+            var s_end = 0.0;
+            if (eye.y < base) {
+                s_end = min(dist, max_reach);
+                if (dir.y > 0.001) {
+                    s_end = min(s_end, (base - eye.y) / dir.y);
+                }
+            } else if (dir.y < -0.005) {
+                s_start = max((base - eye.y) / dir.y, 150.0);
+                s_end = min(dist, s_start + 16000.0);
+            }
+            let span = s_end - s_start;
+            if (span > 450.0) {
+                let sn = 8;
+                let map_span = SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL;
+                let sun_el_w = smoothstep(0.025, 0.070, sh_l.y);
+                var air_tot = 0.0;
+                var lit_acc = 0.0;
+                var shd_acc = 0.0;
+                for (var si = 0; si < sn; si = si + 1) {
+                    let u0 = f32(si) / f32(sn);
+                    let u1 = (f32(si) + 1.0) / f32(sn);
+                    let um = (f32(si) + jit) / f32(sn);
+                    let f0 = 0.35 * u0 + 0.65 * u0 * u0;
+                    let f1 = 0.35 * u1 + 0.65 * u1 * u1;
+                    let fm = 0.35 * um + 0.65 * um * um;
+                    let s_dt = span * (f1 - f0);
+                    let st_d = s_start + span * fm;
+                    let qp = eye + dir * st_d;
+                    let g_s = qp.xz - sh_l.xz * (qp.y - SKY_SEA_Y) / max(sh_l.y, 0.02);
+                    let raw_cs = textureSampleLevel(cl_shadow, vol_rep, g_s / map_span, 0.0).r;
+                    let map_w = (1.0 - smoothstep(0.42, 0.48, length(g_s - eye.xz) / map_span)) * sun_el_w;
+                    let cs_v = mix(1.0, clamp(raw_cs, 0.0, 1.0), map_w);
+                    // Feather shaft density smoothly approaching `base` so sunbeams blend seamlessly
+                    // into sunlit cloud gaps with zero horizontal cutoff shelf below the setting sun.
+                    let base_soft = smoothstep(base, base - 420.0, qp.y);
+                    let h_air = exp(-max(qp.y, 0.0) / 1150.0) * base_soft;
+                    let v_att = exp(-st_d * 0.000040);
+                    let w_air = h_air * v_att * s_dt;
+                    air_tot = air_tot + w_air;
+                    lit_acc = lit_acc + cs_v * w_air;
+                    shd_acc = shd_acc + (1.0 - cs_v) * w_air;
+                }
+                let broken_w = smoothstep(0.05, 0.30, skyu.cloud0.z) * (1.0 - strat);
+                let shadow_frac = shd_acc / max(air_tot, 1.0);
+                let path_cov = 1.0 - exp(-air_tot / 4500.0);
+                // (1) Shadowed coastal haze carve-out: deepens & cools cloud-shadow corridors in
+                // aerial perspective (`dist < 1e8`) and low horizon sky haze (`dist > 1e8`).
+                let shade_dir = mix(0.58, 0.88, smoothstep(-0.2, 0.85, cl_cs));
+                vc_haze_shade = clamp(shadow_frac * path_cov * broken_w * sun_el_w * shade_dir, 0.0, 0.86);
+                vc_sky_shade = clamp(shadow_frac * path_cov * broken_w * sun_el_w * smoothstep(0.34, 0.03, dir.y) * 0.64, 0.0, 0.58);
+                // (2) Volumetric Mie forward-scattered crepuscular sunbeams streaming through broken gaps:
+                // dramatic beside shadowed corridors & humid sunshowers while keeping midday skies crisp.
+                if (cl_cs > 0.04) {
+                    let ph_raw = 0.72 * cl_hg(cl_cs, 0.80) + 0.28 * cl_hg(cl_cs, 0.36);
+                    let ph_s = (ph_raw / (1.0 + 0.52 * ph_raw)) * smoothstep(0.04, 0.45, cl_cs);
+                    let el_w = mix(0.28, 1.0, smoothstep(0.62, 0.12, sh_l.y)) * sun_el_w;
+                    let shaft_contrast = 0.28 + 0.72 * smoothstep(0.02, 0.28, shadow_frac);
+                    let humid_boost = 1.0 + 0.65 * smoothstep(0.5, 4.0, skyu.wet.z);
+                    let aer_s = max(skyu.atmo3.y, 0.000055) * mix(0.72, 1.12, smoothstep(0.35, 0.08, sh_l.y)) * humid_boost;
+                    // Chappuis rose-amber warmth keeps golden-hour sunbeams pure peach-gold (zero olive-green).
+                    let low_sh = smoothstep(0.26, 0.04, sh_l.y);
+                    let e_shaft = cl_sun(max(eye.y + 150.0, 20.0)) * heavy * mix(vec3<f32>(1.0), vec3<f32>(1.14, 0.86, 0.82), low_sh);
+                    let shaft_rad = e_shaft * (ph_s * el_w * shaft_contrast * broken_w * aer_s * lit_acc);
+                    L = L + T * min(shaft_rad, e_shaft * 0.095);
+                }
+            }
+        }
+        if (march && vc_on) {
+            // ---- `--volumetric-clouds` physical multi-bounce ambient & outer-skin-refined raymarch ----
+            // Respect partial high-veil solar attenuation on broken rain/sunshower decks (`beam < 1.0`,
+            // e.g. SunRain 0.74 -> 0.90) while keeping Clear (1.0) at full sun and Storm (0.03) at 0.
+            let vc_beam = heavy * pow(clamp(skyu.cloud1.w, 0.0, 1.0), 0.35);
+            let night_w = smoothstep(0.08, 0.52, skyu.night.z);
+            let day_w = smoothstep(0.02, 0.25, skyu.atmo.y) * (1.0 - strat * 0.78);
+            let low_sun = smoothstep(0.42, 0.04, skyu.atmo.y) * smoothstep(-0.08, 0.02, skyu.atmo.y);
+            let day_or_gold = clamp(day_w + 0.74 * low_sun * (1.0 - strat * 0.78), 0.0, 1.0);
+            let back_w = smoothstep(-0.25, 0.85, cl_cs);
+
+            // Preserve genuine atmospheric sky color in cloud shadows (rich cool cerulean by day,
+            // deep indigo-violet at golden hour, velvety midnight navy at night without double city-glow).
+            let wrap_w = (0.22 + 0.24 * back_w) * day_or_gold;
+            let top_sky = mix(a_top, sk_amb, 0.34 * day_or_gold);
+            let side_sky = mix(a_side, mix(sk_amb, sk_sun, 0.36), wrap_w);
+            let top_l = dot(top_sky, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let side_l = dot(side_sky, vec3<f32>(0.2126, 0.7152, 0.0722));
+            // At night, bypass the global pre-baked amber `amb_base` so clouds outside downtown stay
+            // velvety midnight blue-slate; downtown underside glow is localized per-sample below.
+            let a_bot_eff = mix(a_bot, a_top * vec3<f32>(0.76, 0.84, 1.04), night_w);
+            let bot_l = dot(a_bot_eff, vec3<f32>(0.2126, 0.7152, 0.0722));
+
+            let day_hi = smoothstep(0.22, 0.58, cl_l.y) * (1.0 - strat * 0.82);
+            let sun_cloud_bounce = cl_sun(0.5 * (base + top)) * ((mix(0.011, 0.022, day_hi) * max(cl_l.y, 0.0) + 0.008 * low_sun) * vc_beam * (1.0 - strat * 0.85) * mix(0.62, 1.15, back_w));
+            let sun_ground_bounce = cl_sun(base) * ((mix(0.014, 0.032, day_hi) * max(cl_l.y, 0.0) + 0.007 * low_sun) * vc_beam * (1.0 - strat * 0.82));
+            // Selective molten coral-gold sunset ridge under-bounce (drives high-contrast fiery rims
+            // on exposed protruding ridges while deep recessed shadow bellies stay dark indigo-violet).
+            let sun_under = cl_sun(base) * (0.056 * low_sun * vc_beam * (1.0 - strat * 0.85) * (0.28 + 0.72 * max(cl_cs, 0.0)) * vec3<f32>(1.34, 0.78, 0.52));
+            // Warm lateral cloud-to-cloud bounce from adjacent sunlit towers onto exposed shaded cheeks.
+            let c2c_bounce = cl_sun(0.5 * (base + top)) * ((mix(0.020, 0.034, day_hi) * max(cl_l.y, 0.12) + 0.018 * low_sun) * vc_beam * (1.0 - strat * 0.85)) * mix(vec3<f32>(1.02, 0.99, 0.95), vec3<f32>(1.26, 0.82, 0.66), low_sun);
+
+            let desat_w = mix(0.18, 0.04, low_sun) * day_or_gold;
+            let top_gain = mix(mix(1.0, 0.92, night_w), mix(mix(1.02, 1.18, day_hi), 1.08, back_w), day_or_gold);
+            let side_gain = mix(mix(1.0, 0.88, night_w), mix(mix(0.94, 1.14, day_hi), 0.96, back_w), day_or_gold);
+            let bot_gain = mix(mix(1.0, 0.82, night_w), mix(mix(0.96, 1.24, day_hi), 0.82, back_w), day_or_gold);
+
+            // Deep twilight indigo-violet shadow ambient at golden hour creates authentic "fire vs. indigo"
+            // contrast against blazing sunlit gold/crimson rims (eliminates flat mid-tone peach-brown).
+            let sunset_cool = mix(vec3<f32>(1.0), vec3<f32>(0.84, 0.76, 1.24), low_sun * (1.0 - strat * 0.8));
+            let night_cool = mix(vec3<f32>(1.0), vec3<f32>(0.80, 0.88, 1.16), night_w * (1.0 - strat * 0.5));
+            // At night, clouds scatter BOTH the zenith sky and the diffuse ambient metropolitan sky-dome
+            // bounce (`SKY_GLOW_RGB` cooled to velvety midnight indigo-slate), preventing near-black ink
+            // silhouettes against the glowing San Francisco night horizon.
+            let night_dome_fill = SKY_GLOW_RGB * (skyu.amb_top.w * night_w) * vec3<f32>(0.50, 0.58, 0.84);
+            let vc_top = mix(top_sky, vec3<f32>(top_l) * vec3<f32>(0.96, 0.98, 1.04), desat_w) * top_gain * sunset_cool * night_cool + night_dome_fill * 0.85 + sun_cloud_bounce * 0.78 + skyu.twi.xyz * (0.08 * low_sun);
+            let vc_side = mix(side_sky, vec3<f32>(side_l) * vec3<f32>(0.96, 0.98, 1.04), desat_w) * side_gain * sunset_cool * night_cool + night_dome_fill * 1.15 + sun_cloud_bounce * 0.82 + skyu.twi.xyz * (0.10 * low_sun);
+            let vc_bot = mix(a_bot_eff, vec3<f32>(max(bot_l, side_l * 0.80)) * vec3<f32>(0.96, 0.98, 1.04), desat_w * 1.1) * bot_gain * mix(vec3<f32>(1.0), sunset_cool, 0.82) + night_dome_fill * 0.95 + sun_ground_bounce + skyu.twi.xyz * (0.12 * low_sun);
+
+            let hl = length(dir.xz);
+            // Slightly softer optical density at night gives velvety, translucent feathery nocturnal cloud
+            // margins instead of opaque charcoal cutouts while letting bright stars shimmer through thin edges.
+            let sig_max = skyu.cloud1.x * skyu.cloud0.w * VC_DENSITY * mix(1.0, 0.64, night_w * (1.0 - strat * 0.7));
+            // Step budget scales cleanly with `--sky-quality` (amb_base.w: 12 low / 18 default / 28 high).
+            let q_steps = i32(skyu.amb_base.w);
+            let base_budget = select(select(46, 64, q_steps >= 16), 100, q_steps >= 24);
+            let max_steps_cu = select(select(base_budget, (base_budget * 3) / 4, t0 > 15000.0), base_budget / 2, t0 > 34000.0);
+            // Continuous marine fog & overcast stratus decks saturate optically in ~20 steps.
+            let max_steps = select(max_steps_cu, min(max_steps_cu, 30), strat > 0.45);
+            let is_day_lit = any(cl_sun(top) * vc_beam > vec3<f32>(0.001));
+            let moon_key_w = clamp(skyu.sun_rad.w, 0.0, 1.0) * night_w;
+            let twi_spike_soft = 1.0 - 0.58 * smoothstep(0.02, -0.05, skyu.atmo.y);
+            var Tc = 1.0;
+            var Lc = vec3<f32>(0.0);
+            var tw = 0.0;
+            var twt = 0.0;
+            let dt0 = clamp(18.0 + 0.0056 * t0 + 0.0125 * max(t0 - 13000.0, 0.0), 18.0, 980.0);
+            var t = t0 + jit * dt0;
+            var t_done = t;
+            var fine = 0;
+            var prev_skip = 0.0;
+            var sun_held = vec3<f32>(-1.0);
+            var ao_held = vec2<f32>(1.0, 0.55);
+            for (var i = 0; i < max_steps; i = i + 1) {
+                if (t >= t1) {
+                    break;
+                }
+                let dt_base = clamp(18.0 + 0.0056 * t + 0.0125 * max(t - 13000.0, 0.0), 18.0, 980.0);
+                // Crisp outer-skin step refinement (`Tc > 0.45`) keeps close swirling vapor rims razor-sharp.
+                let dt_skin = select(0.62, 0.52, Tc > 0.54 && t < 16000.0);
+                let dt = select(dt_base, dt_base * dt_skin, fine > 0 && Tc > 0.42 && t < 24000.0 && strat < 0.45);
+                let pp = eye + dir * t;
+                let ht = t * hl;
+                let pc = vec3<f32>(pp.x, pp.y + ht * ht / (2.0 * CL_EARTH_R), pp.z);
+                let fp = vol_footprint(t);
+                let lod = clamp(log2(max(fp, 1.0) / 20.0), 0.0, 3.0);
+                let fine_n = select(5, 3, t > 18000.0 || strat > 0.45);
+                if (fine == 0) {
+                    // Two-tier conservative empty-space skip; backsteps strictly within the just-skipped
+                    // gap (never behind `t_done`, preventing double-integration or ping-pong terraces).
+                    if (vc_envelope(pc, fp, 0.14) <= 0.001) {
+                        prev_skip = 3.6 * dt_base;
+                        t = t + prev_skip;
+                        continue;
+                    }
+                    let cm = select(2.2, 2.8, t > 22000.0);
+                    if (vc_shape(pc, fp, lod).x > 0.001) {
+                        if (prev_skip > 0.0) {
+                            fine = fine_n + 3;
+                            t = max(t - prev_skip + 0.5 * dt_base, t_done);
+                            prev_skip = 0.0;
+                            continue;
+                        }
+                        fine = fine_n;
+                    } else {
+                        prev_skip = cm * dt_base;
+                        t = t + prev_skip;
+                        continue;
+                    }
+                }
+                prev_skip = 0.0;
+                let want_f = Tc > 0.22 && strat < 0.45 && (is_day_lit || t < 14000.0);
+                let allow_m = (is_day_lit || low_sun > 0.05) && night_w < 0.45 && strat < 0.45 && Tc > 0.34;
+                let s = vc_density(pc, t, fp, lod, want_f, allow_m);
+                if (s.x > 0.0012) {
+                    fine = fine_n;
+                    let sig = sig_max * s.x;
+                    // Altitude-stepped golden-hour sunset solar gradient (deep crimson-tangerine on lower
+                    // bellies climbing to blazing golden-champagne crowns) + gentle lunar silver-blue at night.
+                    let alt_grad = mix(vec3<f32>(1.20, 0.80, 0.62), vec3<f32>(1.14, 1.04, 0.86), smoothstep(0.12, 0.78, s.y));
+                    let sun_alt_tint = mix(vec3<f32>(1.0), alt_grad, low_sun * (1.0 - strat * 0.85));
+                    let moon_tint = mix(vec3<f32>(1.0), vec3<f32>(1.95, 2.15, 2.65), moon_key_w);
+                    let e_sun = cl_sun(pc.y) * vc_beam * sun_alt_tint * moon_tint;
+                    var sun = vec3<f32>(0.0);
+                    var sun_slope = 0.24;
+                    var ao_res = ao_held;
+                    if (Tc < 0.16 && sun_held.x >= 0.0) {
+                        sun = sun_held;
+                    } else {
+                        if (night_w < 0.65) {
+                            ao_res = vc_sky_ao(pc, cl_l, s.y, t, fp, lod, sig_max, strat);
+                            ao_held = ao_res;
+                        }
+                        if (any(e_sun > vec3<f32>(0.0))) {
+                            var tl = vec3<f32>(340.0 * s.x * sig_max / max(cl_l.y, 0.14), 80.0 * s.x * sig_max, 0.24);
+                            if (t <= 122000.0 && (strat < 0.45 || t < 24000.0)) {
+                                tl = vc_light_tau(pc, cl_l, t, fp, lod, s.x, jit);
+                            }
+                            sun_slope = tl.z;
+                            let spike_w = twi_spike_soft * (1.0 - 0.65 * smoothstep(32000.0, 74000.0, t));
+                            let sub_top = ao_res.y * mix(1.0, 1.32 - 0.52 * s.z, day_hi);
+                            sun = e_sun * vc_ms(tl.x, tl.y, tl.z, s.w, sub_top, spike_w, cl_cs, low_sun, strat) * VC_SUN_GAIN;
+                        }
+                    }
+                    sun_held = sun;
+                    // Restrain warm twilight `vol_extra_amb` inside deep golden-hour shadow cores so they stay
+                    // rich indigo-violet while exposed edges & blue-hour clouds keep smooth rose-lavender glow.
+                    var extra_a = vol_extra_amb(pc, dir) * mix(1.0, 0.35 + 0.65 * ao_res.x, low_sun);
+                    if (night_w > 0.01) {
+                        let r_city = length(pc.xz - SKY_CITY_CENTRE);
+                        let city_w = skyu.amb_top.w * (1.0 - smoothstep(2600.0, 8200.0, r_city));
+                        let city_night = vec3<f32>(0.046, 0.035, 0.029) * city_w;
+                        extra_a = mix(extra_a, city_night, night_w);
+                    }
+                    // Smooth, broad rose-indigo twilight afterglow at blue hour (zero sharp crest rim).
+                    let twi_dir = 0.32 + 0.68 * max(cl_cs, 0.0);
+                    let alpen = skyu.twi.xyz * vec3<f32>(1.12, 0.84, 0.96) * smoothstep(0.0, 0.65, s.y) * twi_dir * (0.42 + 0.58 * ao_res.x) * 0.24;
+                    let amb = vc_ambient(vc_top + alpen, vc_side + alpen * 0.72, vc_bot + extra_a, sun_under, c2c_bounce, s.y, s.z, s.x, s.w, sun_slope, ao_res.x, low_sun, night_w, strat);
+                    let ext = exp(-sig * dt);
+                    let wgt = Tc * (1.0 - ext);
+                    Lc = Lc + wgt * (sun + amb);
+                    tw = tw + wgt * t;
+                    twt = twt + wgt;
+                    Tc = Tc * ext;
+                    if (Tc < select(0.025, 0.055, t > 14000.0)) {
+                        Tc = 0.0;
+                        break;
+                    }
+                } else {
+                    fine = fine - 1;
+                }
+                t = t + dt;
+                t_done = t;
+            }
+            let t_m = select(t0, tw / max(twt, 1e-6), twt > 1e-6);
+            let alpha = 1.0 - Tc;
+            if (alpha > 0.0005) {
+                let cie = 0.72 * (1.0 + 1.8 * clamp(dir.y, 0.0, 1.0)) / 2.8;
+                Lc = Lc * mix(1.0, max(cie, 0.34), select(strat, 0.0, above));
+                if (!above && strat > 0.0) {
+                    // Dry overcast, rain & storm cumulonimbus base sculpture: multi-scale brooding
+                    // thunderhead cores + 3.2:1 wind-sheared shelf/arcus roll bands + hanging mammatus
+                    // convective pouches alternating with luminous silver-steel storm rifts.
+                    let pb = eye + dir * t0;
+                    let wb = pb.xz + skyu.cloud2.xy;
+                    let fp_b = vol_footprint(t0);
+                    let lod_b = clamp(log2(max(fp_b, 1.0) / 28.0), 0.8, 3.0);
+                    let storm_w = smoothstep(6.0, 20.0, skyu.wet.z);
+                    let rain_w = smoothstep(2.0, 8.0, skyu.wet.z);
+                    let nb = textureSampleLevel(cl_base, vol_rep, vec3<f32>(wb.x, base * 0.6, wb.y) / (VC_BASE_TILE * 1.35), lod_b);
+                    let wdir_b = normalize(skyu.wind.xy + vec2<f32>(1.0, 0.35) * 0.25);
+                    let wperp_b = vec2<f32>(-wdir_b.y, wdir_b.x);
+                    let roll_q = vec2<f32>(dot(wb, wdir_b) * 3.1, dot(wb, wperp_b) * 0.85);
+                    let nr = textureSampleLevel(cl_base, vol_rep, vec3<f32>(roll_q.x, base * 0.55, roll_q.y) / (VC_BASE_TILE * 1.45), max(lod_b, 1.0));
+                    let roll_b = smoothstep(0.20, 0.80, 0.58 * nr.g + 0.42 * nr.b);
+                    let nd = textureSampleLevel(vc_detail, vol_rep, vec3<f32>(wb.x, base * 0.78, wb.y) / 1120.0, clamp(log2(max(fp_b, 1.0) / 18.0), 0.6, 3.0));
+                    let mammatus = smoothstep(0.20, 0.82, 0.55 * (1.0 - nd.r) + 0.45 * (1.0 - nd.b));
+                    let thick_m = smoothstep(0.16, 0.84, mix(nb.r, 0.625 * nb.g + 0.25 * nb.b + 0.125 * nb.a, 0.45));
+                    let thick_r = mix(thick_m, 0.48 * thick_m + 0.32 * roll_b + 0.20 * mammatus, max(rain_w * 0.72, storm_w));
+                    let k_st = strat * mix(mix(0.84, 1.08, storm_w), 0.56, heavy) * smoothstep(0.015, 0.14, dir.y);
+                    let mf_st = clamp(1.0 + k_st * (0.50 - thick_r) * mix(1.56, 2.05, storm_w), mix(0.36, 0.24, storm_w), mix(1.54, 1.78, storm_w));
+                    let gl = dot(Lc, vec3<f32>(0.2126, 0.7152, 0.0722));
+                    let storm_tint = mix(vec3<f32>(0.95, 1.00, 1.07), vec3<f32>(0.84, 0.91, 1.08), storm_w);
+                    let dark_storm = mix(1.0, 0.76, storm_w * smoothstep(0.35, 0.85, thick_r));
+                    Lc = mix(Lc, gl * storm_tint, (0.44 + 0.18 * storm_w) * strat) * mf_st * dark_storm;
+                    let lu = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.5) * 0.90;
+                    let deck = alpha * lu * (0.95 + 0.42 * clamp(dir.y, 0.0, 1.0)) * storm_tint * mf_st * dark_storm;
+                    let w_rain = strat * (1.0 - heavy) * rain_w;
+                    Lc = mix(Lc, deck, w_rain * mix(0.42, 0.24, storm_w));
+
+                    // Internal volumetric thunderhead sheet lightning (`Kind::Storm`, rate >= 19 mm/h):
+                    // illuminates thinner storm rifts & mammatus fissures from INSIDE a localized
+                    // charged thunderhead cell with brooding electric steel-blue/violet scatter.
+                    if (skyu.wet.z >= 19.0 && strat > 0.5) {
+                        let slot = floor(skyu.eye.w / 6.0);
+                        let h_ang = fract(sin(slot * 12.9898 + 4.1414) * 43758.5453);
+                        let h_rad = fract(sin(slot * 78.233 + 1.917) * 43758.5453);
+                        let fwd_h = normalize(vec2<f32>(skyu.cam_fwd.x, skyu.cam_fwd.z) + vec2<f32>(1e-4, 0.0));
+                        let rgt_h = vec2<f32>(-fwd_h.y, fwd_h.x);
+                        // Anchor the charged storm cell ~2.3-3.6 km downrange; shifts per 6 s slot.
+                        let cell_xz = eye.xz + fwd_h * mix(2300.0, 3600.0, h_rad) + rgt_h * ((h_ang - 0.5) * 900.0 - 420.0);
+                        let d_cell = length(pb.xz - cell_xz);
+                        let cell_glow = exp(-(d_cell * d_cell) / (2000.0 * 2000.0));
+                        let pulse = 0.74 + 0.26 * sin(skyu.eye.w * 2.1 + 0.7) * sin(skyu.eye.w * 0.83 + 1.2);
+                        let live_f = skyu.wind.w;
+                        let sheet_e = max(live_f * 3.5, pulse * 1.45);
+                        let fissure = pow(clamp(1.04 - thick_r, 0.04, 1.0), 2.10);
+                        let flash_col = vec3<f32>(0.52, 0.78, 1.52) * max(lk_luma(lu), 0.055);
+                        Lc = Lc + alpha * flash_col * cell_glow * fissure * sheet_e * mix(1.0, 2.4, smoothstep(0.05, 0.5, live_f));
+                    }
+                }
+                // Dedicated soft, wispy 3D volumetric storm scud / shelf fractus (`base - 260..base - 25 m`)
+                // drifting rapidly beneath heavy-rain & thunderstorm ceilings: strictly darker charcoal-slate
+                // than the brooding storm deck behind it, with ultra-soft feathered vapor edges (zero cutouts;
+                // zero cost in clear/fog/night).
+                if (!above && strat > 0.45 && skyu.wet.z > 5.0 && dir.y > 0.04 && eye.y < base - 260.0) {
+                    let sb0 = cl_hit(eye.y, dir, base - 260.0, false);
+                    let sb1 = min(min(cl_hit(eye.y, dir, base - 25.0, false), sb0 + 3000.0), dist);
+                    if (sb0 > 0.0 && sb1 > sb0 && sb0 < min(dist, 10000.0)) {
+                        let ds = (sb1 - sb0) / 10.0;
+                        let scud_rate = smoothstep(5.0, 20.0, skyu.wet.z) * smoothstep(0.04, 0.16, dir.y);
+                        let wdir_s = normalize(skyu.wind.xy + vec2<f32>(1.0, 0.35) * 0.25);
+                        let wperp_s = vec2<f32>(-wdir_s.y, wdir_s.x);
+                        let base_scud = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.25) * 0.85;
+                        let scud_core = base_scud * mix(vec3<f32>(0.24, 0.28, 0.36), vec3<f32>(0.15, 0.19, 0.28), scud_rate)
+                            * (1.0 + vec3<f32>(0.55, 0.75, 1.35) * skyu.wind.w * 2.0);
+                        let scud_edge = base_scud * mix(vec3<f32>(0.32, 0.37, 0.46), vec3<f32>(0.22, 0.27, 0.37), scud_rate);
+                        var ts = 1.0;
+                        var ls = vec3<f32>(0.0);
+                        for (var si = 0; si < 10; si = si + 1) {
+                            let st_q = sb0 + (f32(si) + jit) * ds;
+                            let q = eye + dir * st_q;
+                            let qw = q.xz + skyu.cloud2.xy * 1.35;
+                            let qs_s = vec2<f32>(dot(qw, wdir_s) * 0.65, dot(qw, wperp_s) * 1.35);
+                            let nq = textureSampleLevel(cl_base, vol_rep, vec3<f32>(qs_s.x, q.y * 1.5, qs_s.y) / 2100.0, 2.1);
+                            let ndq = textureSampleLevel(vc_detail, vol_rep, vec3<f32>(qw.x, q.y * 1.6, qw.y) / 960.0, 2.2);
+                            let hb = clamp((base - q.y - 25.0) / 235.0, 0.0, 1.0);
+                            let v_env = smoothstep(0.0, 0.40, hb) * (1.0 - smoothstep(0.50, 1.0, hb));
+                            let raw_w = 0.56 * nq.r + 0.24 * nq.g + 0.20 * (1.0 - ndq.b);
+                            let wisp = smoothstep(0.38, 0.90, raw_w);
+                            // Soft quadratic vapor ramp keeps outer fractus wisps genuinely silky and feathered.
+                            let dn = (wisp * wisp) * v_env * scud_rate * (1.0 - smoothstep(3800.0, 9500.0, st_q));
+                            if (dn > 0.001) {
+                                let e = exp(-0.0016 * dn * ds);
+                                let col_s = mix(scud_edge, scud_core, smoothstep(0.10, 0.80, wisp));
+                                ls = ls + ts * col_s * (1.0 - e);
+                                ts = ts * e;
+                                if (ts < 0.18) {
+                                    break;
+                                }
+                            }
+                        }
+                        L = L + T * ls;
+                        T = T * ts;
+                    }
+                }
+                // Physical Rayleigh + coastal marine-layer aerial perspective along the path to `t_m`,
+                // softening distant East Bay & Pacific horizon banks smoothly into dreamy coastal haze.
+                let dh_c = dir.y * t_m;
+                let air_d = sky_path_density(dh_c);
+                let ray_c = AT_RAY * 0.001 * exp(-max(eye.y + 0.5 * dh_c, 0.0) / 8000.0);
+                let graze_h = mix(0.75, 1.25, smoothstep(0.16, 0.02, abs(dir.y)));
+                let aer_c = max(skyu.atmo3.y, 0.000028) * air_d * mix(graze_h, 1.05, strat);
+                let marine_hz = exp(-t_m * (1.0 - 0.88 * abs(dir.y)) / mix(58000.0, 28000.0, night_w));
+                let far_rgb = exp(-(ray_c * mix(0.58, 0.36, low_sun) + vec3<f32>(aer_c)) * t_m) * marine_hz;
+                // Feather BOTH radiance and opacity (`alpha_h`) smoothly at extreme horizon range so
+                // faded-out clouds never block stars, sun disc, or nocturnal city-skyglow (fixes dark night wall).
+                let hor_fade = 1.0 - smoothstep(mix(44000.0, 14000.0, night_w), mix(86000.0, 38000.0, night_w), t_m);
+                let alpha_h = alpha * hor_fade;
+                let Lc_h = Lc * hor_fade;
+                var behind = lk_sky_dome(dir);
+                if (atmo_on) {
+                    behind = mix(behind, vol_atmo_sky(dir), skyu.atmo2.y);
+                }
+                if (night_w > 0.01 && skyu.amb_top.w > 0.0) {
+                    behind = behind + sky_city_glow(dir, eye, skyu.amb_top.w) * (0.5 * night_w);
+                }
+                if (cl_defer) {
+                    cl_rad = Lc_h;
+                    cl_a = alpha_h;
+                    cl_tm = t_m;
+                } else {
+                    Lc = Lc_h * far_rgb + behind * alpha_h * (vec3<f32>(1.0) - far_rgb);
+                    if (above) {
+                        L = Lc + (1.0 - alpha_h) * L;
+                    } else {
+                        L = L + T * Lc;
+                    }
+                    T = T * (1.0 - alpha_h);
+                }
+            }
+        } else if (march) {
             let hl = length(dir.xz);
             let sig_max = skyu.cloud1.x * skyu.cloud0.w * CL_DENSITY;
             // Steps of ~20 m near the eye growing with distance (a pixel's footprint), up to
@@ -1272,7 +1763,131 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // (D) The high deck: one sheet at its altitude, sky only; lit by the same
         // sun as the low deck (the atmosphere's transmittance at its own height, the same
         // phase and octaves), so the two layers agree and the high one keeps the sun longest.
-        if (high && vol_ci2_on()) {
+        if (high && vc_on) {
+            if (T > 0.004) {
+                let night_d = smoothstep(0.08, 0.52, skyu.night.z);
+                let low_sun_d = (1.0 - smoothstep(-0.02, 0.38, skyu.atmo.y)) * smoothstep(-0.14, -0.02, skyu.atmo.y);
+                let day_d = smoothstep(0.02, 0.25, skyu.atmo.y) * (1.0 - strat * 0.75);
+
+                // Mid-level 6.4-7.1 km true 3D volumetric broken altocumulus floccus / lenticularis
+                // patches (~15-25% sky cover, preserving vast crisp blue sky clearings): 3 jittered 3D
+                // vertical slices through the 700 m slab with real 3D billowing thickness, sunlit upper
+                // puffs, shaded curved undersides, and parallax (0 extra 3D fetches on clear blue sky).
+                let fair_a = (1.0 - smoothstep(0.15, 0.62, strat)) * (1.0 - smoothstep(0.35, 0.72, night_d));
+                if (fair_a > 0.005) {
+                    let ta0 = cl_hit(eye.y, dir, 6400.0, false);
+                    let ta1_raw = cl_hit(eye.y, dir, 7100.0, false);
+                    if (ta0 > 0.0 && ta0 < 185000.0 && ta1_raw > ta0) {
+                        let ta1 = min(ta1_raw, ta0 + 5200.0);
+                        let ta_mid = 0.5 * (ta0 + ta1);
+                        let pa_mid = eye + dir * ta_mid;
+                        // Half low-drift wraps cleanly at 25.6 km; every tile below divides 25.6 km evenly.
+                        let qa_mid = pa_mid.xz + skyu.cloud2.xy * 0.5 + vec2<f32>(9600.0, -5400.0);
+                        let fp_a = vol_footprint(ta_mid) * 0.5;
+                        // Localized synoptic patch archipelago (leaves >=72% open blue sky, zero wall-to-wall veil).
+                        let am_uv = vec2<f32>(qa_mid.y, -qa_mid.x) / VC_WEATHER_TILE + vec2<f32>(0.29, 0.63);
+                        let am = textureSampleLevel(vc_weather, vol_rep, am_uv, clamp(log2(max(fp_a, 1.0) / 50.0), 0.0, 4.0));
+                        let env_a = smoothstep(0.55, 0.85, 0.56 * am.r + 0.44 * am.g) * smoothstep(0.28, 0.70, am.b);
+                        let elev_a = smoothstep(0.06, 0.24, dir.y);
+                        if (env_a > 0.005 && elev_a > 0.002) {
+                            let flow_a = (vec2<f32>(am.b, am.g) - 0.5) * 0.24;
+                            let lod_ad = clamp(log2(max(fp_a, 1.0) / 42.0), 0.0, 3.0);
+                            let e_sa = cl_sun(6750.0) * heavy;
+                            let fwd_a = cl_hg(cl_cs, 0.66);
+                            let ph_a = 0.56 * (fwd_a / (1.0 + 0.46 * fwd_a)) + 0.44 * cl_hg(cl_cs, -0.22);
+                            let top_la = dot(a_top, vec3<f32>(0.2126, 0.7152, 0.0722));
+                            let side_la = dot(a_side, vec3<f32>(0.2126, 0.7152, 0.0722));
+                            let alto_shd = mix(a_top, vec3<f32>(top_la) * vec3<f32>(0.93, 0.97, 1.05), 0.42 * day_d);
+                            let alto_lit_a = mix(a_side, vec3<f32>(side_la) * vec3<f32>(0.99, 0.99, 1.02), 0.45 * day_d);
+                            let shadow_tint = mix(vec3<f32>(0.88, 0.93, 1.04), vec3<f32>(0.96, 0.84, 1.02), low_sun_d);
+                            let l_xz = normalize(vec2<f32>(cl_l.x, cl_l.z) + vec2<f32>(1e-5, 0.0));
+                            let step_a = mix(380.0, 240.0, smoothstep(0.05, 0.65, max(cl_l.y, 0.0)));
+                            let dq_a = (l_xz * step_a) / 3200.0;
+                            let ds_a = (ta1 - ta0) / 3.0;
+                            var Ta_3d = 1.0;
+                            var La_3d = vec3<f32>(0.0);
+                            for (var ai = 0; ai < 3; ai = ai + 1) {
+                                let ha_frac = (f32(ai) + jit) / 3.0;
+                                let ta_s = ta0 + (ta1 - ta0) * ha_frac;
+                                let pa_s = eye + dir * ta_s;
+                                let qa_s = pa_s.xz + skyu.cloud2.xy * 0.5 + vec2<f32>(9600.0, -5400.0);
+                                let qn = qa_s / 3200.0;
+                                // Vertical dome profile inside the 700 m slab: crisp flat base + rounded upper billow.
+                                let v_prof = smoothstep(0.0, 0.24, ha_frac) * (1.0 - smoothstep(0.54, 1.0, ha_frac));
+                                let auv0 = vec3<f32>(
+                                    0.625 * qn.x + 0.25 * qn.y + flow_a.x,
+                                    0.22 + 0.46 * ha_frac + 0.10 * am.b,
+                                    -0.375 * qn.x + 0.875 * qn.y + flow_a.y,
+                                );
+                                let ad0 = textureSampleLevel(vc_detail, vol_rep, auv0, lod_ad);
+                                let band0 = 0.42 * ad0.b + 0.32 * ad0.r + 0.26 * ad0.a;
+                                let alto_d0 = env_a * v_prof * smoothstep(0.41, 0.80, band0);
+                                if (alto_d0 > 0.005) {
+                                    // True 3D directional sun tap (offset horizontally AND vertically toward `cl_l`).
+                                    let auv1 = vec3<f32>(
+                                        auv0.x + 0.625 * dq_a.x + 0.25 * dq_a.y,
+                                        auv0.y + clamp(cl_l.y * 0.22, 0.02, 0.24),
+                                        auv0.z - 0.375 * dq_a.x + 0.875 * dq_a.y,
+                                    );
+                                    let ad1 = textureSampleLevel(vc_detail, vol_rep, auv1, min(lod_ad + 0.35, 3.0));
+                                    let alto_d1 = env_a * smoothstep(0.41, 0.80, 0.42 * ad1.b + 0.32 * ad1.r + 0.26 * ad1.a) * (1.0 - smoothstep(0.75, 1.0, ha_frac + 0.18));
+                                    let tau_a = (0.32 * alto_d0 + 1.72 * alto_d1) * mix(1.45, 2.25, low_sun_d);
+                                    let crest = clamp((alto_d0 - alto_d1) * 2.15 + 0.35 + 0.30 * ha_frac, 0.0, 1.0);
+                                    let ms_a = exp(-tau_a) * ph_a + (0.34 * exp(-0.42 * tau_a) + 0.14 * exp(-0.14 * tau_a)) / 12.566371;
+                                    let sunset_under = mix(vec3<f32>(1.0), vec3<f32>(1.20, 0.87, 0.82), low_sun_d * (0.40 + 0.60 * crest));
+                                    let amb_a = mix(alto_shd * shadow_tint * mix(0.74, 0.92, ha_frac), alto_lit_a * 1.04, 0.22 + 0.52 * crest);
+                                    let twi_a = skyu.twi.xyz * (0.40 + 0.78 * crest + 0.48 * max(cl_cs, 0.0)) * mix(0.75, 1.38, low_sun_d);
+                                    let ca = e_sa * ms_a * sunset_under * (VC_SUN_GAIN * 0.98) + amb_a + twi_a;
+                                    let seg_a = clamp(1.0 - exp(-alto_d0 * 0.00056 * ds_a * fair_a * elev_a), 0.0, 0.36);
+                                    La_3d = La_3d + Ta_3d * seg_a * ca;
+                                    Ta_3d = Ta_3d * (1.0 - seg_a);
+                                }
+                            }
+                            let aa = clamp(1.0 - Ta_3d, 0.0, 0.52);
+                            if (aa > 0.002) {
+                                let fa = exp(-ta_mid * (1.0 - 0.82 * abs(dir.y)) / 82000.0) * (1.0 - smoothstep(125000.0, 185000.0, ta_mid));
+                                L = L + T * La_3d * fa;
+                                T = T * (1.0 - aa * fa);
+                            }
+                        }
+                    }
+                }
+
+                // High-altitude 8.8 km gossamer fibrous cirrus / mare's-tail deck (exact 51.2 km wrap tiles:
+                // 25600 m, 10240 m, 3200 m). Whisper-thin jet-stream ice silk leaving open blue sky & stars crisp.
+                let fair_c = (1.0 - smoothstep(0.22, 0.68, strat)) * (1.0 - 0.85 * night_d);
+                if (fair_c > 0.005 && T > 0.004) {
+                    let t = cl_hit(eye.y, dir, skyu.cloud1.y, false);
+                    if (t > 0.0 && t < 245000.0) {
+                        let p = eye + dir * t;
+                        let qh = p.xz + skyu.cloud2.zw;
+                        let fp_h = vol_footprint(t) * 0.65;
+                        let c_macro_raw = textureSampleLevel(vc_weather, vol_rep, qh / VC_WEATHER_TILE, clamp(log2(max(fp_h, 1.0) / 50.0), 0.0, 4.0)).a;
+                        let c_macro = smoothstep(0.16, 0.80, c_macro_raw);
+                        if (c_macro > 0.004) {
+                            let c_fine = textureSampleLevel(vc_weather, vol_rep, (qh + vec2<f32>(3200.0, -1900.0)) / 10240.0, clamp(log2(max(fp_h, 1.0) / 20.0), 0.0, 4.0)).a;
+                            let c_wisp = textureSampleLevel(vc_detail, vol_rep, vec3<f32>(qh.x, skyu.cloud1.y, qh.y) / 3200.0, clamp(log2(max(fp_h, 1.0) / 50.0), 0.0, 3.0)).b;
+                            let fil = c_macro * (0.26 + 0.74 * smoothstep(0.14, 0.82, c_fine)) * (0.44 + 0.56 * c_wisp);
+                            let a = clamp(fil * skyu.cloud1.z * 0.96 * fair_c * smoothstep(0.05, 0.22, dir.y), 0.0, 0.21);
+                            if (a > 0.002) {
+                                let e_sun = cl_sun(skyu.cloud1.y) * heavy;
+                                let fwd_ice = cl_hg(cl_cs, 0.74);
+                                let halo_ice = fwd_ice / (1.0 + 0.52 * fwd_ice);
+                                let ice_phase = 0.50 * halo_ice + 0.26 * cl_hg(cl_cs, 0.34) + 0.24 * cl_hg(cl_cs, -0.20);
+                                let cirrus_tint = mix(vec3<f32>(1.0), vec3<f32>(1.16, 0.93, 0.88), low_sun_d);
+                                let twi_h = skyu.twi.xyz * (0.44 + 0.78 * max(cl_cs, 0.0)) * mix(0.85, 1.38, low_sun_d);
+                                let c = e_sun * (exp(-0.40 * a) * ice_phase + 0.30 * exp(-0.16 * a) / 12.566371) * cirrus_tint * (VC_SUN_GAIN * 0.64)
+                                    + a_top * mix(0.86, 0.64, low_sun_d) + twi_h;
+                                let fh = exp(-t * (1.0 - 0.84 * abs(dir.y)) / 86000.0) * (1.0 - smoothstep(160000.0, 240000.0, t));
+                                let a_vis = a * fh;
+                                L = L + T * a_vis * c;
+                                T = T * (1.0 - 0.38 * a_vis);
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (high && vol_ci2_on()) {
             // two decks, each at its own height: the 5.2 km sheet (its opacity as the CPU faded
             // and floored it), then the cirrus behind it
             if (skyu.cloud1.z > 0.0) {
@@ -1373,6 +1988,13 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // front of everything in the volume (the range fog is pushed out of reach).
     if (atmo_on && dist < 1e8) {
         var ap = vol_aerial(dir, dist, eye.y);
+        if (vc_on && vc_haze_shade > 0.001) {
+            // Cloud-shadowed coastal haze columns shift cool cerulean by day and pure rose-mauve-amber
+            // at golden hour (attenuating green slightly below red/blue eliminates olive-khaki horizon casts).
+            let low_hz = smoothstep(0.32, 0.04, skyu.atmo.y);
+            let hz_tint = mix(vec3<f32>(0.48, 0.58, 0.74), vec3<f32>(0.76, 0.60, 0.72), low_hz);
+            ap = vec4<f32>(ap.rgb * mix(vec3<f32>(1.0), hz_tint, vc_haze_shade), ap.a);
+        }
         if (cine) {
             ap = vec4<f32>(max(ap.rgb - cine_shade, vec3<f32>(0.0)), ap.a); // (stage L4) the shade in the haze
         }
@@ -1404,7 +2026,21 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // passes on the share of it that reaches the eye (`tdisc`, in its depth texture).
     if (atmo_on && d <= 0.0 && dist > 1e8 && skyu.atmo2.y > 0.0) {
         let w = skyu.atmo2.y;
-        let a = vol_atmo_sky(dir);
+        var a = vol_atmo_sky(dir);
+        if (vc_on) {
+            // Chappuis-ozone warm rose-peach balance across the low golden-hour horizon transition
+            // eliminates any greenish-yellow band where blue Rayleigh sky meets sunset orange.
+            let low_sk = smoothstep(0.28, 0.03, skyu.atmo.y) * smoothstep(-0.08, 0.01, skyu.atmo.y);
+            if (low_sk > 0.001) {
+                let hor_band = smoothstep(0.24, 0.02, abs(dir.y));
+                let g_excess = max(a.g - max(a.r, a.b) * 0.90, 0.0);
+                a = vec3<f32>(a.r + g_excess * 0.30 * low_sk * hor_band, a.g - g_excess * 0.42 * low_sk * hor_band, a.b + g_excess * 0.14 * low_sk * hor_band);
+            }
+            if (vc_sky_shade > 0.001) {
+                let sk_tint = mix(vec3<f32>(0.72, 0.77, 0.86), vec3<f32>(0.90, 0.76, 0.86), low_sk);
+                a = a * mix(vec3<f32>(1.0), sk_tint, vc_sky_shade);
+            }
+        }
         tdisc = T * w;
         L = L + T * w * a;
         T = T * (1.0 - w);
@@ -1414,6 +2050,44 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // x 0.4 over the ground and the water (the city's glow scattered in over the
         // bay drew it glowing brown, as bright as the horizon sky)
         L = L + sky_city_glow(dir, eye, skyu.amb_top.w) * veil * select(0.4, 1.0, dist > 1e8) * mix(1.0, T, 0.5);
+    }
+    // (`--weather-fx` / `--volumetric-clouds`) Physical sunshower rainbow: when rain falls while
+    // direct sunlight breaks through (`--weather sun-rain`), water droplets disperse sunlight at
+    // the antisolar Descartes angles (primary bow ~40.4-42.2 deg, inverted secondary ~50.5-52.7 deg)
+    // with Alexander's dark band between them. Never appears under overcast storms or at night.
+    if ((sky_weather_fx_on(skyu.cirrus) || vc_on) && sky_on(bits, SKY_RAIN) && skyu.wet.z > 0.5 && skyu.beam.x > 0.35 && skyu.atmo.y > 0.03 && dir.y > -0.02) {
+        let sun_d = normalize(skyu.atmo.xyz);
+        let cos_anti = clamp(dot(dir, -sun_d), -1.0, 1.0);
+        let ang_deg = acos(cos_anti) * 57.29578;
+        if (ang_deg > 34.0 && ang_deg < 56.5) {
+            let p_r = exp(-pow((ang_deg - 42.20) / 0.80, 2.0));
+            let p_g = exp(-pow((ang_deg - 41.30) / 0.80, 2.0));
+            let p_b = exp(-pow((ang_deg - 40.40) / 0.80, 2.0));
+            let s_r = exp(-pow((ang_deg - 50.55) / 1.15, 2.0));
+            let s_g = exp(-pow((ang_deg - 51.60) / 1.15, 2.0));
+            let s_b = exp(-pow((ang_deg - 52.65) / 1.15, 2.0));
+            let sec_w = select(0.18, 0.20, vc_on);
+            let prism_raw = vec3<f32>(p_r + sec_w * s_r, p_g + sec_w * s_g, p_b + sec_w * s_b);
+            // Real droplets smear the solar disc (0.53 deg) and scatter white light inside the primary bow.
+            let prism_luma = dot(prism_raw, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let prism = mix(vec3<f32>(prism_luma), prism_raw, select(0.66, 0.78, vc_on));
+            let inner_glow = select(0.16, 0.19, vc_on) * smoothstep(41.6, 36.8, ang_deg) * smoothstep(34.0, 36.2, ang_deg);
+            let rain_path = select(smoothstep(420.0, 2200.0, dist), 1.0, dist > 1e8);
+            let curtain = 0.78 + 0.22 * sin(dir.x * 6.5 + dir.z * 5.0 + skyu.rain.w * 0.03);
+            let bow_w = rain_path * curtain * smoothstep(0.35, 0.72, skyu.beam.x) * smoothstep(0.5, 3.0, skyu.wet.z) * smoothstep(0.03, 0.14, skyu.atmo.y) * smoothstep(-0.01, 0.05, dir.y);
+            if (vc_on) {
+                // Alexander's dark band (42.8..50.2 deg): fewer single/double internal reflections
+                // reach the eye between the primary and secondary Descartes angles.
+                let alex_band = smoothstep(42.3, 44.2, ang_deg) * (1.0 - smoothstep(48.8, 50.6, ang_deg));
+                L = L * (1.0 - 0.10 * bow_w * alex_band);
+            }
+            // Tinted by atmospheric sun radiance so golden-hour sunshowers turn warm-gold,
+            // and subdued softly over bright sunlit clouds so the arc glows naturally against rain sky.
+            let bow_sun = cl_sun(120.0);
+            let bow_gain = select(0.022, 0.038, vc_on);
+            let bow_bg = select(mix(0.24, 1.0, T), mix(0.32, 1.0, T), vc_on);
+            L = L + bow_sun * (prism + vec3<f32>(inner_glow)) * (bow_gain * bow_w) * bow_bg;
+        }
     }
     // Temporal accumulation: this result blended (0.12) onto the last frame's
     // at the same world point (the sky by direction), where the last frame

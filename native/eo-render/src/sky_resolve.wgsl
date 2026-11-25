@@ -252,35 +252,109 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         let dz = acos(clamp(dot(normalize(ray.xz + vec2<f32>(1e-7, 0.0)), normalize(su.xz + vec2<f32>(1e-7, 0.0))), -1.0, 1.0)) * cos(el_s);
         let fl = mix(0.82, 1.0, smoothstep(0.0, 0.06, su.y));
         let ang = sqrt(dz * dz + (dv / fl) * (dv / fl));
-        if (ang < r + px) {
+        let vol_clouds = sky_vol_clouds_on(skyu.cirrus);
+        let beam_vis = smoothstep(0.15, 0.6, skyu.cloud1.w);
+        if (ang < r + px || (vol_clouds && ang < 0.22 && el_s > -0.015 && beam_vis > 0.001)) {
             let vd = vec2<i32>(textureDimensions(rs_volz));
             let q = clamp(vec2<i32>(uv * vec2<f32>(vd)), vec2<i32>(0), vd - 1);
-            // x the weather's beam (a disc showed through the rain deck)
-            // at least 0.35 through a thin low bank on a clear day (the sun setting into the
-            // offshore bank at 19.1 h drew no disc at all: 1.15 x the sky round it)
-            // The share of the disc that reaches the eye, at least 0.35 under anything short of a
-            // continuous deck (a low bank or a broken cumulus field still shows a reddened disc).
-            let td = max(clamp(-textureLoad(rs_volz, q, 0).r - 1.0, 0.0, 1.0), 0.35 * (1.0 - smoothstep(0.75, 0.9, skyu.cloud0.z))) * smoothstep(0.15, 0.6, skyu.cloud1.w);
-            let x = clamp(ang / r, 0.0, 1.0);
-            let limb = 1.0 - 0.6 * (1.0 - sqrt(max(1.0 - x * x, 0.0)));
-            // white-hot over a few degrees of altitude (the look's tinted disc tone-mapped
-            // to the same cream as the glare round it), x 3 the look's radiance
-            // its colour is the sun's own transmittance to the eye x 230 (about 3 x the
-            // look's disc at noon), so only the air dims and reddens it: the look's disc fades
-            // out between +0.3 and -0.6 deg and there was no sun on the sea at sunset. Kept
-            // until its upper limb has set (the centre's ray grazing the horizon).
+            // Smooth 2x2 bilinear sky transmittance when `--volumetric-clouds` is on so the sun disc
+            // and corona feather cleanly around crisp cloud edges without half-res staircase edges.
+            var raw_td = clamp(-textureLoad(rs_volz, q, 0).r - 1.0, 0.0, 1.0);
+            if (vol_clouds) {
+                let hv = uv * vec2<f32>(vd) - 0.5;
+                let bi = vec2<i32>(floor(hv));
+                let bf = fract(hv);
+                var td_acc = 0.0;
+                var td_w = 0.0;
+                for (var k = 0; k < 4; k = k + 1) {
+                    let o = vec2<i32>(k & 1, k >> 1);
+                    let qp = clamp(bi + o, vec2<i32>(0), vd - 1);
+                    let zv = textureLoad(rs_volz, qp, 0).r;
+                    if (zv < 0.0) {
+                        let bw = select(1.0 - bf.x, bf.x, o.x == 1) * select(1.0 - bf.y, bf.y, o.y == 1);
+                        td_acc = td_acc + clamp(-zv - 1.0, 0.0, 1.0) * bw;
+                        td_w = td_w + bw;
+                    }
+                }
+                if (td_w > 1e-4) {
+                    raw_td = td_acc / td_w;
+                }
+            }
+            let floor_td = select(0.35 * (1.0 - smoothstep(0.75, 0.9, skyu.cloud0.z)), 0.0, vol_clouds);
+            let td = max(raw_td, floor_td) * beam_vis;
             let tr = at_sun(rs_trans, rs_lin, skyu.eye.y, max(sin(el_s), 0.0005)) * 230.0;
             let dc = mix(tr, vec3<f32>(lk_luma(tr)), 0.75 * smoothstep(0.0, 0.08, look.sun.y)) * smoothstep(-0.0075, -0.002, el_s);
-            // at least 40 x the sky round it, its hue kept (at sunset the air's
-            // transmittance alone left a disc no brighter than its glow: a smudge, not a sun).
             let dl = lk_luma(dc);
-            // At least 80 x the sky round it (a disc on the horizon is 10-100 x the sky beside it,
-            // so it clips with a hard limb), and toward white in its middle: the clipped core of a
-            // low sun is yellow-white or orange-white, its colour held at the limb.
-            var dc2 = dc * (max(dl, 80.0 * lk_luma(c)) / max(dl, 1e-6));
-            let pk = max(max(dc2.r, dc2.g), dc2.b);
-            dc2 = mix(dc2, vec3<f32>(pk), 0.55 * (1.0 - smoothstep(0.3, 0.9, x)));
-            c = c + select(dc2, vec3<f32>(0.0), dl <= 0.0) * limb * smoothstep(r + px, r - px, ang) * td;
+            if (ang < r + px) {
+                let x = clamp(ang / r, 0.0, 1.0);
+                let limb = 1.0 - 0.6 * (1.0 - sqrt(max(1.0 - x * x, 0.0)));
+                var dc2 = dc * (max(dl, 80.0 * lk_luma(c)) / max(dl, 1e-6));
+                let pk = max(max(dc2.r, dc2.g), dc2.b);
+                dc2 = mix(dc2, vec3<f32>(pk), 0.55 * (1.0 - smoothstep(0.3, 0.9, x)));
+                c = c + select(dc2, vec3<f32>(0.0), dl <= 0.0) * limb * smoothstep(r + px, r - px, ang) * td;
+            }
+            if (vol_clouds && dl > 0.0) {
+                // (`--volumetric-clouds`) Physical atmospheric Mie solar corona anchored strictly to
+                // solar transmittance `dc` (never amplified by horizon luminance, preventing white-out bands).
+                let su_h = max(length(su.xz), 1e-6);
+                let sun_app = vec3<f32>(su.x / su_h * cos(el_s), sin(el_s), su.z / su_h * cos(el_s));
+                var sun_td = raw_td;
+                let sclip = skyu.vp * vec4<f32>(skyu.eye.xyz + sun_app * 1e5, 1.0);
+                if (sclip.w > 1e-3) {
+                    let suv = vec2<f32>(sclip.x / sclip.w * 0.5 + 0.5, 0.5 - sclip.y / sclip.w * 0.5);
+                    if (all(suv >= vec2<f32>(0.0)) && all(suv <= vec2<f32>(1.0))) {
+                        let sq = clamp(vec2<i32>(suv * vec2<f32>(vd)), vec2<i32>(0), vd - 1);
+                        let sz = textureLoad(rs_volz, sq, 0).r;
+                        sun_td = select(0.0, clamp(-sz - 1.0, 0.0, 1.0), sz < 0.0);
+                    }
+                }
+                let corona_td = mix(raw_td * 0.40, max(sun_td, raw_td * 0.30), smoothstep(0.06, 0.006, ang)) * beam_vis;
+                let rim_ang = max(ang - r * 0.85, 0.0);
+                let inner = exp(-rim_ang / 0.0055) * 0.075;
+                let mid = exp(-rim_ang / 0.026) * 0.0075;
+                let outer = exp(-rim_ang / 0.085) * 0.0011 * smoothstep(0.22, 0.08, ang);
+                let sun_col = mix(tr / max(lk_luma(tr), 1e-4), vec3<f32>(1.0), 0.35 * smoothstep(0.0, 0.18, su.y));
+                c = c + sun_col * dl * (inner + mid + outer) * corona_td * smoothstep(-0.012, 0.004, el_s);
+            }
+        }
+    }
+    // Full-resolution forked sky lightning channel (`--volumetric-clouds` during active live
+    // storm strikes `skyu.wind.w > 0.05`; zero cost outside active thunderstorm flashes).
+    if (d <= 0.0 && sea_t >= 1e8 && sky_vol_clouds_on(skyu.cirrus) && skyu.wet.z >= 19.0 && skyu.wind.w > 0.05 && ray.y > 0.0) {
+        let slot = floor(skyu.eye.w / 6.0);
+        let h_az = fract(sin(slot * 12.9898 + 4.1414) * 43758.5453);
+        let h_dist = fract(sin(slot * 78.233 + 1.917) * 43758.5453);
+        let fwd_h = normalize(vec2<f32>(skyu.cam_fwd.x, skyu.cam_fwd.z) + vec2<f32>(1e-4, 0.0));
+        let rgt_h = vec2<f32>(-fwd_h.y, fwd_h.x);
+        let b_dist = mix(1900.0, 3800.0, h_dist);
+        let b_base = skyu.eye.xz + fwd_h * b_dist + rgt_h * ((h_az - 0.5) * 1600.0);
+        let rel_b = b_base - skyu.eye.xz;
+        let b_dir = normalize(rel_b);
+        let b_perp = vec2<f32>(-b_dir.y, b_dir.x);
+        let r_hz = normalize(ray.xz + vec2<f32>(1e-6, 0.0));
+        let along_cos = dot(r_hz, b_dir);
+        if (along_cos > 0.96) {
+            let b_top_y = skyu.cloud0.x + 80.0;
+            let ray_y_at_b = skyu.eye.y + ray.y * length(rel_b) / max(along_cos, 0.1);
+            if (ray_y_at_b > 0.0 && ray_y_at_b < b_top_y) {
+                let u_y = clamp(ray_y_at_b / max(b_top_y, 1.0), 0.0, 1.0);
+                // Multi-octave piecewise-kinked jagged lightning channel + upper secondary fork.
+                let zig = sin(u_y * 19.0 + slot * 3.1) * 58.0
+                    + sin(u_y * 47.0 - slot * 7.3) * 24.0
+                    + sin(u_y * 113.0 + slot * 11.7) * 9.0;
+                let lat_m = dot(r_hz, b_perp) * length(rel_b);
+                let d_main = abs(lat_m - zig);
+                // Secondary fork peeling off mid-channel downward.
+                let fork_s = clamp((0.68 - u_y) * 1.8, 0.0, 1.0);
+                let fork_x = zig + fork_s * 145.0 + sin(u_y * 61.0 + slot * 5.9) * 16.0;
+                let d_fork = abs(lat_m - fork_x);
+                let main_core = exp(-d_main * 0.34) * 1.4 + exp(-d_main * 0.055) * 0.32;
+                let fork_core = (exp(-d_fork * 0.42) * 0.75 + exp(-d_fork * 0.08) * 0.14) * smoothstep(0.68, 0.56, u_y) * smoothstep(0.16, 0.34, u_y);
+                let end_fade = smoothstep(0.0, 0.06, u_y) * smoothstep(1.0, 0.88, u_y);
+                let bolt = (main_core + fork_core) * end_fade * skyu.wind.w;
+                let bolt_col = mix(vec3<f32>(0.55, 0.78, 1.45), vec3<f32>(1.15, 1.22, 1.40), smoothstep(0.25, 0.9, bolt));
+                c = c + bolt_col * bolt * 3.2;
+            }
         }
     }
     // (lighting, `--lit-fog`) the lit fog in front of the pixel (and of the sun's disc); the

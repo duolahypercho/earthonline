@@ -56,6 +56,9 @@ fn pr_sphere(i: PrInstance, m: PrModel) -> PrSphere {
     if (pr_afloat_on(i)) {
         s.r = s.r * 1.12; // a boat's roll and pitch turn it about its waterline (`pr_afloat`)
     }
+    if ((pr.mode.z & PR_F_WEATHER_WIND) != 0u && (i.model == PR_TREE || i.model == PR_PALM || (i.model >= PR_TREE_BASE && i.model < PR_OH_BASE))) {
+        s.r = s.r + pr.wind.z * 2.5 * max(i.scale.y, 1.0);
+    }
     return s;
 }
 

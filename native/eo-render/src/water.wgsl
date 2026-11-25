@@ -42,6 +42,28 @@
 @group(0) @binding(14) var<storage, read> w_ppr: array<u32>;
 // (iteration 2, exposure) the sea's exposure (eo-water exposure.rs): R swell share, G wind ratio / 2, B fetch factor, A water
 @group(0) @binding(15) var w_expo: texture_2d<f32>;
+// (`--volumetric-clouds`) hemispherical off-screen cloud reflection dome (64^2 RGBA16F, hemi-octahedral)
+@group(0) @binding(21) var w_cloud_refl: texture_2d<f32>;
+
+/// Seamless hemi-octahedral encode matching `sky_clouds.wgsl::vc_hemi_oct_decode`.
+fn w_hemi_oct_encode(d: vec3<f32>) -> vec2<f32> {
+    let du = normalize(vec3<f32>(d.x, max(d.y, 0.004), d.z));
+    let p = du.xz / max(abs(du.x) + abs(du.y) + abs(du.z), 1e-5);
+    return vec2<f32>(p.x + p.y, p.x - p.y) * 0.5 + 0.5;
+}
+
+/// Composites the hemispherical off-screen cloud reflection dome onto `base_dome` when
+/// `--volumetric-clouds` is active (`--no-volumetric-clouds` returns `base_dome` untouched).
+fn w_vc_cloud_dome(d: vec3<f32>, base_dome: vec3<f32>) -> vec3<f32> {
+    if (!sky_vol_clouds_on(skyu.cirrus) || !sky_on(skyu.flags.x, SKY_CLOUDS) || skyu.cloud0.z <= 0.0 || skyu.taa.y < 0.5) {
+        return base_dome;
+    }
+    let cr = textureSampleLevel(w_cloud_refl, w_clamp, w_hemi_oct_encode(d), 0.0);
+    var comp = base_dome * (1.0 - clamp(cr.a, 0.0, 1.0)) + max(cr.rgb, vec3<f32>(0.0));
+    // Soft ceiling matching `w_drawn_sky` so direct sun-rim cloud peaks never blow out water reflections.
+    comp = comp * min(1.0, (lk_luma(base_dome) * 3.0 + 1e-4) / max(lk_luma(comp), 1e-6));
+    return comp;
+}
 
 // (exposure) set this point's exposure (`wg_ex`, water_common.wgsl) from the
 // field, when there is one and --no-water-exposure is not given
@@ -561,6 +583,96 @@ fn w_rain_rings(p: vec2<f32>, t: f32) -> vec2<f32> {
     return g;
 }
 
+// (`--weather-fx`) Physical raindrop impacts on water: three staggered scales of
+// expanding capillary ripple rings plus delicate gossamer splash crowns and
+// parallaxed rebounding central droplet beads (Worthington jets) that sparkle
+// realistically under sky, sun and night-lamp light. Returns (slope_x, slope_z, splash_sparkle).
+fn w_rain_impacts(p: vec2<f32>, t: f32, rain: f32, v: vec3<f32>, footprint: f32) -> vec3<f32> {
+    var g = vec2<f32>(0.0);
+    var spark = 0.0;
+    let fp_g = footprint / max(abs(v.y), 0.16);
+    let view_par = v.xz / max(abs(v.y), 0.28);
+    // Natural intensity spectrum (drizzle -> light -> sun-rain -> medium -> heavy -> storm)
+    // plus low-frequency passing shower bands across the water surface.
+    let heavy_r = wg_smooth(5.0, 20.0, skyu.wet.z);
+    let shower = 0.84 + 0.22 * sin(p.x * 0.031 + p.y * 0.023 - t * 0.45) * cos(p.x * 0.019 - p.y * 0.037 - t * 0.31);
+    let density = clamp((0.18 + 0.52 * rain + 0.24 * heavy_r) * shower, 0.08, 0.96);
+    let vigor = mix(0.76, 1.32, heavy_r);
+    for (var k = 0u; k < 3u; k = k + 1u) {
+        let sc = select(select(2.1, 3.3, k == 1u), 5.0, k == 2u);
+        let freq = select(select(1.05, 1.48, k == 1u), 2.15, k == 2u) * mix(0.85, 1.25, heavy_r);
+        let ring_vis = 1.0 - wg_smooth(0.045 / (sc / 2.1), 0.16 / (sc / 2.1), fp_g);
+        let drop_vis = 1.0 - wg_smooth(0.030, 0.14, fp_g);
+        if (ring_vis <= 0.001 && drop_vis <= 0.001) {
+            continue;
+        }
+        let q = p * sc + vec2<f32>(f32(k) * 0.47, f32(k) * 0.31);
+        let c = floor(q);
+        let h = w_hash(c, f32(k) * 31.0 + 7.0);
+        let h2 = fract(h * 17.31);
+        let h3 = fract(h * 53.7);
+        if (fract(h * 97.1) > density) {
+            continue;
+        }
+        let centre = c + vec2<f32>(0.22 + 0.56 * h, 0.22 + 0.56 * h2);
+        let phase = fract(t * freq + h * 7.3 + f32(k) * 0.37);
+        let d = q - centre;
+        let d_m = d / sc;
+        let r_m = length(d_m);
+        let size = (0.65 + 0.75 * h2) * mix(0.86, 1.22, heavy_r);
+        // Expanding concentric capillary ripple rings.
+        if (ring_vis > 0.001) {
+            let x = (r_m - phase * 0.15 * size) * 85.0 / size;
+            let env = exp(-x * x * 0.075) * (1.0 - phase) * (1.0 - phase) * ring_vis;
+            g = g + (d_m / max(r_m, 1e-4)) * (cos(x) * env * 0.78 * vigor);
+        }
+        // Delicate splash crown (0..0.09) + crisp pinpoint rebounding droplet (0.02..0.18).
+        if (drop_vis > 0.001 && phase < 0.18) {
+            let px_m = max(footprint * 0.55, 0.003);
+            var sp = 0.0;
+            if (phase < 0.09) {
+                let ct = phase / 0.09;
+                let cr_r = (0.004 + ct * 0.022) * size;
+                let ang = atan2(d_m.y, d_m.x);
+                let asym = 0.68 + 0.32 * sin(ang * 3.0 + h * 19.0) * cos(ang * 5.0 - h2 * 13.0);
+                let rw = max(px_m * 0.95, 0.0032);
+                let dr = (r_m - cr_r) / rw;
+                sp = sp + exp(-dr * dr) * sin(ct * WG_PI) * asym * 0.48;
+            }
+            if (phase > 0.018 && phase < 0.175) {
+                let jt = (phase - 0.018) / 0.157;
+                let h_jet_m = 0.036 * size * sin(jt * WG_PI);
+                let p_jet = d_m + view_par * h_jet_m;
+                let bw = max(px_m * 0.85, 0.0038);
+                sp = sp + exp(-dot(p_jet, p_jet) / (bw * bw)) * sin(jt * WG_PI) * 1.15;
+            }
+            // Energy-preserving attenuation as pixel size grows past the 4 mm droplet.
+            let sub_att = clamp(0.006 / max(px_m, 0.006), 0.18, 1.0);
+            spark = spark + sp * drop_vis * sub_att * vigor * (0.55 + 0.65 * h3);
+        }
+    }
+    // Subtle circular pinpoint rain-pock glints at medium range (no square tiles).
+    let mid_band = wg_smooth(0.05, 0.14, fp_g) * (1.0 - wg_smooth(0.28, 0.70, fp_g)) * rain;
+    if (mid_band > 0.001) {
+        let msc = 2.6;
+        let mq = p * msc;
+        let mc = floor(mq);
+        let slot = floor(t * 9.0);
+        let mh = w_hash(mc, slot * 1.37 + 19.0);
+        let thr = 0.045 + 0.075 * rain;
+        if (mh < thr) {
+            let mh2 = fract(mh * 37.3);
+            let mpos = mc + vec2<f32>(0.2 + 0.6 * fract(mh * 19.7), 0.2 + 0.6 * mh2);
+            let md_m = (mq - mpos) / msc;
+            let mw = max(footprint * 0.75, 0.010);
+            let pt = exp(-dot(md_m, md_m) / (mw * mw));
+            let life = sin(fract(t * 9.0 + mh2) * WG_PI);
+            spark = spark + pt * life * mid_band * 0.55;
+        }
+    }
+    return vec3<f32>(g.x, g.y, spark * rain);
+}
+
 // the sky as the frame finally drew it: the sky slice's resolved
 // previous frame (its clouds, rain, haze and fog) where the mirror direction
 // falls on sky inside the last frame, the dome elsewhere. Brighter than three
@@ -637,8 +749,9 @@ fn fs_far_mirror2(r: vec3<f32>, dome: vec3<f32>, view_dist: f32) -> vec3<f32> {
 // cover, rain tint: per channel, drawn over dome, at the screen point nearest
 // the direction, or the top centre for a direction behind the camera).
 fn w_sky_ratio(d: vec3<f32>, dome: vec3<f32>, uv: vec2<f32>, ahead: bool) -> vec3<f32> {
-    // under the full atmosphere sky the dome is already the drawn sky
-    if (skyu.atmo2.x > 0.5 && skyu.atmo2.y >= 0.999) {
+    // under the full atmosphere sky (or volumetric cloud reflection dome) `dome` is already the drawn sky
+    if ((skyu.atmo2.x > 0.5 && skyu.atmo2.y >= 0.999)
+        || (sky_vol_clouds_on(skyu.cirrus) && sky_on(skyu.flags.x, SKY_CLOUDS) && skyu.cloud0.z > 0.0 && skyu.taa.y > 0.5)) {
         return dome;
     }
     var uc = vec2<f32>(0.5, 0.03);
@@ -1461,6 +1574,28 @@ fn w_chop(p: vec2<f32>, t: f32, footprint: f32, fine_fade: f32, rough: f32) -> v
     return vec2<f32>(sx, sz);
 }
 
+// (`--volumetric-clouds`) Unclamped cloud-shadow transmittance over water:
+// x: raw direct-beam transmittance (0..1, without the 0.10 diffuse ground floor so solar glitter
+//    fully extinguishes under thick cumulus cores);
+// y: broken-cumulus shadow depth (0..1, fading cleanly to 0 under continuous overcast/storm or night).
+fn w_vc_cloud_shadow(world: vec3<f32>, l: vec3<f32>) -> vec2<f32> {
+    if (!sky_on(skyu.flags.x, SKY_CLOUD_SHADOWS) || l.y <= 0.02 || skyu.cloud0.z <= 0.0) {
+        return vec2<f32>(1.0, 0.0);
+    }
+    let stratus = clamp((skyu.cloud0.z - 0.72) / 0.22, 0.0, 1.0);
+    if (stratus >= 0.999) {
+        return vec2<f32>(skyu.beam.x, 0.0);
+    }
+    let span = SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL;
+    let g = world.xz - l.xz * (world.y - SKY_SEA_Y) / max(l.y, 0.02);
+    let raw = textureSampleLevel(sky_cshadow, sky_rep, g / span, 0.0).r;
+    let fade = (1.0 - smoothstep(0.42, 0.48, length(g - look.cam_pos.xz) / span)) * smoothstep(0.04, 0.14, l.y);
+    let tr = mix(1.0, clamp(raw, 0.0, 1.0), fade);
+    let day_w = 1.0 - smoothstep(0.35, 0.75, skyu.night.z);
+    let sh_depth = (1.0 - tr) * (1.0 - stratus) * day_w;
+    return vec2<f32>(mix(tr, skyu.beam.x, stratus), sh_depth);
+}
+
 fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) -> Shade {
     let t = wu.cam.w;
     w_frag_px = frag.xy;
@@ -1938,14 +2073,23 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             sz = sz + g.y * near;
         }
     }
-    // rain on the water: rings where a pixel resolves them.
+    // rain on the water: rings where a pixel resolves them (+ splash crowns & sparkles under `--weather-fx`).
     let rain = select(0.0, wg_smooth(0.2, 8.0, skyu.wet.z), sky_on(skyu.flags.x, SKY_RAIN));
+    var rain_spark = 0.0;
     if (rain > 0.0) {
-        let near_r = wg_smooth(0.15, 0.04, footprint) * rain;
-        if (near_r > 0.0) {
-            let g = w_rain_rings(p, skyu.wet.w);
-            sx = sx + g.x * near_r;
-            sz = sz + g.y * near_r;
+        if (sky_weather_fx_on(skyu.cirrus)) {
+            let imp = w_rain_impacts(p, skyu.wet.w, rain, v, footprint);
+            let near_r = wg_smooth(0.28, 0.04, footprint) * rain;
+            sx = sx + imp.x * near_r;
+            sz = sz + imp.y * near_r;
+            rain_spark = imp.z;
+        } else {
+            let near_r = wg_smooth(0.15, 0.04, footprint) * rain;
+            if (near_r > 0.0) {
+                let g = w_rain_rings(p, skyu.wet.w);
+                sx = sx + g.x * near_r;
+                sz = sz + g.y * near_r;
+            }
         }
     }
     let chop = w_chop(p, t, footprint, fine_fade, rough);
@@ -2119,7 +2263,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // matches the sky pixels the screen-space march reads elsewhere; the scene
     // probe for what stands in it (buildings round the viewer), told apart
     // from its sky as fa_glazing tells them apart.
-    var dome = w_drawn_sky(rup, w_atmo_dome(rup)); // the sky as drawn (the atmosphere sky)
+    let base_dome = w_vc_cloud_dome(rup, w_atmo_dome(rup)); // atmosphere sky + off-screen volumetric cloud dome
+    var dome = w_drawn_sky(rup, base_dome); // the sky as drawn (the atmosphere sky + volumetric clouds)
     var ppr_in = 0.0; // (ppr blur) the projected reflection read per facet below
     if (brdf) {
         if (!(with_copy && wv_feat(256u))) {
@@ -2304,10 +2449,37 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // --- the sun glint (GGX D V F NdL, clamped as tidewater clamps it) under the cascades.
     let l = look.key_dir.xyz;
     let ndl = max(dot(n, l), 0.0);
+    let vc_on = sky_vol_clouds_on(skyu.cirrus);
+    var vc_tr = 1.0;
+    var vc_sh = 0.0;
+    if (vc_on) {
+        let vc_cs = w_vc_cloud_shadow(world, l);
+        vc_tr = vc_cs.x;
+        vc_sh = vc_cs.y;
+        if (vc_sh > 0.001) {
+            // Wind-roughened water facets inside a cumulus shadow reflect the darker, cooler cloud
+            // underside by day and warm dusk plum-slate at golden hour (never cooling golden Bay water icy blue).
+            let gold_sh = 1.0 - wg_smooth(0.06, 0.22, l.y);
+            let sh_tint = mix(vec3<f32>(0.56, 0.63, 0.74), vec3<f32>(0.74, 0.70, 0.72), gold_sh);
+            let refl_sh = vc_sh * mix(0.80, 1.0, wg_smooth(0.03, 0.28, roughness));
+            sky = sky * mix(vec3<f32>(1.0), sh_tint, refl_sh);
+        }
+    }
     // The cascaded sun shadow at the surface: on the glint, the foam and the
     // sun the water body scatters (buildings and piers shade the water).
     let cloud_t = sky_cloud_transmittance(world); // + the cloud decks' shadow
-    let shadow = w_shadow(world, vec3<f32>(0.0, 1.0, 0.0)) * cloud_t;
+    let geo_shadow = w_shadow(world, vec3<f32>(0.0, 1.0, 0.0));
+    let shadow = geo_shadow * cloud_t;
+    var glint_shadow = shadow;
+    if (vc_on) {
+        // Forward-scattered cloud light spreads over a broad cone and extinguishes coherent
+        // solar glitter steeply under thick cumulus cores; at grazing golden hour preserve a soft
+        // warm solar sheen when the sun glows visibly through thin sunset clouds.
+        let gold_gl = 1.0 - wg_smooth(0.06, 0.22, l.y);
+        let vc_glint_day = vc_tr * smoothstep(0.06, 0.65, vc_tr);
+        let vc_glint_t = mix(vc_glint_day, pow(clamp(vc_tr, 0.0, 1.0), 0.78), 0.55 * gold_gl);
+        glint_shadow = geo_shadow * vc_glint_t;
+    }
     var glint = vec3<f32>(0.0);
     // the sun as it reaches the sea through the atmosphere (the sky slice's
     // `sun_glint`), past the rig's horizon envelope: the glitter path lasts until the
@@ -2371,7 +2543,11 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             // under a low sun the sun is so bright that a faint lobe was the whole strip)
             // (r11b: a wide soft envelope; toward its sides the sparkles thin out rather
             // than dim, so the path has no hard edge)
-            let in_path = wg_smooth(0.05, 1.5, lk_luma(key_g) * spec / max(lk_luma(look.horizon.xyz), 1e-6));
+            var path_lum = lk_luma(key_g) * spec;
+            if (vc_on) {
+                path_lum = path_lum * glint_shadow;
+            }
+            let in_path = wg_smooth(0.05, 1.5, path_lum / max(lk_luma(look.horizon.xyz), 1e-6));
             // (world cells about three pixels wide, so the temporal resolve keeps them: one-pixel flashes averaged out)
             let gh = w_hash(floor(world.xz / max(footprint * 1.5, 0.02)), floor(t * 8.0) + 3.0);
             let fp = 0.01 + 0.156 * in_path;
@@ -2414,7 +2590,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // `key_envelope`), so the glitter path ends at sunset while the clouds are still
         // lit; drive this (and the low-sun body light) from the sky slice's sun radiance
         // through the atmosphere when it lands as a sky uniform.
-        glint = key_g * spec * shadow * (1.0 - sun_hidden) * (1.0 - sf_inj.spec_cut) * sf_glint_cut(foam, sf_foam_share(foam, surf_cov, beach, p.x)); // no glint on the surf's foam (water_surf.wgsl); the sea's own foam is a diffuser too, and foam drawn over the strip takes no mirror glint
+        glint = key_g * spec * glint_shadow * (1.0 - sun_hidden) * (1.0 - sf_inj.spec_cut) * sf_glint_cut(foam, sf_foam_share(foam, surf_cov, beach, p.x)); // no glint on the surf's foam (water_surf.wgsl); the sea's own foam is a diffuser too, and foam drawn over the strip takes no mirror glint
         if (wv_feat(16u)) {
             // (glint) no firefly: the pixel's glint under the display ceiling
             let gl = lk_luma(glint) * max(look.key.w, 1e-4);
@@ -2470,8 +2646,18 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // of its sunlit glow there, so a bridge's shadow darkens it, not turns it cobalt)
         vol_shadow = max(vol_shadow, 0.4 * cloud_t);
     }
+    if (vc_on) {
+        // Replace the 0.10 diffuse ground shadow floor with unclamped cloud transmittance so
+        // deep cumulus shadows truly dim sunlit water-body scatter.
+        vol_shadow = vol_shadow * (max(vc_tr, 0.03) / max(cloud_t, 1e-4));
+    }
     let sun = look.key.xyz * vol_shadow;
-    let sky_irr = look.hemi_sky.xyz / WG_PI;
+    var sky_irr = look.hemi_sky.xyz / WG_PI;
+    if (vc_on && vc_sh > 0.001) {
+        // Overhead cumulus deck blocks bright zenith/circumsolar skylight, shifting shadowed
+        // Bay water from luminous sunlit teal to deep cool slate-navy.
+        sky_irr = sky_irr * mix(vec3<f32>(1.0), vec3<f32>(0.52, 0.59, 0.72), vc_sh);
+    }
     let daylight = max(select(0.0, cove, look.cove.y > 0.0), look.cove.z);
     var vol = wo_volume(path, tv, l, sun, sky_irr, sig_a, sig_s, bb, daylight, select(look.cove.y, lk_luma(wo_marine_kd(ocean,cove)), look.cove.z > 0.5));
     // the bay is turbid (visibility under a metre): the bottom through
@@ -2585,7 +2771,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // (against the brighter of the mirror's sky and the horizon: at a low sun the mirror can be dark and the foam went black)
     // (a white diffuser under the whole sky sits near the sky's own brightness, a little under it)
     // (under an overcast the zenith is brighter than the horizon, so foam lit by the whole dome sits a little over the horizon sky)
-    let foam_amb = amb_raw * (mix(0.92, 1.2, clamp(look.wx.x, 0.0, 1.0)) * max(lk_luma(dome), lk_luma(look.horizon.xyz)) / max(lk_luma(amb_raw), 1e-6));
+    var foam_amb = amb_raw * (mix(0.92, 1.2, clamp(look.wx.x, 0.0, 1.0)) * max(lk_luma(dome), lk_luma(look.horizon.xyz)) / max(lk_luma(amb_raw), 1e-6));
+    if (vc_on && vc_sh > 0.001) {
+        foam_amb = foam_amb * mix(vec3<f32>(1.0), vec3<f32>(0.70, 0.75, 0.84), vc_sh);
+    }
     var foam_own = foam_tone * 0.88 * (look.key.xyz * ndl * shadow * (1.0 - 0.85 * clamp(look.wx.x, 0.0, 1.0)) / WG_PI + foam_amb);
     if (wv_feat(128u)) {
         // (foam lit) foam is a diffuser lit as the city's surfaces are: the
@@ -2721,7 +2910,12 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     }
     let water = 1.0 - foam_w;
     let k_t = (1.0 - fres) * water;
-    s.own = ((vol.inscatter + sss) * k_t + foam_rad * foam_w + glint) * (1.0 - fog) + look.fog_color.xyz * fog;
+    var rain_splash_rad = vec3<f32>(0.0);
+    if (rain_spark > 0.001) {
+        let sky_s = max(dome, look.horizon.xyz) * 0.95 + look.key.xyz * ndl * shadow * 0.75 + vec3<f32>(1.0, 0.78, 0.52) * skyu.night.x * 0.32;
+        rain_splash_rad = sky_s * min(rain_spark, 1.1) * water;
+    }
+    s.own = ((vol.inscatter + sss) * k_t + foam_rad * foam_w + glint + rain_splash_rad) * (1.0 - fog) + look.fog_color.xyz * fog;
     s.body = (vol.inscatter + sss) * k_t;
     s.gl = glint;
     s.terms = vec3<f32>(fres, fres * water * (1.0 - fog), fog);
@@ -2764,7 +2958,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     let salt = select(1.0 - exp(-dist * sky_path_density(world.y - wu.cam.y) / 9000.0), 0.0, skyu.atmo2.x > 0.5);
     let hz_far = max(salt, skirt) * (1.0 - fog);
     if (hz_far > 0.002) {
-        let hsky = w_atmo_dome(normalize(vec3<f32>(-v.x, 0.01, -v.z)));
+        var hsky = w_atmo_dome(normalize(vec3<f32>(-v.x, 0.01, -v.z)));
+        if (vc_on && vc_sh > 0.001) {
+            hsky = hsky * mix(vec3<f32>(1.0), vec3<f32>(0.58, 0.64, 0.75), vc_sh * 0.85);
+        }
         s.own = mix(s.own, hsky, hz_far);
         s.through = s.through * (1.0 - hz_far);
         s.refl_k = s.refl_k * (1.0 - hz_far);
@@ -2807,6 +3004,9 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     s.dash = wg_smooth(-0.02, 0.04, dot(n.xz, normalize(v.xz + vec2<f32>(1e-5, 0.0))));
     s.side = dot(n.xz, normalize(vec2<f32>(-v.z, v.x) + vec2<f32>(1e-5, 0.0)));
     s.sun_near = wg_smooth(0.9, 0.995, dot(rup, normalize(look.sun.xyz))) * wg_smooth(-0.03, 0.02, look.sun.y) * (1.0 - wg_smooth(0.3, 0.6, skyu.night.z));
+    if (vc_on && vc_sh > 0.001) {
+        s.sun_near = s.sun_near * (1.0 - smoothstep(0.08, 0.58, vc_sh));
+    }
     if (with_copy && r.y < WS_MARCH_MAX_SIN && fres > WS_MARCH_MIN_F && sf_inj.rough < 0.5 && !wv_feat(256u)) { // no mirror march in the strip's churned water (ppr: the projected reflection instead, fs_copy)
         var m = vec3<f32>(0.0);
         if (brdf) {

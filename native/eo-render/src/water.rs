@@ -812,6 +812,8 @@ impl WaterGpu {
                 // (iteration 3) the extra field and its sampler (eo-water extra.rs; read by nothing yet)
                 entry(18, vf, tex(filt, wgpu::TextureViewDimension::D2)),
                 entry(19, vf, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                // (`--volumetric-clouds`) hemispherical off-screen cloud reflection dome
+                entry(21, fs, tex(filt, wgpu::TextureViewDimension::D2)),
         ];
         if look.options.water_optics {
             // (submerged camera) the camera look's table and sampler (look_camera.wgsl), so a
@@ -1606,6 +1608,7 @@ impl WaterGpu {
                         wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::TextureView(&self.expo_view) },
                         wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&self.extra_view) },
                         wgpu::BindGroupEntry { binding: 19, resource: wgpu::BindingResource::Sampler(&self.clamp) },
+                        wgpu::BindGroupEntry { binding: 21, resource: wgpu::BindingResource::TextureView(look.sky.cloud_refl_view()) },
                     ];
                     if let Some(view) = &self.canopy_view {
                         entries.push(wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::TextureView(view) });
