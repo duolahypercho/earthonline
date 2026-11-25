@@ -13,7 +13,8 @@
 //!   more on industrial fronts than on shops, on shops than on homes);
 //! * (stage W2c) each seed is its anchors' codes, an exact integer, and the
 //!   piles' anchors are found: storm drains at the kerb, bins at stops and
-//!   corners.
+//!   corners; (stage W2d) the transit stops' own anchors, and the trees'
+//!   trunk kerb offset wherever a tree anchor is.
 
 use eo_render::cc0_decals::{Decal, Hotspots, pack, place_with};
 use eo_render::street_life::{self, Context, DK_LIFE, KIND_SHIFT, LandUse, Params, Trees};
@@ -121,7 +122,7 @@ fn street_life_decals_are_deterministic_seamless_and_by_land_use() {
     let block: Vec<(i32, i32)> = keys.iter().copied().filter(|k| (k.0 - mid.0).abs() <= 5 && (k.1 - mid.1).abs() <= 5).collect();
     assert!(block.len() > 40, "{} tiles", block.len());
     let (mut life, mut shared, mut dropped_life, mut max_records) = (0usize, 0usize, 0usize, 0usize);
-    let (mut drains, mut bins) = (0usize, 0usize);
+    let (mut drains, mut bins, mut stops, mut treed) = (0usize, 0usize, 0usize, 0usize);
     let mut placed: HashMap<(i32, i32), Vec<Decal>> = HashMap::new();
     for &key in &block {
         let before = place_with(&sw, key, false);
@@ -150,12 +151,21 @@ fn street_life_decals_are_deterministic_seamless_and_by_land_use() {
             assert!(d.half[0] <= (street_life::STRETCH_MAX_M / 2.0 + street_life::PAD_M) as f32 + 1e-3, "{key:?}: {} m half length", d.half[0]);
             assert!(d.half[1] > 0.5 && d.half[1] < 12.0, "{key:?}: {} m half width", d.half[1]);
             assert!((d.a[0].hypot(d.a[1]) - 1.0).abs() < 1e-4);
-            // the seed: its anchors' 4-bit codes (trees, drain, bin), an exact integer below 2^16
-            assert!(d.seed >= 0.0 && d.seed < 65536.0 && d.seed.floor() == d.seed, "{key:?}: seed {}", d.seed);
+            // the seed: its anchors' 4-bit codes (trees, drain, bin, stop, the trunks'
+            // kerb offset), an exact integer below 2^24
+            assert!(d.seed >= 0.0 && d.seed < 16_777_216.0 && d.seed.floor() == d.seed, "{key:?}: seed {}", d.seed);
             let codes = street_life::seed_codes(d.seed);
             assert_eq!(street_life::seed_of(codes).to_bits(), d.seed.to_bits());
             drains += (codes[2] > 0) as usize;
             bins += (codes[3] > 0) as usize;
+            stops += (codes[4] > 0) as usize;
+            // a trunk offset exactly where a tree anchor is, past the kerb's top
+            assert_eq!(codes[5] > 0, codes[0] > 0, "{key:?}: codes {codes:?}");
+            if codes[5] > 0 {
+                treed += 1;
+                let kd = codes[5] as f64 * street_life::TREE_KD_STEP_M;
+                assert!(kd > sw.o.curb_top_width && kd < 1.5, "{key:?}: a trunk {kd} m from the kerb line");
+            }
             // no seam: every neighbour it reaches places it too
             for dz in -1..=1 {
                 for dx in -1..=1 {
@@ -176,8 +186,10 @@ fn street_life_decals_are_deterministic_seamless_and_by_land_use() {
     }
     println!("{} tiles: {life} life decals, {shared} checked across a tile border, {dropped_life} of their cell entries dropped (cells full), at most {max_records} records a tile", block.len());
     // stage W2c: the piles' anchors, a surveyed storm drain at the kerb and a bin at a stop or a corner
-    println!("anchors: {drains} stretch sides with a drain's pile, {bins} with a bin's");
+    println!("anchors: {drains} stretch sides with a drain's pile, {bins} with a bin's, {stops} with a stop, {treed} with a tree's basin");
     assert!(drains > 20 && bins > 50 && drains < life && bins < life, "drains {drains}, bins {bins} of {life}");
+    assert!(stops > 5 && stops < life, "stops {stops} of {life}");
+    assert!(treed > 50 && treed < life, "tree basins {treed} of {life}");
     // with the weathering decals too (`--grime`): how many cell entries of the street life drop
     let (mut d_w, mut n_w) = (0usize, 0usize);
     for &key in &block {
@@ -278,7 +290,7 @@ fn street_life_at_a_point() {
         let along = q[0] * d.a[0] + q[1] * d.a[1];
         let across = -q[0] * d.a[1] + q[1] * d.a[0];
         if along.abs() < d.half[0] + reach && across.abs() < d.half[1] + reach {
-            println!("c {:?} a {:?} half {:?} along {along:.1} across {across:.1} {:?} seed {:.3}", d.c, d.a, d.half, Params::unpack(d.kind >> KIND_SHIFT), d.seed);
+            println!("c {:?} a {:?} half {:?} along {along:.1} across {across:.1} {:?} seed {:.3} codes {:?}", d.c, d.a, d.half, Params::unpack(d.kind >> KIND_SHIFT), d.seed, street_life::seed_codes(d.seed));
         }
     }
     // and the wear decals within 12 m (kind, centre, half sizes)

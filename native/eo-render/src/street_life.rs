@@ -57,6 +57,16 @@
 //! building line, piles at the storm drains and by the corners' and stops'
 //! bins), heaps at the wall's foot (bags, leaning cardboard, a mattress), and
 //! denser tables at every level (level 2 one step denser again, `Params::at_level`).
+//!
+//! Stage W2d: the walk's litter lies where SF litter collects, not evenly over
+//! it (street_life.wgsl `sl_walk_zones`): against the kerb and in the
+//! furnishing zone beside it (`sidewalk-furnishing-zone-sf`), along the
+//! building line and in recessed doorways (`sidewalk-frontage-zone-sf`), in
+//! the street trees' basins (at the trunks' kerb offset, `TREE_TRUNK_GAP_M`),
+//! round the bins and at the transit stops (a stop's own anchor, besides its
+//! bin), and leaves under the crowns; the through zone between keeps the odd
+//! butt and scrap (its gum is the wear decals'). The zones' widths are the
+//! standards table's on the ground plan (`zones`), constants of the shader.
 
 use crate::cc0_decals::{Decal, Hotspots};
 use eo_street::StreetWorld;
@@ -123,6 +133,13 @@ pub const DRAIN_REACH_M: f64 = 2.5;
 pub const BIN_STOP_REACH_M: f64 = 4.0;
 pub const BIN_FROM_CORNER_M: f64 = 3.5;
 pub const BIN_PILE_SHARE: f64 = 0.7;
+/// Stage W2d: a street tree's trunk stands this far past the kerb's top
+/// (m) plus its kind's depth (eo-props trees.rs, `lateralFor`'s curb zone:
+/// back of curb + depth + 0.06 m); its basin's litter and leaves gather
+/// round it (street_life.wgsl `sl_walk_zones`).
+pub const TREE_TRUNK_GAP_M: f64 = 0.06;
+/// The trunk's kerb offset rides in the seed in steps of this (m), 4 bits.
+pub const TREE_KD_STEP_M: f64 = 0.1;
 
 /// The level (0 off, 1 high, 2 hyper) street tiles place with (`cc0_decals::place`).
 static LEVEL: AtomicU8 = AtomicU8::new(0);
@@ -286,17 +303,28 @@ pub fn anchor_code(t: Option<f64>) -> u32 {
     t.map(|t| 1 + (t.clamp(0.0, 1.0) * 14.0).round() as u32).unwrap_or(0)
 }
 
+/// How many 4-bit codes a seed carries.
+pub const SEED_CODES: usize = 6;
+
 /// A life decal's seed: its anchors' 4-bit codes (the two nearest street
-/// trees, the storm drain, the bin), an exact integer below 2^16 in the
-/// record's f32. The shaders hash the decal's centre for their randomness.
-pub fn seed_of(codes: [u32; 4]) -> f32 {
-    (codes[0] & 15 | (codes[1] & 15) << 4 | (codes[2] & 15) << 8 | (codes[3] & 15) << 12) as f32
+/// trees, the storm drain, the bin; stage W2d: the transit stop and the trees'
+/// trunk kerb offset, `tree_kd_code`), an exact integer below 2^24 in the
+/// record's f32 (every integer to 2^24 is exact). The shaders hash the
+/// decal's centre for their randomness.
+pub fn seed_of(codes: [u32; SEED_CODES]) -> f32 {
+    codes.iter().enumerate().fold(0u32, |s, (i, c)| s | (c & 15) << (4 * i)) as f32
 }
 
 /// `seed_of` read back.
-pub fn seed_codes(seed: f32) -> [u32; 4] {
+pub fn seed_codes(seed: f32) -> [u32; SEED_CODES] {
     let s = seed as u32;
-    [s & 15, s >> 4 & 15, s >> 8 & 15, s >> 12 & 15]
+    std::array::from_fn(|i| s >> (4 * i) & 15)
+}
+
+/// A trunk's distance from the kerb line (m) as a 4-bit code, 0 for none
+/// (street_life.wgsl reads it back as `code * TREE_KD_STEP_M`).
+pub fn tree_kd_code(kd: Option<f64>) -> u32 {
+    kd.map(|d| (d / TREE_KD_STEP_M).round().clamp(1.0, 15.0) as u32).unwrap_or(0)
 }
 
 /// A decal's kind with its parameters (16 bits above the low byte: exact in the f32 record).
@@ -343,6 +371,9 @@ pub struct Trees {
     cell: f64,
     grid: HashMap<(i32, i32), Vec<[f64; 2]>>,
     pub count: usize,
+    /// Stage W2d: the street tree kind's depth (eo-props `furnitureKinds.tree.depth`,
+    /// m), which sets its trunk's place past the kerb's top; None without it.
+    pub depth: Option<f64>,
 }
 
 impl Trees {
@@ -352,22 +383,32 @@ impl Trees {
         for p in points {
             grid.entry(((p[0] / cell).floor() as i32, (p[1] / cell).floor() as i32)).or_default().push(*p);
         }
-        Trees { cell, grid, count: points.len() }
+        Trees { cell, grid, count: points.len(), depth: None }
     }
 
     /// The surveyed trees (eo-props' `JsProps::trees`, at the ground scale's positions).
     pub fn get() -> &'static Trees {
         static T: OnceLock<Trees> = OnceLock::new();
         T.get_or_init(|| {
-            let pts: Vec<[f64; 2]> = eo_props::JsProps::load()
+            let js = eo_props::JsProps::load().ok();
+            let pts: Vec<[f64; 2]> = js
+                .as_ref()
                 .map(|js| {
                     let t = &js.trees;
                     let st = t.stride.max(2);
                     (0..t.data.len() / st).map(|i| [t.data[i * st] as f64 / 10.0, t.data[i * st + 1] as f64 / 10.0]).collect()
                 })
                 .unwrap_or_default();
-            Trees::from_points(&pts)
+            let mut t = Trees::from_points(&pts);
+            t.depth = js.and_then(|js| js.consts["furnitureKinds"]["tree"]["depth"].as_f64()).filter(|d| d.is_finite() && *d > 0.0);
+            t
         })
+    }
+
+    /// A trunk's distance from the kerb line (m): the kerb's top `curb_top` and
+    /// the kind's depth past it (eo-props `lateralFor`, curb zone).
+    pub fn trunk_kd(&self, curb_top: f64) -> Option<f64> {
+        self.depth.map(|d| curb_top + d + TREE_TRUNK_GAP_M)
     }
 
     /// Trees within `reach` of the segment a-b: (t along it 0..1, lateral distance).
@@ -630,8 +671,9 @@ pub fn place(world: &StreetWorld, key: (i32, i32), cx: &Context, out: &mut Vec<D
                 // at the kerb, the bin at a stop or the corner (some stretches' only).
                 let own = |t: f64| if flipped { 1.0 - t } else { t };
                 let drain = cx.hot.drains_along(at_s(g, sa, side * half), at_s(g, sb, side * half), DRAIN_REACH_M).first().map(|d| own(d.0));
+                // (stage W2d) the stop is an anchor of its own: people wait there whether or not its bin's pile is drawn
+                let stop = cx.hot.stops_along(wa, wb, BIN_STOP_REACH_M).first().map(|s| s.0);
                 let bin = if cx.level >= 2 || hash(run ^ 0x6a09_e667, salt) < BIN_PILE_SHARE {
-                    let stop = cx.hot.stops_along(wa, wb, BIN_STOP_REACH_M).first().map(|s| s.0);
                     let at_end = |s: f64| (s > sa && s < sb).then(|| (s - sa) / (sb - sa));
                     let start = if e.approach_start.is_some() { at_end(f0 + BIN_FROM_CORNER_M) } else { None };
                     let near_corner = start.or(if e.approach_end.is_some() { at_end(f1 - BIN_FROM_CORNER_M) } else { None });
@@ -639,7 +681,16 @@ pub fn place(world: &StreetWorld, key: (i32, i32), cx: &Context, out: &mut Vec<D
                 } else {
                     None
                 };
-                let seed = seed_of([anchor_code(trees.first().map(|t| own(t.0))), anchor_code(trees.get(1).map(|t| own(t.0))), anchor_code(drain), anchor_code(bin)]);
+                // (stage W2d) the trees' basins at their trunks' kerb offset (the kind's, eo-props)
+                let tree_kd = if trees.is_empty() { None } else { cx.trees.trunk_kd(o.curb_top_width) };
+                let seed = seed_of([
+                    anchor_code(trees.first().map(|t| own(t.0))),
+                    anchor_code(trees.get(1).map(|t| own(t.0))),
+                    anchor_code(drain),
+                    anchor_code(bin),
+                    anchor_code(stop.map(own)),
+                    tree_kd_code(tree_kd),
+                ]);
                 out.push(Decal {
                     c: [((pa[0] + pb[0]) * 0.5) as f32, ((pa[1] + pb[1]) * 0.5) as f32],
                     a: [a[0] as f32, a[1] as f32],
@@ -674,12 +725,47 @@ fn under_deck(world: &StreetWorld, sw: &eo_structures::StructureWorld, p: [f64; 
     sw.headroom(p[0], p[1], 0.5, y + 0.5).is_some_and(|h| h > y + 2.0 && h - y < UNDER_DECK_M)
 }
 
+/// Stage W2d: the SF sidewalk zones the walk's litter follows (street_life.wgsl
+/// `sl_walk_zones`), m on the ground plan.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Zones {
+    /// `sidewalk-frontage-zone-sf` (allStreets, 18 in): the strip at the building
+    /// line where litter drifts against the wall and into the doorways.
+    pub frontage_m: f64,
+    /// `sidewalk-furnishing-zone-sf` (withTreesMin, 3 ft): the strip beside the
+    /// kerb with the trees, poles, meters and bins, where litter lodges.
+    pub furnishing_m: f64,
+}
+
+/// The zones from the California street standards table, times the ground-plan
+/// scale (`ground-plan-sidewalks` covers both zones). Zero where the table or the
+/// scale cannot be read: the walk then keeps its litter on the kerb's lip and at
+/// its anchors only.
+pub fn zones() -> Zones {
+    static Z: OnceLock<Zones> = OnceLock::new();
+    *Z.get_or_init(|| {
+        let Some(t) = eo_data::DataPaths::discover().ok().and_then(|p| eo_data::CaStandards::load(&p).ok()) else {
+            return Zones::default();
+        };
+        let Ok(gs) = eo_data::groundscale::resolve() else {
+            return Zones::default();
+        };
+        Zones {
+            frontage_m: t.metric_key("sidewalk-frontage-zone-sf", "allStreets").map(|v| v * gs).unwrap_or(0.0),
+            furnishing_m: t.metric_key("sidewalk-furnishing-zone-sf", "withTreesMin").map(|v| v * gs).unwrap_or(0.0),
+        }
+    })
+}
+
 /// WGSL constants (street_life.wgsl): the switch's bits, the kinds, the decals' geometry.
 pub fn wgsl() -> String {
+    let z = zones();
     format!(
-        "\n// generated by street_life.rs\nconst SL_RUN_SHIFT: u32 = {}u;\nconst SL_DK_LIFE: u32 = {DK_LIFE}u;\nconst SL_DK_COLUMN: u32 = {DK_COLUMN}u;\nconst SL_KIND_SHIFT: u32 = {KIND_SHIFT}u;\nconst SL_PAD_M: f32 = {PAD_M:.4};\nconst SL_WALL_REACH_M: f32 = {WALL_REACH_M:.4};\nconst SL_COLUMN_PAD_M: f32 = {COLUMN_PAD_M:.4};\nconst SL_LIFE_BASE: u32 = {}u;\n",
+        "\n// generated by street_life.rs\nconst SL_RUN_SHIFT: u32 = {}u;\nconst SL_DK_LIFE: u32 = {DK_LIFE}u;\nconst SL_DK_COLUMN: u32 = {DK_COLUMN}u;\nconst SL_KIND_SHIFT: u32 = {KIND_SHIFT}u;\nconst SL_PAD_M: f32 = {PAD_M:.4};\nconst SL_WALL_REACH_M: f32 = {WALL_REACH_M:.4};\nconst SL_COLUMN_PAD_M: f32 = {COLUMN_PAD_M:.4};\nconst SL_LIFE_BASE: u32 = {}u;\nconst SL_FRONTAGE_M: f32 = {:.4};\nconst SL_FURNISH_M: f32 = {:.4};\nconst SL_TREE_KD_STEP_M: f32 = {TREE_KD_STEP_M:.4};\n",
         crate::facade::RUN_STREET_LIFE_SHIFT,
-        crate::cc0::GRID_VEC4
+        crate::cc0::GRID_VEC4,
+        z.frontage_m,
+        z.furnishing_m,
     )
 }
 
@@ -734,14 +820,20 @@ mod tests {
 
     #[test]
     fn seeds_carry_their_anchors_exactly() {
-        for i in 0..65536u32 {
-            let codes = [i & 15, i >> 4 & 15, i >> 8 & 15, i >> 12 & 15];
+        // every value of the low 16 bits, and the upper codes (stop, trunk offset) over a stride
+        let all = (0..65536u32).chain((0..1u32 << 24).step_by(4093)).chain([(1u32 << 24) - 1]);
+        for i in all {
+            let codes: [u32; SEED_CODES] = std::array::from_fn(|k| i >> (4 * k) & 15);
             let s = seed_of(codes);
             // an exact integer in the record's f32 (the shader reads `u32(floor(seed))`)
             assert_eq!(s as u32, i);
             assert_eq!(s.floor(), s);
             assert_eq!(seed_codes(s), codes);
         }
+        assert_eq!(tree_kd_code(None), 0);
+        assert_eq!(tree_kd_code(Some(0.762)), 8, "a tree's trunk: kerb top 0.15 + depth 0.55 + 0.06");
+        assert_eq!(tree_kd_code(Some(0.01)), 1, "a code, not none");
+        assert_eq!(tree_kd_code(Some(9.0)), 15, "clamped");
         assert_eq!(anchor_code(None), 0);
         assert_eq!(anchor_code(Some(0.0)), 1);
         assert_eq!(anchor_code(Some(1.0)), 15);
@@ -791,5 +883,25 @@ mod tests {
     fn the_constants_parse() {
         let src = wgsl();
         wgpu::naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
+    }
+
+    #[test]
+    fn the_walk_zones_come_from_the_standards_on_the_ground_plan() {
+        let z = zones();
+        let gs = eo_data::groundscale::resolve().unwrap();
+        // SF Better Streets: frontage 18 in, furnishing with trees 3 ft (the table's metric values)
+        assert!((z.frontage_m - 0.457 * gs).abs() < 1e-6, "{z:?}");
+        assert!((z.furnishing_m - 0.914 * gs).abs() < 1e-6, "{z:?}");
+        let src = wgsl();
+        assert!(src.contains(&format!("const SL_FRONTAGE_M: f32 = {:.4};", z.frontage_m)), "{src}");
+        assert!(src.contains(&format!("const SL_FURNISH_M: f32 = {:.4};", z.furnishing_m)), "{src}");
+    }
+
+    #[test]
+    fn a_trunk_stands_past_the_kerb_top_by_its_depth() {
+        let t = Trees::from_points(&[]);
+        assert_eq!(t.trunk_kd(0.1524), None, "no kind, no offset");
+        let t = Trees { depth: Some(0.55), ..Trees::from_points(&[]) };
+        assert!((t.trunk_kd(0.1524).unwrap() - 0.7624).abs() < 1e-9);
     }
 }
