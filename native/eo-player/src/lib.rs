@@ -18,7 +18,9 @@ pub mod routes;
 pub mod street_ground;
 pub mod tuning;
 pub mod vehicle;
+pub mod weather;
 pub mod world;
 
 pub use player::{CameraView, Mode, Player, PlayerState, StepInput}; // + PlayerState
+pub use weather::WeatherPhysics;
 pub use world::{BuildingSet, CollisionWorld, DeckPart, Decks, ElevationGround, GroundProvider, LiftDef, PrismCut, SurfaceMesh, TileFeed, TileKey}; // + TileFeed, decks

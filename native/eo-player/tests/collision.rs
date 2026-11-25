@@ -517,3 +517,58 @@ fn the_same_inputs_give_the_same_body() {
     let b = run();
     assert_eq!(a.to_array().map(f64::to_bits), b.to_array().map(f64::to_bits), "{a:?} vs {b:?}");
 }
+
+#[test]
+fn weather_physics_changes_driving_and_walking_deterministically() {
+    let run_drive = |wx: eo_player::WeatherPhysics| {
+        let mut world = CollisionWorld::new(Arc::new(KerbStreet { curb_m: 0.15 }), Arc::new(BuildingSet::empty()), 1);
+        world.load_blocking(DVec3::new(-60.0, 0.0, 0.0), 150.0);
+        let mut player = Player::new(DVec3::new(-60.0, 0.0, 3.0), 0.0);
+        player.set_weather(wx);
+        player.spawn_vehicle(&mut world, -60.0, 0.0, 0.0);
+        for _ in 0..60 {
+            player.fixed_step(&mut world, &StepInput::default());
+        }
+        player.fixed_step(&mut world, &StepInput { vehicle_toggle: true, ..Default::default() });
+        assert_eq!(player.mode, Mode::Driving(0));
+        // Drive straight +Z at full throttle, then brake hard in wet/storm vs dry.
+        for _ in 0..140 {
+            player.fixed_step(&mut world, &StepInput { throttle: 1.0, ..Default::default() });
+        }
+        let peak_pos = player.position(&world);
+        for _ in 0..90 {
+            player.fixed_step(&mut world, &StepInput { brake: 1.0, ..Default::default() });
+        }
+        (peak_pos, player.position(&world), player.vehicles[0].wheels_in_contact())
+    };
+    let dry = eo_player::WeatherPhysics::default();
+    let storm = eo_player::WeatherPhysics { wetness: 0.99, puddle_fill: 0.90, rain_mm_h: 22.0, wind: [12.0, 0.0], gust: 1.1 };
+    let (dry_peak, dry_stop, dry_w) = run_drive(dry);
+    let (st_peak, st_stop, st_w) = run_drive(storm);
+    let (st_peak2, st_stop2, _) = run_drive(storm);
+    assert_eq!(dry_w, 4);
+    assert_eq!(st_w, 4);
+    // Bit-identical determinism under storm weather physics.
+    assert_eq!(st_peak.to_array().map(f64::to_bits), st_peak2.to_array().map(f64::to_bits));
+    assert_eq!(st_stop.to_array().map(f64::to_bits), st_stop2.to_array().map(f64::to_bits));
+    // Strong crosswind + asymmetric puddles deflect the car laterally compared to dry calm.
+    assert!((st_stop.x - dry_stop.x).abs() > 0.01, "lateral storm deflection: dry={dry_stop:?} storm={st_stop:?}");
+    // Wet storm surface physics measurably alters stopping distance vs dry pavement.
+    let dry_brake = dry_stop.z - dry_peak.z;
+    let st_brake = st_stop.z - st_peak.z;
+    assert!(st_brake > dry_brake + 0.25, "wet braking distance {st_brake:.2} m should exceed dry {dry_brake:.2} m");
+    // On foot: walking into a storm headwind covers less ground than walking with a tailwind.
+    let run_walk = |wind: [f64; 2]| {
+        let mut world = CollisionWorld::new(Arc::new(KerbStreet { curb_m: 0.15 }), Arc::new(BuildingSet::empty()), 1);
+        world.load_blocking(DVec3::new(-60.0, 0.0, 0.0), 150.0);
+        let mut player = Player::new(DVec3::new(-60.0, 0.0, 0.0), 0.0);
+        player.set_weather(eo_player::WeatherPhysics { wetness: 0.99, puddle_fill: 0.90, rain_mm_h: 22.0, wind, gust: 1.1 });
+        for _ in 0..120 {
+            player.fixed_step(&mut world, &StepInput { move_y: 1.0, ..Default::default() });
+        }
+        player.character.feet().z
+    };
+    let z_head = run_walk([0.0, -12.0]);
+    let z_tail = run_walk([0.0, 12.0]);
+    assert!(z_head < z_tail - 0.1, "headwind z={z_head:.2} m should be shorter than tailwind z={z_tail:.2} m");
+}

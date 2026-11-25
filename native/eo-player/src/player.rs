@@ -141,6 +141,8 @@ pub struct Player {
     pub ticks: u64,
     /// A landmark lift ride in progress (lift.rs).
     pub lift: Option<crate::lift::LiftRide>,
+    /// Active weather physics conditions (default dry & calm).
+    pub weather: crate::weather::WeatherPhysics,
     accumulator: f64,
     last_camera_distance: f64,
 }
@@ -162,9 +164,16 @@ impl Player {
             mode: Mode::OnFoot,
             ticks: 0,
             lift: None,
+            weather: crate::weather::WeatherPhysics::default(),
             accumulator: 0.0,
             last_camera_distance: camera::on_foot::walk_distance(), // walk_distance()
         }
+    }
+
+    /// Update the weather physics applied during `fixed_step` (wet grip,
+    /// standing puddles and wind forces).
+    pub fn set_weather(&mut self, weather: crate::weather::WeatherPhysics) {
+        self.weather = weather;
     }
 
     /// Place a sedan with its road datum on the ground at (x, z): on the
@@ -281,9 +290,10 @@ impl Player {
                 }
             }
             Mode::Driving(i) => {
+                let wx = self.weather;
                 for (k, v) in self.vehicles.iter_mut().enumerate() {
                     if k == i {
-                        v.pre_step(world, input.steer, input.throttle, input.brake, input.handbrake, input.analog_steer);
+                        v.pre_step_with_weather(world, input.steer, input.throttle, input.brake, input.handbrake, input.analog_steer, &wx);
                     } else {
                         v.park(world);
                     }
@@ -346,7 +356,9 @@ impl Player {
             speed::WALK_MPS
         };
         let before = self.character.feet();
-        let (dx, dz) = self.momentum.step(lx * target_speed, lz * target_speed, dt, input.aim || crouched, before.x, before.z);
+        let (wx_speed_scale, wx_push_x, wx_push_z) = self.weather.on_foot_modifiers(before.x, before.z, lx, lz);
+        let eff_speed = target_speed * wx_speed_scale;
+        let (dx, dz) = self.momentum.step(lx * eff_speed + wx_push_x, lz * eff_speed + wx_push_z, dt, input.aim || crouched, before.x, before.z);
         if input.jump && !crouched {
             self.character.jump(speed::JUMP_MPS);
         }

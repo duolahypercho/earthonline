@@ -366,8 +366,26 @@ impl Vehicle {
         self.controller.wheels().iter().filter(|w| w.raycast_info().is_in_contact).count()
     }
 
-    /// Submit this step's controls and run the wheel solve (before the world step).
+    /// Submit this step's controls and run the wheel solve (before the world step),
+    /// using dry calm road conditions.
     pub fn pre_step(&mut self, world: &mut CollisionWorld, steer_in: f64, throttle_in: f64, brake_in: f64, handbrake: bool, analog: bool) {
+        self.pre_step_with_weather(world, steer_in, throttle_in, brake_in, handbrake, analog, &crate::weather::WeatherPhysics::default());
+    }
+
+    /// Submit this step's controls and run the wheel solve under `weather`
+    /// (wet-pavement grip, standing-puddle hydroplaning and splash drag, and
+    /// aerodynamic wind / crosswind forces). Dry/calm weather is an exact no-op.
+    #[allow(clippy::too_many_arguments)]
+    pub fn pre_step_with_weather(
+        &mut self,
+        world: &mut CollisionWorld,
+        steer_in: f64,
+        throttle_in: f64,
+        brake_in: f64,
+        handbrake: bool,
+        analog: bool,
+        weather: &crate::weather::WeatherPhysics,
+    ) {
         let speed = self.forward_speed(world);
         let dt = tuning::FIXED_STEP_S;
         let c = self.shaper.update(steer_in, throttle_in, brake_in, handbrake, analog, speed, dt);
@@ -398,14 +416,44 @@ impl Vehicle {
             }
             world.physics.bodies[self.body].wake_up(true);
         }
+        let dry_calm = weather.is_dry_calm();
+        let (pos, rot) = self.pose(world);
+        let vel = {
+            let v = world.physics.bodies[self.body].linvel();
+            DVec3::new(v.x as f64, v.y as f64, v.z as f64)
+        };
+        let speed_mag = vel.x.hypot(vel.z);
         for (i, w) in self.controller.wheels_mut().iter_mut().enumerate() {
             w.steering = if i < 2 { steer } else { 0.0 };
+            let mut extra_drag_imp = 0.0;
+            if dry_calm {
+                w.friction_slip = s.tyre_friction as f32;
+                w.side_friction_stiffness = 1.0;
+            } else {
+                let cp = w.chassis_connection_point_cs;
+                let wp = pos + rot * DVec3::new(cp.x as f64, cp.y as f64, cp.z as f64);
+                let (grip_s, lat_s) = weather.tyre_grip_scale(wp.x, wp.z, speed_mag);
+                w.friction_slip = (s.tyre_friction * grip_s) as f32;
+                w.side_friction_stiffness = lat_s as f32;
+                if w.raycast_info().is_in_contact {
+                    let pud = weather.puddle_depth_at(wp.x, wp.z);
+                    extra_drag_imp = weather.wheel_puddle_drag_n(speed_mag, pud) * dt;
+                }
+            }
             if DRIVEN[i] {
                 w.engine_force = driven_engine as f32;
-                w.brake = driven_brake as f32;
+                w.brake = (driven_brake + extra_drag_imp) as f32;
             } else {
                 w.engine_force = 0.0;
-                w.brake = front as f32;
+                w.brake = (front + extra_drag_imp) as f32;
+            }
+        }
+        if !dry_calm {
+            let fwd = rot * DVec3::Z;
+            let f_wind = weather.vehicle_wind_force_n(vel, fwd, s.width, s.height, s.length);
+            if f_wind.length_squared() > 1e-6 {
+                let imp = f_wind * dt;
+                world.physics.bodies[self.body].apply_impulse(Vector::new(imp.x as f32, 0.0, imp.z as f32), false);
             }
         }
         let filter = QueryFilter::default()
