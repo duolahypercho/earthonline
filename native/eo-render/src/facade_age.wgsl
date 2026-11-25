@@ -41,6 +41,14 @@ const FA_ATLAS: u32 = 131072u;
 const FA_AXIS_COS: f32 = 0.89100652;
 const FA_AXIS_SIN: f32 = 0.45399050;
 const FA_RUST: vec3<f32> = vec3<f32>(0.2, 0.072, 0.03);
+// (`--facade-patina`) the wall direction the sun and rain fade paint most on (south-south-west; north is -z)
+const FP_SUN_FACE: vec2<f32> = vec2<f32>(-0.37, 0.93);
+// the rain-carried grime's strength over the graph's
+const FP_GRIME: f32 = 1.6;
+// rust: old, dark iron oxide in the grooves; fixings every FP_FIX_PITCH_M, a share of them bleeding (by wear)
+const FP_RUST_DARK: vec3<f32> = vec3<f32>(0.085, 0.04, 0.022);
+const FP_FIX_PITCH_M: f32 = 0.7;
+const FP_FIX_SHARE: f32 = 0.8;
 
 fn fa_run() -> u32 {
     return u32(frame.copy_step.y);
@@ -56,6 +64,12 @@ fn fg_on() -> bool {
 fn ff_on() -> bool {
     return SF_FAR_FACADES && (fa_run() & 2097152u) != 0u;
 }
+
+// (`--far-relief`, hlod_draw.wgsl) the key light's visibility over what the
+// far layer's relief shades (a parapet's shade on its roof, a cornice's or a
+// belt course's on its wall), set by the far shader before `look_light`; 1
+// everywhere else. Read only behind `SF_FAR_RELIEF` (look_light.wgsl).
+var<private> fr_sun_vis: f32 = 1.0;
 
 // (`--canyon-glass`, facade.rs `RUN_CANYON_GLASS`, bit 23) the street canyon in the kit glass (rooms.wgsl `cg_canyon`).
 fn cg_on() -> bool {
@@ -84,6 +98,28 @@ fn fa_noise(p: vec2<f32>, k: f32) -> f32 {
     let ab = a + (b - a) * w.x;
     let cd = c + (d - c) * w.x;
     return ab + (cd - ab) * w.y;
+}
+
+// (`--facade-patina`) a field's lattice turned off the wall's axes, each field by its own
+// angle: one lattice thresholded draws soft rectangles that line up with the windows.
+fn fp_turn(q: vec2<f32>, k: f32) -> vec2<f32> {
+    if (!SF_FACADE_PATINA) {
+        return q;
+    }
+    let a = 0.47 + k * 0.6180340;
+    let c = cos(a);
+    let s = sin(a);
+    return vec2<f32>(q.x * c - q.y * s, q.x * s + q.y * c);
+}
+
+// (`--facade-patina`) the slow warp (metres) every ageing field of a wall is carried along, so
+// their edges run in curves rather than straight lines; zero without the switch.
+fn fp_warp(axis: f32, y: f32) -> vec2<f32> {
+    if (!SF_FACADE_PATINA) {
+        return vec2<f32>(0.0);
+    }
+    let q = fp_turn(vec2<f32>(axis, y) / 3.3, 9.0);
+    return (vec2<f32>(fa_noise(q, 91.0), fa_noise(q + vec2<f32>(5.2, 1.3), 92.0)) - 0.5) * 2.2;
 }
 
 // The weathering graph's inputs (WEATHERING_SCALAR_KEYS) and structure.
@@ -159,13 +195,21 @@ fn fa_weather(w: FaW, p: vec3<f32>, n: vec3<f32>) -> FaOut {
     let column = fract(sin(floor(along / w.column_m) * 12.9898) * 43758.5453);
     let column_mask = fa_ss(0.45, 0.95, column);
     var m = 1.0 - w.soot_strength * fa_ss(w.soot_top, w.base_y, y);
-    let grime_a = fa_noise(vec2<f32>(axis / w.grime_a.x, local_y / w.grime_a.y), 4.0);
-    let grime_b = fa_noise(vec2<f32>(axis / w.grime_b.x + 6.1, local_y / w.grime_b.y + 2.3), 5.0);
-    m = m * (1.0 - w.grime_strength * (grime_a * 0.55 + grime_b * 0.45));
+    // (`--facade-patina`) the fields below on the wall's slow warp, each lattice turned its own way
+    let wp = fp_warp(axis, local_y);
+    let ax = axis + wp.x;
+    let ly = local_y + wp.y;
+    let grime_a = fa_noise(fp_turn(vec2<f32>(ax / w.grime_a.x, ly / w.grime_a.y), 4.0), 4.0);
+    let grime_b = fa_noise(fp_turn(vec2<f32>(ax / w.grime_b.x + 6.1, ly / w.grime_b.y + 2.3), 5.0), 5.0);
+    var grime = grime_a * 0.55 + grime_b * 0.45;
+    if (SF_FACADE_PATINA) {
+        grime = smoothstep(0.25, 0.8, grime); // (`--facade-patina`) run-off lies in streaks, clean wall between
+    }
+    m = m * (1.0 - w.grime_strength * grime);
     var r = w.rough_gain * fa_ss(w.soot_top, w.base_y, y);
     if ((w.flags & 2u) != 0u) {
-        let pale = fa_noise(vec2<f32>(axis / w.patch_big.x, local_y / w.patch_big.y), 1.0);
-        let dark = fa_noise(vec2<f32>(axis / w.patch_small.x + 11.3, local_y / w.patch_small.y + 4.7), 2.0);
+        let pale = fa_noise(fp_turn(vec2<f32>(ax / w.patch_big.x, ly / w.patch_big.y), 1.0), 1.0);
+        let dark = fa_noise(fp_turn(vec2<f32>(ax / w.patch_small.x + 11.3, ly / w.patch_small.y + 4.7), 2.0), 2.0);
         let reach = 0.24 + 0.76 * fa_ss(w.reach_top, w.reach_bottom, y);
         let lighter = fa_ss(0.62, 0.88, pale);
         let darker = fa_ss(0.64, 0.92, dark);
@@ -173,14 +217,14 @@ fn fa_weather(w: FaW, p: vec3<f32>, n: vec3<f32>) -> FaOut {
         r = r - lighter * 0.16 * reach + darker * 0.09 * reach;
     }
     if ((w.flags & 4u) != 0u) {
-        let oa = fa_noise(vec2<f32>(axis / w.mottle_a.x + 3.7, local_y / w.mottle_a.y + 1.9), 7.0);
-        let ob = fa_noise(vec2<f32>(axis / w.mottle_b.x + 8.3, local_y / w.mottle_b.y + 5.1), 8.0);
+        let oa = fa_noise(fp_turn(vec2<f32>(ax / w.mottle_a.x + 3.7, ly / w.mottle_a.y + 1.9), 7.0), 7.0);
+        let ob = fa_noise(fp_turn(vec2<f32>(ax / w.mottle_b.x + 8.3, ly / w.mottle_b.y + 5.1), 8.0), 8.0);
         let swing = (oa * 0.6 + ob * 0.4 - 0.5) * 2.0;
         m = m * (1.0 + swing * w.mottle);
         r = r - swing * w.mottle_sheen;
     }
     if ((w.flags & 8u) != 0u) {
-        let broken = 0.72 + 0.28 * fa_noise(vec2<f32>(axis / 1.7, local_y / 0.9), 3.0);
+        let broken = 0.72 + 0.28 * fa_noise(fp_turn(vec2<f32>(ax / 1.7, ly / 0.9), 3.0), 3.0);
         m = m * (1.0 - w.soil_strength * broken * fa_ss(w.soil_top, w.soil_bottom, y));
         if ((w.flags & 16u) != 0u) {
             m = m * (1.0 - w.damp_strength * fa_ss(w.damp_top, w.soil_bottom, y));
@@ -332,6 +376,19 @@ fn fa_kit(d: FaD, cls: u32) -> FaW {
     w.band_pitch = d.pitch;
     w.band_count = select(0u, AGE_BANDS, cls == FA_AGE_RENDER || cls == FA_AGE_PAINTED || cls == FA_AGE_MASONRY);
     w.kit_bands = true;
+    if (SF_FACADE_PATINA) {
+        // (`--facade-patina`) the grime the rain carries runs down the wall: long upright, narrow
+        // across, and as much of it as the streak columns and blocks it replaces carried (x FP_GRIME)
+        w.grime_a = vec2<f32>(grime * 0.42, grime * 2.3);
+        w.grime_b = vec2<f32>(grime * 0.75, grime * 3.1);
+        w.grime_strength = w.grime_strength * FP_GRIME;
+        if (SF_FACADE_WEATHER && fw_on()) {
+            // and the storey bands' streak columns (0.35 m blocks hung from every sill line of the
+            // building's rhythm, whether a window is there or not) give way to each window's own
+            // run-off (`fw_apply`)
+            w.band_count = 0u;
+        }
+    }
     // structure { axis: 'wall', patches: { strength: ghosts, mottle: 1 } } + base soil.
     w.flags = 1u | 4u | select(0u, 2u, ghosts) | select(0u, 8u, AL_BASE_SOIL_STRENGTH > 0.0) | select(0u, 16u, AL_DAMP_ON && AL_BASE_SOIL_STRENGTH > 0.0);
     return w;
@@ -447,12 +504,51 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
     let local_y = world.y - d.base_y;
     let wear = d.wear;
     if (cls == FA_AGE_RENDER || cls == FA_AGE_PAINTED) {
-        let patchy = 0.75 + fa_noise(vec2<f32>(along / 3.1, local_y / 2.3), 23.0) * 0.5;
+        var patchy = 0.75 + fa_noise(vec2<f32>(along / 3.1, local_y / 2.3), 23.0) * 0.5;
+        if (SF_FACADE_PATINA) {
+            // (`--facade-patina`) the film chalks by its exposure: the sun and the rain reach a south or
+            // west wall most (north is -z), the upper wall more than the street's shaded foot
+            let nh = nxz / max(length(nxz), 1e-4);
+            let sun_face = clamp(0.55 + 0.45 * dot(nh, FP_SUN_FACE), 0.15, 1.0);
+            let wp = fp_warp(along, local_y);
+            let field = fa_noise(fp_turn(vec2<f32>((along + wp.x) / 2.6, (local_y + wp.y) / 3.6), 23.0), 23.0);
+            patchy = sun_face * (0.55 + 0.45 * fa_ss(0.0, 12.0, local_y)) * (0.6 + 0.8 * field) * 1.3;
+        }
         let fade = fa_row(AW_PAINT_FADE, d) * patchy * upright;
         let chalk = vec3<f32>(dot(color, vec3<f32>(0.2126, 0.7152, 0.0722))) * 1.08 + 0.025;
         color = mix(color, chalk, fade);
     }
-    if (cls == FA_AGE_METAL) {
+    if (SF_FACADE_PATINA && cls == FA_AGE_METAL) {
+        // (`--facade-patina`) metal rusts where water stands and the paint is thinnest: in its grooves
+        // (the scan's own occlusion), along its foot and bottom rail, and in streaks that run down from
+        // its fixings; the coat between stays (no blotches over the slats)
+        let ra = clamp(fa_row(AW_RUST, d), 0.0, 1.0);
+        let fwm = max(length(dpx), length(dpy));
+        let keep = 1.0 - fa_ss(0.02, 0.08, fwm);
+        let wp = fp_warp(along, local_y);
+        let field = fa_noise(fp_turn(vec2<f32>(along + wp.x, local_y + wp.y) / 0.45, 29.0), 29.0) * 0.6 + fa_noise(fp_turn(vec2<f32>(along, local_y) / 0.09, 31.0), 31.0) * 0.4 * keep + 0.2 * (1.0 - keep);
+        let groove = clamp((1.0 - (*s).ao) * 3.0, 0.0, 1.0);
+        let foot = 1.0 - fa_ss(0.0, 0.35, local_y);
+        var rust = fa_ss(0.42, 0.8, field * 0.55 + groove * 0.75 + foot * 0.6 - (1.0 - ra) * 0.3) * ra;
+        // streaks from fixings: in some 0.7 m columns a source, the rust run down under it
+        let col = floor(along / FP_FIX_PITCH_M);
+        let hs = fa_hash(vec2<f32>(col, d.seed), 37.0);
+        if (hs < FP_FIX_SHARE * ra) {
+            let xc = (col + 0.3 + 0.4 * fa_hash(vec2<f32>(col, d.seed), 38.0)) * FP_FIX_PITCH_M;
+            let y0 = mix(0.8, 3.2, fa_hash(vec2<f32>(col, d.seed), 39.0));
+            let below = y0 - local_y;
+            if (below > 0.0) {
+                let wd = min(0.025 + below * 0.05, 0.07); // (its tail inside its 0.7 m column)
+                let wf = sqrt(wd * wd + 0.3 * fwm * fwm);
+                let dx = (along - xc) / wf;
+                let len = mix(0.4, 1.6, fa_hash(vec2<f32>(col, d.seed), 40.0));
+                rust = max(rust, exp(-dx * dx * 1.5) * (wd / wf) * exp(-below / len) * mix(0.6, 1.0, field) * ra);
+            }
+        }
+        let tone = mix(FP_RUST_DARK, FA_RUST * 1.35, fa_ss(0.3, 0.8, field));
+        color = mix(color, tone, clamp(rust, 0.0, 1.0) * 0.85);
+        rough = rough + rust * 0.3;
+    } else if (cls == FA_AGE_METAL) {
         let ra = clamp(fa_row(AW_RUST, d), 0.0, 1.0);
         let p = vec2<f32>(local.x + local.y * 0.61, local_y + local.y * 0.27) / 0.3;
         let field = fa_noise(p, 29.0) * 0.65 + fa_noise(p * 3.7 + 5.3, 31.0) * 0.35;
@@ -495,7 +591,9 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
         rough = rough + splash * 0.1;
     }
     // run-off stains under the sills (the Leaking scans at the building's own sill rhythm).
-    if ((cls == FA_AGE_RENDER || cls == FA_AGE_PAINTED || cls == FA_AGE_MASONRY) && cc0_wall_hit && upright > 0.5) {
+    // (`--facade-patina`, with `--facade-weather`) not in columns on a lattice of the wall: each window's own run-off (`fw_apply`)
+    let stain_columns = !(SF_FACADE_PATINA && SF_FACADE_WEATHER && fw_on());
+    if ((cls == FA_AGE_RENDER || cls == FA_AGE_PAINTED || cls == FA_AGE_MASONRY) && cc0_wall_hit && upright > 0.5 && stain_columns) {
         color = color * cc0_wall_stain(world, along, local_y, d, dpx, dpy, fa_frame(ng).t);
     }
     // grime rising from the wall's foot (the rising-grime scan over the splash zone above).
@@ -511,7 +609,13 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
     }
     if (wx_level() != 0u) {
         // weathering (`--grime`, weathering.wgsl): streaks, roof-edge soot, splash-back, sun fade.
-        wx_facade(&color, &rough, world, ng, along, local_y, d, cls, upright, ob.max.y, wx_fw(dpx, dpy));
+        // (`--facade-patina`, with `--facade-weather`: not its paint blocks, rectangles a bay by a
+        // storey on a lattice of the wall, nor its streak columns under every sill line of the
+        // rhythm, window or not; the run-off of each window and of the parapet in `fw_apply`, the
+        // exposure fade and the foot above take their place)
+        if (!(SF_FACADE_PATINA && SF_FACADE_WEATHER && fw_on())) {
+            wx_facade(&color, &rough, world, ng, along, local_y, d, cls, upright, ob.max.y, wx_fw(dpx, dpy));
+        }
         // stage W5: old painted sashes and frames chalked and peeling, dirt on the trim's ledges, drip lines under them.
         wx_window_trim(&color, &rough, world, ng, local_y, d, di, wx_fw(dpx, dpy));
     }
@@ -637,6 +741,29 @@ const FW_SALT: vec3<f32> = vec3<f32>(0.66, 0.65, 0.62);
 // each wall a little its own. INFERRED from aged-paint reflectance.
 const FW_PALE_CEILING: vec2<f32> = vec2<f32>(0.72, 0.60);
 
+// (`--facade-patina`) the sill's wash: its e-folding length down the wall (m, short .. long, times
+// 0.6-1.3 by wear), its darkening (light .. heavy window), the pitch of its ragged foot's fingers;
+// the parapet's run-off: its streaks' pitch, their length and darkening. INFERRED from photographs
+// of soiled concrete and render towers (the stains read at 50-200 m).
+const FP_WASH_LEN: vec2<f32> = vec2<f32>(0.7, 2.6);
+const FP_WASH: vec2<f32> = vec2<f32>(0.35, 0.85);
+const FP_FINGER_M: f32 = 0.2;
+const FP_PARAPET_STREAK_M: f32 = 0.35;
+const FP_PARAPET_LEN: vec2<f32> = vec2<f32>(0.8, 4.5);
+const FP_PARAPET: f32 = 0.42;
+// the coping's plumes: one in a pitch of 2.5-5.5 m (by building) at most, a share of them (new ..
+// old), 0.5-1.5 m wide, down 20-65 % of the wall, their darkening
+const FP_PLUME_PITCH_M: vec2<f32> = vec2<f32>(2.5, 5.5);
+const FP_PLUME_SHARE: vec2<f32> = vec2<f32>(0.3, 0.7);
+const FP_PLUME_WIDTH_M: vec2<f32> = vec2<f32>(0.5, 1.5);
+const FP_PLUME_REACH: vec2<f32> = vec2<f32>(0.2, 0.65);
+const FP_PLUME: f32 = 0.45;
+// a porous masonry face's run-off streak over a paint film's: (width, length, darkening)
+const FP_POROUS_STREAK: vec3<f32> = vec3<f32>(2.6, 1.35, 1.3);
+// a cast unit's tone (its value, full range) and its warm/cool cast (red against blue, full range)
+const FP_PANEL_TONE: f32 = 0.14;
+const FP_PANEL_HUE: f32 = 0.05;
+
 fn fw_on() -> bool {
     return SF_FACADE_WEATHER && (fa_run() & 4194304u) != 0u;
 }
@@ -669,12 +796,13 @@ fn fw_n1(x: f32, k: vec3<i32>, salt: u32) -> f32 {
 
 // one streak's soiling at `x` across the window and `depth` under its sill,
 // centred at `xc`; `scale` shrinks a front-edge drip; `fw` the pixel's footprint.
-fn fw_streak(x: f32, depth: f32, xc: f32, key: vec3<i32>, salt: u32, wear: f32, fw: f32, scale: f32) -> f32 {
-    let len = mix(FW_LEN.x, FW_LEN.y, fw_h(key, salt + 1u)) * mix(0.6, 1.4, wear) * scale;
+// `wide`: (`--facade-patina`) the streak's width and length over a paint film's (1, 1 without it).
+fn fw_streak(x: f32, depth: f32, xc: f32, key: vec3<i32>, salt: u32, wear: f32, fw: f32, scale: f32, wide: vec2<f32>) -> f32 {
+    let len = mix(FW_LEN.x, FW_LEN.y, fw_h(key, salt + 1u)) * mix(0.6, 1.4, wear) * scale * wide.y;
     if (depth > len * 4.0) {
         return 0.0;
     }
-    let w = (mix(FW_W0.x, FW_W0.y, fw_h(key, salt + 2u)) + depth * mix(FW_SPREAD.x, FW_SPREAD.y, fw_h(key, salt + 3u))) * mix(1.0, scale, 0.6);
+    let w = (mix(FW_W0.x, FW_W0.y, fw_h(key, salt + 2u)) + depth * mix(FW_SPREAD.x, FW_SPREAD.y, fw_h(key, salt + 3u))) * mix(1.0, scale, 0.6) * wide.x;
     // under a pixel the streak widens to the footprint and pales by as much (its share of the pixel)
     let wf = sqrt(w * w + 0.3 * fw * fw);
     let keep = 1.0 - smoothstep(0.015, 0.05, fw);
@@ -730,14 +858,25 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
             let kr = vec3<i32>(vec2<i32>(floor(right.xz * 4.0 + 0.5)), ky);
             let k = mix(0.55, 1.05, wear);
             let share = mix(FW_END_SHARE.x, FW_END_SHARE.y, wear);
+            // (`--facade-patina`) a porous masonry face (concrete, stone, brick) drinks the dirty water as
+            // it runs, so its streaks spread wider and run longer than down a paint film, and read darker
+            let porous = select(vec3<f32>(1.0), FP_POROUS_STREAK, SF_FACADE_PATINA && cls == FA_AGE_MASONRY);
+            if (SF_FACADE_PATINA && (FP_PANEL_FINISHES & (1u << ((m.flags >> 11u) & 31u))) != 0u) {
+                // (`--facade-patina`) a face cast in units (precast panels, cast stone): the spandrel under
+                // a window (the pieces marked with it, from the head below to its sill) one unit, its mix
+                // and cure its own, a little lighter or darker, warmer or cooler than the next
+                let hu = fw_h(kl, 51u) - 0.5;
+                let hc = fw_h(kl, 52u) - 0.5;
+                (*s).albedo = (*s).albedo * (1.0 + hu * FP_PANEL_TONE) * (vec3<f32>(1.0) + vec3<f32>(hc, 0.0, -hc) * FP_PANEL_HUE);
+            }
             // the sill's two ends
             for (var e = 0; e < 2; e = e + 1) {
                 let key = select(kl, kr, e == 1);
                 if (fw_h(key, 1u) < share) {
                     let inset = min(mix(FW_END_IN.x, FW_END_IN.y, fw_h(key, 2u)), 0.3 * width);
                     let xc = select(inset, width - inset, e == 1);
-                    let st = fw_streak(x, depth, xc, key, 10u, wear, fw, 1.0);
-                    dirt = dirt + st * k * mix(0.65, 1.0, fw_h(key, 9u));
+                    let st = fw_streak(x, depth, xc, key, 10u, wear, fw, 1.0, porous.xy);
+                    dirt = dirt + st * k * mix(0.65, 1.0, fw_h(key, 9u)) * porous.z;
                     run = max(run, st);
                 }
             }
@@ -751,8 +890,8 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
                     if (fw_h(kd, 4u) < dshare) {
                         let xc = (ci + 0.5 + (fw_h(kd, 5u) - 0.5) * 0.7) * FW_DRIP_PITCH;
                         if (xc > 0.15 && xc < width - 0.15) {
-                            let st = fw_streak(x, depth, xc, kd, 20u, wear, fw, 0.45);
-                            dirt = dirt + st * k * 0.6;
+                            let st = fw_streak(x, depth, xc, kd, 20u, wear, fw, 0.45, porous.xy);
+                            dirt = dirt + st * k * 0.6 * porous.z;
                             run = max(run, st * 0.8);
                         }
                     }
@@ -760,6 +899,60 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
             }
             // the sheltered strip right under the sill
             dirt = dirt + 0.22 * k * (1.0 - smoothstep(0.0, 0.16, depth));
+            if (SF_FACADE_PATINA) {
+                // (`--facade-patina`) the sill's wash: the dirty water off its front edge soils the wall
+                // under the window across its width, fading down toward the head below, its foot ragged
+                // in fingers; each window its own (most a little, a few heavily), so the facade does not
+                // repeat and its windows read soiled from a block away
+                let hp = fw_h(kl, 31u);
+                let heavy = hp * (0.5 + 0.5 * hp);
+                let len = mix(FP_WASH_LEN.x, FP_WASH_LEN.y, fw_h(kl, 32u)) * mix(0.6, 1.3, wear);
+                let keep = 1.0 - smoothstep(0.06, 0.25, fw);
+                let finger = mix(0.8, 0.45 + 0.9 * fw_n1(x / FP_FINGER_M + fw_h(kl, 33u) * 17.0, kl, 34u), keep);
+                let fall = smoothstep(0.0, 0.06, depth) * exp(-depth / (len * finger));
+                // (to nothing at the jambs: the pier beside carries no mark, so no edge is left at the column's side)
+                let side = pow(sin(3.14159265 * clamp(x / width, 0.0, 1.0)), 0.6);
+                dirt = dirt + fall * side * mix(FP_WASH.x, FP_WASH.y, heavy) * mix(0.55, 1.1, wear);
+                run = max(run, fall * side * 0.6);
+            }
+        }
+    }
+    if (SF_FACADE_PATINA) {
+        // (`--facade-patina`) the parapet's run-off: the rain off the coping carries the roof's soot
+        // down the top of the wall in streaks of their own lengths, and the soot crusts right under it;
+        // where the coping sheds its water (a joint, a low point, a scupper) a broad plume runs far
+        // down the wall, wandering and widening as it falls (it reads from a block away)
+        let dtop = ob.max.y - world.y;
+        if (dtop > -0.05) {
+            let along = dot(world.xz, t.xz);
+            let kb = vec3<i32>(i32(d.seed), 7, 3);
+            let keep = 1.0 - smoothstep(0.05, 0.3, fw);
+            if (dtop < 8.0) {
+                let streak = mix(0.35, smoothstep(0.3, 0.85, fw_n1(along / FP_PARAPET_STREAK_M, kb, 41u)), keep);
+                let len = mix(FP_PARAPET_LEN.x, FP_PARAPET_LEN.y, fw_n1(along / 2.1 + 3.7, kb, 42u)) * mix(0.6, 1.2, wear);
+                let crust = 1.0 - smoothstep(0.05, 0.6, dtop);
+                dirt = dirt + (streak * exp(-dtop / len) * FP_PARAPET + crust * 0.2) * mix(0.45, 1.0, wear);
+            }
+            let h_wall = max(ob.max.y - d.base_y, 1.0);
+            let pitch = mix(FP_PLUME_PITCH_M.x, FP_PLUME_PITCH_M.y, fw_h(kb, 43u));
+            let col = floor(along / pitch);
+            let kc = vec3<i32>(kb.x, i32(col), 5);
+            if (h_wall > 4.0 && fw_h(kc, 44u) < mix(FP_PLUME_SHARE.x, FP_PLUME_SHARE.y, wear)) {
+                // (held inside its own column: its centre within a tenth of the pitch of the column's,
+                // its widest reach and wander under half the pitch, so no plume is cut at a column's edge)
+                let width = min(mix(FP_PLUME_WIDTH_M.x, FP_PLUME_WIDTH_M.y, fw_h(kc, 45u)), 0.26 * pitch);
+                let cx = (col + 0.5 + (fw_h(kc, 46u) - 0.5) * 0.2) * pitch;
+                let reach = max(h_wall * mix(FP_PLUME_REACH.x, FP_PLUME_REACH.y, fw_h(kc, 47u)), 1.5);
+                let tt = dtop / reach;
+                if (tt < 1.2) {
+                    let wander = (fw_n1(dtop / 2.6, kc, 48u) - 0.5) * width * 0.6;
+                    let wd = width * (0.6 + 0.5 * clamp(tt, 0.0, 1.0));
+                    let core = 1.0 - smoothstep(0.35, 1.0, abs(along - cx - wander) / wd);
+                    let fall = 1.0 - smoothstep(0.3, 1.1, tt);
+                    let runs = mix(0.75, 0.5 + 0.5 * fw_n1(along / 0.22, kc, 49u), keep);
+                    dirt = dirt + core * fall * runs * FP_PLUME * mix(0.6, 1.0, wear);
+                }
+            }
         }
     }
     // the wall's foot

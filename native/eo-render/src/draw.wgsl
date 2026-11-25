@@ -947,6 +947,14 @@ fn shade(in: VOut) -> vec4<f32> {
     if (fw_mark) {
         n_in.y = 0.0;
     }
+    // (`--window-depth`) an upright kit pane's normal y byte is how deep it stands in its reveal, across
+    // and up (kit.rs `glass_depths`: 4 bits each, WD_DEPTH_STEP_M a step).
+    var wd_depth = vec2<f32>(0.0);
+    if (SF_WINDOW_DEPTH && (objects[in.object].kind & 255u) == 5u && (m.flags & F_GLASS) != 0u && dot(in.normal.xz, in.normal.xz) > 0.25) {
+        let wb = u32(i32(round(in.normal.y * 127.0))) & 255u;
+        wd_depth = vec2<f32>(f32(wb & 15u), f32(wb >> 4u)) * WD_DEPTH_STEP_M;
+        n_in.y = 0.0;
+    }
     if (dot(n_in, n_in) > 0.25) {
         n = normalize(n_in);
     }
@@ -1190,7 +1198,7 @@ fn shade(in: VOut) -> vec4<f32> {
     // the normal the light takes as the surface's own (a `--facade-glass` pane's: its bow and tilt).
     var n_light = n;
     if ((m.flags & F_GLASS) != 0u && room != 0u && kit_object && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
-        let ng_out = select(face, normalize(in.normal), dot(in.normal, in.normal) > 0.25);
+        let ng_out = select(face, normalize(n_in), dot(n_in, n_in) > 0.25);
         if (sl_level() != 0u) {
             wx_window_life_pre(vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room); // stage W5 (`--street-life`, weathering.wgsl): the wall beside, sill plants, a vacant shop
         }
@@ -1221,6 +1229,14 @@ fn shade(in: VOut) -> vec4<f32> {
                 n_light = -n_light;
             }
             s.n = n_light;
+        }
+        if (SF_WINDOW_DEPTH && max(wd_depth.x, wd_depth.y) > 0.01) {
+            // (`--window-depth`) the reveal round the pane (rooms.wgsl `wd_pane`): the sun only through the
+            // opening (over the key light, look_light.wgsl `fr_sun_vis`), the sky the room behind keeps, and
+            // the reveal in the glass (`wd_refl`, read with the canyon's `cg_apply`)
+            let wd = wd_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, n_light, v, wd_depth, max(length(dpx), length(dpy)));
+            fr_sun_vis = wd.x;
+            s.albedo = s.albedo * wd.y;
         }
         if (SF_CANYON_GLASS && cg_on()) {
             // (`--canyon-glass`) the street canyon the pane reflects (rooms.wgsl `cg_canyon`; look_light.wgsl reads it)

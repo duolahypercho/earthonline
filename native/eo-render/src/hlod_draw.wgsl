@@ -68,6 +68,7 @@ struct HlOut {
     @location(10) @interpolate(flat) rhythm: u32,
     @location(11) @interpolate(flat) phase: f32,
     // @ff-corner-field
+    // @fr-roof-field
 };
 
 @vertex
@@ -121,6 +122,7 @@ fn hlod_vs(
     out.rhythm = select(0u, nrm, district);
     out.phase = f32(uvw >> 24u) / 255.0;
     // @ff-corner-out
+    // @fr-roof-out
     return out;
 }
 
@@ -455,11 +457,19 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     let p = world.xz;
     let fw = max(abs(dpx.xz) + abs(dpy.xz), vec2<f32>(1e-3));
     let fwm = max(fw.x, fw.y);
-    // the membrane: re-roofed patches (12-15 m) and ponding stains (4 m), each faded to its mean.
-    let patch_n = ff_noise(p / 13.0, g ^ 0x51u);
-    let stain = smoothstep(0.58, 0.82, ff_noise(p / 4.3, g ^ 0xa3u));
-    var k = 1.0 + (patch_n - 0.5) * 0.26 * (1.0 - smoothstep(9.0, 26.0, fwm));
-    k = k * (1.0 - 0.2 * (stain - 0.12) * (1.0 - smoothstep(2.5, 8.0, fwm)));
+    // the membrane: re-roofed patches (12-15 m) and ponding stains (4 m), each faded to its mean
+    // (and not looked up at all once it is: the same frame).
+    let keep_patch = 1.0 - smoothstep(9.0, 26.0, fwm);
+    let keep_stain = 1.0 - smoothstep(2.5, 8.0, fwm);
+    var k = 1.0;
+    if (keep_patch > 0.0) {
+        let patch_n = ff_noise(p / 13.0, g ^ 0x51u);
+        k = 1.0 + (patch_n - 0.5) * 0.26 * keep_patch;
+    }
+    if (keep_stain > 0.0) {
+        let stain = smoothstep(0.58, 0.82, ff_noise(p / 4.3, g ^ 0xa3u));
+        k = k * (1.0 - 0.2 * (stain - 0.12) * keep_stain);
+    }
     var col = base * k;
     var rough = 0.9;
     if (!plant) {
@@ -470,13 +480,21 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     let pshare = mix(FF_PENT_SHARE.x, FF_PENT_SHARE.y, hl_h3(g, 37, 409u));
     let cell = floor(p / FF_CELL_M);
     let q = p - cell * FF_CELL_M;
-    let ub = ff_unit_box(cell, g, share);
-    let unit = ff_cov1(q.x, ub.x, ub.x + ub.z, fw.x) * ff_cov1(q.y, ub.y, ub.y + ub.w, fw.y);
+    // once a cell is under a pixel only the means below are kept: its units, penthouse, hatch and the
+    // shade march are not looked up there (the same frame)
+    let fade = smoothstep(0.8, 1.6, fwm / FF_CELL_M);
+    var ub = vec4<f32>(0.0, 0.0, -1.0, -1.0);
+    var unit = 0.0;
     // a stair or lift penthouse (one at most in each FF_PENT_M square)
     let pcell = floor(p / FF_PENT_M);
-    let pq = p - pcell * FF_PENT_M;
-    let pb = ff_pent_box(pcell, g, pshare);
-    let pent = ff_cov1(pq.x, pb.x, pb.x + pb.z, fw.x) * ff_cov1(pq.y, pb.y, pb.y + pb.w, fw.y);
+    var pent = 0.0;
+    if (fade < 1.0) {
+        ub = ff_unit_box(cell, g, share);
+        unit = ff_cov1(q.x, ub.x, ub.x + ub.z, fw.x) * ff_cov1(q.y, ub.y, ub.y + ub.w, fw.y);
+        let pq = p - pcell * FF_PENT_M;
+        let pb = ff_pent_box(pcell, g, pshare);
+        pent = ff_cov1(pq.x, pb.x, pb.x + pb.z, fw.x) * ff_cov1(pq.y, pb.y, pb.y + pb.w, fw.y);
+    }
     // the shade the units and penthouses cast down the roof from the key light: a march toward the
     // sun over their tops (a low sun throws a unit's shade many metres, over the next squares)
     let l = look.key_dir.xyz;
@@ -485,7 +503,7 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     let toward = l.xz / lh;
     let rise = max(l.y, 0.02) / lh;
     var shade = 0.0;
-    if (sun > 0.0) {
+    if (sun > 0.0 && fade < 1.0) {
         for (var i = 0; i < 10; i = i + 1) {
             let sd = 0.4 + 0.22 * f32(i * i) + 0.6 * f32(i);
             let ray = sd * rise;
@@ -506,14 +524,16 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
         shade = shade * (1.0 - max(unit, pent)) * sun;
     }
     // a hatch or skylight in a cell without a unit
-    let has = step(0.01, ub.z);
-    let hatch_on = (1.0 - has) * step(ff_h(cell, g, 8u), 0.22);
-    let hs = vec2<f32>(0.9, 0.9) + 1.4 * ff_h(cell, g, 9u);
-    let ho = vec2<f32>(ff_h(cell, g, 10u), ff_h(cell, g, 12u)) * (FF_CELL_M - hs - 1.0) + 0.5;
-    let hatch = ff_cov1(q.x, ho.x, ho.x + hs.x, fw.x) * ff_cov1(q.y, ho.y, ho.y + hs.y, fw.y) * hatch_on;
+    var hatch = 0.0;
+    if (fade < 1.0) {
+        let has = step(0.01, ub.z);
+        let hatch_on = (1.0 - has) * step(ff_h(cell, g, 8u), 0.22);
+        let hs = vec2<f32>(0.9, 0.9) + 1.4 * ff_h(cell, g, 9u);
+        let ho = vec2<f32>(ff_h(cell, g, 10u), ff_h(cell, g, 12u)) * (FF_CELL_M - hs - 1.0) + 0.5;
+        hatch = ff_cov1(q.x, ho.x, ho.x + hs.x, fw.x) * ff_cov1(q.y, ho.y, ho.y + hs.y, fw.y) * hatch_on;
+    }
     // once a cell is under a pixel: the cell's mean cover and shade (a unit's shade about 2.3 m
     // wide and its height over the sun's rise long; a penthouse's 4.5 m wide)
-    let fade = smoothstep(0.8, 1.6, fwm / FF_CELL_M);
     let mean_unit = share * 5.9 / (FF_CELL_M * FF_CELL_M);
     let mean_pent = pshare * 24.0 / (FF_PENT_M * FF_PENT_M);
     let reach_u = min(1.6 / max(rise, 0.05), 16.0);
@@ -541,12 +561,16 @@ fn ff_window_room(in: HlOut, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> ve
     let up = in.world.y / grid.y - grid.z;
     let fx = (abs(dot(dpx.xz, t)) + abs(dot(dpy.xz, t))) / grid.x;
     let fy = (abs(dpx.y) + abs(dpy.y)) / grid.y;
+    let mean = mix(HL_ROOM * 1.2, FF_BLIND_TONE * 0.9, FF_BLIND_SHARE);
+    let a = smoothstep(0.3, 0.8, max(fx, fy));
+    if (a >= 1.0) {
+        return mean; // a window under a pixel: its mean, no room looked up (the same frame)
+    }
     let gf = in.group ^ (hl_face(n) << 24u);
     let w = ff_h(vec2<f32>(floor(along), floor(up)), gf, 21u);
     let pale = step(w, FF_BLIND_SHARE);
     let room = mix(HL_ROOM * mix(0.6, 1.8, ff_h(vec2<f32>(floor(along), floor(up)), gf, 22u)), FF_BLIND_TONE * mix(0.6, 1.2, fract(w * 7.3)), pale);
-    let mean = mix(HL_ROOM * 1.2, FF_BLIND_TONE * 0.9, FF_BLIND_SHARE);
-    return mix(room, mean, smoothstep(0.3, 0.8, max(fx, fy)));
+    return mix(room, mean, a);
 }
 
 // ---- (`--far-facades`) an untextured far wall's facade ----
@@ -564,6 +588,13 @@ fn ff_window_room(in: HlOut, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> ve
 // first corner come flat from the quad's first vertex (hlod_bake.rs: an
 // untextured wall quad starts at its top corner). INFERRED proportions.
 const FB_BAY_M: f32 = 4.6;
+// (`--far-relief`) the stone front's sandstone (linear albedo of a weathered buff freestone, sRGB
+// about 182/175/161: a light grey-buff), the soot crust where the rain never washes it (its
+// multiplier at full shelter) and the rain-washed upper faces of its projections (their
+// multiplier). INFERRED from photographs of the waterfront's sandstone fronts.
+const FB_SANDSTONE: vec3<f32> = vec3<f32>(0.47, 0.43, 0.355);
+const FB_SOOT: vec3<f32> = vec3<f32>(0.42, 0.40, 0.38);
+const FB_WASHED: f32 = 1.12;
 const FB_PIER_M: f32 = 1.4;
 const FB_STOREY_M: f32 = 5.0;
 const FB_CORNICE_M: f32 = 1.15;
@@ -599,7 +630,42 @@ struct FbOut {
     glass: f32,
     n: vec3<f32>,
     rough: f32,
+    // (`--far-relief`) the sky's visibility under the projections (the ambient terms only); 1 without it
+    ao: f32,
+    // (`--far-relief`) the lit window's light across its glass (1: even); 1 without it
+    lit: f32,
 };
+
+// (`--far-relief`) the stone front's projections (metres out of the wall
+// face) and the arcade's depth: the cornice's corona over its drip, a belt
+// course, a sill, a pilaster, a pavilion's front over the wall between them.
+// INFERRED proportions (a Beaux-Arts front of dressed stone).
+const FB_CORONA_P_M: f32 = 0.85;
+const FB_BELT_P_M: f32 = 0.22;
+const FB_SILL_P_M: f32 = 0.12;
+const FB_PILASTER_P_M: f32 = 0.12;
+const FB_PAV_P_M: f32 = 0.45;
+// the ground floor's arcade (the third storey under the attic): a corridor
+// this deep behind round-headed openings this wide, to this springing.
+const FB_ARCADE_DEPTH_M: f32 = 2.6;
+const FB_ARCADE_HW_M: f32 = 1.55;
+const FB_ARCADE_SPRING_M: f32 = 3.0;
+// a pavilion of three bays at the wall's first corner and every FB_PAV_PERIOD bays along it.
+const FB_PAV_PERIOD: f32 = 13.0;
+// a waterfront quay's deck over the sea (the Embarcadero's apron stands about this high).
+const FB_QUAY_DECK_M: f32 = 2.5;
+
+// the share of a pixel `w` wide in the shade of an edge that throws it `reach` (0 none) past `x` (the distance from the edge).
+fn fb_shade(x: f32, reach: f32, w: f32) -> f32 {
+    return select(0.0, clamp((reach - x) / max(w, 1e-4) + 0.5, 0.0, 1.0), reach > 0.0 && x > -0.5 * w);
+}
+
+// the sky a wall point `y` under a projection `p` deep still sees: the projection hides the part of the
+// upper half of its view hemisphere within the angle atan(p / y) of the wall (half the sky at its root).
+fn fb_sky(y: f32, p: f32) -> f32 {
+    let yy = max(y, 0.0);
+    return 1.0 - 0.5 * (1.0 - yy / sqrt(yy * yy + p * p));
+}
 
 fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> FbOut {
     var o: FbOut;
@@ -617,6 +683,11 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
     let lum = dot(tone, vec3<f32>(0.2126, 0.7152, 0.0722));
     var stone = mix(vec3<f32>(lum) * vec3<f32>(1.08, 1.0, 0.86), tone, 0.25);
     stone = clamp(stone * mix(0.78, 0.98, hl_h3(g, 3, 501u)), vec3<f32>(0.1), vec3<f32>(0.46));
+    if (SF_FAR_RELIEF) {
+        // (`--far-relief`) a buff sandstone, not the prism's far tone (a plain prism's palette tone is
+        // its glass's pale blue): warm, matte, each building a little its own
+        stone = FB_SANDSTONE * mix(0.86, 1.04, hl_h3(g, 3, 501u));
+    }
     let trim = min(stone * 1.18, vec3<f32>(0.56));
     var col = stone;
     var nn = n;
@@ -644,10 +715,40 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
         py = FB_ATTIC_M - (dt - FB_CORNICE_M);
     }
     let arch = !attic;
-    let hw = select(0.95, 0.55, attic);
-    let y0 = select(0.95, 0.55, attic);
-    let y1 = select(4.15, 1.75, attic);
-    let depth = select(0.4, 0.25, attic);
+    var hw = select(0.95, 0.55, attic);
+    var y0 = select(0.95, 0.55, attic);
+    var y1 = select(4.15, 1.75, attic);
+    var depth = select(0.4, 0.25, attic);
+    // (`--far-relief`) the sun's reach across the wall's frame: how far down (per metre out) and sideways it throws a shade
+    let relief = SF_FAR_RELIEF;
+    let lit_face = sl.z > 0.02 && sl.y > 0.0;
+    let drop = select(0.0, sl.y / max(sl.z, 0.02), lit_face);
+    // `along` runs away from the first corner, with or against t: the sun's sideways reach along it
+    let sgn = select(-1.0, 1.0, dot(in.world.xz - corner.xz, t2) >= 0.0);
+    let side = select(0.0, sgn * sl.x / max(sl.z, 0.02), lit_face);
+    var vis = 1.0;
+    var sky = 1.0;
+    var lit = 1.0; // (`--far-relief`) the window light's share across a shop front (its shelves dark, its lights bright)
+    // (`--far-relief`) the ground floor's arcade: the storey 1.5 m over the ground it stands on (the cell's lowest
+    // point, or on the waterfront the quay's deck over the sea, whose ground the prism's foot reaches under it),
+    // and any under it, below a storey of windows at least; and the pavilions
+    let ground = max(corner.w, LM_SEA_LEVEL_Y + FB_QUAY_DECK_M) + 1.5;
+    let ka = floor((top - ground - FB_CORNICE_M - FB_ATTIC_M - 0.35) / FB_STOREY_M);
+    let arcade = relief && !attic && ka >= 1.0 && k >= ka;
+    if (relief && !arcade) {
+        depth = depth + 0.15; // a deeper reveal: the stone's full bed, the frame set back in it
+    }
+    var pav = 0.0;
+    if (relief) {
+        if (arcade) {
+            hw = FB_ARCADE_HW_M;
+            y0 = 0.0;
+            y1 = FB_ARCADE_SPRING_M + FB_ARCADE_HW_M;
+            depth = FB_ARCADE_DEPTH_M;
+        }
+        let m = bay - FB_PAV_PERIOD * floor(bay / FB_PAV_PERIOD);
+        pav = select(0.0, 1.0, in_bays && (bay < 3.0 || (m >= 6.0 && m < 9.0)));
+    }
     var opening = 1e3;
     if (in_bays && dt > FB_CORNICE_M && (attic || body > 0.35)) {
         opening = fb_open(vec2<f32>(x, py), arch, hw, y0, y1);
@@ -659,7 +760,51 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
         let hit = pq + dir.xy / dz * depth;
         let inside = fb_open(hit, arch, hw - 0.07, y0 + 0.07, y1 - 0.07) < 0.0;
         var tau = depth;
-        if (inside) {
+        if (arcade) {
+            // (`--far-relief`) the arcade: the back wall's shop fronts, or the vault and the paving in its shade
+            if (hit.y > y1 - 0.3) {
+                col = trim * 0.62; // the vault's soffit
+                nn = -up;
+                occ = 0.55;
+                sky = 0.35;
+                if (relief) {
+                    col = trim * FB_SOOT * 0.9; // (`--far-relief`) sooted: the rain never reaches it
+                    occ = 0.42;
+                    sky = 0.22;
+                }
+                tau = depth * clamp((y1 - 0.3 - py) / max(hit.y - py, 1e-3), 0.0, 1.0);
+            } else if (hit.y < 0.05) {
+                col = stone * 0.7; // the arcade's paving
+                nn = up;
+                occ = 0.6;
+                sky = 0.4;
+                tau = depth * clamp(py / max(py - hit.y, 1e-3), 0.0, 1.0);
+            } else {
+                // the back wall: a shop front between stone piers, each bay its own: a kick plate, a
+                // bronze frame of three lights under a transom, and through it the shop's shelves
+                // under its lit ceiling (darker between the shelves, brightest under the lights)
+                let sx = fract((hit.x + FB_BAY_M * 0.5) / FB_BAY_M) * FB_BAY_M - FB_BAY_M * 0.5;
+                let shop = fb_cov(abs(sx) - 1.35, fw.x) * fb_cov(hit.y - 3.2, fw.y);
+                let hs = ff_h(vec2<f32>(bay, 7.0), g, 61u);
+                let ax = abs(sx);
+                let frame = max(max(fb_cov(abs(ax - 0.45) - 0.03, fw.x), fb_cov(abs(hit.y - 2.5) - 0.04, fw.y)), max(fb_cov(hit.y - 0.45, fw.y), fb_cov(1.27 - ax, fw.x)));
+                let row = floor(hit.y / 0.42);
+                let shelf = fb_cov(abs(fract(hit.y / 0.42) - 0.08) - 0.06, fw.y) * step(hit.y, 2.2);
+                let item = ff_noise(vec2<f32>(hit.x * 4.3 + bay * 7.0, row * 3.1), g ^ 0x3bu);
+                let hue = ff_h(vec2<f32>(bay, row), g, 63u);
+                let goods = mix(mix(vec3<f32>(0.30, 0.20, 0.12), vec3<f32>(0.16, 0.22, 0.30), step(0.55, hue)), vec3<f32>(0.42, 0.36, 0.26), step(0.85, hue)) * (0.45 + 0.8 * item);
+                let ceiling = smoothstep(2.0, 2.45, hit.y);
+                let interior = mix(mix(goods, vec3<f32>(0.08, 0.07, 0.06), shelf), vec3<f32>(0.55, 0.50, 0.42), ceiling * select(0.0, 1.0, hit.y < 2.46));
+                let pane = shop * (1.0 - frame);
+                col = mix(mix(stone * select(0.8, 0.62, relief), vec3<f32>(0.06, 0.05, 0.04), shop * frame), interior * mix(0.75, 1.15, hs), pane);
+                glass = pane;
+                lit = mix(0.35 + 0.5 * item * (1.0 - shelf), 1.6, ceiling);
+                rough = mix(0.85, 0.2, pane);
+                nn = n;
+                occ = 0.7;
+                sky = 0.3; // the back wall sees the sky only through the opening
+            }
+        } else if (inside) {
             // the glass: each window's room (a blind, a lit ceiling or the dark), its sash bars
             let hr = ff_h(vec2<f32>(key, f32(g % 4093u)), g, 23u);
             let room = select(HL_ROOM * mix(0.7, 1.6, hr), FF_BLIND_TONE * mix(0.7, 1.15, fract(hr * 9.1)), hr < FF_BLIND_SHARE);
@@ -674,6 +819,10 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
             tau = depth * 0.5;
             occ = 0.62;
             nn = normalize(n * 0.3 + t * (-sign(dir.x)) * 0.95);
+            sky = 0.6;
+        }
+        if (relief && !arcade && inside) {
+            sky = 0.75; // the glass at the back of its reveal
         }
         if (sl.z > 0.02) {
             let q = pq + dir.xy / dz * tau + sl.xy / sl.z * tau;
@@ -688,11 +837,28 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
         let joints = max(fb_cov(joint_y - 0.014, fw.y), fb_cov(joint_x - 0.014, fw.x) * 0.7);
         let keep = 1.0 - smoothstep(0.03, 0.12, fwm);
         col = col * (1.0 - 0.3 * joints * keep);
+        if (relief) {
+            // (`--far-relief`) each block its own tone; the ground floor and the pavilions rusticated
+            // (channelled joints, deep enough to hold their shade from a pixel away)
+            let block = floor(along / 1.3 + 0.5 * (row % 2.0));
+            col = col * (1.0 + 0.09 * (ff_h(vec2<f32>(block, row), g, 71u) - 0.5) * (1.0 - smoothstep(0.4, 1.4, fwm)));
+            if (arcade || pav > 0.5) {
+                let chan = fb_cov(joint_y - 0.05, fw.y);
+                col = col * (1.0 - 0.38 * chan);
+                vis = vis * (1.0 - chan * 0.5 * select(0.0, 1.0, lit_face));
+            }
+        }
         // a pilaster at each bay's edge: a stone strip standing out of the wall, lit on its side
         let edge = 0.5 * FB_BAY_M - abs(x);
         let pil = fb_cov(edge - 0.42, fw.x) * select(0.0, 1.0, in_bays && dt > FB_CORNICE_M);
         col = mix(col, trim * 0.97, pil);
         nn = normalize(mix(nn, n + t * sign(x) * 0.8 * smoothstep(0.32, 0.42, edge), pil));
+        if (relief && in_bays && dt > FB_CORNICE_M) {
+            // (`--far-relief`) the pilaster's shade on the wall beside it, on the side away from the sun
+            let toward = select(-1.0, 1.0, x > 0.0); // the nearer pilaster's side
+            let reach = FB_PILASTER_P_M * max(side * toward, 0.0);
+            vis = vis * (1.0 - fb_shade(edge - 0.42, reach, fw.x) * (1.0 - pil));
+        }
         if (opening < 0.26 && opening < 1e2) {
             let band = fb_cov(opening - 0.24, fwm);
             col = mix(col, trim, band);
@@ -701,10 +867,10 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
                 col = mix(col, trim * 1.06, ks);
             }
         }
-        if (in_bays && opening < 1e2) {
+        if (in_bays && opening < 1e2 && !arcade) {
             // the sill: a projecting slab, its shade, and the wash below its ends
             let sill = fb_cov(fb_rect(pq, vec2<f32>(0.0, y0 - 0.08), vec2<f32>(hw + 0.2, 0.08)), fwm);
-            col = mix(col, trim * 1.05, sill);
+            col = mix(col, trim * select(1.05, 1.05 * FB_WASHED, relief), sill); // (`--far-relief`: its top washed by the rain)
             nn = normalize(mix(nn, n + up * 1.0, sill));
             let below = y0 - 0.16 - py;
             if (below > 0.0 && abs(x) < hw + 0.22) {
@@ -712,12 +878,53 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
                 let streak = exp(-below / 1.6) * (0.5 + 0.5 * ff_noise(vec2<f32>(along * 6.0, dt * 0.7), g));
                 col = col * (1.0 - 0.3 * streak);
             }
+            if (relief && abs(x + side * min(max(below, 0.0) / max(drop, 1e-3), FB_SILL_P_M)) < hw + 0.2) {
+                // (`--far-relief`) the sill's shade down the wall under it
+                vis = vis * (1.0 - fb_shade(below, FB_SILL_P_M * drop, fw.y) * (1.0 - sill));
+            }
+            if (relief && abs(x) < hw + 0.2 && below > -0.02) {
+                sky = sky * mix(fb_sky(below, FB_SILL_P_M), 1.0, sill);
+            }
         }
         // the belt course at each floor and over the attic's foot, and its shade
         let bb = select(py - FB_STOREY_M + 0.15, py + 0.18, attic);
         let belt = fb_cov(abs(bb) - 0.16, fw.y) * select(0.0, 1.0, dt > FB_CORNICE_M);
-        col = mix(col, trim, belt);
+        col = mix(col, trim * select(1.0, FB_WASHED, relief), belt); // (`--far-relief`: its top washed by the rain)
         nn = normalize(mix(nn, n + up * 0.7, belt));
+        if (relief && !attic && dt > FB_CORNICE_M) {
+            // (`--far-relief`) the belt's shade down the storey under it, and the sky it hides
+            vis = vis * (1.0 - fb_shade(FB_STOREY_M - 0.31 - py, FB_BELT_P_M * drop, fw.y) * (1.0 - belt));
+            sky = sky * mix(fb_sky(FB_STOREY_M - 0.31 - py, FB_BELT_P_M), 1.0, belt);
+        }
+    }
+    if (relief && in_bays && dt > FB_CORNICE_M) {
+        // (`--far-relief`) a pavilion stands FB_PAV_P_M proud of the wall: its stone a little cleaner, and at its
+        // edges the wall beside it in the shade of its side on the side away from the sun
+        col = col * mix(1.0, 1.07, pav);
+        let pb = bay - FB_PAV_PERIOD * floor(bay / FB_PAV_PERIOD);
+        let first = bay >= 3.0 && pb == 6.0;
+        let last = bay == 2.0 || pb == 8.0;
+        let xb = x + 0.5 * FB_BAY_M; // from the bay's first edge
+        // just outside a pavilion: the bay before its first, the bay after its last
+        let before = pav < 0.5 && (pb == 5.0);
+        let after = pav < 0.5 && (pb == 9.0 || bay == 3.0);
+        let dist_after = xb;
+        let dist_before = FB_BAY_M - xb;
+        var pshade = 0.0;
+        if (after) {
+            pshade = fb_shade(dist_after, FB_PAV_P_M * max(-side, 0.0), fw.x);
+        } else if (before) {
+            pshade = fb_shade(dist_before, FB_PAV_P_M * max(side, 0.0), fw.x);
+        }
+        vis = vis * (1.0 - pshade);
+        // the pavilion's own returns, seen edge on: a thin side face at its first and last edge
+        let ret = FB_PAV_P_M * abs(dir.x) / dz;
+        if (first || last) {
+            let e = select(FB_BAY_M - xb, xb, first);
+            let rc = fb_cov(e - ret, fw.x) * pav;
+            col = mix(col, stone * 0.9, rc);
+            nn = normalize(mix(nn, t * select(1.0, -1.0, first), rc));
+        }
     }
     // the cornice: coping, corona over dentils, frieze, its shade and soot below
     if (dt < FB_CORNICE_M + 0.7) {
@@ -738,6 +945,16 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
             occ = occ * mix(0.5, 1.0, smoothstep(0.0, 0.7, below));
         }
     }
+    if (relief && dt > 0.52) {
+        // (`--far-relief`) the corona's shade: from its drip down the frieze, the attic and as far as the sun throws it
+        vis = vis * (1.0 - fb_shade(dt - 0.52, FB_CORONA_P_M * drop, fw.y));
+        sky = sky * fb_sky(dt - 0.52, FB_CORONA_P_M);
+        // each bay weathered its own: a wash down the pier from its cornice, soot pooled where the rain does not reach
+        let hb = ff_h(vec2<f32>(bay, 3.0), g, 83u);
+        col = col * (0.95 + 0.1 * hb);
+        let wash = smoothstep(0.55, 0.95, ff_noise(vec2<f32>(along / 0.9, dt / 6.0), g ^ 0x5du)) * (1.0 - smoothstep(1.0, 9.0, dt));
+        col = col * (1.0 - 0.22 * wash * (1.0 - smoothstep(0.5, 2.0, fwm)));
+    }
     // the stone's age: mottled, soot plumes from the cornice, darker low down the wall
     let mottle = ff_noise(vec2<f32>(along / 2.3, dt / 1.7), g ^ 0x77u);
     col = col * (0.84 + 0.3 * mottle);
@@ -746,11 +963,24 @@ fn fb_facade(in: HlOut, n: vec3<f32>, tone: vec3<f32>, dpx: vec3<f32>, dpy: vec3
     col = col * mix(1.0, 0.82, smoothstep(9.0, 16.0, dt));
     // the recess's sun shadow where the wall faces the key light
     let facing = smoothstep(0.0, 0.2, sl.z);
-    col = col * mix(1.0, 0.35, sun_cut * facing);
+    if (relief) {
+        // (`--far-relief`) the reveal's shade over the key light only (the sky still reaches into it)
+        vis = vis * (1.0 - sun_cut * facing);
+        fr_sun_vis = vis;
+    } else {
+        col = col * mix(1.0, 0.35, sun_cut * facing);
+    }
+    if (relief) {
+        // (`--far-relief`) the soot crust where the rain never washes the stone: under the cornice, the
+        // belt courses and the sills, in the reveals and the arcade (the shelter the sky cut measures)
+        col = col * mix(vec3<f32>(1.0), FB_SOOT, clamp((1.0 - sky) * 1.4, 0.0, 1.0) * (1.0 - glass));
+    }
     o.albedo = col * mix(1.0, occ, 0.6);
     o.glass = glass;
     o.n = nn;
     o.rough = rough;
+    o.ao = select(1.0, sky, relief);
+    o.lit = select(1.0, lit, relief);
     return o;
 }
 
@@ -759,7 +989,107 @@ fn ff_corner_of(in: HlOut) -> vec4<f32> {
     return vec4<f32>(in.world, in.world.y - 10.0); // @ff-corner-read
 }
 
+// ---- (`--far-relief`) the far layer's construction depth ----
+// A district roof's distances to its footprint's box (hlod_district.rs
+// `roof_frame_words`: along -u, +u, -v, +v, in metres), interpolated over the
+// roof; off (compiled out) the reader returns none.
+fn fr_d_of(in: HlOut) -> vec4<f32> {
+    return vec4<f32>(-1.0); // @fr-roof-read
+}
+
+// A district roof under its parapet (hlod_district.rs `roof_frame_words`):
+// the roof lies the parapet's height under the prism's top, so the eye's ray
+// meets it that much further on (away from the eye), or meets the inner face of
+// the parapet across from the eye first; on top, the parapet's coping. The
+// parapet on the sun's side shades the roof as far as the sun's height throws
+// it (the key light only: `fr_sun_vis`, look_light). Every band is a coverage
+// over the pixel's footprint along the box's axes, so it holds its mean as it
+// shrinks. INFERRED: the parapet's height (hlod_district.rs ROOF_PARAPET_*_M)
+// and its thickness.
+const FR_CAP_M: f32 = 0.3;
+// the longest parapet shade drawn (a sun 1 degree up off a 1.5 m wall): beyond it the cascades' own shade holds.
+const FR_SHADE_MAX_M: f32 = 60.0;
+
+struct FrRoof {
+    // the roof point the eye's ray reaches (xz) and the share of the pixel on the roof itself
+    at: vec2<f32>,
+    roof: f32,
+    // the coping's share and the parapet's inner face's share, and that face's normal
+    cap: f32,
+    face: f32,
+    face_n: vec3<f32>,
+    // the key light's visibility on the roof's share (the parapet's shade)
+    sun: f32,
+};
+
+fn fr_roof(in: HlOut, dpx: vec3<f32>, dpy: vec3<f32>) -> FrRoof {
+    var o: FrRoof;
+    o.at = in.world.xz;
+    o.roof = 1.0;
+    o.cap = 0.0;
+    o.face = 0.0;
+    o.face_n = vec3<f32>(0.0, 1.0, 0.0);
+    o.sun = 1.0;
+    let d0 = fr_d_of(in);
+    // the heading, height and scale ride in the roof ring's glass and phase bytes (flat)
+    let upper = u32(round(in.glass * 255.0)) | (u32(round(in.phase * 255.0)) << 8u);
+    let hp = f32((upper >> 7u) & 15u) * 0.1;
+    if (d0.x < 0.0 || hp <= 0.0) {
+        return o;
+    }
+    let th = f32(upper & 127u) * (LK_PI / 128.0);
+    let eu = vec2<f32>(cos(th), sin(th));
+    let ev = vec2<f32>(-eu.y, eu.x);
+    let fu = abs(dot(dpx.xz, eu)) + abs(dot(dpy.xz, eu)) + 1e-3;
+    let fv = abs(dot(dpx.xz, ev)) + abs(dot(dpy.xz, ev)) + 1e-3;
+    let fw = vec4<f32>(fu, fu, fv, fv);
+    // the coping: the first FR_CAP_M in from each side at the top
+    let capv = clamp((vec4<f32>(FR_CAP_M) - d0) / fw + 0.5, vec4<f32>(0.0), vec4<f32>(1.0));
+    o.cap = max(max(capv.x, capv.y), max(capv.z, capv.w));
+    // the ray on down to the roof, hp under the top: displaced away from the eye
+    let te = normalize(frame.cam_pos.xyz - in.world);
+    let shift = -te.xz * (hp / max(te.y, 0.05));
+    let su = dot(shift, eu);
+    let sv = dot(shift, ev);
+    let d = d0 + vec4<f32>(su, -su, sv, -sv);
+    o.at = in.world.xz + shift;
+    // past a side's line the ray met that side's inner face (it faces back into the roof)
+    let past = clamp(0.5 - d / fw, vec4<f32>(0.0), vec4<f32>(1.0));
+    o.face = max(max(past.x, past.y), max(past.z, past.w));
+    var fn2 = eu;
+    var best = past.x;
+    if (past.y > best) {
+        best = past.y;
+        fn2 = -eu;
+    }
+    if (past.z > best) {
+        best = past.z;
+        fn2 = ev;
+    }
+    if (past.w > best) {
+        fn2 = -ev;
+    }
+    o.face_n = vec3<f32>(fn2.x, 0.0, fn2.y);
+    // the parapet's shade toward the sun: within reach of the side between the point and the sun
+    let l = look.key_dir.xyz;
+    let lh = length(l.xz);
+    if (l.y > 0.0 && lh > 1e-3) {
+        let reach = min(hp * lh / max(l.y, 0.017), FR_SHADE_MAX_M);
+        let tu = dot(l.xz, eu) / lh;
+        let tv = dot(l.xz, ev) / lh;
+        let r = reach * vec4<f32>(max(-tu, 0.0), max(tu, 0.0), max(-tv, 0.0), max(tv, 0.0));
+        let sh = clamp((r - d) / fw + 0.5, vec4<f32>(0.0), vec4<f32>(1.0)) * step(vec4<f32>(1e-3), r);
+        o.sun = (1.0 - sh.x) * (1.0 - sh.y) * (1.0 - sh.z) * (1.0 - sh.w);
+    }
+    o.face = o.face * (1.0 - o.cap);
+    o.roof = max(1.0 - o.cap - o.face, 0.0);
+    return o;
+}
+
 fn hl_shade(in: HlOut) -> vec4<f32> {
+    if (SF_FAR_RELIEF) {
+        fr_sun_vis = 1.0; // (`--far-relief`) the relief's shade over the key light, set below
+    }
     // Derivatives and the atlas first, in uniform control flow.
     let dpx = dpdx(in.world);
     let dpy = dpdy(in.world);
@@ -806,6 +1136,8 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
     }
     var ff_rough = -1.0;
     var ff_n = vec3<f32>(0.0);
+    var fr_ao = 1.0; // (`--far-relief`) the stone front's sky under its projections
+    var fr_lit = 1.0; // (`--far-relief`) its window light across a shop front
     if (ff_on() && !district && !roofish && in.layer < 0 && abs(n.y) < 0.3) {
         // (`--far-facades`) an untextured far wall (a plain prism): its stone facade
         let fb = fb_facade(in, n, albedo, dpx, dpy);
@@ -813,15 +1145,44 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
         glass = fb.glass;
         ff_rough = fb.rough;
         ff_n = fb.n;
+        if (SF_FAR_RELIEF) {
+            fr_ao = fb.ao;
+            fr_lit = fb.lit;
+        }
     }
     if (wx_level() != 0u && !roofish) {
         albedo = albedo * mix(vec3<f32>(1.0), hl_age(in.group), 1.0 - glass); // weathering (`--grime`): each building its own tone
     }
+    // (`--far-relief`) a district roof under its parapet: where the eye's ray meets the roof, the parapet's face or its coping
+    let relief_roof = SF_FAR_RELIEF && district && roofish && n.y > 0.7;
+    var rr: FrRoof;
+    rr.at = in.world.xz;
+    rr.roof = 1.0;
+    rr.cap = 0.0;
+    rr.face = 0.0;
+    rr.face_n = vec3<f32>(0.0, 1.0, 0.0);
+    rr.sun = 1.0;
+    if (relief_roof) {
+        rr = fr_roof(in, dpx, dpy);
+    }
     if (ff_on() && roofish && n.y > 0.7) {
         // (`--far-facades`) a flat roof's membrane, and on a district's its plant, hatches and their shade
-        let fr = ff_roof(in.world, dpx, dpy, in.group, albedo, district);
+        let fr = ff_roof(vec3<f32>(rr.at.x, in.world.y, rr.at.y), dpx, dpy, in.group, albedo, district);
         albedo = fr.rgb;
         ff_rough = fr.a;
+    }
+    if (relief_roof && rr.roof < 1.0) {
+        // the parapet is the wall carried up (the wall's colour word, aged as the wall), the coping a little paler
+        var wall = in.color;
+        if (wx_level() != 0u) {
+            wall = wall * hl_age(in.group);
+        }
+        albedo = albedo * rr.roof + wall * rr.face + min(wall * 1.1, vec3<f32>(0.75)) * rr.cap;
+        ff_rough = mix(select(0.92, ff_rough, ff_rough >= 0.0), 0.88, rr.face + rr.cap);
+        ff_n = normalize(vec3<f32>(0.0, rr.roof + rr.cap, 0.0) + rr.face_n * rr.face);
+    }
+    if (relief_roof) {
+        fr_sun_vis = rr.roof * rr.sun + rr.face + rr.cap; // the parapet's shade over the key light
     }
     var s: Surface;
     s.albedo = albedo;
@@ -831,6 +1192,9 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
     }
     s.metal = 0.0;
     s.ao = 1.0;
+    if (SF_FAR_RELIEF) {
+        s.ao = fr_ao;
+    }
     // a tower's panes tilt panel by panel (by the glass share at this pixel).
     var n_pane = n;
     if (glass > 0.0 && !roofish) {
@@ -851,6 +1215,9 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
     m.rough_flatten = 0.0;
     m.thin_absorption = 0.0;
     rm_emit = hl_windows(in, in.world, n, glass, dpx, dpy);
+    if (SF_FAR_RELIEF) {
+        rm_emit = rm_emit * fr_lit;
+    }
     if (FL_GLASS && !roofish) {
         rm_emit = rm_emit + hl_glass_sky(in, n_pane, v, glass); // the tilted pane
     }

@@ -62,6 +62,111 @@ pub fn district_path(dir: &Path, key: &str, d: (i32, i32)) -> PathBuf {
     dir.join("hlod").join(key).join(format!("district_{}_{}.eohd", d.0, d.1))
 }
 
+/// (`--far-relief`) the districts whose roof rings carry their roof frames
+/// (`roof_frame_words`) cook into their own files beside the plain ones, so a
+/// run without the switch reads and writes the files as before.
+pub fn district_path_relief(dir: &Path, key: &str, d: (i32, i32)) -> PathBuf {
+    dir.join("hlod").join(key).join(format!("district_rf_{}_{}.eohd", d.0, d.1))
+}
+
+// ---- (`--far-relief`) the roof frame: where a roof point lies in its footprint ----
+//
+// A district's flat roof is one polygon at the building's top. Most of the
+// city's flat roofs sit inside a parapet: the wall carried up past the roof
+// (IBC 705.11.1: 30 in where one is required), so the low sun throws its shade
+// down the roof from the parapet on the sun's side, and the eye sees the inner
+// face of the parapet across from it. The far shader needs each roof point's
+// distances to the footprint's edges. The footprint's minimum-area oriented box
+// stands in for its outline (rows of houses, blocks and towers are close to
+// rectangles; a notch's inner edges get no parapet). Each roof-ring vertex
+// carries its own distances to the box's four sides (`dl`, `dr`, `db`, `dt`:
+// along -u, +u, -v, +v), which interpolate exactly over the roof's triangles,
+// in steps of 0.25 m (x2, x4, x8 for longer boxes); the box's heading and the
+// parapet's height ride in the uv word's upper half. The walls read nothing of
+// it: a wall triangle's flat words come from its first vertex, a base-ring one.
+
+/// The oriented box's heading steps over half a turn (7 bits).
+pub const ROOF_HEADING_STEPS: u32 = 128;
+/// The parapet's height step (4 bits: 0 none, up to 1.5 m).
+pub const ROOF_PARAPET_STEP_M: f32 = 0.1;
+/// The distance step at scale 0 (scale k: x 2^k, k < 4).
+pub const ROOF_DIST_STEP_M: f64 = 0.25;
+/// INFERRED parapet heights: a low building's 0.45-1.05 m, a tower's screen wall 1.1-1.5 m.
+pub const ROOF_PARAPET_LOW_M: [f32; 2] = [0.45, 1.05];
+pub const ROOF_PARAPET_TOWER_M: [f32; 2] = [1.1, 1.5];
+/// Roofs smaller than this (sheds, kiosks) carry no parapet.
+pub const ROOF_MIN_AREA_M2: f64 = 24.0;
+
+fn roof_hash(group: u32) -> f32 {
+    let mut h = group.wrapping_mul(0x9E37_79B9) ^ 0x5bd1_e995;
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2c1b_3c6d);
+    h ^= h >> 12;
+    (h >> 8) as f32 / 16_777_216.0
+}
+
+/// The roof frame of a simplified ring: (the uv word's upper half, one normal
+/// word per ring vertex), or None where the roof takes no parapet (too small,
+/// or a box longer than the steps reach).
+pub fn roof_frame_words(ring: &[[f64; 2]], group: u32, tower: bool) -> Option<(u32, Vec<u32>)> {
+    let n = ring.len();
+    if n < 3 {
+        return None;
+    }
+    let area = 0.5 * (0..n).map(|i| {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        a[0] * b[1] - b[0] * a[1]
+    }).sum::<f64>().abs();
+    if area < ROOF_MIN_AREA_M2 {
+        return None;
+    }
+    // the minimum-area box has a side along one of the hull's edges; every edge of the ring is tried.
+    let frame = |q: u32| {
+        let a = q as f64 * std::f64::consts::PI / ROOF_HEADING_STEPS as f64;
+        let (eu, ev) = ([a.cos(), a.sin()], [-a.sin(), a.cos()]);
+        let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+        for p in ring {
+            let (u, v) = (p[0] * eu[0] + p[1] * eu[1], p[0] * ev[0] + p[1] * ev[1]);
+            lo = [lo[0].min(u), lo[1].min(v)];
+            hi = [hi[0].max(u), hi[1].max(v)];
+        }
+        (eu, ev, lo, hi)
+    };
+    let mut best: Option<(f64, u32)> = None;
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        if dx * dx + dz * dz < 1e-6 {
+            continue;
+        }
+        let ang = dz.atan2(dx).rem_euclid(std::f64::consts::PI);
+        let q = ((ang / std::f64::consts::PI * ROOF_HEADING_STEPS as f64).round() as u32) % ROOF_HEADING_STEPS;
+        let (_, _, lo, hi) = frame(q);
+        let a2 = (hi[0] - lo[0]) * (hi[1] - lo[1]);
+        if best.is_none_or(|(b, _)| a2 < b - 1e-9) {
+            best = Some((a2, q));
+        }
+    }
+    let (_, q) = best?;
+    let (eu, ev, lo, hi) = frame(q);
+    let extent = (hi[0] - lo[0]).max(hi[1] - lo[1]);
+    let scale = (0..4u32).find(|&k| extent / (ROOF_DIST_STEP_M * f64::from(1u32 << k)) <= 255.0)?;
+    let step = ROOF_DIST_STEP_M * f64::from(1u32 << scale);
+    let range = if tower { ROOF_PARAPET_TOWER_M } else { ROOF_PARAPET_LOW_M };
+    let hp = range[0] + (range[1] - range[0]) * roof_hash(group);
+    let hq = ((hp / ROOF_PARAPET_STEP_M).round() as u32).clamp(1, 15);
+    let upper = q | (hq << 7) | (scale << 11);
+    let byte = |d: f64| ((d / step).round().max(0.0) as u32).min(255);
+    let words = ring
+        .iter()
+        .map(|p| {
+            let (u, v) = (p[0] * eu[0] + p[1] * eu[1], p[0] * ev[0] + p[1] * ev[1]);
+            byte(u - lo[0]) | (byte(hi[0] - u) << 8) | (byte(v - lo[1]) << 16) | (byte(hi[1] - v) << 24)
+        })
+        .collect();
+    Some((upper, words))
+}
+
 #[derive(Clone, Debug)]
 pub struct District {
     pub key: (i32, i32),
@@ -185,6 +290,13 @@ pub fn vertex_words(s: &BuildingSummary, glass_body: bool) -> (u32, u32, u32) {
 /// the window share, the rhythm and the tower flag; the far shader mixes in the
 /// glass. Without it, the facade's mean colour as before.
 pub fn build_district(city: &eo_data::City, entry: u32, key: (i32, i32), summaries: &[BuildingSummary], glass_body: bool) -> DistrictMesh {
+    build_district_with(city, entry, key, summaries, glass_body, false)
+}
+
+/// `build_district`, and with `roof_frames` (`--far-relief`) each roof ring
+/// carrying its roof frame (`roof_frame_words`) in place of the wall words the
+/// walls never read there.
+pub fn build_district_with(city: &eo_data::City, entry: u32, key: (i32, i32), summaries: &[BuildingSummary], glass_body: bool, roof_frames: bool) -> DistrictMesh {
     let mut vertices = vec![];
     let mut indices = vec![];
     let mut ear = earcut::Earcut::<f64>::new();
@@ -200,10 +312,17 @@ pub fn build_district(city: &eo_data::City, entry: u32, key: (i32, i32), summari
         let n = r.len() as u32;
         let base = vertices.len() as u32;
         let (colour, uv, rhythm) = vertex_words(s, glass_body);
-        for y in [s.base, s.top] {
-            for p in &r {
-                vertices.push(HlodVertex { pos: [p[0] as f32, y, p[1] as f32], normal: rhythm, uv, color: colour, group: s.group });
-            }
+        for p in &r {
+            vertices.push(HlodVertex { pos: [p[0] as f32, s.base, p[1] as f32], normal: rhythm, uv, color: colour, group: s.group });
+        }
+        // (`--far-relief`) the roof ring's words: its roof frame (no parapet: zero heading and height).
+        let frame = if roof_frames { Some(roof_frame_words(&r, s.group, s.tower > 0.5).unwrap_or((0, vec![0; r.len()]))) } else { None };
+        for (k, p) in r.iter().enumerate() {
+            let (normal, uv_top) = match &frame {
+                Some((upper, words)) => (words[k], (uv & 0xffff) | (upper << 16)),
+                None => (rhythm, uv),
+            };
+            vertices.push(HlodVertex { pos: [p[0] as f32, s.top, p[1] as f32], normal, uv: uv_top, color: colour, group: s.group });
         }
         for i in 0..n {
             let j = (i + 1) % n;
@@ -332,8 +451,10 @@ pub fn chunk_by_cell(mesh: &mut DistrictMesh, group_cell: &[u32], cells: &[u32])
 /// Read a district from the cache, or make it from its cells' summaries
 /// (reading each cell's summary file, baking the cells not yet baked) and cache it.
 pub fn load_or_build(ctx: &BakeContext, d: &District) -> DistrictMesh {
+    let relief = crate::facade::far_relief_from_args(); // (`--far-relief`) the roof frames, in their own files
+    let path = |dir: &Path| if relief { district_path_relief(dir, &ctx.key, d.key) } else { district_path(dir, &ctx.key, d.key) };
     if let Some(dir) = &ctx.cache_dir {
-        if let Ok(b) = std::fs::read(district_path(dir, &ctx.key, d.key)) {
+        if let Ok(b) = std::fs::read(path(dir)) {
             if let Ok(m) = DistrictMesh::decode(&b, d.entry) {
                 if m.key == d.key {
                     return m;
@@ -346,9 +467,9 @@ pub fn load_or_build(ctx: &BakeContext, d: &District) -> DistrictMesh {
         let s = hlod_bake::read_summaries(ctx, c).unwrap_or_else(|| hlod_bake::load_or_bake(ctx, c).0.summaries);
         all.extend(s);
     }
-    let m = build_district(&ctx.city, d.entry, d.key, &all, ctx.opts.glass_body);
+    let m = build_district_with(&ctx.city, d.entry, d.key, &all, ctx.opts.glass_body, relief);
     if let Some(dir) = &ctx.cache_dir {
-        let p = district_path(dir, &ctx.key, d.key);
+        let p = path(dir);
         if let Some(parent) = p.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -459,6 +580,34 @@ mod tests {
         assert_eq!(uv >> 24, 64, "the phase");
         let (old, _, _) = vertex_words(&s, false);
         assert_eq!(old & 255, hlod_bake::linear_to_srgb_byte(0.3) as u32, "glass body off: the facade mean as before");
+    }
+
+    #[test]
+    fn a_roof_frame_gives_each_ring_vertex_its_distances_to_the_box() {
+        // A 20 x 8 m rectangle turned 30 degrees: its box is itself.
+        let (c, s) = (30f64.to_radians().cos(), 30f64.to_radians().sin());
+        let rot = |x: f64, z: f64| [10.0 + x * c - z * s, -4.0 + x * s + z * c];
+        let ring = vec![rot(0.0, 0.0), rot(20.0, 0.0), rot(20.0, 8.0), rot(0.0, 8.0)];
+        let (upper, words) = roof_frame_words(&ring, 7, false).expect("a frame");
+        let q = upper & 127;
+        let heading = q as f64 * 180.0 / ROOF_HEADING_STEPS as f64;
+        assert!((heading - 30.0).abs() < 1.0 || (heading - 120.0).abs() < 1.0, "heading {heading}");
+        let hp = ((upper >> 7) & 15) as f32 * ROOF_PARAPET_STEP_M;
+        assert!(hp >= ROOF_PARAPET_LOW_M[0] - 0.06 && hp <= ROOF_PARAPET_LOW_M[1] + 0.06, "{hp}");
+        assert_eq!(upper >> 11, 0, "a 20 m box in 0.25 m steps");
+        for w in &words {
+            let d = [w & 255, (w >> 8) & 255, (w >> 16) & 255, w >> 24].map(|b| b as f64 * ROOF_DIST_STEP_M);
+            // a corner: on two sides, across the box from the other two
+            assert!(d.iter().filter(|&&x| x < 0.3).count() == 2, "{d:?}");
+            assert!(((d[0] + d[1]) - 20.0).abs() < 0.6 || ((d[0] + d[1]) - 8.0).abs() < 0.6, "{d:?}");
+            assert!(((d[2] + d[3]) - 20.0).abs() < 0.6 || ((d[2] + d[3]) - 8.0).abs() < 0.6, "{d:?}");
+        }
+        // a long block takes coarser steps (300 m in 2 m steps), one past their reach and a shed none
+        let long = vec![[0.0, 0.0], [300.0, 0.0], [300.0, 40.0], [0.0, 40.0]];
+        assert_eq!(roof_frame_words(&long, 1, true).expect("a frame").0 >> 11, 3);
+        let longer = vec![[0.0, 0.0], [600.0, 0.0], [600.0, 40.0], [0.0, 40.0]];
+        assert!(roof_frame_words(&longer, 1, true).is_none());
+        assert!(roof_frame_words(&[[0.0, 0.0], [4.0, 0.0], [4.0, 4.0], [0.0, 4.0]], 1, false).is_none());
     }
 
     #[test]

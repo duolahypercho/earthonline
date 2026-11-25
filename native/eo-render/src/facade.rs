@@ -186,8 +186,15 @@ pub fn facade_constants_wgsl() -> String {
     let row2 = |v: &Value| format!("vec2<f32>({}, {})", f(v["ao"].as_f64().unwrap_or(0.0)), if v["replaceNormal"].as_bool().unwrap_or(false) { "1.0" } else { "0.0" });
     s.push_str(&format!("const FD_SPEC: array<vec4<f32>, {n}> = array<vec4<f32>, {n}>({});\n", fins.iter().map(|(_, v)| row(v)).collect::<Vec<_>>().join(", ")));
     s.push_str(&format!("const FD_SPEC2: array<vec2<f32>, {n}> = array<vec2<f32>, {n}>({});\n", fins.iter().map(|(_, v)| row2(v)).collect::<Vec<_>>().join(", ")));
+    // (`--facade-patina`) the finishes cast in units (precast and civic concrete, cast stone): bit (index + 1) of the detail finish
+    let panels = fins.iter().enumerate().filter(|(_, (k, _))| PANEL_FINISHES.contains(&k.as_str())).fold(0u32, |m, (i, _)| m | (1 << (i + 1)));
+    s.push_str(&format!("const FP_PANEL_FINISHES: u32 = {panels}u;\n"));
     s
 }
+
+/// (`--facade-patina`) The kit finishes cast as units apart (a precast panel, a cast-stone block),
+/// each its own mix and cure, so a facade of them is a little patchy unit by unit (facade_age.wgsl `fw_apply`).
+pub const PANEL_FINISHES: [&str; 3] = ["concrete-precast", "civic-concrete", "cast-stone"];
 
 /// JS `Math.round`.
 fn js_round(v: f64) -> f64 {
@@ -505,6 +512,68 @@ pub fn weather_from_args() -> bool {
 pub fn canyon_from_args() -> bool {
     let args: Vec<String> = std::env::args().collect();
     last_switch(&args, "--canyon-glass", "--no-canyon-glass")
+}
+
+/// `--far-relief` (`--no-far-relief`; off by default): the far layer's
+/// construction depth. A district's flat roof sits under its parapet: the
+/// parapet's cap and its inner faces where the eye sees them, and the shade
+/// it casts down the roof from the key light (the district mesh's roof ring
+/// carries its place in the footprint's oriented box, hlod_district.rs
+/// `roof_frame_words`, cooked into its own district files); the plain
+/// prism's stone front (with `--far-facades`) casts the sun's shadow from its
+/// cornice, belt courses, sills and pilasters, its arcade is deep, its bays
+/// grouped under pavilions (hlod_draw.wgsl behind `SF_FAR_RELIEF`). Compiled
+/// in only with the switch (no runtime gate); off, the code is compiled out,
+/// the district files and the frame are as before.
+pub fn far_relief_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--far-relief", "--no-far-relief")
+    })
+}
+
+/// `--facade-patina` (`--no-facade-patina`; off by default): the kit walls'
+/// ageing laid on the building rather than on a lattice of blocks. The
+/// ageing graph's soot, grime, overpaint ghosts and mottle are drawn on a
+/// slowly warped field turned off the wall's axes (one lattice thresholded
+/// reads as soft rectangles); the paint fades by its exposure (high on a
+/// south or west wall); the scanned stain columns under the sills give way
+/// to the run-off of each window (`--facade-weather`), which gains the
+/// sill's broad wash under the window and the parapet's run-off down from
+/// the roofline; metal rusts in its grooves, along its foot and in streaks
+/// from its fixings (facade_age.wgsl, cc0.wgsl behind `SF_FACADE_PATINA`).
+/// Compiled in only with the switch (no runtime gate); off, the code is
+/// compiled out and the frame is as before.
+pub fn patina_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--facade-patina", "--no-facade-patina")
+    })
+}
+
+/// `--window-depth` (`--no-window-depth`; off by default): the reveal round
+/// every kit pane. Each glass face of a kit window carries how deep it stands
+/// in its reveal, behind its jambs and behind its head and sill (kit.rs
+/// `glass_depths`: the normal's y byte, 4 bits an axis), and on the near rung
+/// a ribbon behind piers and floor bands is cut into the openings they leave
+/// (kit.rs `split_ribbons`), all cooked into its own kit cache folder. The
+/// pane is shaded as glass in a hole in a wall: the sun reaches it only past
+/// the jambs and the head (their hard-edged shadows across the pane and the
+/// blinds behind it), the sky reaches the room behind it less near the
+/// reveal, and it reflects the reveal (the head's soffit, the jambs, the
+/// sill) where its reflected ray meets them before it clears the opening
+/// (draw.wgsl, rooms.wgsl `wd_pane` behind `SF_WINDOW_DEPTH`; the key light's
+/// share through look_light.wgsl `fr_sun_vis`). Compiled in only with the
+/// switch (no runtime gate); off, the code is compiled out, the kit packs and
+/// their cache key are as before and the frame is as before.
+pub fn window_depth_from_args() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let args: Vec<String> = std::env::args().collect();
+        last_switch(&args, "--window-depth", "--no-window-depth")
+    })
 }
 
 /// The facades track's runtime bits in the frame switches (`fa_run()`), high

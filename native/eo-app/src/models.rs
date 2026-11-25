@@ -201,6 +201,9 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     features.far_facades |= eo_render::facade::far_from_args();
     features.facade_weather |= eo_render::facade::weather_from_args();
     features.canyon_glass |= eo_render::facade::canyon_from_args();
+    features.far_relief |= eo_render::facade::far_relief_from_args(); // (`--far-relief`: no runtime gate, so only with its switch)
+    features.facade_patina |= eo_render::facade::patina_from_args(); // (`--facade-patina`: no runtime gate, so only with its switch)
+    features.window_depth |= eo_render::facade::window_depth_from_args(); // (`--window-depth`: no runtime gate, so only with its switch)
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
             "lx" => features.lx_bits = u32::MAX,
@@ -215,6 +218,9 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "far_facades" => features.far_facades = true,
             "facade_weather" => features.facade_weather = true,
             "canyon_glass" => features.canyon_glass = true,
+            "far_relief" => features.far_relief = true,
+            "facade_patina" => features.facade_patina = true,
+            "window_depth" => features.window_depth = true,
             "street_pbr" => features.street_pbr = true, // (`--street-pbr`)
             "wet_surfaces" => features.wet_surfaces = true, // (`--wet-surfaces`)
             "screen_reflect" => features.screen_reflect = true, // (`--screen-reflect`)

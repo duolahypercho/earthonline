@@ -1120,12 +1120,53 @@ fn cg_facade(k: f32) -> vec3<f32> {
 // the light on a surface with normal n at p (in front of it, in the air):
 // the sun by the shadow maps and the clouds, the sky and the street by the
 // ambient volume there; `env_w` its environment class.
+// the sun on what a pane reflects: the cascades' tent (or the far map past them) as `lk_shadow` takes
+// it, without the penumbra's search and filter (`--soft-shadows`) or the cascades' blend: a reflection
+// blurred over the panes' waviness has no use for a penumbra, and the search was most of the canyon's cost.
+fn cg_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
+    if (!(SF_SOFT_SHADOWS && LK_SHADOW_SOFT)) {
+        return lk_shadow(world, ng); // no penumbra compiled in: the lookup as before
+    }
+    let probe = frame.copy_step.z > 0.5;
+    var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
+    if (probe) {
+        vd = distance(world, look.cam_pos.xyz);
+    }
+    let split = look.cascade_split;
+    if (look.key_dir.w <= 0.0) {
+        return 1.0;
+    }
+    let far = LK_SHADOW_FAR && lk_far_on();
+    if (vd >= split.z || !LK_SHADOW_CASCADES) {
+        if (!far) {
+            return 1.0;
+        }
+        return mix(1.0, lk_far_shadow(world, ng), look.key_dir.w);
+    }
+    var c = 0;
+    if (vd > split.x) {
+        c = 1;
+    }
+    if (vd > split.y) {
+        c = 2;
+    }
+    let vis = lk_cascade(c, world, ng, probe);
+    if (vis < 0.0) {
+        return 1.0;
+    }
+    let fade = lk_smooth(split.w, split.z, vd);
+    if (far && fade > 0.0) {
+        return mix(1.0, mix(vis, lk_far_shadow(world, ng), fade), look.key_dir.w);
+    }
+    return mix(1.0, mix(vis, 1.0, fade), look.key_dir.w);
+}
+
 fn cg_light(p: vec3<f32>, n: vec3<f32>, env_w: f32) -> vec3<f32> {
     let l = look.key_dir.xyz;
     var sun = vec3<f32>(0.0);
     let nl = dot(n, l);
     if (nl > 0.0) {
-        sun = look.key.xyz * nl * lk_shadow(p, n) * sky_cloud_transmittance(p);
+        sun = look.key.xyz * nl * cg_shadow(p, n) * sky_cloud_transmittance(p);
     }
     return sun + amb_irradiance(amb_sample(p, n), n, lk_sh(n) * env_w);
 }
@@ -1236,5 +1277,126 @@ fn cg_apply(probe: vec3<f32>) -> vec3<f32> {
     let ls = lk_luma(cg_sky.rgb);
     let sky_like = rm_ss(0.55, 0.85, min(lp, ls) / max(max(lp, ls), 1e-6));
     let open = mix(cg_sky.rgb, probe, sky_like);
-    return mix(probe, mix(open, cg_env.rgb, cg_env.w), cg_sky.w);
+    let canyon = mix(probe, mix(open, cg_env.rgb, cg_env.w), cg_sky.w);
+    if (SF_WINDOW_DEPTH) {
+        return mix(canyon, wd_refl.rgb, wd_refl.w); // (`--window-depth`) the reveal where the ray meets it before it leaves the opening
+    }
+    return canyon;
+}
+
+// ---- (`--window-depth`, facade.rs `window_depth_from_args`) the reveal round a kit pane ----
+// A kit window's glass stands in its opening behind the faces round it, by
+// `depth.x` behind its jambs' and `depth.y` behind its head's and sill's
+// (kit.rs `glass_depths`: the normal's y byte; a split ribbon's opening is
+// behind its piers and floor bands, a punched window behind the wall's face).
+// The hole it stands in does three things a pane in the wall's plane does not:
+//  * it shades the pane: a point of the glass sees the sun only if the ray to
+//    the sun leaves past the jambs and the head, so a low sun throws the head's
+//    and the far jamb's shadows across the glass and the blinds behind it,
+//    hard-edged (the sun's disc over a reveal's few decimetres is millimetres)
+//    and as long as the sun is low;
+//  * it hides part of the sky from what stands behind the glass near the
+//    reveal: through a slot of width w at depth d a point at x sees
+//    (sin a + sin b) / 2 of the cosine-weighted sky across it (tan a = x / d,
+//    tan b = (w - x) / d), the two axes taken one after the other;
+//  * the glass reflects it: a reflected ray that meets a jamb, the head or the
+//    sill before it clears the reveal (the one it reaches first) shows that
+//    face, so the pane shows the head's soffit along its top seen from below,
+//    a jamb down a side seen aslant, in the light that face gets there (its
+//    own normal: the sun by the shadow maps, the sky and the street by the
+//    ambient volume, rooms.wgsl `cg_light`).
+// A window at the packing's limit (a ribbon, 127 steps) does not locate its
+// jambs (or its head and sill): that axis is left open. INFERRED: the
+// reveal's reflectance (an average of the kit's wall finishes), the
+// opening's margin past the glass (half a frame).
+const WD_REVEAL_ALBEDO: f32 = 0.3;
+const WD_FRAME_M: f32 = 0.03;
+// the sun's angular radius, rad
+const WD_SUN_RAD: f32 = 0.00465;
+// a step of the packed depth (kit.rs `WD_DEPTH_STEP_M`)
+const WD_DEPTH_STEP_M: f32 = 0.03;
+
+// (rgb, cover): the reveal's radiance seen in the pane and its share of the reflection there (`cg_apply`)
+var<private> wd_refl: vec4<f32> = vec4<f32>(0.0);
+
+// the cosine-weighted view factor across a slot of width `w` from `x` in it, `d` behind its face
+fn wd_slot(x: f32, w: f32, d: f32) -> f32 {
+    let dd = max(d, 1e-3);
+    let a = clamp(x, 0.0, w) / dd;
+    let b = clamp(w - x, 0.0, w) / dd;
+    return 0.5 * (a * inverseSqrt(1.0 + a * a) + b * inverseSqrt(1.0 + b * b));
+}
+
+// 1 inside [lo, hi], 0 outside, over a soft edge of half-width `soft`
+fn wd_inside(q: f32, lo: f32, hi: f32, soft: f32) -> f32 {
+    return rm_ss(lo - soft, lo + soft, q) * (1.0 - rm_ss(hi - soft, hi + soft, q));
+}
+
+// (sun, room): the sun's share past the reveal at the pane's point, and the share of the sky the
+// room behind it keeps; sets `wd_refl`. `pane` the frame bytes (rooms.rs), `ng` the wall's outward
+// normal, `np` the pane's own (bowed) normal, `v` toward the eye, `depth` (across, up) in metres,
+// `fw` the pixel's footprint.
+fn wd_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, np: vec3<f32>, v: vec3<f32>, depth: vec2<f32>, fw: f32) -> vec2<f32> {
+    wd_refl = vec4<f32>(0.0);
+    let b = u32(round(pane.z * 255.0));
+    let qw = f32(b & 127u);
+    let qh = abs(round(pane.w * 127.0));
+    // an axis is closed by its reveal where the frame locates it and the reveal has depth
+    let open = vec2<f32>(select(0.0, 1.0, qw > 0.5 && qw < 126.5 && depth.x > 0.01), select(0.0, 1.0, qh > 0.5 && qh < 126.5 && depth.y > 0.01));
+    if (open.x + open.y < 0.5) {
+        return vec2<f32>(1.0);
+    }
+    let d = max(depth, vec2<f32>(1e-3));
+    let size = vec2<f32>(qw, qh) / 8.0;
+    let local = pane.xy * size;
+    let n = normalize(vec3<f32>(ng.x, 0.0, ng.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    let t = vec3<f32>(-n.z, 0.0, n.x);
+    let lo = vec2<f32>(-WD_FRAME_M);
+    let hi = size + WD_FRAME_M;
+    // the sun past the jambs and the head
+    var sun = 1.0;
+    let l = look.key_dir.xyz;
+    let ln = dot(l, n);
+    if (ln > 1e-3) {
+        let k = d / ln;
+        let q = local + vec2<f32>(dot(l, t), l.y) * k;
+        let soft = max(k * WD_SUN_RAD, vec2<f32>(0.5 * fw));
+        sun = mix(1.0, wd_inside(q.x, lo.x, hi.x, soft.x), open.x) * mix(1.0, wd_inside(q.y, lo.y, hi.y, soft.y), open.y);
+    }
+    // the sky the room behind keeps
+    let w = hi - lo;
+    let room = mix(1.0, wd_slot(local.x - lo.x, w.x, d.x), open.x) * mix(1.0, wd_slot(local.y - lo.y, w.y, d.y), open.y);
+    // the reveal in the glass
+    let r = reflect(-v, np);
+    let rn = dot(r, n);
+    if (rn > 1e-3) {
+        let k = d / rn; // the ray's length to each axis's front
+        let rt = vec2<f32>(dot(r, t), r.y);
+        let q = local + rt * k;
+        // the reflection's blur over the reveal: the panes' waviness and the glass's own, and the pixel
+        let soft = max(k * 2.0 * (FG_TILT + FG_BOW + FG_ROUGH * FG_ROUGH), vec2<f32>(0.5 * fw));
+        let inside = mix(1.0, wd_inside(q.x, lo.x, hi.x, soft.x), open.x) * mix(1.0, wd_inside(q.y, lo.y, hi.y, soft.y), open.y);
+        let cover = 1.0 - inside;
+        if (cover > 1e-3) {
+            // the face it meets first: the ray's length to where it leaves each axis's span (past its front: never)
+            var ex = 1e6;
+            if (open.x > 0.5 && abs(rt.x) > 1e-5) {
+                ex = select(lo.x - local.x, hi.x - local.x, rt.x > 0.0) / rt.x;
+                ex = select(1e6, ex, ex < k.x);
+            }
+            var ey = 1e6;
+            if (open.y > 0.5 && abs(rt.y) > 1e-5) {
+                ey = select(lo.y - local.y, hi.y - local.y, rt.y > 0.0) / rt.y;
+                ey = select(1e6, ey, ey < k.y);
+            }
+            var nr = select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, -1.0, 0.0), rt.y > 0.0); // the head's soffit, or the sill
+            if (ex < ey) {
+                nr = select(t, -t, rt.x > 0.0); // a jamb, facing across the opening
+            }
+            let at = clamp(min(min(ex, ey), max(k.x, k.y)), 0.0, 2.0);
+            let e = cg_light(pos + r * at + nr * 0.05 + n * 0.05, nr, look.ambient.w * look.env_class.x);
+            wd_refl = vec4<f32>(WD_REVEAL_ALBEDO / LK_PI * e, clamp(cover, 0.0, 1.0));
+        }
+    }
+    return vec2<f32>(sun, room);
 }
