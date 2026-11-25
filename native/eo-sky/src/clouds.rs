@@ -28,6 +28,9 @@ pub const SHEET_RES: usize = 256;
 /// World metres one sheet tile spans (sky-atmosphere.js tile sizes).
 pub const LOW_TILE_M: f64 = 3200.0;
 pub const HIGH_TILE_M: f64 = 10000.0;
+/// Common wrap period (m) for the volumetric cloud mode (`--volumetric-clouds`),
+/// divisible by every weather, macro, base, curl and detail noise tile so drift wraps seamlessly.
+pub const VOL_WRAP_TILE_M: f64 = 51200.0;
 /// The marine bank's own tile (a coarser field over the same sheet).
 pub const MARINE_TILE_M: f64 = 9600.0;
 const SILHOUETTE_GAIN: f64 = 0.56;
@@ -608,6 +611,8 @@ fn raw_decks(w: &WeatherState, smooth: bool) -> Decks {
     let mut h = [HEIGHTS[i][0] + (HEIGHTS[i + 1][0] - HEIGHTS[i][0]) * t, HEIGHTS[i][1] + (HEIGHTS[i + 1][1] - HEIGHTS[i][1]) * t];
     if w.kind == Kind::Overcast {
         h = OVERCAST_HEIGHTS;
+    } else if w.kind == Kind::SunRain {
+        h = [800.0, 2200.0];
     }
     // Toward ESE (from 290 deg): east 0.94, south 0.34; the weather's own wind adds.
     let dir = [0.94, 0.34];
@@ -617,7 +622,7 @@ fn raw_decks(w: &WeatherState, smooth: bool) -> Decks {
     let stratus = (p.overcast - 0.5).max(0.0) * 2.0;
     let marine_top = match w.kind {
         Kind::Fog => 230.0,
-        Kind::Drizzle | Kind::Rain | Kind::Storm => 150.0,
+        Kind::Drizzle | Kind::LightRain | Kind::Rain | Kind::HeavyRain | Kind::Storm => 150.0,
         _ => 180.0,
     };
     let fair_share = if smooth {
@@ -666,6 +671,80 @@ pub fn decks(w: &WeatherState) -> Decks {
         // one with the most weight
         raw_decks(w, f.clear_sky_state).with_sky(wc, m.dominant(), f.cirrus)
     }
+}
+
+/// High-verticality cloud slab bounds (m) for `--volumetric-clouds` per severity
+/// rung (clear, fog, drizzle, rain, storm), plus dry overcast and post-rain damp.
+/// Fair-weather cumulus bases sit at the lifting condensation level (~1.05 km) while
+/// convective cumulus mediocris and congestus climb to 4.2 km with broad multi-dome
+/// crowns; storm cumulonimbus reach 5.4 km.
+const VOL_HEIGHTS: [[f64; 2]; 5] = [
+    [1220.0, 4850.0],
+    [60.0, 320.0],
+    [580.0, 2650.0],
+    [560.0, 4400.0],
+    [540.0, 6200.0],
+];
+const VOL_OVERCAST_HEIGHTS: [f64; 2] = [750.0, 2900.0];
+const VOL_DAMP_HEIGHTS: [f64; 2] = [1080.0, 4850.0];
+/// Volumetric cumulus extinction (1/m): balanced vapor extinction lets light penetrate outer
+/// 50-150 m entrainment margins for glowing translucency while keeping distant ranges plump.
+const VOL_CUMULUS_SIGMA: f64 = 0.044;
+const VOL_STRATUS_SIGMA: f64 = 0.028;
+
+/// Deck parameters for `--volumetric-clouds`: deep vertical slabs for cumulus humilis,
+/// mediocris and towering congestus, balanced synoptic coverage under clear skies, and
+/// a 7.8 km fibrous ice-cirrus layer. Existing `decks()` is unchanged for default runs.
+pub fn volumetric_decks(w: &WeatherState) -> Decks {
+    let mut d = decks(w);
+    let s = w.severity.clamp(0.0, 4.0);
+    let i = (s.floor() as usize).min(3);
+    let t = s - i as f64;
+    let mut h = [
+        VOL_HEIGHTS[i][0] + (VOL_HEIGHTS[i + 1][0] - VOL_HEIGHTS[i][0]) * t,
+        VOL_HEIGHTS[i][1] + (VOL_HEIGHTS[i + 1][1] - VOL_HEIGHTS[i][1]) * t,
+    ];
+    if w.kind == Kind::Overcast {
+        h = VOL_OVERCAST_HEIGHTS;
+    } else if w.kind == Kind::Damp {
+        h = VOL_DAMP_HEIGHTS;
+    } else if w.kind == Kind::SunRain {
+        h = [1040.0, 5500.0];
+    } else if w.kind == Kind::LightRain {
+        h = [600.0, 2900.0];
+    } else if w.kind == Kind::HeavyRain {
+        h = [520.0, 5200.0];
+    }
+    let p = &w.profile;
+    let stratus = (p.overcast - 0.5).max(0.0) * 2.0;
+    d.low_base_m = h[0];
+    d.low_top_m = h[1];
+    d.coverage = match w.kind {
+        Kind::Clear => 0.48,
+        Kind::Damp => 0.58,
+        Kind::SunRain => 0.58,
+        Kind::Overcast => 0.86,
+        Kind::Fog => 0.92,
+        Kind::Drizzle => 0.88,
+        Kind::LightRain => 0.86,
+        Kind::Rain => 0.94,
+        Kind::HeavyRain => 0.96,
+        Kind::Storm => 0.98,
+    };
+    d.low_opacity = match w.kind {
+        Kind::Overcast => 0.88,
+        _ => p.deck_low.max(0.92),
+    };
+    d.extinction = VOL_CUMULUS_SIGMA + (VOL_STRATUS_SIGMA - VOL_CUMULUS_SIGMA) * stratus.min(1.0);
+    d.high_alt_m = 9400.0;
+    d.high_opacity = match w.kind {
+        Kind::Clear => 0.16,
+        Kind::Damp => 0.24,
+        Kind::Fog => 0.10,
+        Kind::Overcast => 0.30,
+        _ => (p.deck_high * 0.42).max(0.14),
+    };
+    d
 }
 
 impl Decks {
@@ -1094,5 +1173,22 @@ mod tests {
         let d_in: f64 = (0..64).map(|y| (fbm(0.5, y as f64 / 64.0, 8, 5, 1) - fbm(0.5 + 1.0 / n, y as f64 / 64.0, 8, 5, 1)).abs()).sum();
         let d_edge: f64 = (0..64).map(|y| (fbm(1.0 - 0.5 / n, y as f64 / 64.0, 8, 5, 1) - fbm(0.5 / n, y as f64 / 64.0, 8, 5, 1)).abs()).sum();
         assert!(d_edge < d_in * 3.0 + 0.05, "edge step {d_edge} inside {d_in}");
+    }
+
+    #[test]
+    fn volumetric_decks_preserve_slab_order_and_wrap_period() {
+        for kind in [Kind::Clear, Kind::Damp, Kind::Overcast, Kind::Fog, Kind::Drizzle, Kind::LightRain, Kind::SunRain, Kind::Rain, Kind::HeavyRain, Kind::Storm] {
+            let w = crate::weather::preset(kind);
+            let d = volumetric_decks(&w);
+            assert!(d.low_top_m > d.low_base_m + 200.0, "{kind:?}: thin slab {}..{}", d.low_base_m, d.low_top_m);
+            assert!(d.high_alt_m > d.low_top_m, "{kind:?}: cirrus below low top");
+            assert!(d.coverage > 0.3 && d.coverage <= 1.0, "{kind:?}: coverage {}", d.coverage);
+            assert!(d.extinction > 0.02 && d.extinction < 0.1, "{kind:?}: extinction {}", d.extinction);
+        }
+        // Every volumetric noise tile divides VOL_WRAP_TILE_M evenly for seamless drift wrapping.
+        for tile in [51200.0, 25600.0, 10240.0, 6400.0, 3200.0, 2560.0, 1280.0, 800.0, 640.0, 200.0, 80.0] {
+            let r = VOL_WRAP_TILE_M % tile;
+            assert!(r.abs() < 1e-9, "tile {tile} does not divide {VOL_WRAP_TILE_M}");
+        }
     }
 }

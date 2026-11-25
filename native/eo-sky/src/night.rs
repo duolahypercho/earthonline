@@ -81,7 +81,10 @@ pub fn vehicle_lamps(sun_alt_deg: f64, w: &WeatherState) -> f64 {
     let night = 1.0 - smoothstep(-3.0, 6.0, sun_alt_deg);
     let floor = match w.kind {
         crate::weather::Kind::Drizzle => 0.55,
+        crate::weather::Kind::LightRain => 0.6,
+        crate::weather::Kind::SunRain => 0.4,
         crate::weather::Kind::Rain => 0.7,
+        crate::weather::Kind::HeavyRain => 0.78,
         crate::weather::Kind::Storm => 0.8,
         crate::weather::Kind::Fog => 0.7,
         _ => 0.0,

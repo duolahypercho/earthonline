@@ -36,7 +36,17 @@ pub enum Kind {
     Fog,
     Overcast,
     Drizzle,
+    /// Light steady rain (`--weather light-rain` / `little-rain`): ~1.8 mm/h,
+    /// gentle breeze, damp streets and shallow gutter puddles.
+    LightRain,
+    /// Sunshower (`--weather sun-rain` / `sunshower`): ~3.5 mm/h falling under
+    /// broken sunlit cumulus (`beam` 0.74, `continuous` 0.0) with bright sunlit
+    /// rain streaks, glistening puddles and a faint antisolar rainbow under `--weather-fx`.
+    SunRain,
     Rain,
+    /// Torrential downpour (`--weather heavy-rain` / `big-rain` / `downpour`):
+    /// ~16 mm/h, brisk 8.2 m/s wind, deeply pooled puddles, no lightning.
+    HeavyRain,
     Storm,
     /// A street an hour after rain (`--weather damp`, cinematic look plan
     /// stage L3; not in the JS and never produced by the schedule): the
@@ -51,7 +61,10 @@ impl Kind {
             Kind::Fog => "fog",
             Kind::Overcast => "overcast",
             Kind::Drizzle => "drizzle",
+            Kind::LightRain => "light-rain",
+            Kind::SunRain => "sun-rain",
             Kind::Rain => "rain",
+            Kind::HeavyRain => "heavy-rain",
             Kind::Storm => "storm",
             Kind::Damp => "damp",
         }
@@ -62,7 +75,10 @@ impl Kind {
             "fog" => Kind::Fog,
             "overcast" => Kind::Overcast,
             "drizzle" => Kind::Drizzle,
-            "rain" => Kind::Rain,
+            "light-rain" | "little-rain" => Kind::LightRain,
+            "sun-rain" | "sunshower" => Kind::SunRain,
+            "rain" | "medium-rain" => Kind::Rain,
+            "heavy-rain" | "big-rain" | "downpour" => Kind::HeavyRain,
             "storm" => Kind::Storm,
             "damp" => Kind::Damp,
             _ => return None,
@@ -111,7 +127,10 @@ pub fn atmos(kind: Kind) -> [f64; 3] {
         Kind::Fog => [9.5, 0.021, 0.72],
         Kind::Overcast => [4.0, 0.009, 0.74],
         Kind::Drizzle => [6.0, 0.013, 0.78],
+        Kind::LightRain => [5.4, 0.0115, 0.78],
+        Kind::SunRain => [3.6, 0.0085, 0.79],
         Kind::Rain => [7.5, 0.016, 0.76],
+        Kind::HeavyRain => [8.4, 0.0185, 0.73],
         Kind::Storm => [9.0, 0.02, 0.7],
         // (`--weather damp`) air washed by the rain but still humid: between
         // clear and overcast (INFERRED, no JS bucket).
@@ -189,7 +208,10 @@ pub const CLEAR: Profile = p(0.0, 0.0, 1.0, 1.0, 0.0, 0.0, [1.0, 1.0, 1.0], 0.6,
 pub const FOG: Profile = p(0.9, 0.7, 0.62, 0.25, 0.0, 0.7, [0.98, 1.0, 1.02], 0.85, 1.0, [0.92, 0.98, 0.35], [0.40, 0.55], 0.52, 2.0, MARINE_FOG_SIGMA, [9.5, 0.021, 0.72]);
 pub const OVERCAST: Profile = p(0.92, 0.9, 0.84, 0.18, 0.0, 0.78, [0.99, 1.0, 1.015], 0.9, 1.0, [0.88, 0.2, 0.90], [1.0, 1.18], 0.20, 1.15, 0.0, [4.0, 0.009, 0.74]);
 pub const DRIZZLE: Profile = p(0.85, 0.35, 0.38, 0.12, 1.0, 0.82, [0.99, 1.0, 1.02], 1.0, 1.0, [0.85, 0.97, 0.42], [0.50, 0.66], 0.34, 1.6, MARINE_FOG_SIGMA * 0.35, [6.0, 0.013, 0.78]);
+pub const LIGHT_RAIN: Profile = p(0.80, 0.40, 0.48, 0.16, 1.0, 0.72, [0.99, 1.0, 1.015], 1.0, 0.92, [0.84, 0.96, 0.44], [0.62, 0.78], 0.30, 1.45, MARINE_FOG_SIGMA * 0.25, [5.4, 0.0115, 0.78]);
+pub const SUN_RAIN: Profile = p(0.32, 0.22, 0.88, 0.74, 0.0, 0.20, [1.02, 1.00, 0.96], 0.75, 0.92, [0.56, 0.95, 0.38], [0.76, 0.94], 0.24, 1.25, 0.0, [3.6, 0.0085, 0.79]);
 pub const RAIN: Profile = p(0.95, 0.5, 0.26, 0.07, 1.0, 0.86, [0.985, 1.0, 1.02], 1.1, 0.8, [0.95, 0.98, 0.5], [0.42, 0.56], 0.40, 1.4, MARINE_FOG_SIGMA * 0.2, [7.5, 0.016, 0.76]);
+pub const HEAVY_RAIN: Profile = p(0.98, 0.58, 0.18, 0.04, 1.0, 0.88, [0.97, 1.0, 1.02], 1.15, 0.65, [0.97, 0.99, 0.56], [0.36, 0.49], 0.46, 1.32, MARINE_FOG_SIGMA * 0.18, [8.4, 0.0185, 0.73]);
 pub const STORM: Profile = p(1.0, 0.65, 0.13, 0.03, 1.0, 0.8, [0.95, 1.0, 0.965], 1.2, 0.55, [0.98, 0.99, 0.6], [0.32, 0.45], 0.50, 1.25, MARINE_FOG_SIGMA * 0.15, [9.0, 0.02, 0.7]);
 
 /// (`--weather damp`, stage L3) The bucket's air: turbidity, Mie, Mie g.
@@ -209,7 +231,10 @@ pub fn profile(kind: Kind) -> Profile {
         Kind::Fog => FOG,
         Kind::Overcast => OVERCAST,
         Kind::Drizzle => DRIZZLE,
+        Kind::LightRain => LIGHT_RAIN,
+        Kind::SunRain => SUN_RAIN,
         Kind::Rain => RAIN,
+        Kind::HeavyRain => HEAVY_RAIN,
         Kind::Storm => STORM,
     }
 }
@@ -616,7 +641,10 @@ pub fn preset(kind: Kind) -> WeatherState {
         Kind::Overcast => (0.0, 0.0, 0.0, [1.0, 0.4], 0.5),
         Kind::Fog => (0.0, 0.01, 0.0, [0.5, 0.2], 1.0),
         Kind::Drizzle => (0.5, 0.0508, 0.1, [2.0, 0.5], 2.0),
+        Kind::LightRain => (1.8, 0.095, 0.25, [2.8, 0.7], 2.4),
+        Kind::SunRain => (3.5, 0.14, 0.42, [3.4, 0.9], 2.7),
         Kind::Rain => (6.0, 0.19, 0.6, [4.4, 1.1], 3.2),
+        Kind::HeavyRain => (16.0, 0.34, 0.85, [7.8, 2.5], 3.7),
         Kind::Storm => (22.0, 0.4, 0.9, [11.5, 4.2], 4.0),
         Kind::Damp => (0.0, DAMP_FILM_MM, DAMP_PUDDLE_FILL, [1.2, 0.5], 0.5),
     };
@@ -724,5 +752,30 @@ mod tests {
     fn beam_blends_in_log_space() {
         let m = blend(&CLEAR, &RAIN, 0.5);
         assert!((m.beam - (0.07f64).sqrt()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rain_spectrum_presets_cover_light_sun_medium_heavy_and_storm() {
+        assert_eq!(Kind::parse("little-rain"), Some(Kind::LightRain));
+        assert_eq!(Kind::parse("light-rain"), Some(Kind::LightRain));
+        assert_eq!(Kind::parse("sun-rain"), Some(Kind::SunRain));
+        assert_eq!(Kind::parse("sunshower"), Some(Kind::SunRain));
+        assert_eq!(Kind::parse("medium-rain"), Some(Kind::Rain));
+        assert_eq!(Kind::parse("heavy-rain"), Some(Kind::HeavyRain));
+        assert_eq!(Kind::parse("big-rain"), Some(Kind::HeavyRain));
+        assert_eq!(Kind::parse("downpour"), Some(Kind::HeavyRain));
+
+        let dz = preset(Kind::Drizzle);
+        let lr = preset(Kind::LightRain);
+        let sr = preset(Kind::SunRain);
+        let mr = preset(Kind::Rain);
+        let hr = preset(Kind::HeavyRain);
+        let st = preset(Kind::Storm);
+        assert!(dz.rain_mm_h < lr.rain_mm_h && lr.rain_mm_h < sr.rain_mm_h && sr.rain_mm_h < mr.rain_mm_h && mr.rain_mm_h < hr.rain_mm_h && hr.rain_mm_h < st.rain_mm_h);
+        assert!(dz.puddle_fill < lr.puddle_fill && lr.puddle_fill < sr.puddle_fill && sr.puddle_fill < mr.puddle_fill && mr.puddle_fill < hr.puddle_fill && hr.puddle_fill < st.puddle_fill);
+        // Sunshower keeps direct sun beam shining through broken clouds while raining.
+        assert!(sr.profile.beam > 0.6 && sr.profile.continuous == 0.0 && sr.rain_mm_h > 2.0);
+        // Heavy rain has torrential rain and strong wind without thunderstorm lightning.
+        assert!(hr.rain_mm_h >= 15.0 && hr.flash == 0.0 && hr.wind[0].hypot(hr.wind[1]) > mr.wind[0].hypot(mr.wind[1]));
     }
 }
