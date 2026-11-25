@@ -375,8 +375,15 @@ fn pp_person(g: AgSurf) -> vec3<f32> {
     if (cls == PP_NONE || lk_key_vis <= 0.0 || (nl <= 0.0 && cls != PP_SKIN)) {
         return vec3<f32>(0.0);
     }
-    let v = g.v;
     let key = look.key.xyz * lk_key_vis;
+    return pp_lobes(g, cls, l, nl, key) * (1.0 - lk_fog_out);
+}
+
+// The skin's, cloth's and hair's own terms for one light: `key` its irradiance
+// across a surface facing it (at its visibility), `l` toward it, nl = n.l.
+fn pp_lobes(g: AgSurf, cls: u32, l: vec3<f32>, nl: f32, key: vec3<f32>) -> vec3<f32> {
+    let n = g.s.n;
+    let v = g.v;
     var out = vec3<f32>(0.0);
     if (cls == PP_SKIN) {
         out = key * pp_terminator(nl, PP_SKIN_MFP_MM / PP_SKIN_FEATURE_MM) * g.s.albedo / LK_PI;
@@ -393,6 +400,108 @@ fn pp_person(g: AgSurf) -> vec3<f32> {
             let s2 = pp_strand(t, n, h, PP_HAIR_SHIFT.y, PP_HAIR_EXP.y) * PP_HAIR_SPEC.y;
             out = key * smoothstep(0.0, 0.25, nl) * (vec3<f32>(s1) + s2 * g.s.albedo);
         }
+    }
+    return out;
+}
+
+// ---- the lamps on a person (`--people-lamps`; agents.rs `SF_PEOPLE_LAMPS`) ----
+// The rig lights a person from each street lamp, headlamp and lit shop window
+// with the city's two lobes (Lambert and the GGX at the texel's roughness,
+// sky_light.wgsl `sky_local_lights_ao`); what `pp_person` adds for the key,
+// the skin's blurred terminator and oily lobe, the cloth's sheen and the
+// hair's strand highlights, it adds for each of those lights too: the
+// frame's lights of the fragment's cluster, each at its irradiance there
+// (shaped and reached as sky_light.wgsl shapes them, `pl_shape`) and, where
+// the light keeps a shadow map (`--light-shadows`), at its visibility
+// (looked up at any n.l, so the skin's band reaches past the terminator as
+// the key's does). At night this is the light that outlines a person
+// against the dark: the sheen of a jacket's shoulders and sleeves and the
+// glint of hair toward a lamp behind them, the warm band on a cheek turned
+// from a shop window. Under the fog look_light found.
+
+// A frame light's irradiance factor at a point `dist` away along unit `l`
+// toward it (x its colour and intensity, before n.l): its luminaire's shape
+// toward the point and its reach, as `sky_local_lights_ao` computes them.
+fn pl_shape(li: SkyLight, l: vec3<f32>, dist: f32, cine: bool) -> f32 {
+    let d2 = max(dist * dist, 0.04);
+    let w = clamp(1.0 - pow(dist / li.range, 4.0), 0.0, 1.0);
+    let ca = dot(-l, li.dir);
+    var shape = 1.0;
+    if (li.kind == 0u) {
+        shape = (1.0 + 1.5 * (1.0 - ca * ca)) * smoothstep(li.cos_outer, li.cos_inner, ca);
+        if (cine) {
+            shape = sky_cine_cobra(l, li.dir);
+        }
+    } else if (li.kind == 1u) {
+        let dep = asin(clamp(l.y, -1.0, 1.0)) * 57.29578;
+        var vert = 1.0;
+        if (dep < 0.6) {
+            vert = 0.031;
+        } else if (dep < 1.3) {
+            vert = mix(0.031, 1.0, (dep - 0.6) / 0.7);
+        } else if (dep > 2.5) {
+            vert = (2.5 / dep) * (2.5 / dep);
+        }
+        let hl = normalize(vec2<f32>(-l.x, -l.z) + vec2<f32>(1e-6, 0.0));
+        let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
+        let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
+        let near = clamp(max(dist, 0.4) / 6.5, 0.0, 1.0);
+        if (cine) {
+            let hr = vec2<f32>(-ha.y, ha.x);
+            vert = sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578);
+        }
+        shape = vert * side * near * near;
+    } else if (li.kind >= 3u) {
+        shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+    }
+    return li.intensity * shape * w * w / d2;
+}
+
+// The frame's light cluster at a world point: (first record, count), count 0 outside the clusters.
+fn pl_cluster(world: vec3<f32>) -> vec2<u32> {
+    let rel = world - skyu.eye.xyz;
+    let vz = dot(rel, skyu.cam_fwd.xyz);
+    if (vz < skyu.cluster.x || vz > skyu.cluster.y) {
+        return vec2<u32>(0u, 0u);
+    }
+    let vx = dot(rel, skyu.cam_right.xyz);
+    let vy = dot(rel, skyu.cam_up.xyz);
+    let ndc = vec2<f32>(vx / (vz * skyu.cluster.z * skyu.cluster.w), vy / (vz * skyu.cluster.z));
+    let gr = skyu.lights.yzw;
+    let tx = u32(clamp((ndc.x * 0.5 + 0.5) * f32(gr.x), 0.0, f32(gr.x) - 1.0));
+    let ty = u32(clamp((0.5 - ndc.y * 0.5) * f32(gr.y), 0.0, f32(gr.y) - 1.0));
+    let tz = u32(clamp(log(vz / skyu.cluster.x) / log(skyu.cluster.y / skyu.cluster.x) * f32(gr.z), 0.0, f32(gr.z) - 1.0));
+    let c = (tz * gr.y + ty) * gr.x + tx;
+    return vec2<u32>(gr.x * gr.y * gr.z + c * SKY_CLUSTER_CAP, min(sky_clusters[c], SKY_CLUSTER_CAP));
+}
+
+fn pl_person(g: AgSurf, world: vec3<f32>) -> vec3<f32> {
+    let cls = pp_class(g.s.rough);
+    if (cls == PP_NONE || !sky_on(skyu.flags.x, SKY_LIGHTS) || skyu.lights.x == 0u || frame.copy_step.z > 0.5) {
+        return vec3<f32>(0.0);
+    }
+    let cl = pl_cluster(world);
+    let cine = SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC);
+    let n = g.s.n;
+    let reach = select(0.0, -PP_SKIN_WRAP_REACH, cls == PP_SKIN);
+    var out = vec3<f32>(0.0);
+    for (var k = 0u; k < cl.y; k = k + 1u) {
+        let li = sky_lights[sky_clusters[cl.x + k]];
+        let d = li.pos - world;
+        let dist = max(length(d), 1e-3);
+        let l = d / dist;
+        let nl = dot(n, l);
+        if (nl <= reach || (nl <= 0.0 && cls != PP_SKIN)) {
+            continue;
+        }
+        var e = pl_shape(li, l, dist, cine);
+        if (e <= 0.0) {
+            continue;
+        }
+        if (LS_SHADER && li.pad >= 1.0) {
+            e = e * ls_light_visibility(u32(li.pad) - 1u, world, g.n);
+        }
+        out = out + pp_lobes(g, cls, l, nl, li.color * e);
     }
     return out * (1.0 - lk_fog_out);
 }
@@ -524,6 +633,10 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     }
     if (person) {
         c = vec4<f32>(c.rgb + pp_person(g), c.a);
+    }
+    // (`--people-lamps`) the lamps' skin, cloth and hair terms; compiled out without it.
+    if (SF_PEOPLE_LAMPS && is_person) {
+        c = vec4<f32>(c.rgb + pl_person(g, in.world), c.a);
     }
     // (`--people-bounce`) the ground round the feet in place of the rig's ground lobe; compiled out without it.
     if (SF_PEOPLE_BOUNCE && is_person) {

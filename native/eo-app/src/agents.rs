@@ -74,6 +74,43 @@ pub fn crowd_on() -> bool {
     CROWD.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// `--people-groups` (with `--crowd`; main.rs sets it): social groups keep
+/// together (eo-sim `RegionConfig::groups`, `Crowd::keep_parties`).
+pub static PEOPLE_GROUPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `--people-crosswalks` (with `--crowd`; main.rs sets it): the walkers cross
+/// on the zebras the street draws (eo-sim `NativeSource::with_zebras`).
+pub static PEOPLE_CROSSWALKS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `--people-near` (captures; main.rs sets it): a warmed card hides the
+/// simulated people only within `PEOPLE_NEAR_CLEAR_M` of its eye, not
+/// `WARM_CLEAR_M`: a crew holds traffic out of a shot, not the people on the
+/// walk round the camera.
+pub static PEOPLE_NEAR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// (`--people-near`) the people hidden round a warmed card's eye: a person
+/// nearer than this (and their bounding radius) would fill a street lens's
+/// frame (a body 1.8 m tall is the whole height of a 30 degree frame at 3.4 m).
+pub const PEOPLE_NEAR_CLEAR_M: f32 = 4.0;
+
+/// `--people-windows` (with `--crowd`; main.rs sets it): a window-shopping
+/// stop only in front of a shop's window (eo-sim `RegionConfig::windows`).
+pub static PEOPLE_WINDOWS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `--people-stagger` (with `--crowd` and `--people-groups`; main.rs sets it):
+/// a walking group's line turned from square by its own angle (eo-sim
+/// `RegionConfig::stagger`).
+pub static PEOPLE_STAGGER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `--people-evening` (with `--crowd`; main.rs sets it): the walk-in shops'
+/// walkers by a neighbourhood commercial street's day, which holds into the
+/// evening (eo-sim `shop_footfall`, `CrowdDensity::evening`).
+pub static PEOPLE_EVENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn people_groups() -> bool {
+    PEOPLE_GROUPS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn people_crosswalks() -> bool {
+    PEOPLE_CROSSWALKS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The walk-in rule of the decal survey (streets.rs `cc0_survey`): a shop or
 /// food `amenity`, or a retail / commercial `building`; not worship,
 /// schools, services behind a lobby or parking. The evening economy's uses
@@ -141,6 +178,35 @@ pub fn crossing_points(paths: &eo_data::DataPaths) -> Vec<[f64; 2]> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// `--people-crosswalks`: the zebras the street draws (eo-sim
+/// `NativeSource::with_zebras`): at each junction that earns paint, each
+/// approach whose crossing is painted and fits its run (eo-street mesh.rs
+/// `emit_approach_paint`'s rule), the middle of its band on the approach's
+/// centreline (the band from the approach's trim plus the crosswalk
+/// clearance, the junction's band depth deep). A structure's leg carries none.
+pub fn drawn_zebras(sw: &eo_street::StreetWorld) -> Vec<[f64; 2]> {
+    let o = &sw.o;
+    let mut out = vec![];
+    for node in sw.plan.nodes.iter().filter(|n| n.earns_paint) {
+        for app in &node.approaches {
+            let e = &sw.plan.entries[app.entry];
+            if e.structure_leg.is_some() || !app.crossing_painted {
+                continue;
+            }
+            let available = app.run_length - if app.at_start { e.trim_end } else { e.trim_start };
+            let band0 = app.trim + o.crosswalk_clearance;
+            let band1 = band0 + node.band_depth;
+            if band1 + 0.4 > available {
+                continue;
+            }
+            let d = 0.5 * (band0 + band1);
+            let f = e.frame(if app.at_start { d } else { e.length - d }, false);
+            out.push([f.x, f.z]);
+        }
+    }
+    out
 }
 
 /// `--crowd`: the drawn street's cross-sections (eo-sim
@@ -352,7 +418,10 @@ fn region_config(density: u32, crowd: Option<f64>, traffic: Option<f64>) -> Regi
     }
     if let Some(hour) = crowd {
         cfg.hour = hour.rem_euclid(24.0);
-        cfg.crowd = Some(eo_sim::consts::CrowdDensity::standard(n as f64));
+        cfg.crowd = Some(eo_sim::consts::CrowdDensity { evening: PEOPLE_EVENING.load(std::sync::atomic::Ordering::Relaxed), ..eo_sim::consts::CrowdDensity::standard(n as f64) }); // (`--people-evening`)
+        cfg.groups = people_groups(); // (`--people-groups`) the groups keep together
+        cfg.windows = PEOPLE_WINDOWS.load(std::sync::atomic::Ordering::Relaxed); // (`--people-windows`) browsing at shop windows only
+        cfg.stagger = PEOPLE_STAGGER.load(std::sync::atomic::Ordering::Relaxed); // (`--people-stagger`) the groups' lines turned
     }
     cfg
 }
@@ -421,17 +490,20 @@ impl AgentRuntime {
         // (`--car-materials`) each vehicle material's role and the plates' own coordinates;
         // (`--car-contact`) the bodies' occluder boxes, cooked with them (nothing of the
         // roles draws without `--car-materials`'s shader code); (`--people-motion`) the
-        // people's heads held steady in the bake.
+        // people's heads held steady in the bake; (`--people-idles`) the wider standing repertoire.
         // (`--car-panels`) the panels' filter and the badges, cooked with the cars' materials.
         let car_materials = args.look.car_materials > 0 || args.look.car_contact > 0;
-        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0, car_materials, car_panels: car_materials && eo_render::agents::car_panels(), steady_heads: eo_agents::motion::steady_heads() };
+        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0, car_materials, car_panels: car_materials && eo_render::agents::car_panels(), steady_heads: eo_agents::motion::steady_heads(), more_idles: eo_agents::motion::more_idles() };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-load".into())
             .spawn(move || {
-                // (`--people-contact`) the people's contact anchors, made at load (never cached).
+                // (`--people-contact`) the people's contact anchors, made at load (never cached);
+                // (`--people-capsules`) their body capsules in their place.
                 let lib = Library::load_opts(&repo, cache.as_deref(), &people, cook).map(|mut l| {
-                    if eo_render::agents::people_contact() {
+                    if eo_render::agents::people_capsules() {
+                        eo_agents::people::add_capsule_anchors(&mut l);
+                    } else if eo_render::agents::people_contact() {
                         eo_agents::people::add_contact_anchors(&mut l);
                     }
                     l
@@ -478,13 +550,17 @@ impl AgentRuntime {
                         // drawn walks and kerbs, the mapped crosswalks.
                         let mut walks = walk_paths(&paths, c);
                         let mut sections = vec![];
+                        let mut zebras = vec![];
                         if let Some(sw) = &street {
                             let rings = plaza_rings(&paths.repo_root, sw);
                             walks.extend(plaza_paths(&rings));
                             *plazas_out.lock().unwrap() = Some(Arc::new(eo_agents::feed::Plazas::new(rings.into_iter().map(|(_, r)| r).collect())));
                             sections = drawn_sections(sw);
+                            if people_crosswalks() {
+                                zebras = drawn_zebras(sw); // (`--people-crosswalks`) crossed on the paint
+                            }
                         }
-                        source = source.with_frontage(frontage_edges(c)).with_paths(walks).with_sections(sections).with_crossings(crossing_points(&paths));
+                        source = source.with_frontage(frontage_edges(c)).with_paths(walks).with_sections(sections).with_crossings(crossing_points(&paths)).with_zebras(zebras);
                     }
                     let source = Arc::new(source);
                     let w = build_sim(&source, focus, density, crowd, traffic, WARMUP_STEPS);
@@ -640,7 +716,11 @@ impl AgentRuntime {
                         let hide = &self.hide_near;
                         let lib = self.lib.as_deref();
                         let body = |a: &GpuAgent| lib.and_then(|l| l.models.get(a.model as usize)).map(|m| m.radius * a.scale.max(1.0)).unwrap_or(3.0);
-                        self.scratch.extend(base.iter().filter(|a| !hide.iter().any(|(p, r)| (a.pos[0] - p[0]).hypot(a.pos[2] - p[2]) < *r + body(a))));
+                        // (`--people-near`) the people cleared only from round the lens.
+                        let near = PEOPLE_NEAR.load(std::sync::atomic::Ordering::Relaxed);
+                        let person = |a: &GpuAgent| lib.and_then(|l| l.models.get(a.model as usize)).is_some_and(|m| m.class == eo_agents::CLASS_PERSON);
+                        let clear = |a: &GpuAgent, r: f32| if near && person(a) { r.min(PEOPLE_NEAR_CLEAR_M) } else { r };
+                        self.scratch.extend(base.iter().filter(|a| !hide.iter().any(|(p, r)| (a.pos[0] - p[0]).hypot(a.pos[2] - p[2]) < clear(a, *r) + body(a))));
                     }
                     self.scratch.extend_from_slice(&self.extras);
                     self.scratch.extend_from_slice(&self.parked); // props
@@ -818,6 +898,11 @@ impl AgentRuntime {
         }
         self.traffic_hour = hour; // (`--car-density`) the card's own hour
         let focus = Self::focus_of(eye, forward);
+        if self.opts.crowd {
+            // `--crowd`: the card's street at the card's hour (the restart starts the
+            // clock at `start_hour`; it was the run's start hour for every card).
+            self.start_hour = renderer.look.time_of_day();
+        }
         self.restart_sim(world, focus, self.opts.density);
         self.hide_near = vec![(eye.to_array(), WARM_CLEAR_M)];
         let t = Instant::now();

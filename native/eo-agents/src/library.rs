@@ -23,6 +23,8 @@ use std::time::Instant;
 
 /// (`--people-motion`) Bump when `rocketbox::steady_head` changes (part of the key with the option on).
 pub const STEADY_HEADS_VERSION: u32 = 1;
+/// (`--people-idles`) Bump when `motion::MORE_IDLES` changes (part of the key with the option on).
+pub const MORE_IDLES_VERSION: u32 = 1;
 /// Bump when the cooked layout or the cook changes.
 pub const COOK_VERSION: u32 = 5; // 4 -> 5 (people moved by the Rocketbox clips and 100STYLE walks only)
 const MAGIC: &[u8; 4] = b"EOAL";
@@ -109,6 +111,9 @@ pub struct CookOptions {
     /// with it (`motion::MotionMeta::steady`). Off: the bake and the cache
     /// key are as before.
     pub steady_heads: bool,
+    /// `--people-idles`: the standing repertoire `motion::MORE_IDLES` baked
+    /// after `motion::ROLES`' loops. Off: the bake and the cache key are as before.
+    pub more_idles: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -229,6 +234,14 @@ fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &M
             h.update(STEADY_HEADS_VERSION.to_le_bytes());
             for x in rocketbox::NOD_MEAN.iter().chain(&rocketbox::NOD_FRAME).chain(std::iter::once(&rocketbox::NOD_NECK_SHARE)) {
                 h.update(x.to_le_bytes());
+            }
+        }
+        // (`--people-idles`) the wider standing repertoire; nothing added without it.
+        if opts.more_idles && motions.any() {
+            h.update(b"more-idles");
+            h.update(MORE_IDLES_VERSION.to_le_bytes());
+            for r in &crate::motion::MORE_IDLES {
+                h.update(format!("{}|{}|{}|{}|{}|{}|{}|{}|{:?}", r.name, r.slot, r.female, r.male, r.start_s, r.start_m, r.seconds, r.fps, r.family).as_bytes());
             }
         }
         h.update(rocketbox::COOK_VERSION.to_le_bytes());
@@ -454,7 +467,7 @@ pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
     match people {
         PeopleSource::Rocketbox(root) => {
             let t = Instant::now();
-            match cook_rocketbox(&mut b, root, motions, opts.steady_heads) {
+            match cook_rocketbox(&mut b, root, motions, opts.steady_heads, opts.more_idles) {
                 Ok(res) => {
                     atlas_res = res;
                     b.lib.meta.people_source = "rocketbox".into();
@@ -487,13 +500,13 @@ pub const MAX_MESHES: usize = 511;
 /// Rocketbox clips and the 100STYLE walks (both are needed: there is no other
 /// motion). The player's body is the first pool avatar. Returns the atlas
 /// side. Nothing is appended to the library unless at least one avatar cooked.
-fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots, steady: bool) -> Result<u32> {
+fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots, steady: bool, more_idles: bool) -> Result<u32> {
     let manifest = rocketbox::Manifest::load()?;
     // The licence travels with the copy: no LICENSES.md (as the manifest pins it), no people.
     rocketbox::read_verified(root, &manifest, "LICENSES.md").context("the copy's LICENSES.md")?;
     // The motions first: without them nothing could move the avatars.
     let mut motion = crate::motion::MotionMeta::default();
-    let mo = motion_sources(motions, &mut motion)?;
+    let mo = motion_sources(motions, &mut motion, more_idles)?;
     let budget = MAX_MESHES.saturating_sub(b.lib.meshes.len()) / LODS;
     let wanted = manifest.avatars.iter().filter(|a| a.pool).count();
     let pool = rocketbox::pool(&manifest, budget);
@@ -637,7 +650,7 @@ fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots, steady: b
 enum SegKind {
     /// A 100STYLE walk (index into the loaded cycles).
     Style(usize),
-    /// A `motion::ROLES` loop.
+    /// A `motion::roles` loop.
     Role(usize),
 }
 
@@ -653,11 +666,14 @@ struct Seg {
 struct MotionSources {
     clips: HashMap<String, crate::motion::RbClip>,
     styles: Vec<crate::motion::StyleCycle>,
+    /// The standing loops baked (`motion::roles`).
+    roles: Vec<crate::motion::Role>,
 }
 
 /// Both motion sources, or why the people cannot move.
-fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> Result<MotionSources> {
-    use crate::motion::{CLIPS_ROOT_ENV, Manifest, ROLES, STYLES, STYLES_ROOT_ENV, load_rb_clip};
+fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta, more_idles: bool) -> Result<MotionSources> {
+    use crate::motion::{CLIPS_ROOT_ENV, Manifest, STYLES, STYLES_ROOT_ENV, load_rb_clip};
+    let roles = crate::motion::roles(more_idles);
     if !crate::motion::enabled() {
         bail!("the Rocketbox motions are switched off (--no-rocketbox-motions), and nothing else moves the people");
     }
@@ -666,7 +682,7 @@ fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> 
     let clips = (|| -> Result<HashMap<String, crate::motion::RbClip>> {
         let m = Manifest::clips()?;
         m.read(clips_root, "LICENSES.md").context("the copy's LICENSES.md")?;
-        let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| [r.female, r.male]).collect();
+        let mut ids: Vec<&str> = roles.iter().flat_map(|r| [r.female, r.male]).collect();
         ids.sort_unstable();
         ids.dedup();
         let loaded: Vec<Result<crate::motion::RbClip>> = std::thread::scope(|s| ids.iter().map(|id| s.spawn(|| load_rb_clip(clips_root, &m, id))).collect::<Vec<_>>().into_iter().map(|h| h.join().expect("motion clip thread")).collect());
@@ -703,15 +719,15 @@ fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> 
         Ok(v)
     })()
     .context("the 100STYLE walks")?;
-    Ok(MotionSources { clips, styles })
+    Ok(MotionSources { clips, styles, roles })
 }
 
 /// the stretches of every table, in order: one walk loop a style in slot 0,
-/// the `ROLES` loops of each standing slot after it.
+/// the `motion::roles` loops of each standing slot after it.
 fn layout(mo: &MotionSources) -> Vec<Seg> {
     let mut segs: Vec<Seg> = (0..mo.styles.len()).map(|i| Seg { slot: 0, kind: SegKind::Style(i), frames: crate::motion::WALK_FRAMES + 1 }).collect();
     for slot in 1..CLIPS {
-        for (i, r) in crate::motion::ROLES.iter().enumerate().filter(|(_, r)| r.slot == slot) {
+        for (i, r) in mo.roles.iter().enumerate().filter(|(_, r)| r.slot == slot) {
             segs.push(Seg { slot, kind: SegKind::Role(i), frames: (r.seconds * r.fps).round() as u32 + 1 });
         }
     }
@@ -721,25 +737,26 @@ fn layout(mo: &MotionSources) -> Vec<Seg> {
 /// every group's table over the layout, the motion meta filled for it. None
 /// for a group that cannot be baked (its people are left out).
 fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSources, meta: &mut crate::motion::MotionMeta, missing: &mut Vec<String>, steady: bool) -> (Vec<Seg>, Vec<Option<Vec<[f32; 4]>>>) {
-    use crate::motion::{LoopMeta, ROLES, StyleMeta};
+    use crate::motion::{LoopMeta, StyleMeta};
     use rocketbox::BakeSrc;
+    let roles = &mo.roles;
     let segs = layout(mo);
     let mut tables = vec![];
     let mut strides: Vec<Vec<Option<(f32, f32)>>> = vec![];
     for (g, sk) in skels.iter().enumerate() {
-        let clip_of = |r: usize| mo.clips.get(if female[g] { ROLES[r].female } else { ROLES[r].male });
-        let relaxed = clip_of(0).and_then(|c| rocketbox::relaxed_hands(sk, c, &ROLES[0]).ok());
+        let clip_of = |r: usize| mo.clips.get(if female[g] { roles[r].female } else { roles[r].male });
+        let relaxed = clip_of(0).and_then(|c| rocketbox::relaxed_hands(sk, c, &roles[0]).ok());
         let srcs: Option<Vec<BakeSrc>> = segs
             .iter()
             .map(|s| match s.kind {
                 SegKind::Style(i) => Some(BakeSrc::Style { cycle: &mo.styles[i] }),
-                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &ROLES[r], frames: s.frames }),
+                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &roles[r], frames: s.frames }),
             })
             .collect();
         match srcs.ok_or_else(|| anyhow!("a role's clip is missing")).and_then(|srcs| rocketbox::bake_list_opts(sk, &srcs, relaxed.as_deref(), steady)) {
             Ok(bk) => {
                 if g == 0 && steady {
-                    let moved: Vec<String> = segs.iter().zip(&bk.nods).filter_map(|(s, n)| n.filter(|(a, b)| (a - b).abs() > 0.5).map(|(a, b)| format!("{} {a:+.0} -> {b:+.0}", match s.kind { SegKind::Style(i) => mo.styles[i].name.clone(), SegKind::Role(r) => crate::motion::ROLES[r].name.to_string() }))).collect();
+                    let moved: Vec<String> = segs.iter().zip(&bk.nods).filter_map(|(s, n)| n.filter(|(a, b)| (a - b).abs() > 0.5).map(|(a, b)| format!("{} {a:+.0} -> {b:+.0}", match s.kind { SegKind::Style(i) => mo.styles[i].name.clone(), SegKind::Role(r) => roles[r].name.to_string() }))).collect();
                     meta.notes.push(format!("steady heads (mean nod, degrees down): {}", moved.join(", ")));
                 }
                 tables.push(Some(bk.rows));
@@ -783,7 +800,7 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
     let mut first = [0u32; CLIPS];
     for s in &segs {
         if let SegKind::Role(r) = s.kind {
-            let role = &ROLES[r];
+            let role = &roles[r];
             meta.loops[s.slot].push(LoopMeta { role: role.name.into(), family: role.family, first: first[s.slot], frames: s.frames - 1, seconds: role.seconds, female: role.female.into(), male: role.male.into() });
         }
         first[s.slot] += s.frames;

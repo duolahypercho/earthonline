@@ -80,6 +80,10 @@ pub struct NativeSource {
     /// street is crossed only where one is mapped. None: wherever the JS
     /// crosses (every junction), as before.
     crossings: Option<std::sync::Arc<CrossingIndex>>,
+    /// The zebras the street draws (`--people-crosswalks`; `with_zebras`):
+    /// each street end is crossed on its drawn zebra, and not where none is
+    /// drawn. None: the class band and the rules above, as before.
+    zebras: Option<std::sync::Arc<CrossingIndex>>,
 }
 
 /// One straight piece of a drawn carriageway's centreline (`--crowd`;
@@ -239,6 +243,24 @@ impl CrossingIndex {
             cells.entry(front_cell(p[0], p[1])).or_default().push(p);
         }
         CrossingIndex { cells }
+    }
+
+    /// The nearest middle within `r` of (x, z) that `keep` admits.
+    fn nearest_by(&self, x: f64, z: f64, r: f64, keep: impl Fn(P2) -> bool) -> Option<P2> {
+        let lo = front_cell(x - r, z - r);
+        let hi = front_cell(x + r, z + r);
+        let mut best: Option<(f64, P2)> = None;
+        for cx in lo.0..=hi.0 {
+            for cz in lo.1..=hi.1 {
+                for p in self.cells.get(&(cx, cz)).into_iter().flatten() {
+                    let d = geom::hypot(p[0] - x, p[1] - z);
+                    if d <= r && keep(*p) && best.is_none_or(|(b, q)| d < b || (d == b && (p[0], p[1]) < (q[0], q[1]))) {
+                        best = Some((d, *p));
+                    }
+                }
+            }
+        }
+        best.map(|(_, p)| p)
     }
 
     /// Whether a mapped crosswalk's middle lies within `r` of (x, z).
@@ -444,6 +466,8 @@ impl FrontageIndex {
         }
         let n = (len / FRONT_SAMPLE_M).ceil().max(1.0) as usize;
         let (mut shops, mut night, mut storeys) = (0u32, 0u32, 0.0f64);
+        // each sample's front a walk-in shop (`FootActivity::shop_fronts`)
+        let mut shop_at = vec![false; n];
         for i in 0..n {
             let (x, z, _, _, _) = geom::at_arc(points, &cum, (i as f64 + 0.5) * len / n as f64);
             let lo = front_cell(x - reach, z - reach);
@@ -466,10 +490,14 @@ impl FrontageIndex {
                 shops += e.shops as u32;
                 night += e.night as u32;
                 storeys += e.storeys as f64;
+                shop_at[i] = e.shops;
             }
         }
+        // each of the walk's stretches takes the sample nearest its middle
+        let slots = crate::consts::SHOP_FRONT_SLOTS;
+        let shop_fronts = (0..slots).filter(|&j| shop_at[(((j as f64 + 0.5) / slots as f64) * n as f64) as usize % n]).fold(0u64, |m, j| m | 1u64 << j);
         let n = n as f64;
-        crate::consts::FootActivity { shops: (shops as f64 / n) as f32, night: (night as f64 / n) as f32, storeys: (storeys / n) as f32, place: 0.0 }
+        crate::consts::FootActivity { shops: (shops as f64 / n) as f32, night: (night as f64 / n) as f32, storeys: (storeys / n) as f32, place: 0.0, shop_fronts }
     }
 }
 
@@ -527,7 +555,7 @@ impl NativeSource {
         for (i, s) in source.signals.iter().enumerate() {
             signal_tiles.entry(TileKey::of(s[0], s[1])).or_default().push(i as u32);
         }
-        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new(), frontage: None, paths: vec![], path_tiles: HashMap::new(), sections: None, crossings: None }
+        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new(), frontage: None, paths: vec![], path_tiles: HashMap::new(), sections: None, crossings: None, zebras: None }
     }
 
     /// The same source with the drawn street's cross-sections (`--crowd`):
@@ -551,6 +579,16 @@ impl NativeSource {
     /// junction, as before.
     pub fn with_crossings(mut self, points: Vec<P2>) -> Self {
         self.crossings = (!points.is_empty()).then(|| std::sync::Arc::new(CrossingIndex::new(points)));
+        self
+    }
+
+    /// The same source with the zebras the street draws (`--people-crosswalks`;
+    /// eo-app from eo-street's plan: the middle of each painted approach's
+    /// crossing band): a footway's crossing band at a street end is the drawn
+    /// zebra's, so walkers cross on the paint, and a street end with no zebra
+    /// drawn is not crossed, at a signal too. Empty: as before.
+    pub fn with_zebras(mut self, points: Vec<P2>) -> Self {
+        self.zebras = (!points.is_empty()).then(|| std::sync::Arc::new(CrossingIndex::new(points)));
         self
     }
 
@@ -976,9 +1014,33 @@ impl NativeSource {
                     let t = arc.min(l);
                     cx.near(p[0] + dx / l * t, p[1] + dz / l * t, self.dims.crosswalk_m * 2.0)
                 };
+                // (`--people-crosswalks`) the zebra the street draws across
+                // this street at this end (eo-street's plan: a painted
+                // approach's band middle, on its centreline): the band moves
+                // onto it, and with none drawn the street is not crossed
+                // here, signal or not. The zebra is taken within two
+                // crosswalk widths of the class band, ahead of the node and
+                // within half a crosswalk of the centreline.
+                let zebra = |p: P2, toward: P2, arc: f64| -> Option<Option<f64>> {
+                    let zx = self.zebras.as_ref()?;
+                    let (dx, dz) = (toward[0] - p[0], toward[1] - p[1]);
+                    let l = geom::hypot(dx, dz).max(1e-9);
+                    let (ux, uz) = (dx / l, dz / l);
+                    let t = arc.min(l);
+                    let reach = self.dims.crosswalk_m * 2.0;
+                    let found = zx.nearest_by(p[0] + ux * t, p[1] + uz * t, reach, |m| {
+                        let (mx, mz) = (m[0] - p[0], m[1] - p[1]);
+                        mx * ux + mz * uz > 0.0 && (mx * uz - mz * ux).abs() <= self.dims.crosswalk_m / 2.0
+                    });
+                    Some(found.map(|m| (m[0] - p[0]) * ux + (m[1] - p[1]) * uz))
+                };
                 let end = |h: f64, junction: bool, p: P2, toward: P2| {
                     let arc = trim(h, junction) + self.dims.crosswalk_m / 2.0;
-                    FootEndBuild { kerb_trim: trim(h, junction), crossing_arc: arc, no_crossing: !mapped(p, toward, arc) }
+                    match zebra(p, toward, arc) {
+                        Some(Some(at)) => FootEndBuild { kerb_trim: trim(h, junction), crossing_arc: at.max(trim(h, junction)), no_crossing: false, zebra_only: true },
+                        Some(None) => FootEndBuild { kerb_trim: trim(h, junction), crossing_arc: arc, no_crossing: true, zebra_only: true },
+                        None => FootEndBuild { kerb_trim: trim(h, junction), crossing_arc: arc, no_crossing: !mapped(p, toward, arc), zebra_only: false },
+                    }
                 };
                 build.footways.push(FootwayBuild {
                     points,
@@ -1029,7 +1091,7 @@ impl NativeSource {
                     node_keys: Some([node_text(a), node_text(b)]),
                     normal: [d[1] / dl, -d[0] / dl],
                     cross_index: None,
-                    ends: [FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false }, FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false }],
+                    ends: [FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false, zebra_only: false }, FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false, zebra_only: false }],
                     tile: Some(TileKey::of(mid[0], mid[1])),
                 });
                 path_place.push(if p.highway == "pedestrian" { crate::consts::PLACE_PEDESTRIAN } else { crate::consts::PLACE_FOOTPATH });
