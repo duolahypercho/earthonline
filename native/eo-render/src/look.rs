@@ -827,6 +827,16 @@ pub struct ShaderFeatures {
     pub wet_surfaces: bool,
     /// The screen-space reflection's second generation (`--screen-reflect`; sky_light.wgsl `sky_sr_on`, `SF_SCREEN_REFLECT`).
     pub screen_reflect: bool,
+    /// The probe grid's sky as the frame draws it and its GGX levels (`--probe-sky`;
+    /// probe_sky.wgsl, `SF_PROBE_SKY`): its pipelines are made only with it.
+    pub probe_sky: bool,
+    /// The water the street's relief holds and the film by the surface under it
+    /// (`--wet-relief`; sky_light.wgsl `sky_wr_*`, `SF_WET_RELIEF`; over `--wet-surfaces`).
+    pub wet_relief: bool,
+    /// The cars' rear lamps as streak lights on the wet street (`--lamp-streaks`;
+    /// sky_light.wgsl `sky_ls_*`, `SF_LAMP_STREAKS`; the gather's pick, sky_lamp_streaks.wgsl,
+    /// and its words after the streak list made only with it; under the cinematic look).
+    pub lamp_streaks: bool,
     /// The camera model under the cinematic look (`--cine-camera`; `SF_CAMERA`; cine_post.rs):
     /// its passes are made only with it, and its lines in the post and bloom shaders sit behind it.
     pub camera: bool,
@@ -863,7 +873,7 @@ impl ShaderFeatures {
         facade_glass: true, far_facades: true, facade_weather: true, canyon_glass: true, far_relief: false, facade_patina: false, window_depth: false, // the facades track
         street_pbr: false, street: 0, // the street track
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, occluder_light: true, // the light track
-        wet_surfaces: true, screen_reflect: true, // the reflect track
+        wet_surfaces: true, screen_reflect: true, probe_sky: true, wet_relief: true, lamp_streaks: true, // the reflect track
         camera: true, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, // the night track
@@ -875,7 +885,7 @@ impl ShaderFeatures {
         facade_glass: false, far_facades: false, facade_weather: false, canyon_glass: false, far_relief: false, facade_patina: false, window_depth: false, // the facades track
         street_pbr: false, street: 0, // the street track
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, // the light track
-        wet_surfaces: false, screen_reflect: false, // the reflect track
+        wet_surfaces: false, screen_reflect: false, probe_sky: false, wet_relief: false, lamp_streaks: false, // the reflect track
         camera: false, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, // the night track
@@ -911,6 +921,9 @@ impl ShaderFeatures {
             occluder_light: o.occluder_light,
             wet_surfaces: o.sky.wet_surfaces,
             screen_reflect: o.sky.screen_reflect,
+            probe_sky: o.sky.probe_sky,
+            wet_relief: o.sky.wet_relief,
+            lamp_streaks: o.sky.lamp_streaks,
             camera: o.look.is_cinematic() && o.sky.cine_camera,
             car_materials: o.car_materials > 0,
             car_reflections: o.car_materials > 0 && o.car_reflections > 0,
@@ -981,6 +994,9 @@ impl ShaderFeatures {
         if !self.screen_reflect {
             l.sky.screen_reflect = false;
         }
+        l.sky.probe_sky &= self.probe_sky;
+        l.sky.wet_relief &= self.wet_relief;
+        l.sky.lamp_streaks &= self.lamp_streaks;
         l.sky.cine_camera &= self.camera;
         if !self.car_materials {
             l.car_materials = 0;
@@ -1034,6 +1050,9 @@ impl ShaderFeatures {
                 // the reflect track
                 ("SF_WET_SURFACES", self.wet_surfaces),
                 ("SF_SCREEN_REFLECT", self.screen_reflect),
+                ("SF_PROBE_SKY", self.probe_sky),
+                ("SF_WET_RELIEF", self.wet_relief),
+                ("SF_LAMP_STREAKS", self.lamp_streaks),
                 // the camera track
                 ("SF_CAMERA", self.camera),
                 // the vehicles track
@@ -2125,6 +2144,13 @@ impl LookGpu {
         }
         let mut st = self.state.lock().unwrap();
         st.ao_made = st.cur_cam.map(|(vp, eye, fwd, _)| (vp, eye, fwd));
+    }
+
+    /// (`--screen-reflect`, the reflect track) the occlusion pass's half-resolution
+    /// view depth (group 1 binding 4, `lk_ao_z`), once made: the reflection
+    /// pyramid's Hi-Z is built from it (sky_reflect.rs).
+    pub(crate) fn ao_z_view(&self) -> Option<wgpu::TextureView> {
+        self.ao.lock().unwrap().as_ref().map(|t| t.z_view.clone())
     }
 
     /// Bytes of the occlusion targets, once they exist.

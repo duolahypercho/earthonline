@@ -57,6 +57,8 @@ pub const SKY_DAMP_BIT: u32 = 1 << 18;
 pub const SKY_WET_SURFACES_BIT: u32 = 1 << 23;
 /// (`--screen-reflect`) the reflection's runtime bit (sky_light.wgsl `SKY_SCREEN_REFLECT`).
 pub const SKY_SCREEN_REFLECT_BIT: u32 = 1 << 24;
+/// (`--wet-relief`) the relief's water's runtime bit (sky_light.wgsl `SKY_WET_RELIEF`).
+pub const SKY_WET_RELIEF_BIT: u32 = 1 << 22;
 /// (`--night-photometry`) sky_lights.wgsl `LT_NIGHT_PHOTOMETRY_BIT`: the gather
 /// marks each street luminaire's intensity toward the eye on its sprite.
 pub const SKY_NIGHT_PHOTOMETRY_BIT: u32 = 1 << 25; // (1 << 24 is `--screen-reflect`'s, the reflect track)
@@ -190,6 +192,26 @@ pub struct SkyOptions {
     /// traced as well (sky_light.wgsl `sky_sr_*`). Off by default (its code
     /// compiled out: `SF_SCREEN_REFLECT`); off, the frame is as before.
     pub screen_reflect: bool,
+    /// (`--probe-sky`, the reflect track) the probe grid's sky is the one the
+    /// frame draws (the atmosphere tables over the drawn dome, the city's
+    /// glow, greyed by the cloud cover) instead of the analytic dome alone, and
+    /// its levels are GGX-prefiltered instead of box-filtered (probe_sky.wgsl,
+    /// probe_grid.rs `SkyFill`). Off by default (made only with
+    /// `SF_PROBE_SKY` compiled in); off, the probes are as before.
+    pub probe_sky: bool,
+    /// (`--wet-relief`, the reflect track; over `--wet-surfaces`) the water
+    /// stands where the street's relief holds it (the street pass's ruts,
+    /// birdbaths and flow line, not the switch's noise hollows on the road),
+    /// the film as smooth as the surface under it (the streaks' lobes with
+    /// it), and Lekner & Dorf's darkening (sky_light.wgsl `sky_wr_*`). Off by
+    /// default (its code compiled out: `SF_WET_RELIEF`); off, the frame is as before.
+    pub wet_relief: bool,
+    /// (`--lamp-streaks`, the reflect track; under the cinematic look) the
+    /// cars' rear lamps streak on the wet street as lights of their own
+    /// (sky_lamp_streaks.wgsl picks the cars brightest at the eye, sky_light.wgsl
+    /// `sky_cine_streaks` reflects them). Off by default (its code and pass made
+    /// only with `SF_LAMP_STREAKS`); off, the gather writes no rear lamp.
+    pub lamp_streaks: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -265,6 +287,9 @@ impl Default for SkyOptions {
             cloud_depth_haze: false,
             wet_surfaces: false,
             screen_reflect: false,
+            probe_sky: false,
+            wet_relief: false,
+            lamp_streaks: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -308,6 +333,9 @@ impl SkyOptions {
             cloud_depth_haze: false,
             wet_surfaces: false,
             screen_reflect: false,
+            probe_sky: false,
+            wet_relief: false,
+            lamp_streaks: false,
             ..Self::default()
         }
     }
@@ -348,6 +376,7 @@ impl SkyOptions {
             (self.cinematic, 1 << 17), // SKY_CINEMATIC (`--look cinematic`, stage L4: the golden haze and shafts)
             (self.wet_surfaces, SKY_WET_SURFACES_BIT), // SKY_WET_SURFACES (`--wet-surfaces`, sky_light.wgsl)
             (self.screen_reflect, SKY_SCREEN_REFLECT_BIT), // SKY_SCREEN_REFLECT (`--screen-reflect`, sky_light.wgsl)
+            (self.wet_relief, SKY_WET_RELIEF_BIT), // SKY_WET_RELIEF (`--wet-relief`, sky_light.wgsl)
             (self.night_photometry, SKY_NIGHT_PHOTOMETRY_BIT), // (`--night-photometry`) sky_lights.wgsl LT_NIGHT_PHOTOMETRY_BIT
             (self.lamp_bounce, SKY_LAMP_BOUNCE_BIT), // (`--lamp-bounce`) sky_lights.wgsl LT_LAMP_BOUNCE_BIT
             (self.urban_sky, SKY_URBAN_SKY_BIT), // (`--urban-sky`) look_sky.wgsl's stars
@@ -627,6 +656,8 @@ pub struct SkyGpu {
     lights_pipes: [wgpu::ComputePipeline; 5],
     /// (`--look cinematic`, stage L3) the streak lights' pick (sky_streaks.wgsl), made only with SF_CINEMATIC.
     streaks_pipe: Option<wgpu::ComputePipeline>,
+    /// (`--lamp-streaks`) the cars' rear lamps' pick (sky_lamp_streaks.wgsl), made only with SF_LAMP_STREAKS and SF_CINEMATIC.
+    lamp_streaks_pipe: Option<wgpu::ComputePipeline>,
     noise_pipe: wgpu::ComputePipeline,
     noise_bg: wgpu::BindGroup,
     noise_down: wgpu::ComputePipeline,
@@ -723,6 +754,9 @@ pub fn cine_lamps_wgsl(on: bool) -> String {
         // (stage L3) the streak lights' pick (sky.rs `streaks_pipe`)
         src += &format!("const LT_STREAK_CAP: u32 = {STREAK_CAP}u;\n");
         src += include_str!("sky_streaks.wgsl");
+        if crate::look::shader_features().lamp_streaks {
+            src += &crate::sky_reflect::lamp_streaks_gather_wgsl(); // (`--lamp-streaks`, the reflect track)
+        }
     }
     src
 }
@@ -784,7 +818,10 @@ impl SkyGpu {
         let uniform = buffer("sky-uniform", std::mem::size_of::<SkyUniform>() as u64, uni);
         let lamps = buffer("sky-lamps", LAMP_CAP as u64 * 64, st);
         // (COPY_SRC: the light shadows' tests read the frame's lights, light_shadow.rs)
-        let frame_lights = buffer("sky-frame-lights", FRAME_LIGHT_CAP as u64 * 64, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+        // (`--lamp-streaks`, the reflect track) the cars' rear lamps' records past the cap, only with it compiled in.
+        let lamp_streaks = crate::look::shader_features().cinematic && crate::look::shader_features().lamp_streaks;
+        let rear = if lamp_streaks { crate::sky_reflect::lamp_streak_lamps() } else { 0 };
+        let frame_lights = buffer("sky-frame-lights", (FRAME_LIGHT_CAP as u64 + rear) * 64, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
         let sprites = buffer("sky-sprites", SPRITE_CAP as u64 * 64, wgpu::BufferUsages::STORAGE);
         // (COPY_SRC: the light shadows' tests read the frame's light count, light_shadow.rs)
         let counter = buffer("sky-light-counter", 32, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
@@ -792,6 +829,8 @@ impl SkyGpu {
         // (COPY_SRC: the shop lights' tests and cards read the clusters, `lights_readback`)
         // (`--look cinematic`, stage L3) the streak lights' count and indices after the clusters, only with the look compiled in.
         let streak_words = if crate::look::shader_features().cinematic { 1 + STREAK_CAP as u64 } else { 0 };
+        // (`--lamp-streaks`) the cars' rear lamps' indices after them, only with both compiled in.
+        let streak_words = streak_words + rear;
         let clusters = buffer("sky-clusters", (ncl * (1 + CLUSTER_CAP as u64) + streak_words) * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         let lt_params = buffer("sky-light-params", std::mem::size_of::<LtParams>() as u64, uni);
         let dummy_storage = buffer("sky-dummy-storage", 256, wgpu::BufferUsages::STORAGE);
@@ -870,6 +909,8 @@ impl SkyGpu {
             compute("lights_shops", &ll, &lm, "lights_shops"), // (`--shop-light`)
         ];
         let streaks_pipe = crate::look::shader_features().cinematic.then(|| compute("lights_streaks", &ll, &lm, "lights_streaks"));
+        // (`--lamp-streaks`) the cars' rear lamps' pick, after the streaks' (sky_lamp_streaks.wgsl)
+        let lamp_streaks_pipe = (crate::look::shader_features().cinematic && crate::look::shader_features().lamp_streaks).then(|| compute("lights_lamp_streaks", &ll, &lm, "lights_lamp_streaks"));
 
         // Cloud noise (once).
         let (vol_src, noise_src) = include_str!("sky_volume.wgsl").split_once("// ---- noise module").expect("noise marker");
@@ -1164,6 +1205,7 @@ impl SkyGpu {
             lights_bgl,
             lights_pipes,
             streaks_pipe,
+            lamp_streaks_pipe,
             noise_pipe,
             noise_bg,
             noise_down,
@@ -1887,7 +1929,10 @@ impl SkyGpu {
         let tunnel_pool = bore_units / crate::structures::TUNNEL_POOL_OVERLAP;
         let p = LtParams {
             counts: [self.lamp_count.load(Ordering::Relaxed), agents, FRAME_LIGHT_CAP, (s.agents_bg.is_some()) as u32],
-            scale: [(lamp_k * lamps_on) as f32, (lamp_k * eo_sky::photometry::LOW_BEAM_PEAK_CD * veh) as f32, 0.0, 45.0],
+            // (z: `--lamp-streaks`, the cars' rear lamps' units per candela, with the street
+            // lamps' clock: by day a rear lamp's few hundred cd/m2 are lost in the daylit
+            // film, which the lamps' constant night scale would not show; 0 off)
+            scale: [(lamp_k * lamps_on) as f32, (lamp_k * eo_sky::photometry::LOW_BEAM_PEAK_CD * veh) as f32, if o.lamp_streaks { (lamp_k * veh * lamps_on) as f32 } else { 0.0 }, 45.0],
             props: [(props_k * lamps_on) as f32, if tiles_any { 1.0 } else { 0.0 }, (eo_sky::photometry::LAMP_POOL_PEAK_LUX * lamp_k * lamps_on) as f32, tunnel_pool as f32],
             // (`--look cinematic`, stage L2) w the lamp palette's cell (0: none or the look off),
             // the waterside's z, w its columns and rows (both unread by the gather without the look).
@@ -2021,6 +2066,11 @@ impl SkyGpu {
         pass.dispatch_workgroups(ncl, 1, 1);
         // (`--look cinematic`, stage L3) the streak lights, after the clusters
         if let (Some(p), true) = (&self.streaks_pipe, s.opts.cinematic) {
+            pass.set_pipeline(p);
+            pass.dispatch_workgroups(1, 1, 1);
+        }
+        // (`--lamp-streaks`) the cars' rear lamps after them (none written while the switch is off)
+        if let (Some(p), true) = (&self.lamp_streaks_pipe, s.opts.cinematic) {
             pass.set_pipeline(p);
             pass.dispatch_workgroups(1, 1, 1);
         }
@@ -2387,7 +2437,7 @@ impl SkyGpu {
         }
         // (`--screen-reflect`) the history's mip chain, read next frame (sky_reflect.rs)
         if let (Some(r), Some(p), true) = (&self.reflect, &t.pyr, o.screen_reflect) {
-            r.encode(enc, p, parity);
+            r.encode(&self.device, &self.uniform, enc, p, parity, look.ao_z_view().as_ref()); // + the trace's Hi-Z from this frame's occlusion depth
         }
         // Bloom.
         {

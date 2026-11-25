@@ -167,7 +167,8 @@ fn sky_cine_film(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, t: vec3<f32>, at: f32
 fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     let g = skyu.lights.yzw;
     let base = g.x * g.y * g.z * (1u + SKY_CLUSTER_CAP);
-    let count = min(sky_clusters[base], SKY_STREAK_CAP);
+    // (`--lamp-streaks`) the cars' rear lamps appended to the list (`sky_ls_lamps`; none without)
+    let count = min(sky_clusters[base], SKY_STREAK_CAP + sky_ls_lamps());
     // the tangent along the ground toward the eye (the streak's length)
     var t = v - n * dot(v, n);
     if (dot(t, t) < 1e-8) {
@@ -176,8 +177,10 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     t = normalize(t);
     // (`--wet-surfaces`) a puddle's own lobe, and in rain its rings' (`sky_w2_lobe`; 0 without)
     let a_pud = select(SKY_CINE_PUDDLE_ALPHA, max(SKY_CINE_PUDDLE_ALPHA, sky_w2_pud_alpha), SKY_W2_FULL);
-    let a_along = mix(SKY_CINE_STREAK_ALONG, a_pud, sky_streak_pud);
-    let a_across = mix(SKY_CINE_STREAK_ACROSS, a_pud, sky_streak_pud);
+    // (`--wet-relief`) the film's lobes as smooth as the surface under it (`sky_wr_film_k`; 1 without)
+    let a_k = select(1.0, sky_wr_alpha_k, SKY_WR_FULL);
+    let a_along = mix(SKY_CINE_STREAK_ALONG * a_k, a_pud, sky_streak_pud);
+    let a_across = mix(SKY_CINE_STREAK_ACROSS * a_k, a_pud, sky_streak_pud);
     let ring_w = select(0.0, sky_w2_ring * sky_streak_pud, SKY_W2_FULL);
     let r_along = mix(SKY_CINE_STREAK_ALONG, SKY_W2_RING_LOBE.y, sky_streak_pud);
     let r_across = mix(SKY_CINE_STREAK_ACROSS, SKY_W2_RING_LOBE.y, sky_streak_pud);
@@ -897,8 +900,15 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
     }
     let fp = sky_w2_footprint(world, n_geom);
     var ph = vec2<f32>(0.0);
+    // (`--wet-relief`) where the street pass measured its relief's water: the ponds it holds
+    let relief = sky_wr_on();
+    let held = relief && SF_STREET_PBR && sp_pond_water > -1.0;
     if (n_geom.y > 0.95) {
-        ph = sky_w2_puddle(world.xz, k, skyu.wet.y * select(SKY_W2_WALK_FILL, 1.0, asphalt), fp);
+        if (held) {
+            ph = sky_wr_pond(world.xz, fp);
+        } else {
+            ph = sky_w2_puddle(world.xz, k, skyu.wet.y * select(SKY_W2_WALK_FILL, 1.0, asphalt), fp);
+        }
     }
     let pud = ph.x;
     // the halo is saturated ground: as wet as the film can be
@@ -908,10 +918,26 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
         sky_streak_pud = pud;
     }
     sky_w2_water = max(soak, pud);
-    (*s).albedo = (*s).albedo * mix(1.0, darken, soak) * mix(1.0, SKY_W2_UNDER_WATER, pud) * mix(1.0, SKY_W2_HALO_DARKEN, ph.y);
+    if (held) {
+        // (`--wet-relief`) Lekner & Dorf: the film and the ground under a pond alike
+        (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), sky_wr_darken((*s).albedo), max(soak, pud));
+    } else {
+        (*s).albedo = (*s).albedo * mix(1.0, darken, soak) * mix(1.0, SKY_W2_UNDER_WATER, pud) * mix(1.0, SKY_W2_HALO_DARKEN, ph.y);
+    }
     let v = normalize(skyu.eye.xyz - world);
     let graze = smoothstep(0.26, 0.05, abs(dot(n_geom, v))) * select(0.0, 1.0, n_geom.y > 0.95);
-    let film = mix(wet_rough, 0.06, graze * 0.92);
+    var film = mix(wet_rough, 0.06, graze * 0.92);
+    if (relief && !held) {
+        sky_wr_iso = 1.0; // (`--wet-relief`) a walk's film is isotropic for the trace
+    }
+    if (held) {
+        // (`--wet-relief`) the film as smooth as the surface under it, at every
+        // angle: GGX and Fresnel make it a sheet seen low (its roughness does
+        // not fall with the view; the grazing drop toward 0.06 made the whole
+        // road as sharp a mirror as a pond, and the ponds could not be told
+        // from it)
+        film = wet_rough * sky_wr_film_k((*s).rough, asphalt);
+    }
     (*s).rough = mix(mix((*s).rough, film, soak), min(film, SKY_W2_WATER_ROUGH * 2.0), ph.y * 0.5);
     var n = normalize(mix((*s).n, n_geom, clamp(soak * select(0.70, 0.75, asphalt), 0.0, 1.0)));
     if (pud > 0.01) {
@@ -967,6 +993,131 @@ fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
     sky_w2_water = ww * 0.5;
 }
 
+// ---- (`--wet-relief`, the reflect track; sky.rs `SkyOptions::wet_relief`,
+// `SKY_WET_RELIEF_BIT`; compiled out without SF_WET_RELIEF, and with it only
+// over `--wet-surfaces` in the street's pipelines) ----
+// The water stands where the street's own relief holds it, and the film is
+// as smooth as the surface under it lets it be:
+// Only where the street pass measured its relief (with `--street-pbr`: the
+// carriageway and the gutter pan); walks and plazas keep `--wet-surfaces`'
+// film and puddles (their noise hollows are the only ponds there, and a
+// rougher film seen low made them dark holes in a bright sheet):
+// * the carriageway and the gutter pan: the wheel
+//   paths' ruts (laid out from the standards' lane, parking lane and design
+//   vehicle), the settled birdbaths and the pan's flow line hold water deeper
+//   than what has drained since the rain (street_pbr.wgsl `sp_wet_relief`,
+//   its water depth `sp_pond_water`), over the pavement's profile inside
+//   those basins (a chain of pools along a rut, lobed shores, not a strip with
+//   a straight edge); the switch's value-noise hollows stay
+//   off the road (on a crowned carriageway they drew blobs either side of the
+//   centre line and, in a narrow street, a canal from kerb to kerb). The shore
+//   is anti-aliased by the pixel's footprint over the relief's slope; a ring
+//   of saturated ground half a millimetre of depth wide lies round each pond
+//   where the water has just drawn back;
+// * the film's roughness and the streaks' lobes follow the surface's own
+//   (its scan, the polished wheel paths, the oil band, the sealant, the
+//   patches): the film fills the texture's valleys and what stays rough is
+//   the texture's tops, so a polished path is glossier wet than the open
+//   binder beside it. The look's calibrated film (`SKY_CINE_WET_ROUGH`) is the
+//   open texture's; each pixel takes it times its own roughness over the
+//   street's mean (never more than the look's film),
+//   the streak lobes' alphas times that squared, at every angle of view (no
+//   drop toward a mirror seen low: GGX and Fresnel make the sheet; the drop
+//   made the film as sharp as the ponds, which then could not be told from
+//   it). Lamps and headlamps break into bands along the wheel paths and
+//   glints on the sealant instead of one uniform bar per light, and a pond is
+//   a sharp mirror in a rougher film;
+// * the darkening is Lekner & Dorf's (1988): a rough surface under water
+//   keeps (1 - r_e)(1 - r_i) / (1 - r_i A) of its albedo A (r_e water's
+//   normal-incidence reflectance 0.0204, r_i the film's mean internal
+//   reflectance 1 - (1 - 0.066) / 1.333^2 = 0.474): 0.53-0.55 for asphalt
+//   (the street pass has already taken the dry aggregate's lighter tone,
+//   `SP_WET_DARKEN`), 0.6 for concrete; the ground under a pond the same
+//   (saturated), not a further fixed share. Wet asphalt kept a third of its
+//   albedo before (x 0.45 over the street pass's x 0.7): a black sheet in
+//   which the ponds read as stains.
+const SKY_WET_RELIEF: u32 = 4194304u;
+const SKY_WR_FULL: bool = SF_WET_RELIEF && SKY_W2_FULL;
+/// Lekner & Dorf: (1 - r_e)(1 - r_i), r_i.
+const SKY_WR_LEKNER: vec2<f32> = vec2<f32>(0.5149, 0.4744);
+/// The saturated ring round a pond: its width in water depth (m; over a
+/// rut's or a birdbath's sides, a few centimetres on the ground).
+const SKY_WR_HALO_M: f32 = 0.0005;
+/// The shore's width in depth (m) and per metre of the pixel's footprint
+/// (the relief's slope, street_pbr.wgsl `sp_wet_relief`).
+const SKY_WR_SHORE: vec2<f32> = vec2<f32>(3e-4, 0.015);
+/// The film's roughness over the look's, as the surface's own over its mean:
+/// held within x..y (never rougher than the look's film, the open texture's
+/// own, so a rough patch's film stays inside the reflection's roughness
+/// range, 0.3-0.5). The film of a few tenths of a millimetre levels the
+/// texture under it, and what roughens it is as much its own (drops landing,
+/// the drying film's edges) as the surface's: a smooth patch, plate or
+/// sealant band makes it at most a third smoother (a floor of 0.45 made a
+/// smooth plate a hard-edged mirror in a soft sheen, and lines of sealant
+/// laser-thin streaks).
+const SKY_WR_FILM_K: vec2<f32> = vec2<f32>(0.7, 1.0);
+/// The pavement's profile under the water (m of height, m of wavelength; two
+/// octaves, domain-warped): a rut's floor, a birdbath's and the gutter's flow
+/// line are not level along the road. The paver's screed and the base's
+/// settling leave a few millimetres of undulation over a metre or two (an
+/// urban street's roughness, IRI ~3-5 m/km), the mix's segregation about a
+/// millimetre over half a metre. Against a rut's side slope of ~2 % that moves
+/// a shore by up to 15 cm and leaves stretches of rut dry: the water stands in
+/// a chain of pools with lobed shores, not in a strip with a straight edge.
+const SKY_WR_PROFILE: vec4<f32> = vec4<f32>(0.003, 1.7, 0.0012, 0.45);
+/// The profile pools the water only inside a basin of the relief (a rut, a
+/// birdbath, the flow line: relief deeper than x, fully from y m): on the
+/// open carriageway the crown's cross fall drains an undulation instead.
+const SKY_WR_BASIN: vec2<f32> = vec2<f32>(0.0005, 0.002);
+
+/// (`--wet-relief`) the streak lobes' alphas over the look's at the fragment
+/// (the film's roughness ratio squared; 1 elsewhere).
+var<private> sky_wr_alpha_k: f32 = 1.0;
+/// (`--wet-relief`) the share of the fragment's film the trace filters as an
+/// isotropic surface (walks and plazas: 1; 0 elsewhere). A broom-finished
+/// walk's film is as rough across the view as along it, so what it reflects
+/// blurs sideways by alpha n.v as it stretches toward the eye by alpha: the
+/// look's anisotropic streak lobe (a seventh as wide across) drew a pillar, a
+/// post or a person on a wet walk as a hard-edged slab.
+var<private> sky_wr_iso: f32 = 0.0;
+
+fn sky_wr_on() -> bool {
+    return SKY_WR_FULL && sky_on(skyu.flags.x, SKY_WET_RELIEF) && sky_w2_on();
+}
+
+/// The pavement's profile at a horizontal point (m, mean 0; `SKY_WR_PROFILE`).
+fn sky_wr_profile(p: vec2<f32>) -> f32 {
+    let warp = vec2<f32>(st_noise(p * 0.31 + 5.7), st_noise(p * 0.31 + 13.9)) - 0.5;
+    let q = p + warp * 1.6;
+    return (st_noise(q / SKY_WR_PROFILE.y + 2.9) - 0.5) * 2.0 * SKY_WR_PROFILE.x + (st_noise(q / SKY_WR_PROFILE.w + 8.3) - 0.5) * 2.0 * SKY_WR_PROFILE.z;
+}
+
+/// The pond (x) and its saturated ring (y) at `p` where the street pass
+/// measured the relief's water (`sp_pond_water`, m over the drained level),
+/// over the pavement's profile there; the shore over the footprint `fp` (m).
+fn sky_wr_pond(p: vec2<f32>, fp: f32) -> vec2<f32> {
+    // the relief's depth there (the street pass's water over what has drained)
+    let dip = sp_pond_water + SP_POND_DRAIN_M * (1.0 - clamp(skyu.wet.y, 0.0, 1.0));
+    let water = sp_pond_water + sky_wr_profile(p) * smoothstep(SKY_WR_BASIN.x, SKY_WR_BASIN.y, dip);
+    let pud = smoothstep(0.0, SKY_WR_SHORE.x + fp * SKY_WR_SHORE.y, water);
+    let ring = smoothstep(-SKY_WR_HALO_M, 0.0, water) * (1.0 - pud);
+    return vec2<f32>(pud, ring);
+}
+
+/// Lekner & Dorf's wet albedo over the dry one, for albedo `a`.
+fn sky_wr_darken(a: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(SKY_WR_LEKNER.x) / (vec3<f32>(1.0) - SKY_WR_LEKNER.y * clamp(a, vec3<f32>(0.0), vec3<f32>(1.0)));
+}
+
+/// The film's roughness over the look's at a surface of roughness `rough`
+/// (asphalt or concrete), and the streak lobes' factor (`sky_wr_alpha_k`).
+fn sky_wr_film_k(rough: f32, asphalt: bool) -> f32 {
+    let mean = select(ST_CONCRETE_ROUGHNESS, select(ST_ASPHALT_ROUGHNESS, SP_ASPHALT_ROUGH, SF_STREET_PBR), asphalt);
+    let k = clamp(rough / max(mean, 0.05), SKY_WR_FILM_K.x, SKY_WR_FILM_K.y);
+    sky_wr_alpha_k = k * k;
+    return k;
+}
+
 // ---- (`--screen-reflect`, the reflect track; sky.rs `SkyOptions::screen_reflect`,
 // `SKY_SCREEN_REFLECT_BIT`; compiled out without SF_SCREEN_REFLECT, and into the
 // street's pipelines only) ----
@@ -977,16 +1128,24 @@ fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
 //   was made with), stepped on the screen (McGuire & Mara 2014): the ray's 1/w
 //   and its depth over w are linear on the screen, so its depth at each step
 //   is exact and every stretch of its path is looked at, near and far alike.
-//   At most `SKY_SR_STEPS` steps and never more than one a texel, denser
-//   toward the start (contact), the first a texel and a half out, jittered per
-//   pixel and frame (interleaved gradient noise, golden-ratio steps). A step
-//   hits where the depth there lies within the ray's depth over the step
-//   (passed by a small bias) and no more than the sample's assumed thickness in
-//   front of it; bisections on the screen place the hit against the depth
-//   read bilinearly where its four texels are one surface (a reflected facade
-//   moves smoothly with the pixel instead of in half-resolution blocks). A ray
-//   that stays on the frame to its full reach and meets nothing has escaped:
-//   it sees the sky;
+//   It walks the depth's hierarchy (Hi-Z: the reflection pyramid's alpha,
+//   sky_reflect.rs, the nearest depth of each cell of 2^l half-resolution
+//   texels): a cell the ray crosses wholly in front of its nearest depth is
+//   passed in one step and the walk climbs a level; a cell it may pass behind
+//   is looked into a level finer; a texel is tested. So every texel of the
+//   path is looked at (the linear march's 40 steps, packed toward the start,
+//   skipped up to 25 texels at a time at its far end: thin poles and kerbs
+//   were stepped over) in at most `SKY_SR_STEPS` steps. The first texel is a
+//   texel and a half out, jittered per pixel and frame (interleaved gradient
+//   noise, golden-ratio steps). A texel hits where its depth lies within the
+//   ray's depth across it (passed by a small bias) and no more than the
+//   sample's assumed thickness in front of it, but a ray that comes in behind
+//   a face at its silhouette only as deep behind it as the thing is wide (a
+//   person, a pole is passed, not drawn out into a slab); bisections on the screen place
+//   the hit against the depth read bilinearly where its four texels are one
+//   surface (a reflected facade moves smoothly with the pixel instead of in
+//   half-resolution blocks). A ray that stays on the frame to its full reach
+//   and meets nothing has escaped: it sees the sky;
 // * the filter (`sky_sr_cone`): the surface's lobe at the hit seen through
 //   the mirror, read from the previous frame's mip chain (sky_reflect.rs). A
 //   GGX lobe of alpha a turns the reflected ray by about 1.1 a (a Gaussian's
@@ -1032,11 +1191,17 @@ const SKY_SR_FULL: bool = SF_SCREEN_REFLECT && LK_SHADOW_CASCADES && LK_SHADOW_F
 /// over 1.177); a mip level m's blur, about `y` 2^m pixels (13-tap means read
 /// bilinearly); the most taps along a streak.
 const SKY_SR_CONE: vec3<f32> = vec3<f32>(1.1, 0.8, 12.0);
-/// The trace: its most steps, the power that packs them toward the start,
-/// the bisections that place a hit.
-const SKY_SR_STEPS: i32 = 40;
-const SKY_SR_SPACING: f32 = 1.6;
+/// The trace: its most steps, its coarsest Hi-Z level (cells of 2^x
+/// half-resolution texels: the pyramid's level x + 1), the bisections that
+/// place a hit.
+const SKY_SR_STEPS: i32 = 48;
+const SKY_SR_HIZ_TOP: i32 = 6;
 const SKY_SR_REFINE: i32 = 5;
+/// The cone's coarsest level (1/32 of the frame: the widest lobe it filters;
+/// the pyramid goes on for the Hi-Z).
+const SKY_SR_CONE_TOP: f32 = 5.0;
+/// The Hi-Z's sky (sky_reflect.wgsl `RP_FAR_M`): no surface in the cell.
+const SKY_SR_HIZ_FAR: f32 = 60000.0;
 /// The ray's reach (m) and the nearest view depth it is followed to (m).
 const SKY_SR_REACH_M: f32 = 800.0;
 const SKY_SR_NEAR_M: f32 = 0.25;
@@ -1045,6 +1210,15 @@ const SKY_SR_NEAR_M: f32 = 0.25;
 /// half-resolution texel's own depth slope on ground seen low).
 const SKY_SR_THICK: vec2<f32> = vec2<f32>(0.4, 0.04);
 const SKY_SR_BIAS: vec2<f32> = vec2<f32>(0.03, 0.004);
+/// The first thing a ray passes behind holds it (the ray is inside it) where
+/// the ray is no deeper behind its face than x times its width (a canopy, a
+/// facade, a car: about as deep as they are wide); its width measured where
+/// the depth stays within y of its own at taps this many half-resolution
+/// texels out (`sky_sr_width`). Without it a ray from a puddle up into a
+/// street tree's crown passed behind the leaves the camera sees and read the
+/// sky beyond: a hole the colour of the sky in the tree's reflection.
+const SKY_SR_WIDE: vec2<f32> = vec2<f32>(1.0, 0.35);
+const SKY_SR_WIDE_TAPS: vec3<f32> = vec3<f32>(4.0, 12.0, 32.0);
 /// Four depth texels are one surface for the bilinear read within this share
 /// of their nearest.
 const SKY_SR_LIN_TOL: f32 = 0.08;
@@ -1073,9 +1247,26 @@ const SKY_SR_OFF_FRAME: vec4<f32> = vec4<f32>(0.9553365, 0.6216100, 0.5, 2.0);
 const SKY_SR_FRAME_ENV: f32 = 0.6;
 /// (look_light) the surface being shaded is glass (set before `sky_ssr`).
 var<private> sky_sr_glass: bool;
+/// The share of the reflection's weight the trace's hit carries (set by
+/// `sky_sr_ssr`; the rest is the frame's sky along the ray).
+var<private> sky_sr_hit: f32;
 
 fn sky_sr_on() -> bool {
     return SKY_SR_FULL && sky_on(skyu.flags.x, SKY_SCREEN_REFLECT);
+}
+
+/// (look_light) The indirect specular: the environment `env` and the
+/// reflection `ssr` (rgb, weight) through the split sum `fss`, under the
+/// specular occlusion `so` (the occlusion pass's visibility as a cone, Lagarde
+/// & de Rousiers 2014) only where the trace did not find what the ray meets:
+/// a hit's radiance is what the occluder sends, and occluding it again took
+/// most of a car's, a kerb's or a wall's reflection at its foot (where the
+/// occlusion is deepest). Off, as before.
+fn sky_sr_spec(env: vec3<f32>, ssr: vec4<f32>, fss: vec3<f32>, so: f32) -> vec3<f32> {
+    if (!sky_sr_on()) {
+        return mix(env, ssr.rgb, ssr.a) * fss * so;
+    }
+    return mix(env * so, ssr.rgb * mix(so, 1.0, sky_sr_hit), ssr.a) * fss;
 }
 
 /// (look_light) The glass clearcoat's environment `rad` (x `env_i` there) with
@@ -1094,7 +1285,7 @@ fn sky_sr_glass_mix(rad: vec3<f32>, ssr: vec4<f32>, env_i: f32) -> vec3<f32> {
 /// each other; `j` slides them within a spacing), Gaussian-weighted; capped
 /// at 24 x the exposure.
 fn sky_sr_cone(uv: vec2<f32>, sig: vec2<f32>, j: f32) -> vec3<f32> {
-    let top = f32(textureNumLevels(sky_prev) - 1u);
+    let top = min(f32(textureNumLevels(sky_prev) - 1u), SKY_SR_CONE_TOP);
     let sa = max(sig.x, 0.5);
     let sl = max(sig.y, 0.5);
     let n = i32(clamp(ceil(2.0 * sl / sa), 1.0, SKY_SR_CONE.z));
@@ -1145,6 +1336,17 @@ fn sky_sr_depth_lin(s: vec2<f32>, top: vec2<i32>) -> f32 {
     return mix(mix(z00, z10, f.x), mix(z01, z11, f.x), f.y);
 }
 
+/// The nearest view depth (m) in Hi-Z cell `c` of level `l` (0: the
+/// half-resolution depth's own texel, `top` its last; sky and nothing: far).
+fn sky_sr_hiz(c: vec2<i32>, l: i32, top: vec2<i32>) -> f32 {
+    if (l == 0) {
+        let z = textureLoad(lk_ao_z, clamp(c, vec2<i32>(0), top), 0).r;
+        return select(SKY_SR_HIZ_FAR, z, z > 0.0);
+    }
+    let d = vec2<i32>(textureDimensions(sky_prev, l + 1)) - 1;
+    return textureLoad(sky_prev, clamp(c, vec2<i32>(0), d), l + 1).a;
+}
+
 /// Open sky at the frame's `q` (uv): the share of five depth texels round it
 /// (`rho` uv apart) that are sky or scenery past `SKY_SR_FAR_M`.
 fn sky_sr_open(q: vec2<f32>, rho: f32) -> f32 {
@@ -1158,6 +1360,28 @@ fn sky_sr_open(q: vec2<f32>, rho: f32) -> f32 {
         open = open + select(smoothstep(SKY_SR_FAR_M.x, SKY_SR_FAR_M.y, z), 1.0, z <= 0.0);
     }
     return open * 0.2;
+}
+
+/// The width (half-resolution texels) of what stands at texel `s` (view depth
+/// `z`) along the ray's screen direction `dir` and across it: how far the
+/// depth stays within `SKY_SR_WIDE.y` of `z` at taps `SKY_SR_WIDE_TAPS` out
+/// (ahead; either side, summed), the smaller of the two.
+fn sky_sr_width(s: vec2<f32>, dir: vec2<f32>, z: f32, top: vec2<i32>) -> f32 {
+    let perp = vec2<f32>(-dir.y, dir.x);
+    var along = 0.0;
+    var left = 0.0;
+    var right = 0.0;
+    for (var m = 0; m < 3; m = m + 1) {
+        let o = select(select(SKY_SR_WIDE_TAPS.z, SKY_SR_WIDE_TAPS.y, m == 1), SKY_SR_WIDE_TAPS.x, m == 0);
+        let za = sky_sr_depth(s + dir * o, top);
+        let zl = sky_sr_depth(s + perp * o, top);
+        let zr = sky_sr_depth(s - perp * o, top);
+        let tol = SKY_SR_WIDE.y * z;
+        along = select(along, o, za > 0.0 && abs(za - z) < tol);
+        left = select(left, o, zl > 0.0 && abs(zl - z) < tol);
+        right = select(right, o, zr > 0.0 && abs(zr - z) < tol);
+    }
+    return min(along, left + right);
 }
 
 /// The trace (see above) from `p0` along `r`, jittered by `j`: the hit's uv,
@@ -1209,29 +1433,82 @@ fn sky_sr_trace(p0: vec3<f32>, r: vec3<f32>, j: f32) -> vec4<f32> {
     if (span < 2.0) {
         return vec4<f32>(0.0, 0.0, select(0.0, -1.0, whole), 0.0);
     }
-    let n = min(f32(SKY_SR_STEPS), ceil(span));
+    // the Hi-Z walk (see above): the levels the pyramid holds over this
+    // depth (none where its level 1 is not the depth's size: a texel at a time)
+    let hiz_ok = textureNumLevels(sky_prev) > 2u && all(textureDimensions(sky_prev, 1) == textureDimensions(lk_ao_z));
+    let l_top = select(0, min(SKY_SR_HIZ_TOP, i32(textureNumLevels(sky_prev)) - 2), hiz_ok);
+    let f_end = max(fe, 0.0);
+    let inv = vec2<f32>(select(1e30, 1.0 / ds.x, abs(ds.x) > 1e-6), select(1e30, 1.0 / ds.y, abs(ds.y) > 1e-6));
+    let toward = select(vec2<f32>(0.0), vec2<f32>(1.0), ds > vec2<f32>(0.0));
+    let nudge = 1e-3 / len;
+    var f = (1.5 + j) / len;
+    var lvl = 0;
     var f_prev = 0.0;
-    var z_prev = d0;
     var f_hit = -1.0;
     var behind = false;
+    // the width (m) of the last thing measured and its depth (0: none yet)
+    var w_m = 0.0;
+    var w_z = 0.0;
     for (var i = 0; i < SKY_SR_STEPS; i = i + 1) {
-        if (f32(i) >= n) {
+        if (f >= f_end) {
             break;
         }
-        let f = (1.5 + (span - 1.5) * pow((f32(i) + j) / n, SKY_SR_SPACING)) / len;
-        let k = mix(k0, k1, f);
-        let zr = mix(q0, q1, f) / k;
-        let z = sky_sr_depth(s0 + ds * f, top);
+        let cs = exp2(f32(lvl));
+        let cell = floor((s0 + ds * f) / cs);
+        // where the ray leaves the cell
+        let tb = ((cell + toward) * cs - s0) * inv;
+        let f_out = min(max(min(tb.x, tb.y), f), f_end);
+        let za = mix(q0, q1, f) / mix(k0, k1, f);
+        let zb = mix(q0, q1, f_out) / mix(k0, k1, f_out);
+        let z = sky_sr_hiz(vec2<i32>(cell), lvl, top);
+        if (max(za, zb) <= z + SKY_SR_BIAS.x + SKY_SR_BIAS.y * z) {
+            // wholly in front of the cell's nearest: past it, a level up
+            f = f_out + nudge;
+            lvl = min(lvl + 1, l_top);
+            continue;
+        }
+        if (lvl > 0) {
+            lvl = lvl - 1;
+            continue;
+        }
+        // a texel: a hit where the ray crosses its depth within its thickness
         let thick = SKY_SR_THICK.x + SKY_SR_THICK.y * z;
-        if (z > 0.0 && max(zr, z_prev) > z + SKY_SR_BIAS.x + SKY_SR_BIAS.y * z && min(zr, z_prev) < z + thick) {
-            f_hit = f;
+        let solid = z < SKY_SR_HIZ_FAR;
+        // how far behind the texel's face the ray's nearer end lies, and what
+        // a crossing in the texel allows (the ray's own depth across it and the bias)
+        let gap = min(za, zb) - z;
+        let cross = abs(zb - za) + SKY_SR_BIAS.x + SKY_SR_BIAS.y * z;
+        let inside = solid && gap < thick;
+        let past = solid && gap >= thick;
+        // a ray that comes in behind a face (at its silhouette, not across
+        // it) or passes wholly behind it is inside the thing only as deep as
+        // it is wide (a canopy, a facade, a car body: about as deep as wide);
+        // a pole, a sign or a person, narrow across the ray's path, it passes
+        // (a fixed thickness held it a metre behind a person: his reflection
+        // drawn out into a slab on a wet walk). The width: how far the depth
+        // stays near this texel's along the ray's path and either side of it,
+        // measured again only for another thing (one call site).
+        if ((inside && gap > cross) || (past && !behind)) {
+            if (w_z <= 0.0 || abs(z - w_z) > SKY_SR_WIDE.y * w_z) {
+                w_m = sky_sr_width(s0 + ds * f, ds / len, z, top) * z * 2.0 * skyu.cluster.z / dims.y;
+                w_z = z;
+            }
+        }
+        if (inside && (gap <= cross || gap < SKY_SR_WIDE.x * w_m)) {
+            f_prev = f;
+            f_hit = f_out;
             break;
         }
-        behind = behind || (z > 0.0 && zr > z + thick);
-        f_prev = f;
-        z_prev = zr;
+        if (past && !behind && gap < SKY_SR_WIDE.x * w_m) {
+            // the first thing the ray passes behind holds it
+            let kf = mix(k0, k1, f);
+            return vec4<f32>((s0 + ds * f) / dims, reach * k1 * f / kf, 1.0);
+        }
+        behind = behind || past;
+        f = f_out + nudge;
+        lvl = min(1, l_top);
     }
-    let escaped = select(0.0, -1.0, whole && !behind);
+    let escaped = select(0.0, -1.0, whole && !behind && f >= f_end);
     if (f_hit < 0.0) {
         return vec4<f32>(0.0, 0.0, escaped, 0.0);
     }
@@ -1279,6 +1556,7 @@ fn sky_sr_dir(q: vec2<f32>) -> vec3<f32> {
 
 /// The reflection with the switch on (see above): rgb radiance, a weight.
 fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<f32> {
+    sky_sr_hit = 0.0;
     if (!sky_on(skyu.flags.x, SKY_SSR) || skyu.flags.z == 0u || look.ao_params.x < 0.5 || rough > SKY_CINE_SSR_ROUGH.y || frame.copy_step.z > 0.5) {
         return vec4<f32>(0.0);
     }
@@ -1299,8 +1577,12 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     // across (x n.v on the ground) and along the plane of incidence
     let ground = n.y >= SKY_SR_EXTEND_NY;
     let a_pud = max(SKY_CINE_PUDDLE_ALPHA, sky_w2_pud_alpha);
-    let a_along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG, a_pud, sky_streak_pud), sky_streak_w);
-    let a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS, a_pud, sky_streak_pud), sky_streak_w);
+    let a_k = select(1.0, sky_wr_alpha_k, SKY_WR_FULL); // (`--wet-relief`) the film's lobes by the surface under it
+    let a_along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG * a_k, a_pud, sky_streak_pud), sky_streak_w);
+    var a_across = mix(rough * rough, mix(SKY_CINE_STREAK_ACROSS * a_k, a_pud, sky_streak_pud), sky_streak_w);
+    if (SKY_WR_FULL) {
+        a_across = mix(a_across, a_along, sky_wr_iso * (1.0 - sky_streak_pud)); // (`--wet-relief`) a walk's film is isotropic
+    }
     let cw = select(1.0, max(dot(n, v), 0.02), ground);
     // pixels a radian at the frame's centre
     let ppr = skyu.res.y / (2.0 * max(skyu.cluster.z, 0.1));
@@ -1384,6 +1666,7 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     if (w <= 0.0) {
         return vec4<f32>(0.0);
     }
+    sky_sr_hit = hit_w / w;
     // the lookups through the lobes (one call site: the lit pipelines stand
     // at Apple's compiler's limit): the hit through the surface's lobe and
     // the rings', the sky through the surface's
@@ -1415,4 +1698,25 @@ fn sky_sr_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<
     }
     let c = (hit_c * hit_w + sky_c * sky_w * (1.0 - hit_w)) / w;
     return vec4<f32>(c, w * fade);
+}
+
+// ---- (`--lamp-streaks`, the reflect track; sky.rs `SkyOptions::lamp_streaks`;
+// compiled out without SF_LAMP_STREAKS, and into the street's pipelines only;
+// the gather's side is sky_lamp_streaks.wgsl) ----
+// The cars' rear lamps streak on the wet street as the street lamps and
+// headlamps do (`sky_cine_streaks`): the gather writes the rear lamps of the
+// cars brightest at the eye as light records past the frame list's cap (a
+// lens of the lamp's size, its intensity in the frame's light units, its
+// lens's red at unit luminance, a cone round the car's rear axis) and appends
+// their indices to the streak list, so the streak loop reflects them through
+// the same film lobes with no other change to it (a loop that read them from
+// a second place cost the city's opaque pass about a millisecond, compiled in
+// and never run). With the switch off the gather appends none.
+const SKY_LS_FULL: bool = SF_LAMP_STREAKS && SKY_CINE_FULL;
+/// The rear lamps appended at most (two a car, sky_reflect.rs `LS_CARS`).
+const SKY_LS_LAMPS: u32 = 12u;
+
+/// (`--lamp-streaks`) The streak list's room past its own cap (0 off).
+fn sky_ls_lamps() -> u32 {
+    return select(0u, SKY_LS_LAMPS, SKY_LS_FULL);
 }
