@@ -2625,6 +2625,8 @@ impl Renderer {
             // takes that cube's bind group (made in advance), nothing is rebuilt.
             if fb.is_some_and(|m| m.probe_count.is_some()) {
                 self.probe.encode_count(enc); // the capture's per-face counts (bounds.rs)
+            } else {
+                self.probe.encode_face_count(enc); // (the count emulation, probe::ProbeFaceCounts) the same, when asked
             }
             // (the bounded draws: the face's planned bound, unless the list stays in the count emulation)
             let probe_bound = fb.filter(|_| !self.probe.in_count_emulation()).map(|m| m.probe.map(|p| p.2).unwrap_or(0));

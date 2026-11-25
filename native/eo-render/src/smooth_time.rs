@@ -36,7 +36,8 @@ pub const KEYS_PER_DAY: i64 = 1440;
 pub const REFIT_DEG: f64 = 0.25;
 /// At most this many frames in a row may move the scene probe's face off
 /// (`ProbeGpu::defer_this_frame_within`) while the clock moves, so a capture
-/// finishes within 6 x (this + 1) frames whatever the cascades do.
+/// finishes within 6 x (this + 1) frames whatever the cascades do (plus, in
+/// the count emulation, `probe::FACE_COUNT_WAIT_FRAMES` for its count pass).
 pub const PROBE_DEFER_MAX: u32 = 2;
 
 /// What a keyframe was built for besides its hour.

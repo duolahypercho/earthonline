@@ -467,7 +467,7 @@ const REALTIME_FRAME_CAP: usize = 16;
 const TS_FRAMES: usize = (4096 / QUERIES_PER_FRAME) as usize;
 
 /// Timestamp query sets per path, used in turn: each is resolved as soon as
-/// its `TS_FRAMES` frames are encoded, then reused. Metal keeps at most 32 sets
+/// its `TS_FRAMES` frames have finished on the GPU, then reused. Metal keeps at most 32 sets
 /// alive (each is a counter sample buffer; one more loses the device), and the
 /// realtime drive draws thousands of frames.
 const TS_RING: usize = 4;
@@ -1115,9 +1115,14 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if let Some(w) = renderer.water.get().filter(|_| renderer.water_active()) {
                 enc.copy_buffer_to_buffer(w.counter_buffer(), 0, &water_stats_buf, i as u64 * 16, 16); // water
             }
-            if i % TS_FRAMES == TS_FRAMES - 1 && slot.is_some() {
-                resolve_chunk(&mut enc, i / TS_FRAMES); // its frames are all encoded: resolve, free the slot
-                resolved = i / TS_FRAMES + 1;
+            // a set is resolved once its last frame has finished on the GPU (the
+            // wait above for frame i - 2), in the next set's second frame. On Metal
+            // a resolve right behind a frame (in its command buffer or the next)
+            // reads that frame's last end-of-pass timestamp before the GPU writes
+            // it, and the frame went untimed (its total the wall interval).
+            if i % TS_FRAMES == 1 && i > TS_FRAMES && slot.is_some() {
+                resolve_chunk(&mut enc, i / TS_FRAMES - 1); // its frames are all done: resolve, free the slot
+                resolved = i / TS_FRAMES;
             }
             drop(enc_span);
             if let Some((issued, slots)) = renderer.draw_range_stats() {
@@ -1154,9 +1159,14 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
         }
         if !qsets.is_empty() && resolved < cpu_ms.len().div_ceil(TS_FRAMES) {
-            // the last set, partly used.
+            // the sets the loop left (the last, partly used, and the one before it
+            // if the path ended within a frame of the last one's start), once
+            // every frame has finished on the GPU, as above.
+            ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("{e}"))?;
             let mut enc = ctx.device.create_command_encoder(&Default::default());
-            resolve_chunk(&mut enc, resolved);
+            for k in resolved..cpu_ms.len().div_ceil(TS_FRAMES) {
+                resolve_chunk(&mut enc, k);
+            }
             eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
         }
         ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("{e}"))?;
@@ -1319,7 +1329,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
             let probe_json = {
                 let p = renderer.probe.stats(); // facade
-                json!({ "captures": p.captures, "faces": p.faces, "transfer": p.transfer, "frames_per_capture": p.last_capture_frames, "look_transfer_in_use": renderer.look.transfer() })
+                json!({ "captures": p.captures, "faces": p.faces, "transfer": p.transfer, "frames_per_capture": p.last_capture_frames, "look_transfer_in_use": renderer.look.transfer(), "face_count_passes": p.count_passes, "face_count_waits": p.count_waits, "faces_without_count": p.uncounted_faces })
             };
             let serial_json: serde_json::Map<String, serde_json::Value> = SERIAL.iter().zip(&serial).map(|((n, _), v)| (n.to_string(), json!(percentile(v, 50.0)))).collect();
             println!("  GPU serial shares (median ms, end minus the previous pass's end): {}", SERIAL.iter().zip(&serial).map(|((n, _), v)| format!("{n} {:.2}", percentile(v, 50.0))).collect::<Vec<_>>().join(", "));

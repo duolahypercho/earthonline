@@ -35,6 +35,63 @@ pub const MIPS: u32 = 6;
 pub const PROBE_KIT_BOX_M: f32 = 65.0;
 pub const PROBE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
+/// In the count emulation (no MULTI_DRAW_INDIRECT_COUNT, Metal), a capture's
+/// faces wait for its count pass (one compute dispatch, read back without
+/// waiting, as `--bounded-draws` does), and each face's list is drawn to at
+/// least its own count padded (`counted::CountedLists::raise_bound`). From
+/// the read-back history alone, a capture's face with more objects than the
+/// faces the window saw (the window held the last capture's last face, read
+/// back on every idle frame) went past its bound: an overflow, a recapture,
+/// and eight frames of recovery whose GPU read-back the render thread waits
+/// for (`Counts::prepare_recovery`). The history's bound and the overflow
+/// check stay. `--no-probe-face-counts`: the history alone, as before.
+pub struct ProbeFaceCounts;
+
+thread_local! {
+    static FACE_COUNTS_SCOPE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+impl ProbeFaceCounts {
+    /// The switch (eo-app accepts it; this crate reads it).
+    pub const SWITCH: &'static str = "--no-probe-face-counts";
+
+    /// Whether a probe made now uses them (unless `--no-probe-face-counts`, or
+    /// a `with` scope on this thread says otherwise).
+    pub fn wanted() -> bool {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        FACE_COUNTS_SCOPE.with(|s| s.get()).unwrap_or_else(|| *ON.get_or_init(|| !std::env::args().any(|a| a == Self::SWITCH)))
+    }
+
+    /// Runs `body` with probes made meanwhile on this thread using them or
+    /// not (tests: the two side by side in one process).
+    pub fn with<R>(on: bool, body: impl FnOnce() -> R) -> R {
+        let old = FACE_COUNTS_SCOPE.with(|s| s.replace(Some(on)));
+        struct Restore(Option<bool>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                FACE_COUNTS_SCOPE.with(|s| s.set(self.0));
+            }
+        }
+        let _restore = Restore(old);
+        body()
+    }
+}
+
+/// Frames a capture's first face waits for its count pass's read-back
+/// (normally two or three) before it is drawn with the read-back history
+/// alone (a lost or slow read-back). Once a capture: with the clock moving a
+/// capture still finishes within 6 x (`smooth_time::PROBE_DEFER_MAX` + 1)
+/// frames plus these.
+pub const FACE_COUNT_WAIT_FRAMES: u64 = 6;
+/// Frames before the count pass is asked again for the same point.
+const FACE_COUNT_ASK_AGAIN: u64 = 30;
+// The count read-back's stages: free, copied in an encoder, mapping, mapped, failed.
+const COUNT_FREE: u8 = 0;
+const COUNT_COPIED: u8 = 1;
+const COUNT_MAPPING: u8 = 2;
+const COUNT_MAPPED: u8 = 3;
+const COUNT_FAILED: u8 = 4;
+
 /// The JS's probe numbers (data/facade-oracle.json `tables.probe`).
 pub struct ProbeConstants {
     pub face_size: u32,
@@ -106,6 +163,11 @@ pub struct ProbeStats {
     pub last_capture_frames: u32,
     /// faces moved off a frame that carried a heavy pass (`defer_this_frame`).
     pub deferred: u64,
+    /// (`ProbeFaceCounts`) count passes run, frames a face waited for one,
+    /// and faces drawn without one (the wait ran out).
+    pub count_passes: u64,
+    pub count_waits: u64,
+    pub uncounted_faces: u64,
 }
 
 struct State {
@@ -125,6 +187,13 @@ struct State {
     frozen: bool,
     /// Frames in a row whose face was moved off (`defer_this_frame_within`).
     defer_run: u32,
+    /// (`ProbeFaceCounts`) the capture point's per-face counts read back; the
+    /// count pass asked for (point, frame), due in this frame's encode; the
+    /// point the read-back in flight was counted at.
+    face_counts: Option<(Vec3, [u32; 6])>,
+    count_asked: Option<(Vec3, u64)>,
+    count_due: bool,
+    count_read_pos: Option<Vec3>,
     stats: ProbeStats,
 }
 
@@ -159,6 +228,10 @@ pub struct ProbeGpu {
     pub lobe_buf: wgpu::Buffer,
     lobe_read: wgpu::Buffer,
     lobe_mapped: Arc<AtomicU8>,
+    /// (`ProbeFaceCounts`) the count pass's six counts read back, and its stage.
+    count_read: wgpu::Buffer,
+    count_mapped: Arc<AtomicU8>,
+    face_counts_on: bool,
     pipeline: wgpu::RenderPipeline,
     pub sampler: wgpu::Sampler,
     state: Mutex<State>,
@@ -219,6 +292,7 @@ impl ProbeGpu {
         let faces_buf = buf("probe-faces", 36 * 16, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let lobe_buf = buf("probe-lobe", 160, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
         let lobe_read = buf("probe-lobe-read", 16, wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST);
+        let count_read = buf("probe-count-read", 24, wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST);
 
         // Cull.
         let cs = wgpu::ShaderStages::COMPUTE;
@@ -382,9 +456,12 @@ impl ProbeGpu {
             lobe_buf,
             lobe_read,
             lobe_mapped: Arc::new(AtomicU8::new(0)),
+            count_read,
+            count_mapped: Arc::new(AtomicU8::new(COUNT_FREE)),
+            face_counts_on: ProbeFaceCounts::wanted(),
             pipeline,
             sampler,
-            state: Mutex::new(State { front_pos: None, front: 0, capturing: None, hour: f64::NAN, sky_up: f64::NAN, frame: 0, this_frame: None, lobe_pending: false, frozen: false, defer_run: 0, stats: ProbeStats::default() }),
+            state: Mutex::new(State { front_pos: None, front: 0, capturing: None, hour: f64::NAN, sky_up: f64::NAN, frame: 0, this_frame: None, lobe_pending: false, frozen: false, defer_run: 0, face_counts: None, count_asked: None, count_due: false, count_read_pos: None, stats: ProbeStats::default() }),
             object_count: init.object_count,
             bytes,
         }
@@ -463,7 +540,37 @@ impl ProbeGpu {
             }
             _ => {}
         }
+        // (`ProbeFaceCounts`) the count pass's read-back, as the lobe's: mapped
+        // once its frame is submitted, picked up when ready.
+        match self.count_mapped.load(Ordering::Acquire) {
+            COUNT_COPIED => {
+                self.count_mapped.store(COUNT_MAPPING, Ordering::Release);
+                let flag = self.count_mapped.clone();
+                self.count_read.slice(..).map_async(wgpu::MapMode::Read, move |r| flag.store(if r.is_ok() { COUNT_MAPPED } else { COUNT_FAILED }, Ordering::Release));
+            }
+            COUNT_MAPPING => {
+                let _ = self.device.poll(wgpu::PollType::Poll);
+            }
+            COUNT_MAPPED => {
+                let counts = self.count_read.slice(..).get_mapped_range().ok().map(|v| {
+                    let w: &[u32] = bytemuck::cast_slice(&v);
+                    [w[0], w[1], w[2], w[3], w[4], w[5]]
+                });
+                self.count_read.unmap();
+                self.count_mapped.store(COUNT_FREE, Ordering::Release);
+                if let (Some(c), Some(p)) = (counts, s.count_read_pos.take()) {
+                    s.face_counts = Some((p, c));
+                }
+            }
+            COUNT_FAILED => {
+                self.count_read.unmap();
+                self.count_mapped.store(COUNT_FREE, Ordering::Release);
+                s.count_read_pos = None;
+            }
+            _ => {}
+        }
         if !on || s.frozen {
+            self.raise_idle_bound(&s);
             return;
         }
         // Start a capture when the viewer has left the front cube's point (or the
@@ -484,7 +591,10 @@ impl ProbeGpu {
                 s.sky_up = sky_up;
             }
         }
-        let Some((pos, face, _)) = s.capturing else { return };
+        let Some((pos, face, _)) = s.capturing else {
+            self.raise_idle_bound(&s);
+            return;
+        };
         s.this_frame = Some((face, pos));
         let vp = face_view_proj(pos, face, self.c.near, self.c.far);
         let planes = frustum_planes(vp).map(|p| p.to_array());
@@ -499,6 +609,68 @@ impl ProbeGpu {
         // copy_step.z = 1: the probe pass (no screen-space AO, fog by distance).
         fu[38] = 1.0;
         queue.write_buffer(&self.frame_buf, 0, bytemuck::cast_slice(&fu));
+        // (`ProbeFaceCounts`) the face's list drawn to at least its own count,
+        // once the capture's count pass is read back; until then the face
+        // waits: while the pass is due (it runs in the next encode; the face
+        // cull's uniform holds `pos` already), then at most
+        // FACE_COUNT_WAIT_FRAMES from the frame that encoded it.
+        if let Some(c) = self.counted.get().filter(|_| self.face_counts_on) {
+            match s.face_counts {
+                Some((p, counts)) if p == pos => c.raise_bound(0, crate::bounds::pad(counts[face as usize], 8)),
+                _ => {
+                    let asked = s.count_asked.filter(|(p, _)| *p == pos);
+                    // frames since the count pass was encoded (None while it is due)
+                    let waited = asked.filter(|_| !s.count_due).map(|(_, f)| s.frame - f);
+                    let ask = asked.is_none() || waited.is_some_and(|w| w > FACE_COUNT_ASK_AGAIN);
+                    if ask {
+                        self.write_count(queue, pos);
+                        s.count_asked = Some((pos, s.frame));
+                        s.count_due = true;
+                    }
+                    if s.count_due || waited.is_some_and(|w| w < FACE_COUNT_WAIT_FRAMES) {
+                        s.this_frame = None;
+                        s.stats.count_waits += 1;
+                    } else {
+                        s.stats.uncounted_faces += 1;
+                    }
+                }
+            }
+            if s.this_frame.is_none() {
+                self.raise_idle_bound(&s);
+            }
+        }
+    }
+
+    /// (`ProbeFaceCounts`) On a frame that draws no face: the face's counters
+    /// are read back every frame, so such a frame reads the last face's count
+    /// (or the recovery cull's, or 0 after the count pass) against its own
+    /// bound. That bound is raised to cover the latest capture's largest
+    /// face, so a count the list was not drawn to is not taken for an
+    /// overflow (and a recapture, and the recovery's waits). A frame that
+    /// draws a face raises its bound to that face's count instead.
+    fn raise_idle_bound(&self, s: &State) {
+        if let (Some(c), Some((_, counts))) = (self.counted.get().filter(|_| self.face_counts_on), s.face_counts) {
+            c.raise_bound(0, crate::bounds::pad(counts.iter().copied().max().unwrap_or(0), 8));
+        }
+    }
+
+    /// (`ProbeFaceCounts`) This frame's count pass, when `update` asked for
+    /// one, and its six counts copied for the read-back. It stays due while a
+    /// read-back is in flight (and `update` keeps the face waiting meanwhile:
+    /// the pass and the face cull share the counters).
+    pub fn encode_face_count(&self, enc: &mut wgpu::CommandEncoder) {
+        let mut s = self.state.lock().unwrap();
+        if !s.count_due || s.this_frame.is_some() || self.count_mapped.load(Ordering::Acquire) != COUNT_FREE {
+            return;
+        }
+        let Some((pos, _)) = s.count_asked else { return };
+        self.encode_count(enc);
+        enc.copy_buffer_to_buffer(&self.counters, 16, &self.count_read, 0, 24);
+        self.count_mapped.store(COUNT_COPIED, Ordering::Release);
+        s.count_due = false;
+        s.count_asked = Some((pos, s.frame)); // the face's wait counts from here
+        s.count_read_pos = Some(pos);
+        s.stats.count_passes += 1;
     }
 
     /// This frame's face and capture point (None: no face this frame).
@@ -548,6 +720,7 @@ impl ProbeGpu {
             s.stats.deferred += 1;
             s.defer_run += 1;
             crate::hitch::mark(crate::hitch::Mark::ProbeDeferred, 1);
+            self.raise_idle_bound(&s); // (`ProbeFaceCounts`) no face drawn after all
         }
         had
     }

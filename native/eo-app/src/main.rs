@@ -721,6 +721,9 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             s if eo_render::pace::GG3_SWITCHES.contains(&s) => {} // read by its crate (the frame budget; --no-gg3 every track's roll-up)
             s if s == eo_render::CityClasses::SWITCH => {} // read by its crate (the city pass's classes, one pipeline each)
             s if s == eo_render::counted::MotionBounds::SWITCH => {} // read by its crate (the count emulation's motion-aware bounds)
+            s if s == eo_render::probe::ProbeFaceCounts::SWITCH => {} // read by its crate (the count emulation's probe faces drawn to their count pass)
+            s if s == eo_render::counted::CutWindow::SWITCH => {} // read by its crate (the count emulation's fresh read-back window on a cut)
+            s if s == eo_render::alloc::VmBlocks::SWITCH => {} // read by its crate (macOS: blocks of 1 MiB and more from the VM)
             s if eo_look::season::SWITCHES.contains(&s) => {} // read by its crate (the photo dates, season and sky)
             s if eo_look::features::GG3_SWITCHES.contains(&s) => {} // read by its crate (the colour and camera)
             s if eo_landmarks::vegetation::GG3_SWITCHES.contains(&s) => {} // read by its crate (the coastal vegetation)
@@ -1684,6 +1687,27 @@ mod tests {
     fn the_motion_bounds_switch_parses() {
         assert_eq!(eo_render::counted::MotionBounds::SWITCH, "--no-motion-bounds");
         assert!(super::parse_args_from(&[eo_render::counted::MotionBounds::SWITCH.to_string()]).is_ok());
+    }
+
+    /// `--no-probe-face-counts` (eo-render `probe::ProbeFaceCounts`, read by that crate) parses.
+    #[test]
+    fn the_probe_face_counts_switch_parses() {
+        assert_eq!(eo_render::probe::ProbeFaceCounts::SWITCH, "--no-probe-face-counts");
+        assert!(super::parse_args_from(&[eo_render::probe::ProbeFaceCounts::SWITCH.to_string()]).is_ok());
+    }
+
+    /// `--no-cut-window` (eo-render `counted::CutWindow`, read by that crate) parses.
+    #[test]
+    fn the_cut_window_switch_parses() {
+        assert_eq!(eo_render::counted::CutWindow::SWITCH, "--no-cut-window");
+        assert!(super::parse_args_from(&[eo_render::counted::CutWindow::SWITCH.to_string()]).is_ok());
+    }
+
+    /// `--no-vm-blocks` (eo-render `alloc::VmBlocks`, read by that crate) parses.
+    #[test]
+    fn the_vm_blocks_switch_parses() {
+        assert_eq!(eo_render::alloc::VmBlocks::SWITCH, "--no-vm-blocks");
+        assert!(super::parse_args_from(&[eo_render::alloc::VmBlocks::SWITCH.to_string()]).is_ok());
     }
 
     /// The bounded draws are opt-in, and `--no-bounded-draws` wins wherever it stands.
