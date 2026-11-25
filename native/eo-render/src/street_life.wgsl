@@ -15,6 +15,10 @@
 // and dots. Stage W2c made it read at normal and mid distance: bold tags in
 // two bands, throw-ups with shadows and drips, pieces, column bases covered,
 // litter clusters with dark halos (sl_clusters), heaps at the walls' foot.
+// Stage W2d put the walk's litter where it collects (sl_walk_zones: the kerb's
+// lip and the furnishing zone, the building line and doorways, the trees'
+// basins, the bins and the stops), in clumps, the through zone nearly clean,
+// and faded the prints (sl_faded).
 
 // The street fragment's distance from the kerb line (m; draw.wgsl
 // `street_surface` sets it before the decals, with the level on).
@@ -149,6 +153,14 @@ fn sl_owns(c: vec2<f32>, own: vec4<f32>, oh: f32) -> bool {
     return abs(dot(c - own.xy, own.zw)) <= oh;
 }
 
+// Stage W2d: a print as it lies on the street weeks on: sun-faded toward its
+// own grey and filmed with dust (`k` 0..1). Fresh saturated prints stood out
+// on the walk more than real litter does.
+fn sl_faded(c: vec3<f32>, k: f32) -> vec3<f32> {
+    let l = dot(c, SL_LUMA);
+    return mix(c, vec3<f32>(l) * vec3<f32>(1.04, 1.0, 0.9), k) * (1.0 - 0.18 * k) + vec3<f32>(0.035, 0.032, 0.027) * k;
+}
+
 // A paper-size item (scraps, receipts, cups, wrappers, caps, napkins, bottles).
 fn sl_big(p: vec2<f32>, fw: f32, prob: f32, deck: bool, own: vec4<f32>, oh: f32) -> SlPaint {
     var o = sl_none();
@@ -188,7 +200,7 @@ fn sl_big(p: vec2<f32>, fw: f32, prob: f32, deck: bool, own: vec4<f32>, oh: f32)
         d = max(abs(q.x) - hx, abs(q.y) - hy) + edge;
         var c = vec3<f32>(0.53, 0.515, 0.48);
         if (hc > 0.84) {
-            c = select(select(vec3<f32>(0.52, 0.36, 0.37), vec3<f32>(0.52, 0.48, 0.27), hs > 0.4), vec3<f32>(0.31, 0.41, 0.51), hs > 0.75);
+            c = sl_faded(select(select(vec3<f32>(0.52, 0.36, 0.37), vec3<f32>(0.52, 0.48, 0.27), hs > 0.4), vec3<f32>(0.31, 0.41, 0.51), hs > 0.75), 0.3);
         } else if (hc > 0.66) {
             c = vec3<f32>(0.30, 0.21, 0.12);
         } else if (hc > 0.46) {
@@ -215,12 +227,12 @@ fn sl_big(p: vec2<f32>, fw: f32, prob: f32, deck: bool, own: vec4<f32>, oh: f32)
         d = max(abs(q.x) - hx, abs(q.y) - r);
         var c = vec3<f32>(0.66, 0.65, 0.62);
         var rough = 0.5;
-        if (hc < 0.3) {
+        if (hc < 0.38) {
             // a kraft coffee sleeve round a white cup
             c = select(c, vec3<f32>(0.33, 0.22, 0.12), abs(q.x + hx * 0.15) < hx * 0.35);
-        } else if (hc < 0.5) {
-            c = vec3<f32>(0.40, 0.035, 0.03); // red party cup
-            rough = 0.3;
+        } else if (hc < 0.46) {
+            c = sl_faded(vec3<f32>(0.40, 0.035, 0.03), 0.35); // a red party cup, scuffed
+            rough = 0.35;
         } else if (hc < 0.62) {
             c = vec3<f32>(0.42, 0.44, 0.45); // clear plastic
             rough = 0.12;
@@ -230,36 +242,41 @@ fn sl_big(p: vec2<f32>, fw: f32, prob: f32, deck: bool, own: vec4<f32>, oh: f32)
         it.rough = rough;
         tl = vec2<f32>(0.0, clamp(q.y / r, -1.0, 1.0) * 0.75);
     } else if (hk < 0.68) {
-        // a snack wrapper: crimped ends, a saturated print, foil inside; crinkled
+        // a snack wrapper: crimped ends, a print sun-faded and dusty (stage W2d: the
+        // fresh saturated squares stood out), foil or clear film for some; crinkled
         let hx = 0.03 + 0.025 * hs;
         let hy = 0.02 + 0.016 * hc;
         let crimp = abs(fract(q.y * 160.0) - 0.5) * 0.004;
         d = max(abs(q.x) - hx + crimp, abs(q.y) - hy);
         let pick = fract(hc * 7.31);
-        var c = vec3<f32>(0.50, 0.04, 0.03);
-        if (pick > 0.85) {
-            c = vec3<f32>(0.55, 0.55, 0.56);
-            it.metal = 0.7;
-        } else if (pick > 0.7) {
-            c = vec3<f32>(0.62, 0.48, 0.04);
-        } else if (pick > 0.55) {
-            c = vec3<f32>(0.03, 0.11, 0.42);
+        var c = vec3<f32>(0.30, 0.21, 0.12); // a kraft or brown print
+        if (pick > 0.78) {
+            c = vec3<f32>(0.50, 0.50, 0.50); // foil-lined, the print worn off
+            it.metal = 0.55;
+        } else if (pick > 0.62) {
+            c = vec3<f32>(0.48, 0.48, 0.46); // clear or white film
+        } else if (pick > 0.5) {
+            c = sl_faded(vec3<f32>(0.50, 0.04, 0.03), 0.55);
         } else if (pick > 0.4) {
-            c = vec3<f32>(0.06, 0.33, 0.08);
-        } else if (pick > 0.25) {
-            c = vec3<f32>(0.68, 0.2, 0.02);
+            c = sl_faded(vec3<f32>(0.62, 0.48, 0.04), 0.5);
+        } else if (pick > 0.3) {
+            c = sl_faded(vec3<f32>(0.03, 0.11, 0.42), 0.55);
+        } else if (pick > 0.2) {
+            c = sl_faded(vec3<f32>(0.06, 0.33, 0.08), 0.6);
+        } else if (pick > 0.1) {
+            c = sl_faded(vec3<f32>(0.68, 0.2, 0.02), 0.55);
         }
-        // a lighter band across the print (no lettering)
+        // a lighter band across the print (no lettering), the crumples' shading
         let band = 1.0 - smoothstep(0.004, 0.004 + soft, abs(q.x - hx * (hs - 0.5)) - hx * 0.18);
-        it.c = mix(c, min(c * 1.8 + 0.12, vec3<f32>(0.8)), band * 0.6);
-        it.rough = 0.32;
+        it.c = mix(c, min(c * 1.5 + 0.08, vec3<f32>(0.7)), band * 0.35) * (0.78 + 0.22 * st_noise(q * 90.0 + hc * 3.0));
+        it.rough = 0.38;
         tl = (vec2<f32>(st_noise(q * 120.0 + 4.1), st_noise(q * 120.0 + 7.7)) - 0.5) * 1.3;
     } else if (hk < 0.76) {
         // a bottle cap
         let r = 0.0125 + 0.003 * hs;
         d = length(q) - r;
         let rim = 1.0 - smoothstep(0.002, 0.002 + soft, abs(length(q) - r + 0.002));
-        it.c = select(vec3<f32>(0.42, 0.40, 0.37), select(vec3<f32>(0.35, 0.03, 0.03), vec3<f32>(0.03, 0.08, 0.3), hc > 0.7), hc > 0.45) * (1.0 - 0.3 * rim);
+        it.c = select(vec3<f32>(0.42, 0.40, 0.37), sl_faded(select(vec3<f32>(0.35, 0.03, 0.03), vec3<f32>(0.03, 0.08, 0.3), hc > 0.7), 0.4), hc > 0.45) * (1.0 - 0.3 * rim);
         it.metal = select(0.0, 0.6, hc <= 0.45);
         it.rough = 0.4;
     } else if (hk < 0.9 || !deck) {
@@ -366,9 +383,10 @@ fn sl_small(p: vec2<f32>, fw: f32, pl: f32, pb: f32, pg: f32, pf: f32, own: vec4
         let hx = 0.01 + 0.016 * hc;
         let hy = hx * (0.4 + 0.6 * fract(hs * 7.7));
         d = max(abs(q.x) - hx, abs(q.y) - hy) + (st_noise(q * 300.0 + hc * 5.0) - 0.5) * 0.004;
-        // mostly dirty paper (white, grey, brown), now and then a dull plastic flake or a clear one
+        // mostly dirty, trodden paper (off-white, grey, brown), now and then a dull plastic
+        // flake or a clear one
         let pick = fract(hc * 5.3);
-        var fc = vec3<f32>(0.5, 0.49, 0.46);
+        var fc = vec3<f32>(0.44, 0.43, 0.40);
         if (pick > 0.93) {
             fc = mix(sl_spray(0.6 + 0.4 * fract(hc * 11.0)).rgb, vec3<f32>(0.3), 0.55);
         } else if (pick > 0.85) {
@@ -550,6 +568,75 @@ fn sl_anchor(code: u32, oh: f32) -> f32 {
     return (f32(code - 1u) / 14.0 * 2.0 - 1.0) * oh;
 }
 
+// ---- where the walk's litter lies (stage W2d) ----------------------------------
+//
+// SF litter collects where feet and brooms do not reach and where people
+// stop, not evenly over the walk: on the kerb's lip and in the furnishing zone
+// beside it (the trees, poles, meters and bins: SL_FURNISH_M), against the
+// building line and in the recessed doorways (SL_FRONTAGE_M), in the street
+// trees' basins (at their trunks' kerb offset, the seed's code 5), round the
+// bin (code 3) and where people wait at a transit stop (code 4). The through
+// zone between keeps the odd butt and scrap (its gum is the wear decals').
+// Returns the multipliers of the paper-size litter, the leaves and the butts
+// at a walk point: `kd` from the kerb line, `dw` from the building line (< 0
+// inside a recess), `along` from the stretch's middle (`oh` its half length).
+
+// the through zone's own (a level 2 street is a step less kept)
+const SL_OPEN_LITTER: f32 = 0.05;
+const SL_OPEN_LEAVES: f32 = 0.2;
+const SL_OPEN_BUTTS: f32 = 0.06;
+// a street tree's basin: its reach (times the trunk's kerb offset: the basin runs
+// back to the kerb's top) and the slack along (the anchor's 1/14 of a stretch, and
+// eo-props' kerb shifts); no trunk offset: the furnishing zone's middle. INFERRED.
+const SL_BASIN_K: f32 = 0.8;
+const SL_BASIN_SLACK_M: f32 = 0.45;
+// a bin's spill (along, across from its place 0.6 m off the kerb line) and a
+// stop's waiting area (along either way, across from the kerb). INFERRED.
+const SL_BIN_SPILL_M: vec2<f32> = vec2<f32>(1.5, 1.1);
+const SL_STOP_WAIT_M: vec2<f32> = vec2<f32>(4.0, 2.6);
+
+fn sl_walk_zones(along: f32, kd: f32, dw: f32, oh: f32, codes: u32, wall: bool, lvl: u32) -> vec3<f32> {
+    var z = vec3<f32>(SL_OPEN_LITTER, SL_OPEN_LEAVES, SL_OPEN_BUTTS) * select(1.0, 1.6, lvl >= 2u);
+    let k = max(kd, 0.0);
+    // the kerb's lip: butts flicked at the gutter, scraps caught on the edge
+    z += vec3<f32>(0.7, 0.8, 1.4) * exp(-k / 0.2);
+    // the furnishing zone beside it
+    if (SL_FURNISH_M > 0.0) {
+        z += vec3<f32>(0.3, 0.5, 0.5) * (1.0 - smoothstep(0.75 * SL_FURNISH_M, 1.15 * SL_FURNISH_M, k));
+    }
+    // the building line (a lot's fence or a garden's edge, less): blown against the
+    // wall's foot, a little over the frontage zone; and the doorways' recesses
+    if (SL_FRONTAGE_M > 0.0) {
+        let w = max(dw, 0.0);
+        let line = (exp(-w / 0.18) * 2.4 + (1.0 - smoothstep(0.6 * SL_FRONTAGE_M, 1.1 * SL_FRONTAGE_M, w)) * 0.45) * select(0.55, 1.0, wall);
+        z += vec3<f32>(1.0, 0.85, 0.75) * line + vec3<f32>(1.2, 1.0, 1.0) * smoothstep(0.0, 0.5, -dw);
+    }
+    // the trees' basins
+    let tkc = (codes >> 20u) & 15u;
+    let tkd = select(0.5 * SL_FURNISH_M, f32(tkc) * SL_TREE_KD_STEP_M, tkc > 0u);
+    let rb = max(SL_BASIN_K * tkd, 0.4);
+    for (var i = 0u; i < 2u; i = i + 1u) {
+        let c = (codes >> (4u * i)) & 15u;
+        if (c > 0u) {
+            let e = length(vec2<f32>(max(abs(along - sl_anchor(c, oh)) - SL_BASIN_SLACK_M, 0.0), kd - tkd)) / rb;
+            z += vec3<f32>(1.6, 3.5, 2.6) * (1.0 - smoothstep(0.7, 1.15, e));
+        }
+    }
+    // the bin's spill round it
+    let bc = (codes >> 12u) & 15u;
+    if (bc > 0u) {
+        let e = length(vec2<f32>(along - sl_anchor(bc, oh), kd - 0.6) / SL_BIN_SPILL_M);
+        z += vec3<f32>(2.2, 0.6, 2.0) * (1.0 - smoothstep(0.5, 1.0, e));
+    }
+    // a transit stop: butts and the odd cup where people wait
+    let sc = (codes >> 16u) & 15u;
+    if (sc > 0u) {
+        let w = (1.0 - smoothstep(0.6 * SL_STOP_WAIT_M.x, SL_STOP_WAIT_M.x, abs(along - sl_anchor(sc, oh)))) * (1.0 - smoothstep(0.7 * SL_STOP_WAIT_M.y, SL_STOP_WAIT_M.y, k));
+        z += vec3<f32>(0.6, 0.2, 2.2) * w;
+    }
+    return z;
+}
+
 // The litter's clusters at a street point (decal space: `along` from the
 // stretch's middle, `oh` its half length; `kd` from the kerb line, `dw` from
 // the building line): drifts against the kerb in the gutter, drifts along the
@@ -639,17 +726,33 @@ fn sl_street(world: vec3<f32>, cls: u32, along: f32, across: f32, d0: vec4<f32>,
     // where in the section: the kerb (sl_kd, from the street's own coordinate) and the building line
     let kd = sl_kd;
     let dw = (d1.y - SL_WALL_REACH_M) - across;
-    // Litter collects against the kerb face in the gutter and along the building line,
-    // thins out into the carriageway; wind and sweeping leave it in drifts.
+    // Litter collects against the kerb face in the gutter, thins out into the
+    // carriageway; on the walk it lies in its zones (stage W2d, sl_walk_zones), the
+    // through zone nearly clean; wind and sweeping leave it in drifts.
+    // (`acc` the paper-size litter's, `acc_b` the butts', `zl` the walk's leaves')
     var acc = 1.0;
+    var acc_b = 1.0;
+    var zl = 1.0;
     if (gutter) {
         acc = 1.0 + 5.0 * exp(-max(kd, 0.0) / 0.15);
+        acc_b = acc;
     } else if (road) {
         acc = 0.5 * exp(-max(kd - 0.3, 0.0) / 0.5);
+        acc_b = acc;
     } else {
-        acc = 0.8 + 1.6 * exp(-max(dw, 0.0) / 0.3) + 0.6 * exp(-max(kd, 0.0) / 0.25);
+        let z = sl_walk_zones(along, kd, dw, oh, codes, wall, lvl);
+        acc = z.x;
+        zl = z.y;
+        acc_b = z.z;
     }
     let drift = 0.3 + 1.4 * smoothstep(0.35, 0.8, st_noise(p / 2.7 + rnd * 17.0));
+    // (stage W2d) on the walk the scatter lies in small clumps where an eddy or a broom
+    // left it, bare between: no even sprinkle across a zone (a branch, not a select: the
+    // gutter's and the lane's fragments skip the noise)
+    var clump = 1.0;
+    if (walk) {
+        clump = 0.06 + 3.2 * smoothstep(0.56, 0.78, st_noise(p / 0.7 + rnd * 23.0));
+    }
     // the trees beside the stretch (its seed's low bits): leaves thickest under their crowns
     var tree = 0.0;
     for (var i = 0u; i < 2u; i = i + 1u) {
@@ -663,15 +766,22 @@ fn sl_street(world: vec3<f32>, cls: u32, along: f32, across: f32, d0: vec4<f32>,
     let core = cl.x;
     // chances per cell (street_life.rs densities 0..7)
     let l7 = litter / 7.0;
-    let p_big = 0.15 * pow(l7, 1.1) * acc * drift * (1.0 + 5.0 * core) * lb;
+    let p_big = 0.15 * pow(l7, 1.1) * acc * drift * clump * (1.0 + 5.0 * core) * lb;
     // butts and torn bits (the small grid's share `frag` of them bits)
-    let p_butt = (0.06 * pow(l7, 1.5) + 0.12 * l7) * acc * drift * (1.0 + 3.0 * core) * lb;
-    let frag = 0.1 * l7 / max(0.05 * pow(l7, 1.5) + 0.1 * l7, 1e-4);
+    let p_butt = (0.06 * pow(l7, 1.5) + 0.12 * l7) * acc_b * drift * clump * (1.0 + 3.0 * core) * lb;
+    // (stage W2d: fewer torn bits on the walk, where they read as confetti)
+    let frag = 0.1 * l7 / max(0.05 * pow(l7, 1.5) + 0.1 * l7, 1e-4) * select(1.0, 0.6, walk);
     let leaf_acc = select(1.0, 1.0 + 4.0 * exp(-max(kd, 0.0) / 0.2), gutter) * select(1.0, 0.4, road);
-    let p_leaf = 0.5 * pow(leaves / 7.0, 1.5) * (0.25 + 0.9 * tree) * leaf_acc * (0.4 + 0.9 * smoothstep(0.3, 0.75, st_noise(p / 1.3 + rnd * 5.0))) * (1.0 + 2.5 * core);
+    // leaves: fallen under the crowns (thinner where feet kick them on), blown into the
+    // walk's zones; the gutter's and the lane's as before
+    let leaf_w = select((0.25 + 0.9 * tree) * leaf_acc, 0.9 * tree * (0.45 + 0.55 * min(zl, 1.0)) + 0.25 * zl, walk);
+    // (the walk's in drifts: stage W2d; the gutter's and the lane's as before; one noise)
+    let ln = st_noise(p / select(1.3, 1.1, walk) + rnd * 5.0);
+    let leaf_drift = select(0.4 + 0.9 * smoothstep(0.3, 0.75, ln), 0.15 + 1.6 * smoothstep(0.45, 0.8, ln), walk);
+    let p_leaf = 0.5 * pow(leaves / 7.0, 1.5) * leaf_w * leaf_drift * (1.0 + 2.5 * core);
     // glass crumbs: a car broken into here and there, in the gutter and the parking lane
     let glass = select(0.0, 0.55 * smoothstep(0.82, 0.9, st_noise(p / 1.1 + rnd * 41.0)), (gutter || road) && st_hash(floor(p / 6.0) + rnd * 3.0) < 0.06 + 0.05 * l7);
-    let p_grit = select(0.0, 0.08 * grit, lvl >= 2u) + glass;
+    let p_grit = select(0.0, 0.08 * grit * select(1.0, clamp(acc, 0.25, 1.0), walk), lvl >= 2u) + glass;
     var lit_p = sl_none();
     // Grit and sand drifts: in the kerb corner of the gutter, along the building line;
     // under a deck a dusty film over all, and the kerb corner's packed leaf mulch.
@@ -718,7 +828,7 @@ fn sl_street(world: vec3<f32>, cls: u32, along: f32, across: f32, d0: vec4<f32>,
             let paper = smoothstep(0.55, 0.66, n1 * 0.55 + n3 * 0.45) * (1.0 - 0.7 * lf);
             bc = mix(bc, vec3<f32>(0.56, 0.54, 0.49) * (0.8 + 0.4 * n3), paper);
             let fleck = step(0.9, n3) * step(0.5, n2) * sl_keep(0.05, fwc);
-            bc = mix(bc, sl_spray(0.64 + 0.36 * fract(n1 * 7.3)).rgb, fleck * 0.8);
+            bc = mix(bc, sl_faded(sl_spray(0.64 + 0.36 * fract(n1 * 7.3)).rgb, 0.6), fleck * 0.6);
             var b = sl_none();
             b.c = bc;
             // the walk shows through the thin of it (the scatter's items stand on it near)
