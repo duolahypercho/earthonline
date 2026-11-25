@@ -840,6 +840,12 @@ pub struct ShaderFeatures {
     /// The camera model under the cinematic look (`--cine-camera`; `SF_CAMERA`; cine_post.rs):
     /// its passes are made only with it, and its lines in the post and bloom shaders sit behind it.
     pub camera: bool,
+    /// The camera model's later features compiled in (`cine_post::CAM_BIT_*`: `--camera-tone`,
+    /// `--white-balance`, `--lens-halation`, `--camera-sharpen`, `--lens-flare`,
+    /// `--camera-resolve` (`SF_CAM_RESOLVE` here: the resolve's shader), `--camera-print`;
+    /// cine_post.rs `SF_CAM_*`), only with the model.
+    /// New code: `ALL` leaves it out, as the shaders were before it.
+    pub camera_bits: u32,
     /// The cars' materials and lamps (`--car-materials`; `SF_CAR_MATERIALS`,
     /// agents_draw.wgsl `ag_car_*`): compiled into the agents' pipelines only.
     pub car_materials: bool,
@@ -874,7 +880,7 @@ impl ShaderFeatures {
         street_pbr: false, street: 0, // the street track
         sun_bounce: true, ao_albedo: true, soft_shadows: true, screen_gi: true, occluder_light: true, // the light track
         wet_surfaces: true, screen_reflect: true, probe_sky: true, wet_relief: true, lamp_streaks: true, // the reflect track
-        camera: true, // the camera track
+        camera: true, camera_bits: 0, // the camera track
         car_materials: true, car_reflections: true, // the vehicles track
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, // the night track
         nature: 0, // the nature track
@@ -886,7 +892,7 @@ impl ShaderFeatures {
         street_pbr: false, street: 0, // the street track
         sun_bounce: false, ao_albedo: false, soft_shadows: false, screen_gi: false, occluder_light: false, // the light track
         wet_surfaces: false, screen_reflect: false, probe_sky: false, wet_relief: false, lamp_streaks: false, // the reflect track
-        camera: false, // the camera track
+        camera: false, camera_bits: 0, // the camera track
         car_materials: false, car_reflections: false, // the vehicles track
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, // the night track
         nature: 0, // the nature track
@@ -925,6 +931,7 @@ impl ShaderFeatures {
             wet_relief: o.sky.wet_relief,
             lamp_streaks: o.sky.lamp_streaks,
             camera: o.look.is_cinematic() && o.sky.cine_camera,
+            camera_bits: if o.look.is_cinematic() && o.sky.cine_camera { o.sky.cam_bits & crate::cine_post::CAM_BITS_ALL } else { 0 },
             car_materials: o.car_materials > 0,
             car_reflections: o.car_materials > 0 && o.car_reflections > 0,
             night_photometry: o.sky.night_photometry,
@@ -998,6 +1005,7 @@ impl ShaderFeatures {
         l.sky.wet_relief &= self.wet_relief;
         l.sky.lamp_streaks &= self.lamp_streaks;
         l.sky.cine_camera &= self.camera;
+        l.sky.cam_bits &= self.camera_bits;
         if !self.car_materials {
             l.car_materials = 0;
         }
@@ -1055,6 +1063,7 @@ impl ShaderFeatures {
                 ("SF_LAMP_STREAKS", self.lamp_streaks),
                 // the camera track
                 ("SF_CAMERA", self.camera),
+                ("SF_CAM_RESOLVE", self.camera && self.camera_bits & crate::cine_post::CAM_BIT_RESOLVE != 0),
                 // the vehicles track
                 ("SF_CAR_MATERIALS", self.car_materials),
                 ("SF_CAR_REFLECTIONS", self.car_reflections),
