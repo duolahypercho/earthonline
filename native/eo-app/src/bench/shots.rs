@@ -20,6 +20,9 @@
 //! and orientation in game coordinates (and the eye's latitude, longitude and
 //! height), the build's commit, the full command line, the size, the hour,
 //! the weather, every switch, and how the settle and the convergence went.
+//! With `EO_PROPS_STATS=1` it also records the props' drawn instances and
+//! triangles of the last frame (the camera's view and every view summed)
+//! and the resident trees by kind (`props_stats`; one log line a shot).
 //!
 //! Shots are given in a JSON array; each has a `name` (it names the files),
 //! one pose, and optional `fov` (vertical, degrees), `far` (metres),
@@ -1179,7 +1182,21 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
         notes.push(format!("the temporal resolve did not converge in {} frames (RMS {})", taa["frames"], taa["rms_8bit"]));
     }
     io.agents.extras.clear();
+    // `EO_PROPS_STATS=1`: the props' drawn instances and triangles of the shot's last frame
+    // (view 0 the camera, then every view summed: the shadow cascades and the rest) and the
+    // resident trees by kind, in the shot's JSON and the log.
+    let props_stats = std::env::var_os("EO_PROPS_STATS").filter(|v| !v.is_empty() && v != "0").and_then(|_| {
+        let words = io.renderer.props.get()?.stats_readback(io.ctx).ok()?;
+        let pairs: Vec<(u64, u64)> = words.chunks_exact(2).map(|w| (w[0] as u64, w[1] as u64)).collect();
+        let all = pairs.iter().fold((0u64, 0u64), |a, p| (a.0 + p.0, a.1 + p.1));
+        let trees: std::collections::BTreeMap<String, usize> = io.props.resident_counts().into_iter().filter(|(k, _)| k.contains("ree")).collect();
+        println!("props stats {}: camera {} instances {} triangles; all views {} instances {} triangles; resident trees {:?}", shot.name, pairs.first().map_or(0, |p| p.0), pairs.first().map_or(0, |p| p.1), all.0, all.1, trees);
+        Some(json!({ "camera_instances": pairs.first().map(|p| p.0), "camera_triangles": pairs.first().map(|p| p.1), "views": pairs, "all_instances": all.0, "all_triangles": all.1, "resident_trees": trees }))
+    });
     let mut m = common.clone();
+    if let Some(ps) = props_stats {
+        m.insert("props_stats".into(), ps);
+    }
     m.insert("name".into(), json!(shot.name));
     m.insert("file".into(), json!(png.file_name().map(|f| f.to_string_lossy().to_string())));
     for (k, v) in &shot.info {
