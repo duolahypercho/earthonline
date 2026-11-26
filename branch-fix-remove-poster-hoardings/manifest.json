@@ -1,0 +1,82 @@
+{
+  "title": "Remove the poster hoardings",
+  "base": "origin/main f5872565",
+  "after": "fix/remove-poster-hoardings",
+  "createdAt": "2026-11-26T01:34:20.795268+00:00",
+  "diffThreshold": 24,
+  "embedded": true,
+  "pairs": [
+    {
+      "id": "low-view-left",
+      "name": "Low view, left",
+      "note": "The board stood in front of the shopfront; the glazing shows through",
+      "before": "before/low-view-left.png",
+      "after": "after/low-view-left.png",
+      "beforeSHA256": "8cd859ef562d29aba5de9d6be1796416f295aea1ac7569f0b94f94da79c9f13f",
+      "afterSHA256": "eb1a2470c83c49f47f699a2ea96bce9762e6863498019031ba687d0970941800",
+      "identical": false,
+      "changedPercent": 29.13,
+      "diff": "diff/low-view-left.png"
+    },
+    {
+      "id": "low-view-centre",
+      "name": "Low view, centre",
+      "note": "The view from the report: board gone, shop windows behind it",
+      "before": "before/low-view-centre.png",
+      "after": "after/low-view-centre.png",
+      "beforeSHA256": "11cd1352b67d9428a1f59edaf196d0437039fb81031b17a0808c8b8edcb51a5a",
+      "afterSHA256": "cfbded0fbbc51f9d6e66dd7d7c72aa716d7d6b1a13e43fe69e45702b6d81e25c",
+      "identical": false,
+      "changedPercent": 45.93,
+      "diff": "diff/low-view-centre.png"
+    },
+    {
+      "id": "low-view-right",
+      "name": "Low view, right",
+      "note": "Board gone; its lower edge had stood off the sloped pavement",
+      "before": "before/low-view-right.png",
+      "after": "after/low-view-right.png",
+      "beforeSHA256": "814c227c6a24ad61980504d06fade8c91dfb124826a134700c285ad9a14b88f9",
+      "afterSHA256": "0462d0f542da8fad7ff57e66a28d6e23dae62701cd57d1e4820b9b8b2909e801",
+      "identical": false,
+      "changedPercent": 17.87,
+      "diff": "diff/low-view-right.png"
+    },
+    {
+      "id": "hoarding-a-4-m",
+      "name": "Hoarding A, 4 m",
+      "note": "A second hoarding, board gone",
+      "before": "before/hoarding-a-4-m.png",
+      "after": "after/hoarding-a-4-m.png",
+      "beforeSHA256": "9d663c10485d71f45ff62089e138fcbba538d9db6f2999cb59f28f31b9bda36a",
+      "afterSHA256": "16bc6d677fff4e7e6905165515e036b58b6fd41a3fb629e72fd4941da9f117a0",
+      "identical": false,
+      "changedPercent": 22.76,
+      "diff": "diff/hoarding-a-4-m.png"
+    },
+    {
+      "id": "hoarding-b-4-m",
+      "name": "Hoarding B, 4 m",
+      "note": "A third hoarding; the shop door behind it is now visible",
+      "before": "before/hoarding-b-4-m.png",
+      "after": "after/hoarding-b-4-m.png",
+      "beforeSHA256": "a946c8ee85d1a61245f01bdceab1723edd7bdd7d788ea1e9281565e0bba7070d",
+      "afterSHA256": "571bc0b8253eef792dbbf35f29cf17a395f91c794297c7cb78d3acfc07b88c20",
+      "identical": false,
+      "changedPercent": 18.16,
+      "diff": "diff/hoarding-b-4-m.png"
+    },
+    {
+      "id": "hoarding-b-9-m",
+      "name": "Hoarding B, 9 m",
+      "note": "Street view: board gone; the pole, bench and A-board stay where they were",
+      "before": "before/hoarding-b-9-m.png",
+      "after": "after/hoarding-b-9-m.png",
+      "beforeSHA256": "b6c1435cb15138bec6c50a29d8c384e0699f307eb95853d2f94562aede946ef4",
+      "afterSHA256": "353c1ef203abc25e0b39069d6e5ba0ebaa48497d620f34de16aa4729d9776fe4",
+      "identical": false,
+      "changedPercent": 5.87,
+      "diff": "diff/hoarding-b-9-m.png"
+    }
+  ]
+}
