@@ -88,11 +88,14 @@ pub struct Props2Args {
     /// Street props v2 (eo-props `props_v2`) in place of the v1 files; `--no-street-props-v2`
     /// (or `--no-props2`) keeps the v1 manifest (its absent files drawn as before).
     pub street_v2: bool,
+    /// `--poster-hoardings`: draw the furniture walk's poster hoardings again (eo-props
+    /// `furniture::set_poster_hoardings`). Off (the default): they are planned but not drawn.
+    pub poster_hoardings: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, poster_hoardings: false }
     }
 }
 
@@ -101,7 +104,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, poster_hoardings: self.poster_hoardings };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -117,6 +120,8 @@ impl Props2Args {
             "--no-fade" => self.features &= !eo_render::props::F_FADE,
             "--no-wind" => self.features &= !eo_render::props::F_WIND,
             "--capture-props2" => self.capture = true,
+            "--poster-hoardings" => self.poster_hoardings = true,
+            "--no-poster-hoardings" => self.poster_hoardings = false,
             _ => return false,
         }
         true
@@ -364,6 +369,7 @@ impl PropsRuntime {
                     eo_props::basins::set_tree_basins(p2.tree_basins);
                     let world = Arc::new(PropsWorld::new(street, js, std).with_structures(structures));
                     eo_props::furniture::set_surveyed_first(p2.surveyed_furniture);
+                    eo_props::furniture::set_poster_hoardings(p2.poster_hoardings);
                     if p2.furniture || p2.eztree {
                         world.install_furniture(&city.buildings)?;
                     }
