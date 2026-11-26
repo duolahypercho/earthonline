@@ -906,6 +906,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-corridor-traffic" | "--no-deck-walkers" => {} // read by its crate (the corridor traffic)
             "--no-gg2-vegetation" | "--no-coastal-trees" => {} // read by its crate (the vegetation; --no-ground-cover handled above)
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs: the open ground's colour from the aerial survey)
+            "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`: the hill builder's 2 m relief over the city's hills)
             // the round-3 tracks' switches: one list per track, each in a file the track owns (read by its crate)
             s if eo_render::pace::GG3_SWITCHES.contains(&s) => {} // read by its crate (the frame budget; --no-gg3 every track's roll-up)
             s if s == eo_render::CityClasses::SWITCH => {} // read by its crate (the city pass's classes, one pipeline each)

@@ -30,6 +30,15 @@
 //! relief moved the ground (None elsewhere: the readers keep their own 8 m
 //! ground) so the props sit on them.
 //!
+//! **The city's hills** (`--no-city-relief`, Docs/HILLS-PLAN.md H3): with the hill builder's
+//! cooked relief (`cooked`, eo-hills `relief`) a patch is also drawn over every block with
+//! at least `COOKED_RELIEF_MIN` of relief, at most `COOKED_BUILT_MAX` under footprints and
+//! at least `COOKED_GREEN_MIN` open ground or mapped greens, its relief read from the block
+//! (the same high-pass, cooked from the six 1 m tiles) instead of the survey; such a patch
+//! takes relief on the parks' mapped grass too. Without the survey, the patches round the
+//! photo eyes are not drawn. "Pressed" ground is ground the carpet moved away from the
+//! patch's median offset (the carpet lifts all open ground by one constant).
+//!
 //! **Materials** (`--no-terrain-materials`): see `Materials`.
 
 use crate::scene::Vertex;
@@ -105,6 +114,13 @@ impl Lattice {
 /// diagonal from (1, 0) to (0, 1)), at (u, v) in [0, 1]^2.
 pub fn cell_tri(h00: f32, h10: f32, h01: f32, h11: f32, u: f32, v: f32) -> f32 {
     if u + v <= 1.0 { h00 + u * (h10 - h00) + v * (h01 - h00) } else { h11 + (1.0 - u) * (h01 - h11) + (1.0 - v) * (h10 - h11) }
+}
+
+/// Whether patch `key` lies in the square round a photo eye that `patch_keys` covers.
+fn near_region(l: &Lattice, key: (i64, i64), eye: &[f64; 2]) -> bool {
+    let pm = PATCH_CELLS as f64 * l.cell;
+    let (cx, cz) = (l.ox + (key.0 as f64 + 0.5) * pm, l.oz + (key.1 as f64 + 0.5) * pm);
+    (cx - eye[0]).abs() <= REGION_HALF_M + pm && (cz - eye[1]).abs() <= REGION_HALF_M + pm
 }
 
 /// The patches chosen round `REGIONS` that lie inside the grid.
@@ -239,6 +255,47 @@ pub fn dem() -> Option<&'static Dem1m> {
     .as_ref()
 }
 
+/// (`--no-city-relief`, Docs/HILLS-PLAN.md stage H3) The hill builder's cooked relief over
+/// the whole city (eo-hills `relief`, `<cache>/hills/relief-v1.bin`: the 1 m DEM's high-pass
+/// at the patches' 2 m vertices, by the same definition as `build`'s, kept where it passes
+/// 0.1 m), opened once (None: switched off, missing or refused: the patches round the photo
+/// eyes alone, from the survey, as before).
+pub fn cooked() -> Option<&'static eo_hills::relief::Relief> {
+    static R: std::sync::OnceLock<Option<eo_hills::relief::Relief>> = std::sync::OnceLock::new();
+    R.get_or_init(|| {
+        if std::env::args().any(|a| a == "--no-city-relief") {
+            return None;
+        }
+        let p = eo_hills::relief::file_path(&eo_hills::cache_dir());
+        if !p.is_file() {
+            eprintln!("terrain detail: no city relief at {} (eo-hills cook relief); the photo eyes' patches alone", p.display());
+            return None;
+        }
+        eo_hills::relief::Relief::open(&p).map_err(|e| eprintln!("terrain detail: the city relief is not used ({e:#})")).ok()
+    })
+    .as_ref()
+}
+
+/// A cooked block more than this share of whose points lie inside footprints is left to the
+/// tiles (backyards and light wells between buildings, whose relief is the buildings' edges).
+pub const COOKED_BUILT_MAX: f32 = 0.2;
+/// ... and one with less relief than this (m, before the height scale): the cook keeps 92 % of
+/// the land at its 0.1 m (house pads, terraced yards, street cuts), 35,601 blocks; the hills
+/// and wild parks are a few thousand.
+pub const COOKED_RELIEF_MIN: f32 = 0.5;
+/// ... and one whose 4 x 4 sample points are less than this share open ground or mapped
+/// greens (`OPEN_TONES` and the parks' "grass").
+pub const COOKED_GREEN_MIN: f64 = 0.5;
+
+/// The cooked relief at patch `key`'s vertex (i, j) (0..=32 inside it; -1 and 33 reach into
+/// the neighbours, for the normals), metres before the height scale (None: no block there).
+fn cooked_at(r: &eo_hills::relief::Relief, key: (i64, i64), i: i64, j: i64) -> Option<f64> {
+    let last = PATCH_CELLS * STEPS; // 32
+    let (bx, ii) = if i < 0 { (key.0 - 1, i + last) } else if i > last { (key.0 + 1, i - last) } else { (key.0, i) };
+    let (bz, jj) = if j < 0 { (key.1 - 1, j + last) } else if j > last { (key.1 + 1, j - last) } else { (key.1, j) };
+    r.block(bx, bz).map(|b| b[(jj * (last + 1) + ii) as usize] as f64 * 0.01)
+}
+
 /// The survey's NAIP mosaic (None: no survey root).
 pub fn naip() -> Option<&'static Naip> {
     static N: std::sync::OnceLock<Option<Naip>> = std::sync::OnceLock::new();
@@ -318,9 +375,32 @@ fn chamfer(cells: &[bool], n: usize, step: f64) -> Vec<f32> {
 /// Build the relief patches (None: no DEM, or no patch inside the grid).
 pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> {
     let t0 = std::time::Instant::now();
-    let dem = dem()?;
+    let dem = dem();
+    let city = cooked();
+    if dem.is_none() && city.is_none() {
+        return None;
+    }
     let l = inp.lattice;
-    let keys = patch_keys(&l);
+    // the photo eyes' patches (from the survey), and (`--no-city-relief`) every cooked block
+    // over open ground
+    let mut keys = if dem.is_some() { patch_keys(&l) } else { vec![] };
+    if let Some(r) = city {
+        let have: HashSet<(i64, i64)> = keys.iter().copied().collect();
+        let (pw, ph) = (l.width / PATCH_CELLS, l.height / PATCH_CELLS);
+        let cover = eo_landmarks::ground_cover::installed();
+        let pm = PATCH_CELLS as f64 * l.cell;
+        let green = |k: &(i64, i64)| -> f64 {
+            let (x0, z0) = (l.vx(k.0 * PATCH_CELLS), l.vz(k.1 * PATCH_CELLS));
+            let hit = (0..16).filter(|s| cover.and_then(|c| c.tone_name_at(x0 + ((s % 4) as f64 + 0.5) * pm / 4.0, z0 + ((s / 4) as f64 + 0.5) * pm / 4.0)).is_some_and(|n| OPEN_TONES.contains(&n) || n == "grass")).count();
+            hit as f64 / 16.0
+        };
+        let mut more: Vec<(i64, i64)> = r
+            .keys()
+            .filter(|k| !have.contains(k) && k.0 >= 0 && k.1 >= 0 && k.0 < pw && k.1 < ph && r.info(k.0, k.1).is_some_and(|b| b.built_share <= COOKED_BUILT_MAX && b.max_abs_m >= COOKED_RELIEF_MIN) && green(k) >= COOKED_GREEN_MIN)
+            .collect();
+        more.sort();
+        keys.extend(more);
+    }
     if keys.is_empty() {
         return None;
     }
@@ -331,7 +411,7 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
         let mut acc = 0.0;
         for (dx, dz) in [(-half, -half), (half, -half), (-half, half), (half, half)] {
             let (lat, lon) = inp.frame.lat_lon(x + dx, z + dz);
-            acc += dem.height(lon, lat)? as f64;
+            acc += dem?.height(lon, lat)? as f64;
         }
         Some(acc / 4.0)
     };
@@ -381,18 +461,30 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
     let cover = eo_landmarks::ground_cover::installed();
     // `keyset`: the patches drawn (an outer edge is one with no patch beyond)
     let build_patch = |key: (i64, i64), keyset: &HashSet<(i64, i64)>| -> Patch {
+        // a patch with a cooked block takes its relief from it (the photo eyes' patches from the
+        // survey where it is present and holds none)
+        let from_city = city.is_some_and(|r| r.block(key.0, key.1).is_some()) && !(dem.is_some() && REGIONS.iter().any(|(_, e)| near_region(&l, key, e)));
         let (cx0, cz0) = (key.0 * PATCH_CELLS, key.1 * PATCH_CELLS);
         let (x0, z0) = (l.vx(cx0), l.vz(cz0));
         let span = PATCH_CELLS as f64 * l.cell;
         // the tiles' vertex heights round the patch (two cells of margin), read once
         let cw = (PATCH_CELLS + 5) as usize;
         let hc: Vec<f32> = (0..cw * cw).map(|k| (inp.vertex_height)(cx0 - 2 + (k % cw) as i64, cz0 - 2 + (k / cw) as i64)).collect();
-        let pressed: Vec<bool> = (0..cw * cw)
+        // the carpet lifts all open ground by one constant (eo-street `openGroundLiftM`, about
+        // 0.1 m): pressed is a move away from the patch's own (median) offset, so the lift alone
+        // presses nothing (with it, every open hillside read as pressed and took no relief)
+        let offset: Vec<f32> = (0..cw * cw)
             .map(|k| {
                 let (cx, cz) = (cx0 - 2 + (k % cw) as i64, cz0 - 2 + (k / cw) as i64);
-                (hc[k] - (inp.raw_ground)(l.vx(cx), l.vz(cz))).abs() > PRESSED_M
+                hc[k] - (inp.raw_ground)(l.vx(cx), l.vz(cz))
             })
             .collect();
+        let lift = {
+            let mut o = offset.clone();
+            o.sort_by(|a, b| a.total_cmp(b));
+            o[o.len() / 2]
+        };
+        let pressed: Vec<bool> = offset.iter().map(|d| (d - lift).abs() > PRESSED_M).collect();
         let vh = |cx: i64, cz: i64| hc[((cz - cz0 + 2).clamp(0, cw as i64 - 1) as usize) * cw + (cx - cx0 + 2).clamp(0, cw as i64 - 1) as usize];
         let base_at = |x: f64, z: f64| -> f32 {
             let fx = (x - l.vx(0)) / l.cell;
@@ -415,7 +507,10 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
                 // round a photo eye (`EYE_CLEAR_M`)
                 m = m || REGIONS.iter().any(|(_, e)| (p[0] - e[0]).hypot(p[1] - e[1]) < EYE_CLEAR_M);
                 // the mapped lawns and parks: every ground-cover tone that is not open ground
-                m = m || cover.and_then(|c| c.tone_name_at(p[0], p[1])).is_some_and(|n| !OPEN_TONES.contains(&n));
+                // (a cooked block's own relief also reaches the mapped greens: Bernal Heights,
+                // Twin Peaks and the city's other hills are mapped as parks; a mown lawn's
+                // relief is about nothing anyway)
+                m = m || cover.and_then(|c| c.tone_name_at(p[0], p[1])).is_some_and(|n| !OPEN_TONES.contains(&n) && !(from_city && n == "grass"));
                 if !m {
                     // pressed: a corner of the grid cell under it moved by the carpet or the press
                     let fx = ((p[0] - l.vx(0)) / l.cell).floor() as i64;
@@ -470,18 +565,20 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
                 let (qx, qz) = (cx0 + i.div_euclid(STEPS), cz0 + j.div_euclid(STEPS));
                 let (u, v) = (i.rem_euclid(STEPS) as f32 / STEPS as f32, j.rem_euclid(STEPS) as f32 / STEPS as f32);
                 let mut add = 0.0f32;
-                if let ((Some(a), Some(b), Some(c), Some(d)), Some(dm)) = ((lp_at(qx, qz), lp_at(qx + 1, qz), lp_at(qx, qz + 1), lp_at(qx + 1, qz + 1)), dem_at(x, z, step / 4.0)) {
+                let w = || smooth(0.0, MASK_FADE_M, dist_at(x, z) - step * 0.5) * smooth(0.0, EDGE_FADE_M, edge_d(x, z));
+                if let Some(rv) = city.filter(|_| from_city).and_then(|r| cooked_at(r, key, i, j)) {
+                    // (`--no-city-relief`) the cooked high-pass, by the same definition as below
+                    add = ((rv * inp.height_scale) as f32).clamp(-MAX_RELIEF_M, MAX_RELIEF_M) * w() as f32;
+                } else if let ((Some(a), Some(b), Some(c), Some(d)), Some(dm)) = ((lp_at(qx, qz), lp_at(qx + 1, qz), lp_at(qx, qz + 1), lp_at(qx + 1, qz + 1)), dem_at(x, z, step / 4.0)) {
                     let lpv = cell_tri(a as f32, b as f32, c as f32, d as f32, u, v) as f64;
-                    let w = smooth(0.0, MASK_FADE_M, dist_at(x, z) - step * 0.5) * smooth(0.0, EDGE_FADE_M, edge_d(x, z));
-                    add = (((dm - lpv) * inp.height_scale) as f32).clamp(-MAX_RELIEF_M, MAX_RELIEF_M) * w as f32;
+                    add = (((dm - lpv) * inp.height_scale) as f32).clamp(-MAX_RELIEF_M, MAX_RELIEF_M) * w() as f32;
                 }
-                if materials.is_some() && eo_landmarks::flora2::flora2().knoll && base as f64 > eo_landmarks::flora2::KNOLL_MIN_Y {
+                if let Some(dem) = dem.filter(|_| materials.is_some() && eo_landmarks::flora2::flora2().knoll && base as f64 > eo_landmarks::flora2::KNOLL_MIN_Y) {
                     if let Some((t, f, down)) = knoll_at(inp, dem, x, z) {
                         kn[jj * hw + ii] = (t, f);
                         if eo_landmarks::flora2::flora2().relief && f > 0.0 {
                             // the cut face's gullies, under the same masks as the relief
-                            let w = smooth(0.0, MASK_FADE_M, dist_at(x, z) - step * 0.5) * smooth(0.0, EDGE_FADE_M, edge_d(x, z));
-                            add += (eo_landmarks::flora2::gully_m(x, z, down, f) * w) as f32;
+                            add += (eo_landmarks::flora2::gully_m(x, z, down, f) * w()) as f32;
                         }
                     }
                 }
@@ -604,7 +701,9 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
                 let (qx, qz) = (fx.floor() as i64, fz.floor() as i64);
                 let base = drawn_base_q(inp, qx, qz, (fx - qx as f64) as f32, (fz - qz as f64) as f32);
                 let (lat, lon) = inp.frame.lat_lon(x, z);
-                eprintln!("probe {:6.1} m: base {:8.2} drawn {:?} dem {:?} raw {:.2} knoll {:?} gully {:?} relief {:?}", k as f64 * 3.0, base, d.height(x, z), dem.height(lon, lat), (inp.raw_ground)(x, z), knoll_at(inp, dem, x, z), knoll_at(inp, dem, x, z).map(|(_, f, dn)| eo_landmarks::flora2::gully_m(x, z, dn, f)), d.relief_height(x, z));
+                let dh = dem.and_then(|dm| dm.height(lon, lat));
+                let kn = dem.and_then(|dm| knoll_at(inp, dm, x, z));
+                eprintln!("probe {:6.1} m: base {:8.2} drawn {:?} dem {:?} raw {:.2} knoll {:?} gully {:?} relief {:?}", k as f64 * 3.0, base, d.height(x, z), dh, (inp.raw_ground)(x, z), kn, kn.map(|(_, f, dn)| eo_landmarks::flora2::gully_m(x, z, dn, f)), d.relief_height(x, z));
             }
         }
     }
