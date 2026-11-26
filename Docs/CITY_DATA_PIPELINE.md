@@ -214,7 +214,11 @@ source, retrieval, digests and required attribution, except
 
 Two measured tables derived from USDA NAIP aerial imagery (public domain)
 ship in `native/assets/`: `roof-colours-v1.bin.gz` and
-`ground-green-v1.bin.gz`. The imagery itself stays outside the repository;
+`ground-green-v1.bin.gz`. Beside them, `native/assets/sf-lithology-v1.json.gz` is the
+city's bedrock by mapped geologic unit, derived from the USGS geologic map databases
+MF-2337, OF 98-354 and MF-2342 (public domain) by `scripts/world-data/build-sf-lithology.py`
+(record in `sf-lithology-v1.NOTICE.txt`; the maps' archives stay in `external/geology/`).
+The imagery itself stays outside the repository;
 `native/tools/fetch-aerial.mjs` fetches it and `eo-kit`'s `roof_survey`
 example measures it. The tiles are requested with pixels square in
 degrees, because the image service widens any other longitude/latitude box

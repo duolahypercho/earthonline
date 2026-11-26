@@ -128,6 +128,12 @@ carries its sources under `meta.sources`.
   Bay subset supplies offshore soundings beyond the detailed city grid. US
   Government public-domain data. [Dataset](https://doi.org/10.25921/fd45-gt74)
   and [build record](public/data/sf/sf-shelf.NOTICE.txt).
+- **U.S. Geological Survey geologic map databases** (`native/assets/sf-lithology-v1.json.gz`:
+  the map units read as rock classes): Blake, M.C., Jr., Graymer, R.W., and
+  Jones, D.L., 2000, MF-2337; Bonilla, M.G., 1998, Open-File Report 98-354;
+  Graymer, R.W., 2000, MF-2342. Public domain (U.S. Government work). Credit:
+  U.S. Geological Survey; no endorsement implied. Sources, digests and the
+  unit table are in the [build record](native/assets/sf-lithology-v1.NOTICE.txt).
 - **ESA WorldCover 10 m 2021 v200** (`sf-land-cover.bin.gz`): © ESA
   WorldCover project 2021 / Contains modified Copernicus Sentinel data
   (2021) processed by ESA WorldCover consortium. Zanaga, D. et al., 2022,
