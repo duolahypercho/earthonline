@@ -7,6 +7,7 @@
 //! ```text
 //! EO_AERIAL_DIR=<NAIP folder> cargo run --release -p eo-hills --example cook -- macro [--preview out.png]
 //! cargo run --release -p eo-hills --example cook -- relief [--preview <dir>]
+//! EO_AERIAL_DIR=<NAIP folder> cargo run --release -p eo-hills --example cook -- planting
 //! ```
 //!
 //! * [`macro_map`]: the aerial macro colour map (stage H2), a de-lit ground
@@ -16,11 +17,14 @@
 //!   writes (the grid of `eo-kit/examples/roof_survey.rs`), and the survey's haze.
 //! * [`raster`]: plan polygons (footprints, greens, roads) onto a texel grid.
 //! * [`transfer`]: the macro map's classified colour transfer.
+//! * [`planting`]: the vegetation planting's NAIP rules counted per 2 m
+//!   texel citywide (stage H6a), in `<cache>/hills/planting-v1.bin`.
 //! * [`relief`]: the ground's relief at 2 m from the USGS 1 m DEM (stage H3),
 //!   in `<cache>/hills/relief-v1.bin`.
 
 pub mod macro_map;
 pub mod naip;
+pub mod planting;
 pub mod raster;
 pub mod relief;
 pub mod transfer;

@@ -7,6 +7,9 @@
 //!
 //! `relief`: the ground's relief at 2 m (see `cook/relief.rs`).
 //!
+//! `planting`: the vegetation planting's NAIP rules counted per 2 m texel
+//! citywide (see `cook/planting.rs`).
+//!
 //! `macro`: the aerial macro colour map (`eo_hills::macro_map`, stage H2)
 //! into `<cache>/hills/aerial-macro-v1.bin`, `<cache>` being
 //! `EO_NATIVE_CACHE`, else `native/cache`. Inputs: the USDA NAIP 0.3 m RGB
@@ -44,6 +47,8 @@ use std::time::Instant;
 
 #[path = "cook/relief.rs"]
 mod relief; // `relief`: the 2 m relief from the 1 m DEM (stage H3)
+#[path = "cook/planting.rs"]
+mod planting; // `planting`: the vegetation planting's NAIP rules counted citywide (stage H6a)
 
 struct Probe {
     name: String,
@@ -62,10 +67,16 @@ fn main() {
     let usage = || -> ! {
         eprintln!("usage: cook macro [--preview out.png] [--probe name,x,z ...] [--colour classes|matrix] [--ridge r]   (EO_AERIAL_DIR: the NAIP folder; EO_NATIVE_CACHE: where the map goes)");
         eprintln!("       cook relief [--preview <dir>]   (EO_DEM1M_DIR: the 1 m DEM tiles, default <repo>/external/dem/1m)");
+        eprintln!("       cook planting [--samples n]   (EO_AERIAL_DIR: the NAIP folder; EO_SURVEY_ROOT: the survey, to validate)");
         std::process::exit(2)
     };
-    if args.first().map(String::as_str) == Some("relief") {
-        if let Err(e) = relief::run(&args[1..]) {
+    let sub: Option<fn(&[String]) -> Result<()>> = match args.first().map(String::as_str) {
+        Some("relief") => Some(relief::run),
+        Some("planting") => Some(planting::run),
+        _ => None,
+    };
+    if let Some(run) = sub {
+        if let Err(e) = run(&args[1..]) {
             eprintln!("cook: {e:#}");
             std::process::exit(1);
         }
@@ -101,6 +112,19 @@ fn main() {
         eprintln!("cook: {e:#}");
         std::process::exit(1);
     }
+}
+
+/// The macro map's texel grid: the NAIP grid's box on the plan, rounded out
+/// to whole texels, the size to a multiple of 64 texels (exact halves for six mips).
+fn macro_grid(g: &naip::Grid, frame: &PlanFrame) -> PlanGrid {
+    let bb = g.bbox();
+    let (xw, zn) = frame.to_plan(bb[0], bb[3]);
+    let (xe, zs) = frame.to_plan(bb[2], bb[1]);
+    let origin_x = (xw / TEXEL_M).floor() * TEXEL_M;
+    let origin_z = (zn / TEXEL_M).floor() * TEXEL_M;
+    let w = (((xe - origin_x) / TEXEL_M).ceil() as usize).div_ceil(64) * 64;
+    let h = (((zs - origin_z) / TEXEL_M).ceil() as usize).div_ceil(64) * 64;
+    PlanGrid { origin_x, origin_z, texel: TEXEL_M, width: w, height: h }
 }
 
 fn sha256_hex(b: &[u8]) -> String {
@@ -444,6 +468,26 @@ fn green_classes(paths: &eo_data::DataPaths, pg: &PlanGrid) -> Result<Vec<u8>> {
     Ok(class)
 }
 
+/// Mapped trails and bare ground (the soil rule's): a path, footway, track,
+/// bridleway or steps at grade within 1.5 m inside a park, grassland, scrub,
+/// wood or golf course, or mapped bare ground; and every way at grade within 3 m.
+fn trails(city: &eo_data::City, pg: &PlanGrid, class: &[u8]) -> (Vec<bool>, Vec<bool>) {
+    let n = pg.width * pg.height;
+    let (mut near_way, mut path) = (vec![false; n], vec![false; n]);
+    for r in &city.roads {
+        let pts: Vec<[f64; 2]> = r.points.iter().map(|p| [p[0] as f64, p[1] as f64]).collect();
+        if pts.is_empty() || r.bridge || r.tunnel || r.layer != 0 {
+            continue;
+        }
+        raster::fill_corridor(pg, &pts, 3.0, |i, j| near_way[j * pg.width + i] = true);
+        if matches!(r.highway.as_str(), "path" | "footway" | "track" | "bridleway" | "steps") {
+            raster::fill_corridor(pg, &pts, 1.5, |i, j| path[j * pg.width + i] = true);
+        }
+    }
+    let trail = (0..n).map(|k| class[k] == C_BARE || (path[k] && matches!(class[k], C_PARK | C_GRASSLAND | C_SCRUB | C_WOOD | C_GOLF))).collect();
+    (trail, near_way)
+}
+
 /// Ground slope at (x, z) on the surveyed elevation grid (central differences over 8 m).
 fn slope(elev: &eo_data::ElevationGrid, x: f64, z: f64) -> Option<f64> {
     let d = 4.0;
@@ -778,16 +822,12 @@ fn cook_macro(preview: Option<&Path>, probes: &[Probe], ridge: f32, mode: Mode) 
     let (cir_tiles, cir_missing) = verify_tiles(&dir, &manifest.cir_tiles, "cir")?;
     eprintln!("{} RGB tiles verified ({missing} missing), {} CIR ({cir_missing} missing) ({:.1} s)", tiles.len(), cir_tiles.len(), t0.elapsed().as_secs_f64());
 
-    // 2. The texture's grid: the NAIP grid's box on the plan, rounded out to
-    //    whole texels, the size to a multiple of 64 texels (exact halves for six mips).
+    // 2. The texture's grid (`macro_grid`).
+    let pg = macro_grid(&g, &frame);
+    let (origin_x, origin_z, w, h) = (pg.origin_x, pg.origin_z, pg.width, pg.height);
     let bb = g.bbox();
     let (xw, zn) = frame.to_plan(bb[0], bb[3]);
     let (xe, zs) = frame.to_plan(bb[2], bb[1]);
-    let origin_x = (xw / TEXEL_M).floor() * TEXEL_M;
-    let origin_z = (zn / TEXEL_M).floor() * TEXEL_M;
-    let w = (((xe - origin_x) / TEXEL_M).ceil() as usize).div_ceil(64) * 64;
-    let h = (((zs - origin_z) / TEXEL_M).ceil() as usize).div_ceil(64) * 64;
-    let pg = PlanGrid { origin_x, origin_z, texel: TEXEL_M, width: w, height: h };
     eprintln!("texture {w} x {h} texels of {TEXEL_M} m, north-west corner ({origin_x}, {origin_z}) on the surveyed plan; imagery box x {xw:.1}..{xe:.1}, z {zn:.1}..{zs:.1}");
 
     // 3. RGB box sums in linear light; each tile's haze.
