@@ -1364,10 +1364,12 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
                 // stand in the open. (A blade's position along itself stands in for
                 // its depth in the canopy.)
                 // (`--no-city-grass`) the city's annual canopy carries its depth in its
-                // vertex colours (vegetation_models.rs `canopy_light`): not again per blade.
-                let open = select(clamp(0.3 + 0.7 * along, 0.0, 1.0), 1.0, inst.model == PR_VEG_BASE + PR_VEG_ANNUAL);
+                // vertex colours (vegetation_models.rs `canopy_light`): not again per blade;
+                // its sky light falls down the canopy by height (`pr_annual_sky`).
+                let annual = inst.model == PR_VEG_BASE + PR_VEG_ANNUAL;
+                let open = select(clamp(0.3 + 0.7 * along, 0.0, 1.0), 1.0, annual);
                 s.albedo = s.albedo * mix(vec3<f32>(0.68, 0.75, 0.85), vec3<f32>(1.0), open);
-                s.ao = mix(0.45, 1.0, open);
+                s.ao = select(mix(0.45, 1.0, open), pr_annual_sky(in.local.y), annual);
                 // the blade's keel (a V fold at the midrib) and rolled margins as a
                 // normal map: the across direction from the screen derivatives of u.
                 let near = 1.0 - smoothstep(6.0, 18.0, dist);
@@ -1401,7 +1403,8 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
                     blade_t = s.albedo * vec3<f32>(0.5, 0.6, 0.2) * 0.3;
                     s.rough = 0.38;
                 } else if ((m.flags & PR_MEADOW_LIVE) != 0u) {
-                    blade_t = s.albedo * vec3<f32>(0.95, 0.9, 0.3) * 0.9;
+                    // (the annual canopy's cured straw passes its own hue: `ANNUAL_STRAW_T`.)
+                    blade_t = select(s.albedo * vec3<f32>(0.95, 0.9, 0.3) * 0.9, s.albedo * PR_ANNUAL_T, annual);
                     s.rough = 0.55;
                 } else {
                     blade_t = s.albedo * vec3<f32>(0.75, 0.6, 0.35) * 0.6;

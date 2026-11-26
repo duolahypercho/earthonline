@@ -116,6 +116,8 @@ pub fn thin_wgsl() -> String {
     // the city's annual canopy (`--no-city-grass`): its depth is in its vertex colours, so
     // props_draw.wgsl leaves out the blades' own clump occlusion on it.
     s += &format!("const PR_VEG_ANNUAL: u32 = {}u;\n", V_MEADOW - V_TREE + eo_landmarks::vegetation::MEADOW_ANNUAL as u32);
+    // and its straw's transmission and the sky's light down in it (`ANNUAL_STRAW_T`, `ANNUAL_SKY_K`).
+    s += &format!("const PR_ANNUAL_T: f32 = {ANNUAL_STRAW_T:?};\nfn pr_annual_sky(y: f32) -> f32 {{\n    let u = 1.0 - clamp((y - {:?}) / {ANNUAL_TOP_M:?}, 0.0, 1.0);\n    return exp(-{:?} * u * u);\n}}\n", MEADOW_GROUND - 0.01, ANNUAL_SKY_K * ANNUAL_PAI);
     s += &format!("const PR_VEG_MOUND: u32 = {mound}u;\nconst PR_VEG_MOUND_END: u32 = {}u;\nconst PR_VEG_SPECIES: u32 = {species}u;\nconst PR_VEG_SPECIES_END: u32 = {}u;\n", mound + 3, species + 4);
     s += "fn pr_veg_thin(model: u32) -> vec3<f32> {\n    switch (model - PR_VEG_BASE) {\n";
     for (k, (a, b, g)) in THIN.iter().enumerate() {
@@ -1122,9 +1124,11 @@ fn bare_tufts(b: &mut Builder, mats: &MeadowMats, soil: u32, lod: u32, seed: u32
 
 // ------------------------------------------------------------------ the city's annual grassland
 
-/// The annual canopy's levels' edges (m): the near level's blades to 8 m, the mid
-/// level's to 24 m (the meadow patches' own), the far level's strokes past them.
-pub const ANNUAL_LOD: [f32; 2] = [8.0, 24.0];
+/// The annual canopy's levels' edges (m): the near level's fine stems to 6 m (a 3 mm
+/// culm is under a pixel past about 4 m at 1920 x 1080 and a 60 degree field, so the
+/// mid level's wider stems take over soon after), the mid level's to 24 m (the meadow
+/// patches' own), the far level's strokes past them.
+pub const ANNUAL_LOD: [f32; 2] = [6.0, 24.0];
 /// A patch's disc (m): the cells are 1 m apart, so neighbours overlap.
 const ANNUAL_R: f32 = 0.75;
 /// The canopy's top in the model (m; the tallest culms' heads), what its light is
@@ -1135,17 +1139,27 @@ const ANNUAL_TOP_M: f32 = 0.8;
 /// about 0.3-0.5 for the near-upright leaves and stems of grasses, and for leaves
 /// that scatter, k sqrt(a) with a their absorptance (Campbell and Norman 1998, An
 /// Introduction to Environmental Biophysics, 2nd ed., ch. 15), per colour band. k
-/// 0.4 and a plant area index of 2.5 for a closed annual grass stand (INFERRED
-/// inside those ranges); the straw's absorptance per band 1 - (r + t), with its
+/// 0.4 and a plant area index of 3.5 for a closed annual grass stand at seed set
+/// (INFERRED inside those ranges); the straw's absorptance per band 1 - (r + t), with its
 /// reflectance r the cured oats' (`MEADOW_CURED`, inside the dry grass's 0.15-0.30)
 /// and its transmittance t taken as 0.8 r (INFERRED), so the light scattered down
 /// through the straw is warmer than the sky's: the interior reads brown, not grey.
 /// The area thins upward (its density falls linearly from the ground to the top),
 /// so the area above height y is L (1 - y / top)^2: the light at the ground is
-/// about 0.49, 0.46 and 0.41 of the top's in red, green and blue.
+/// about 0.37, 0.34 and 0.29 of the top's in red, green and blue.
 const ANNUAL_K: f32 = 0.4;
-const ANNUAL_PAI: f32 = 2.5;
+const ANNUAL_PAI: f32 = 3.5;
 const ANNUAL_STRAW_RT: f32 = 1.8;
+/// The straw's diffuse transmittance over its reflectance (as in [`canopy_light`];
+/// INFERRED): props_draw.wgsl's light through a blade of this canopy, the straw's own
+/// hue (a living blade's transmission is a saturated yellow-green: chlorophyll).
+pub const ANNUAL_STRAW_T: f32 = 0.8;
+/// The sky's diffuse light down in the canopy beyond what the vertex colours carry:
+/// diffuse light is stopped faster than the high sun's beam in a canopy (Campbell and
+/// Norman 1998, ch. 15), so the sky term (props_draw.wgsl's occlusion on this canopy,
+/// `pr_annual_sky`) falls by exp(-k L (1 - y / top)^2) more, k 0.3 (INFERRED): the
+/// lower canopy is lit by the light the straw passes down, not by the blue sky.
+const ANNUAL_SKY_K: f32 = 0.3;
 
 fn canopy_light(y: f32) -> [f32; 3] {
     let u = 1.0 - (y / ANNUAL_TOP_M).clamp(0.0, 1.0);
@@ -1160,6 +1174,14 @@ fn canopy_light(y: f32) -> [f32; 3] {
 /// at the ground and at the top (INFERRED).
 const ANNUAL_UP: (f32, f32) = (0.5, 2.2);
 
+/// The wind's weight at a blade's tip (props_types.wgsl `pr_wind`: the displacement is
+/// the weight times the wind's amplitude in metres, whatever the blade's length) for
+/// the canopy's culms, low leaves, stem leaves and litter: dry culms are stiff and the
+/// low leaves short, so a culm's tip moves a few centimetres in a breeze, not a
+/// quarter metre (the meadow's 1.0 bent the 0.6 m culms' top segments flat); the
+/// heads move with their culm's top (INFERRED).
+const ANNUAL_FLEX: [f32; 4] = [0.35, 0.12, 0.25, 0.03];
+
 /// One level of the annual canopy: (count, width m, segments) of the litter lying
 /// on the ground, of the lower canopy's leaves and of the leaves up the stems,
 /// (count, width m, segments, spikelets per panicle, head size over the near
@@ -1171,16 +1193,20 @@ struct AnnualLevel {
     culm: (u32, f32, u32, u32, f32),
 }
 
-/// The levels: the near level's area (about 0.5 m2 seen side-on per patch, so the
-/// ground is mostly hidden past about 10 m from an eye 1.7 m up) over a litter
-/// that covers about two thirds of the ground (seen from above near the feet);
-/// the mid level fewer, wider blades for about the same area and a thinner litter;
-/// the far level the upper canopy only (the lower canopy and the litter are hidden
-/// behind it at grazing angles). INFERRED.
+/// The levels. Near: 360 culms a patch (a patch a square metre: 360 stems per m2,
+/// inside the 200-600 tillers per m2 of a closed annual grass stand, INFERRED), each
+/// 2.5-3.5 mm wide (the wild oat's hollow culm is 2-4 mm thick), most within 5-10
+/// degrees of upright; a dense lower canopy of short narrow leaves (4.5 mm, the cured
+/// leaves rolled); a few withered leaves bending from the stems; and only a short, sparse
+/// litter, low and in the floor's light (barely seen between the stems). About 0.5 m2
+/// seen side-on per patch, so the ground is mostly hidden past about 10 m from an eye
+/// 1.7 m up. Mid: fewer, wider stems and leaves for about the same area, no litter;
+/// far: the upper canopy only (the lower canopy and the litter are hidden behind it
+/// at grazing angles). INFERRED.
 const ANNUAL_LEVELS: [AnnualLevel; 3] = [
-    AnnualLevel { litter: (700, 0.009, 1), low: (300, 0.009, 2), leaf: (180, 0.011, 2), culm: (110, 0.005, 3, 4, 1.0) },
-    AnnualLevel { litter: (110, 0.026, 1), low: (180, 0.022, 1), leaf: (60, 0.026, 1), culm: (40, 0.012, 2, 2, 1.7) },
-    AnnualLevel { litter: (0, 0.0, 1), low: (0, 0.0, 1), leaf: (16, 0.09, 1), culm: (16, 0.04, 1, 0, 3.0) },
+    AnnualLevel { litter: (150, 0.005, 1), low: (500, 0.0045, 1), leaf: (24, 0.004, 2), culm: (360, 0.003, 3, 5, 1.0) },
+    AnnualLevel { litter: (0, 0.0, 1), low: (180, 0.012, 1), leaf: (30, 0.014, 1), culm: (100, 0.008, 2, 2, 1.6) },
+    AnnualLevel { litter: (0, 0.0, 1), low: (0, 0.0, 1), leaf: (16, 0.07, 1), culm: (20, 0.035, 1, 0, 3.0) },
 ];
 
 /// The city's cured annual grassland (`eo_landmarks::vegetation::MEADOW_ANNUAL`,
@@ -1220,78 +1246,92 @@ fn annual_with(b: &mut Builder, mats: &MeadowMats, lv: &AnnualLevel, near: bool,
         let k = canopy_light(y);
         [c[0] * k[0], c[1] * k[1], c[2] * k[2]]
     };
-    // the litter: last year's straw and this year's fallen leaves lying matted, each its
-    // own colour between the weathered thatch and this year's straw (the dead material:
-    // no seasonal tint; INFERRED), in the canopy's floor light.
+    // the litter: last year's straw and this year's fallen leaves, short pieces lying
+    // under the canopy, each its own colour between the weathered thatch and this year's
+    // straw (the dead material: no seasonal tint; INFERRED), in the floor's light.
     let (n, w, segs) = lv.litter;
     let thatch = v::MEADOW_THATCH_ALBEDO;
     let fresh = v::MEADOW_CURED[v::MEADOW_OATS as usize];
     for k in 0..n {
         let (x, z) = disc(k, ANNUAL_R * 0.85, seed + 4);
-        let c = lit(vary_dry(mix3(thatch, fresh, hash3(k as i32, 31, 9, seed)), k, seed + 4), 0.02);
-        let len = 0.1 + 0.16 * hash3(k as i32, 32, 9, seed);
-        let lift = 0.005 + 0.04 * hash3(k as i32, 33, 9, seed).powi(2);
+        let c = lit(vary_dry(mix3(thatch, fresh, hash3(k as i32, 31, 9, seed)), k, seed + 4), 0.0);
+        let len = 0.03 + 0.06 * hash3(k as i32, 32, 9, seed);
+        let lift = 0.002 + 0.008 * hash3(k as i32, 33, 9, seed);
         let yaw = hash3(k as i32, 34, 9, seed) * std::f32::consts::TAU;
         let ww = w * (0.7 + 0.6 * hash3(k as i32, 35, 9, seed));
-        blade(b, mats.dead, [x, MEADOW_GROUND + 0.003, z], yaw, lift, ww, len, 0.0, segs, [c[0] * 0.85, c[1] * 0.85, c[2] * 0.85], c, 0.1);
+        blade(b, mats.dead, [x, MEADOW_GROUND + 0.002, z], yaw, lift, ww, len, 0.0, segs, [c[0] * 0.85, c[1] * 0.85, c[2] * 0.85], c, ANNUAL_FLEX[3]);
     }
-    // the lower canopy.
+    // the lower canopy: short narrow leaves, mostly upright.
     let (n, w, segs) = lv.low;
     for k in 0..n {
         let (x, z) = disc(k, ANNUAL_R, seed);
-        let h = 0.06 + 0.2 * hash3(k as i32, 1, 9, seed);
-        let reach = h * (0.3 + 0.6 * hash3(k as i32, 2, 9, seed));
-        let droop = 0.4 + 0.9 * hash3(k as i32, 3, 9, seed);
+        let h = 0.05 + 0.17 * hash3(k as i32, 1, 9, seed);
+        let reach = h * (0.15 + 0.35 * hash3(k as i32, 2, 9, seed));
+        let droop = 0.2 + 0.7 * hash3(k as i32, 3, 9, seed);
         let yaw = hash3(k as i32, 4, 9, seed) * std::f32::consts::TAU;
         let c = vary_dry(live, k, seed);
         let ww = w * (0.7 + 0.6 * hash3(k as i32, 5, 9, seed));
-        blade(b, mats.live, [x, g, z], yaw, h, ww, reach, droop, segs, lit(c, 0.0), lit(c, h * (1.0 - 0.5 * droop)), 0.4);
+        blade(b, mats.live, [x, g, z], yaw, h, ww, reach, droop, segs, lit(c, 0.0), lit(c, h * (1.0 - 0.5 * droop)), ANNUAL_FLEX[1]);
     }
-    // leaves up the stems.
+    // a few withered leaves up the stems (at seed set the stand's leaves are mostly dead
+    // at its base): narrow, rising then bending over, not lying out flat (INFERRED).
     let (n, w, segs) = lv.leaf;
     for k in 0..n {
         let (x, z) = disc(k, ANNUAL_R, seed + 1);
-        let y0 = 0.3 * hash3(k as i32, 11, 9, seed).powf(1.5);
-        let h = 0.12 + 0.2 * hash3(k as i32, 12, 9, seed);
-        let reach = 0.1 + 0.18 * hash3(k as i32, 13, 9, seed);
-        let droop = 0.8 + 0.8 * hash3(k as i32, 14, 9, seed);
+        let y0 = 0.03 + 0.27 * hash3(k as i32, 11, 9, seed).powf(1.5);
+        let h = 0.12 + 0.13 * hash3(k as i32, 12, 9, seed);
+        let reach = 0.03 + 0.07 * hash3(k as i32, 13, 9, seed);
+        let droop = 0.3 + 0.6 * hash3(k as i32, 14, 9, seed);
         let yaw = hash3(k as i32, 15, 9, seed) * std::f32::consts::TAU;
         let c = vary_dry(live, k + 400, seed);
         let ww = w * (0.75 + 0.5 * hash3(k as i32, 16, 9, seed));
-        blade(b, mats.live, [x, g + y0, z], yaw, h, ww, reach, droop, segs, lit(c, y0), lit(c, y0 + h * (1.0 - 0.5 * droop)), 0.7);
+        blade(b, mats.live, [x, g + y0, z], yaw, h, ww, reach, droop, segs, lit(c, y0), lit(c, y0 + h * (1.0 - 0.5 * droop)), ANNUAL_FLEX[2]);
     }
-    // the culms and their heads.
+    // the culms and their heads: most near upright (the lean's tangent 0.04-0.39, cubed
+    // toward its low end: half within about 5 degrees, a tenth past 17; INFERRED).
     let (n, w, segs, spk, big) = lv.culm;
-    // the glumes' straw in the green state (the tint takes it to the cured head's).
-    let head = [0.105, 0.135, 0.05];
+    // the glumes' pale straw in the green state (the tint takes it to the cured head's,
+    // about (0.38, 0.32, 0.20): paler and less saturated than the stems; INFERRED).
+    let head = [0.098, 0.148, 0.064];
     for k in 0..n {
         let (x, z) = disc(k, ANNUAL_R * 0.9, seed + 2);
         let h = 0.42 + 0.36 * hash3(k as i32, 21, 9, seed);
         let yaw = hash3(k as i32, 22, 9, seed) * std::f32::consts::TAU;
-        let reach = 0.02 + 0.18 * hash3(k as i32, 23, 9, seed).powi(2);
-        let droop = 0.1 + 0.35 * hash3(k as i32, 24, 9, seed);
+        let reach = h * (0.04 + 0.35 * hash3(k as i32, 23, 9, seed).powi(3));
+        let droop = 0.05 + 0.2 * hash3(k as i32, 24, 9, seed);
         let c = vary_dry(live, k + 800, seed);
+        let ww = w * (0.83 + 0.34 * hash3(k as i32, 29, 9, seed));
         let top = h * (1.0 - 0.5 * droop);
-        blade(b, mats.live, [x, g, z], yaw, h, w, reach, droop, segs, lit(c, 0.0), lit([c[0] * 1.12, c[1] * 1.08, c[2]], top), 1.0);
+        blade(b, mats.live, [x, g, z], yaw, h, ww, reach, droop, segs, lit(c, 0.0), lit([c[0] * 1.08, c[1] * 1.05, c[2]], top), ANNUAL_FLEX[0]);
+        // the heads sway with the culm's top: every vertex its weight there.
+        let head_from = b.v.len();
         let (sy, cy) = yaw.sin_cos();
         let at = |t: f32| [x + cy * reach * t * t.sqrt(), g + h * (t - 0.5 * droop * t * t), z + sy * reach * t * t.sqrt()];
         let hc = vary_dry(head, k + 1200, seed);
         let form = hash3(k as i32, 25, 9, seed);
         let hs = if near { 2 } else { 1 };
-        if form < 0.6 && spk > 0 {
-            // the oat's panicle: spikelets hanging from the culm's top fifth on short
-            // branches (each one wedge pointing out and down: a pendant).
+        if form < 0.55 && spk > 0 {
+            // the oat's open panicle: spikelets hanging from the culm's top fifth at the
+            // ends of spreading branches 1.5-4.5 cm long (each one wedge pointing down and
+            // a little out: a pendant; INFERRED from the source's "hang like pendants").
             for j in 0..spk {
                 let t = 0.8 + 0.2 * j as f32 / spk as f32;
                 let a = hash3((k * 16 + j) as i32, 26, 9, seed) * std::f32::consts::TAU;
-                let len = 0.026 * big;
+                let br = 0.015 + 0.03 * hash3((k * 16 + j) as i32, 30, 9, seed);
+                let p = at(t);
+                let p = [p[0] + a.cos() * br, p[1] - 0.3 * br, p[2] + a.sin() * br];
+                let len = (0.02 + 0.008 * hash3((k * 16 + j) as i32, 27, 9, seed)) * big;
                 let c = vary_dry(hc, k * 16 + j, seed + 3);
-                blade(b, mats.live, at(t), a, len, 0.008 * big, len * 0.8, 3.0, 1, c, [c[0] * 1.12, c[1] * 1.08, c[2]], 1.0);
+                blade(b, mats.live, p, a, len, 0.005 * big, len * 0.3, 3.0, 1, c, [c[0] * 1.08, c[1] * 1.06, c[2] * 1.04], 1.0);
             }
-        } else if form < 0.85 || spk == 0 {
-            // a dense nodding spike (or, far, the head as one stroke): along the top, bent over.
-            let len = (0.05 + 0.05 * hash3(k as i32, 27, 9, seed)) * big.min(1.7);
-            blade(b, mats.live, at(0.92), yaw + 0.3 * (hash3(k as i32, 28, 9, seed) - 0.5), len, 0.01 * big, len * 0.6, 1.6, hs, hc, [hc[0] * 1.1, hc[1] * 1.06, hc[2]], 1.0);
+        } else if form < 0.8 || spk == 0 {
+            // a dense spike (brome, barley and ryegrass heads, one form; or, far, the head as
+            // one stroke): continuing the culm's top, 4-8 cm, nodding a little (INFERRED).
+            let len = (0.04 + 0.04 * hash3(k as i32, 27, 9, seed)) * big.min(1.6);
+            blade(b, mats.live, at(0.97), yaw + 0.3 * (hash3(k as i32, 28, 9, seed) - 0.5), len, 0.006 * big.min(1.6), len * 0.25, 0.6, hs, hc, [hc[0] * 1.06, hc[1] * 1.04, hc[2] * 1.02], 1.0);
+        }
+        for vx in &mut b.v[head_from..] {
+            vx.pad = (ANNUAL_FLEX[0] * 0.92f32.powf(1.5)).to_bits();
         }
     }
     // the shading normals turned up toward the canopy's, more toward its top.
@@ -1732,11 +1772,11 @@ mod tests {
             eprintln!("annual canopy near level: {name} {a:.3} m2, {} triangles", b.opaque.len() / 3);
         }
         assert!(tris[0] > tris[1] && tris[1] > tris[2], "{tris:?}");
-        assert!(tris[0] <= 4000 && tris[1] <= 600 && tris[2] <= 60, "{tris:?}");
-        assert!(area[0] > 0.4 && area[1] > 0.6 * area[0] && area[2] > 0.3 * area[0], "{area:?}");
+        assert!(tris[0] <= 4000 && tris[1] <= 700 && tris[2] <= 60, "{tris:?}");
+        assert!(area[0] > 0.35 && area[1] > 0.6 * area[0] && area[2] > 0.3 * area[0], "{area:?}");
         // the canopy is darker inside: the light at the ground is about half the top's.
         let (floor, top) = (canopy_light(0.0), canopy_light(ANNUAL_TOP_M));
-        assert!(floor[0] > floor[1] && floor[1] > floor[2] && floor[2] > 0.35 && floor[0] < 0.55, "{floor:?}");
+        assert!(floor[0] > floor[1] && floor[1] > floor[2] && floor[2] > 0.25 && floor[0] < 0.45, "{floor:?}");
         assert_eq!(top, [1.0; 3]);
     }
 
