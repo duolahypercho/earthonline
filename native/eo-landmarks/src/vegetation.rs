@@ -755,6 +755,12 @@ pub const FAR_TREE_ALBEDO: [[f32; 3]; 3] = [[0.035, 0.060, 0.030], [0.040, 0.065
 pub fn far_form(x: f64, z: f64, shore_m: f64, draw: f64) -> (u8, f32, f32, [u8; 3]) {
     let (sp, s, hf) = coastal_tree(x, z, shore_m, draw);
     let (h, c) = FAR_TREE_SIZE[sp as usize];
+    (sp, h * s * hf, c * s, far_tint(sp, x, z))
+}
+
+/// A far card's crown colour (sRGB bytes) for coastal species `sp` at (x, z):
+/// its leaf albedo target varied as the near tier's tint is (`far_form`'s).
+pub fn far_tint(sp: u8, x: f64, z: f64) -> [u8; 3] {
     let v = 0.85 + 0.3 * hash((x * 8.0) as i64, (z * 8.0) as i64, 92) as f32;
     let enc = |l: f32| {
         let l = l.clamp(0.0, 1.0);
@@ -762,7 +768,7 @@ pub fn far_form(x: f64, z: f64, shore_m: f64, draw: f64) -> (u8, f32, f32, [u8; 
         (e * 255.0).round() as u8
     };
     let a = FAR_TREE_ALBEDO[sp as usize];
-    (sp, h * s * hf, c * s, [enc(a[0] * v), enc(a[1] * v), enc(a[2] * v)])
+    [enc(a[0] * v), enc(a[1] * v), enc(a[2] * v)]
 }
 
 /// The coarse layer over [x0, x1) x [z0, z1): coastal trees on unmapped tree
