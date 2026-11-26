@@ -16,6 +16,8 @@ NOTICE files with the data when you redistribute it.
 | `sf-lots-parks.json.gz` | Surface car parks, green areas and inland water | ODbL 1.0 (© OpenStreetMap contributors) | `sf-lots-parks.NOTICE.txt` |
 | `sf-map-citywide.json.gz` | Citywide map cartography (pause map, corner map, GPS) | ODbL 1.0, with PDDL 1.0 and public-domain inputs | `sf-map-citywide.NOTICE.txt` |
 | `sf-storm-drains.json.gz` | Street storm drains | PDDL 1.0 (DataSF / SFPUC) | `sf-storm-drains.NOTICE.txt` |
+| `sf-tree-sizes.json.gz` | Street trees: position, species, trunk diameter (DBH), plot, site, planting date; built by `scripts/world-data/build-sf-tree-sizes.py` | PDDL 1.0 (DataSF / SF Public Works) | `sf-tree-sizes.NOTICE.txt` |
+| `sf-tree-allometry.json` | Urban Tree Database equations (crown diameter and height from DBH) for the list's species, and each species' match; built by the same script | U.S. Government work (USDA Forest Service RDS-2016-0005), citation requested | `sf-tree-allometry.NOTICE.txt` |
 | `building-metadata/v1/` | Per-building use and ground-floor unit categories for the extract's buildings (SoMa pilot areas and citywide) | DataSF PDDL 1.0, OSM ODbL 1.0, SF Planning CC0 1.0 | sources in its `index.json` |
 | `building-metadata/v1-pack/` | The same categories citywide, including the DataSF footprint-pack lots | DataSF PDDL 1.0, OSM ODbL 1.0, SF Planning CC0 1.0 | sources in its `index.json` |
 

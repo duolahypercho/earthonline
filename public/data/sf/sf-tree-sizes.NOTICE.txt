@@ -1,0 +1,20 @@
+sf-tree-sizes.json.gz - San Francisco street trees: position, species, trunk diameter, plot, site, planting date
+
+Source: DataSF "San Francisco Street Tree Inventory" (tkzw-k3nq), San Francisco Public Works.
+  https://data.sf.gov/d/tkzw-k3nq
+License: Open Data Commons Public Domain Dedication and License (PDDL) 1.0
+         http://opendatacommons.org/licenses/pddl/1.0/
+Retrieved: 2026-11-26T21:19:55Z from https://data.sf.gov/resource/tkzw-k3nq.json?$select=treeid,species,mapdbh,plotsize,planteddate,latitude,longitude,siteinfo,data_as_of&$order=treeid&$limit=50000&$offset=0..100000 (3 pages)
+           and the metadata https://data.sf.gov/api/views/tkzw-k3nq (rowsUpdatedAt 1795714719).
+Upstream data as of: 2026-09-30 to 2026-11-26 (the rows' data_as_of)
+Retrieved rows SHA-256 (the pages in order): 24e8a286c240016a4f3c1e1f9006d1fd5f71d823ff7e20031f39a22ae7a75956
+Metadata SHA-256: ff0a1bd2a72884fdd0a2548a9c22a96fb206b6d8b4bc40ff08f0dfc646976834
+Produced by:   scripts/world-data/build-sf-tree-sizes.py (sf-tree-sizes-v1)
+Output sha256: f8de05d781b775e91f1e1f50819132e7cfea290b13fd32b546bb9ba49684b5e0 (sf-tree-sizes.json.gz)
+
+Kept 136595 of 144655 rows: 5754 no location, 2306 not a tree skipped.
+With a DBH: 128908; with a planting date: 33555.
+Positions: the list's latitude and longitude in the sf-city.json frame (centre 37.778, -122.4194; 110574 m per
+degree of latitude, 87986.24747640654 m per degree of longitude; x east, z south), in decimetres.
+No caretaker, planter or address fields are carried. The DBH is as the list records it, which for
+many trees is not a recent measurement (a tree planted in 2007 may still read 3 in).

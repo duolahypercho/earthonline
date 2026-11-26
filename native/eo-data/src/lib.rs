@@ -26,6 +26,7 @@ pub mod lithology; // the city's bedrock map (USGS geologic map units as rock cl
 pub mod roof_colours; // measured roof colours (aerial imagery)
 pub mod sim_source;
 pub mod standards;
+pub mod tree_sizes; // the street trees' trunk sizes (DataSF) and the Urban Tree Database allometry
 pub use standards::CaStandards;
 
 /// Where the repository's data lives.

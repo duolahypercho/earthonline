@@ -115,8 +115,16 @@ carries its sources under `meta.sources`.
   Domain Dedication and License (PDDL) 1.0. Building Footprints
   (`ynuv-fyni`), SF Shoreline and Islands, Stormwater inlets, drains and
   catch basins (`jtgq-b7c5`, maintained by the SFPUC), Registered Business
-  Locations (`g8m3-pdis`) and the Assessor Historical Secured Property Tax
-  Rolls (`wv5m-vpq2`).
+  Locations (`g8m3-pdis`), the Assessor Historical Secured Property Tax
+  Rolls (`wv5m-vpq2`) and the Street Tree List (`tkzw-k3nq`, San Francisco
+  Public Works; `sf-tree-sizes.json.gz`).
+- **USDA Forest Service, Urban Tree Database** (`sf-tree-allometry.json`):
+  McPherson, E. Gregory; van Doorn, Natalie S.; Peper, Paula J. 2016. Urban
+  tree database. Fort Collins, CO: Forest Service Research Data Archive.
+  Updated 21 January 2020. https://doi.org/10.2737/RDS-2016-0005 (report:
+  Gen. Tech. Rep. PSW-GTR-253, https://doi.org/10.2737/PSW-GTR-253). U.S.
+  Government work: "can be used without additional permissions or fees";
+  the citation is requested. [Build record](public/data/sf/sf-tree-allometry.NOTICE.txt).
 - **SF Planning, San Francisco Land Use** (`c5ge-t6pj`): CC0 1.0, as
   recorded in `public/data/sf/building-metadata/*/index.json`.
 - **U.S. Geological Survey, 3D Elevation Program** (1 m DEM in

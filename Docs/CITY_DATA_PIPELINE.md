@@ -210,6 +210,8 @@ source, retrieval, digests and required attribution, except
 | `sf-lots-parks.json.gz` | Car parks, green areas, inland water | ODbL 1.0 |
 | `sf-map-citywide.json.gz` | Map cartography, piers, place names | ODbL 1.0 |
 | `sf-storm-drains.json.gz` | Gutter storm drains | PDDL 1.0 |
+| `sf-tree-sizes.json.gz` | Street trees' DBH, species, plot and planting date (`scripts/world-data/build-sf-tree-sizes.py`) | PDDL 1.0 |
+| `sf-tree-allometry.json` | USDA Urban Tree Database equations for those species (same script) | U.S. Government work (RDS-2016-0005) |
 | `building-metadata/v1/`, `v1-pack/` | Ground-floor shop categories per tile; inputs in each `index.json` | PDDL 1.0, ODbL 1.0, CC0 1.0 |
 
 `eo-data` embeds [stop-control nodes and directions](../native/eo-data/data/sf-traffic-stops.json)
