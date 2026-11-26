@@ -1173,6 +1173,10 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
         let (oak, ash, high) = (variant_of("street-oak"), variant_of("street-ash"), variant_of("street-high"));
         let blocked = |x: f64, z: f64| sw.buildings.contains(x, z) || sw.paved_at(x, z).is_some() || world.ground(x, z) < sea + 0.3;
         for tr in cover.park_trees(x0, z0, x0 + t, z0 + t, &|x, z| world.ground(x, z), &blocked) {
+            // (`--no-city-canopy-trees`) a park tree only under the aerial image's canopy
+            if !vegetation::park_tree_canopy_ok(tr.x, tr.z) {
+                continue;
+            }
             // a mapped wood's tree as a mature coastal tree (the Presidio forest's species), on the drawn ground.
             if let Some(v) = veg.filter(|v| v.switches.coastal_trees && (cover.tree_class_at(tr.x, tr.z) == 1 || v.in_presidio(tr.x, tr.z))) {
                 let site = v.site(tr.x, tr.z);

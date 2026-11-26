@@ -288,6 +288,56 @@ fn presidio_ring(repo_root: &std::path::Path) -> Option<Vec<[f64; 2]>> {
 
 /// What the plants read: the drawn terrain, the street world (footprints,
 /// paved surfaces), the open spaces' greens, the land cover, the shore field.
+/// (`--no-city-planting`, Docs/HILLS-PLAN.md H6a) The hill builder's planting map
+/// (eo-hills `planting`), read once for every reader: the vegetation's ground
+/// ([`VegGround`]) and the park trees of both tiers ([`park_tree_canopy_ok`]).
+/// None with `--no-naip-planting` or `--no-city-planting`, or without the map.
+pub fn city_planting() -> Option<&'static eo_hills::planting::Planting> {
+    static P: std::sync::OnceLock<Option<eo_hills::planting::Planting>> = std::sync::OnceLock::new();
+    P.get_or_init(|| {
+        if !eo_landmarks::vegetation::gg3().naip_planting || std::env::args().any(|a| a == "--no-city-planting") {
+            return None;
+        }
+        let p = eo_hills::planting::file_path(&eo_hills::cache_dir());
+        if !p.is_file() {
+            eprintln!("vegetation: no city planting map at {} (eo-hills cook planting)", p.display());
+            return None;
+        }
+        match eo_hills::planting::Planting::open(&p) {
+            Ok(c) => {
+                eprintln!("vegetation: the city planting map (eo-hills planting) plants by the NAIP rules outside the survey");
+                Some(c)
+            }
+            Err(e) => {
+                eprintln!("vegetation: the city planting map is not used ({e:#})");
+                None
+            }
+        }
+    })
+    .as_ref()
+}
+
+/// The switch of [`park_tree_canopy_ok`].
+pub const CITY_CANOPY_TREES_SWITCH: &str = "--no-city-canopy-trees";
+
+/// (`--no-city-canopy-trees`, Docs/HILLS-PLAN.md H6c) Whether a park tree of the
+/// greens' lattice may stand at (x, z) (game metres): where the city planting map
+/// has the aerial image, only under its canopy (the share of canopy pixels in the
+/// [`NAIP_TREE_BOX_M`](eo_landmarks::vegetation::NAIP_TREE_BOX_M) box round the
+/// trunk at least [`NAIP_TREE_CANOPY`](eo_landmarks::vegetation::NAIP_TREE_CANOPY),
+/// the coastal trees' rule), so a park's open grassland (McLaren's, Bernal's
+/// slopes) carries no tree the photograph does not show; elsewhere, and with the
+/// switch, the lattice as it was. The near tier and the distant trees both read it.
+pub fn park_tree_canopy_ok(x: f64, z: f64) -> bool {
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *OFF.get_or_init(|| std::env::args().any(|a| a == CITY_CANOPY_TREES_SWITCH)) {
+        return true;
+    }
+    let Some(c) = city_planting() else { return true };
+    let gs = eo_data::groundscale::scale();
+    c.shares(x / gs, z / gs, eo_landmarks::vegetation::NAIP_TREE_BOX_M / gs).is_none_or(|n| n.canopy >= eo_landmarks::vegetation::NAIP_TREE_CANOPY)
+}
+
 pub struct VegGround {
     pub grid: TerrainGrid,
     pub street: Arc<eo_street::StreetWorld>,
@@ -302,7 +352,7 @@ pub struct VegGround {
     /// (`--no-city-planting`, Docs/HILLS-PLAN.md H6a) the hill builder's planting map: the
     /// same NAIP rules' class counts from the citywide 0.3 m tiles (eo-hills `planting`),
     /// read wherever the survey's image is not.
-    city: Option<eo_hills::planting::Planting>,
+    city: Option<&'static eo_hills::planting::Planting>,
     /// (`--no-city-lithology`, Docs/HILLS-PLAN.md H7) the city's bedrock map (eo-data
     /// `lithology`), in surveyed plan metres.
     bedrock: Option<eo_data::lithology::LithologyMap>,
@@ -350,26 +400,7 @@ impl VegGround {
         } else {
             None
         };
-        let city = if g3.naip_planting && !std::env::args().any(|a| a == "--no-city-planting") {
-            let p = eo_hills::planting::file_path(&eo_hills::cache_dir());
-            if p.is_file() {
-                match eo_hills::planting::Planting::open(&p) {
-                    Ok(c) => {
-                        eprintln!("vegetation: the city planting map (eo-hills planting) plants by the NAIP rules outside the survey");
-                        Some(c)
-                    }
-                    Err(e) => {
-                        eprintln!("vegetation: the city planting map is not used ({e:#})");
-                        None
-                    }
-                }
-            } else {
-                eprintln!("vegetation: no city planting map at {} (eo-hills cook planting)", p.display());
-                None
-            }
-        } else {
-            None
-        };
+        let city = city_planting();
         let bedrock = if std::env::args().any(|a| a == CITY_LITHOLOGY_SWITCH) {
             None
         } else {
@@ -470,7 +501,7 @@ impl VegGround {
         }
         // (`--no-city-planting`) the city planting map, in surveyed plan metres
         let gs = eo_data::groundscale::scale();
-        self.city.as_ref()?.shares(x / gs, z / gs, side / gs)
+        self.city?.shares(x / gs, z / gs, side / gs)
     }
 
     /// Whether (x, z) is inside the survey's NAIP image and the image is read.
@@ -482,7 +513,7 @@ impl VegGround {
     /// Whether (x, z) is inside a NAIP image that is read (`--no-naip-planting`: never): the
     /// survey's, or (`--no-city-planting`) the city planting map's.
     pub fn in_naip(&self, x: f64, z: f64) -> bool {
-        self.in_survey(x, z) || self.city.as_ref().is_some_and(|c| {
+        self.in_survey(x, z) || self.city.is_some_and(|c| {
             let gs = eo_data::groundscale::scale();
             c.shares(x / gs, z / gs, 2.0).is_some()
         })
