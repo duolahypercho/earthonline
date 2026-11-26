@@ -696,6 +696,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "eo-hills"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "eo-data",
+ "intel_tex_2",
+ "jpeg-decoder",
+ "png",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "eo-kit"
 version = "0.1.0"
 dependencies = [
@@ -795,6 +809,7 @@ dependencies = [
  "eo-assets",
  "eo-data",
  "eo-farshore",
+ "eo-hills",
  "eo-kit",
  "eo-landmarks",
  "eo-look",
