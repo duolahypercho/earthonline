@@ -59,7 +59,9 @@ grass, scrub, tree and rock systems take their placements from the lists.
 | H3 | 1 m relief on open ground citywide: the hill builder's cooked high-pass drawn as 2 m patches over the hills and wild parks; `--no-city-relief` | done (first pass) |
 | H4 | Structure cleanup in the ground (roof decks, Moscone South) | planned |
 | H5 | Surface map as material IDs in the terrain shader | planned |
-| H6 | Vegetation from the layers (grass by cure, coyote brush, lidar trees) | planned |
+| H6a | The planting's NAIP rules citywide from the hill builder's class-count map; parks with cured ground are grassland, not lawn; `--no-city-planting` | done (first pass) |
+| H6b | Grass that reads as a canopy on foot (denser, taller cured blades; a floor darkened near the eye was tried and rejected: a camera-centred halo) | planned |
+| H6c | Trees from lidar (height, crown) instead of the 14 m park lattice | planned |
 | H7 | Rock by lithology (chert on Twin Peaks, Bernal, Mount Davidson) | planned |
 
 Each stage ships with two matched capture sets (before, after), the bench
