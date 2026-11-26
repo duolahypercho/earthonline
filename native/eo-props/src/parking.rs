@@ -463,6 +463,9 @@ pub fn plan_kerbs(w: &PropsWorld, ei: usize, key: &str, ctx: &mut PlanCtx) -> Ve
     let node_end = e.approach_end.is_some();
     let start = e.trim_start + if node_start { k("endClearance") } else { k("splitClearance") };
     let end = e.length - e.trim_end - if node_end { k("endClearance") } else { k("splitClearance") };
+    // (`--street-tapers`, eo-street `StreetWorld::taper_reach`) no stall where the kerb tapers in
+    let taper = w.street.taper_reach(ei);
+    let (start, end) = (start.max(e.trim_start + taper[0]), end.min(e.length - e.trim_end - taper[1]));
     let street_type = seg.street_type.clone().unwrap_or_default();
     let stall_pitch = w.js.consts["kerbStallPitch"][street_type.as_str()].as_f64();
     if !(end - start > 4.2) {
