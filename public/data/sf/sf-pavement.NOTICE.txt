@@ -1,0 +1,21 @@
+sf-pavement.json.gz - San Francisco street pavement condition and last resurfacing
+
+Source: DataSF, San Francisco Public Works:
+  Streets Data - Pavement Condition Index (PCI) Scores (5aye-4rtt), rows updated 2026-11-26
+  Streets Data - Historical Pavement Condition Index (PCI) Scores (78va-8dhi), latest resurfacing per segment
+License: Open Data Commons Public Domain Dedication and License (PDDL) 1.0
+         http://opendatacommons.org/licenses/pddl/1.0/
+Attribution (courtesy): City and County of San Francisco, San Francisco Public Works, via DataSF.
+Retrieved from:
+  https://data.sf.gov/resource/5aye-4rtt.json?%24select=cnn%2Cpci_score%2Cpci_change_date%2Ctreatment_or_survey%2Cfunctional_class%2Cline%2Cpoint&%24order=cnn&%24limit=50000
+  https://data.sf.gov/resource/78va-8dhi.json?%24select=cnn%2Cmax%28pci_change_date%29+as+last_treatment&%24where=treatment_or_survey%3D%27Treatment%27&%24group=cnn&%24order=cnn&%24limit=50000
+Source SHA-256: 5aye-4rtt f8ae3f3ffcdb7a7f154f23ab26476c811d9fa56fd7a7b781a9e0fb8897d707f0
+                78va-8dhi fe53dd0e0b5339ed599637819304ff0129a67f2c31f5c710ed9f8cfe85c39723
+Produced by:   scripts/world-data/build-sf-pavement.py (sf-pavement-v1)
+Output SHA-256: 31559b010988cfeb0debd02d385f4906997c9072b38daa395e98092b575fcdd1 (sf-pavement.json.gz)
+
+Kept: 14266 street segments with a line (12433 with a recorded resurfacing date), 4883 intersection points; 326 rows without a usable score or position.
+Carried per record: CNN, PCI score (0-100), the score's date, survey or treatment, functional class,
+the latest resurfacing date, and the segment line (or intersection point) in the city file's local
+metre frame (sf-city.json.gz meta: x east, z south). The game reads the age of the pavement from
+the resurfacing date against the snapshot date above, not against the clock.

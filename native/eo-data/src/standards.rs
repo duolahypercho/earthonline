@@ -76,6 +76,13 @@ impl CaStandards {
             .ok_or_else(|| anyhow!("California street standard \"{id}\" [{key}] has no verified scalar metric value"))
     }
 
+    /// The metric value of an entry as the table holds it (an object or an
+    /// array, for values no scalar accessor reads), or an error when the
+    /// table has no verified value for it.
+    pub fn metric_value(&self, id: &str) -> Result<&serde_json::Value> {
+        self.metric.get(id).ok_or_else(|| anyhow!("California street standard \"{id}\" has no verified metric value"))
+    }
+
     /// `caMetric(id, key)` for a `[lo, hi]` range under `key`.
     pub fn metric_range(&self, id: &str, key: &str) -> Result<[f64; 2]> {
         let v = self

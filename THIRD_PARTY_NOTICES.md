@@ -116,8 +116,13 @@ carries its sources under `meta.sources`.
   (`ynuv-fyni`), SF Shoreline and Islands, Stormwater inlets, drains and
   catch basins (`jtgq-b7c5`, maintained by the SFPUC), Registered Business
   Locations (`g8m3-pdis`), the Assessor Historical Secured Property Tax
-  Rolls (`wv5m-vpq2`) and the Street Tree List (`tkzw-k3nq`, San Francisco
-  Public Works; `sf-tree-sizes.json.gz`).
+  Rolls (`wv5m-vpq2`), the Street Tree List (`tkzw-k3nq`, San Francisco
+  Public Works; `sf-tree-sizes.json.gz`), San Francisco Public Works' Streets
+  Data - Pavement Condition Index (PCI) Scores (`5aye-4rtt`) and Historical
+  PCI Scores (`78va-8dhi`) in `sf-pavement.json.gz`, and the SFMTA's MTA Bike
+  Network Linear Features (`ygmz-vaxd`) in `sf-bikeways.json.gz`, and its
+  Parking regulations (`hi6h-neyh`), Parking Meters (`8vzz-qzz9`) and Traffic
+  Signals (`ybh5-27n2`) in `sf-street-survey.json.gz`.
 - **USDA Forest Service, Urban Tree Database** (`sf-tree-allometry.json`):
   McPherson, E. Gregory; van Doorn, Natalie S.; Peper, Paula J. 2016. Urban
   tree database. Fort Collins, CO: Forest Service Research Data Archive.

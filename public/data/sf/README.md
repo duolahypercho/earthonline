@@ -18,6 +18,9 @@ NOTICE files with the data when you redistribute it.
 | `sf-storm-drains.json.gz` | Street storm drains | PDDL 1.0 (DataSF / SFPUC) | `sf-storm-drains.NOTICE.txt` |
 | `sf-tree-sizes.json.gz` | Street trees: position, species, trunk diameter (DBH), plot, site, planting date; built by `scripts/world-data/build-sf-tree-sizes.py` | PDDL 1.0 (DataSF / SF Public Works) | `sf-tree-sizes.NOTICE.txt` |
 | `sf-tree-allometry.json` | Urban Tree Database equations (crown diameter and height from DBH) for the list's species, and each species' match; built by the same script | U.S. Government work (USDA Forest Service RDS-2016-0005), citation requested | `sf-tree-allometry.NOTICE.txt` |
+| `sf-street-survey.json.gz` | Kerbside parking regulation stretches (allowed or banned) and on-street meters, and the mid-block signals, beacons and flashers, in world metres (built by `scripts/world-data/build-sf-street-survey.py`) | PDDL 1.0 (DataSF / SFMTA) | `sf-street-survey.NOTICE.txt` |
+| `sf-bikeways.json.gz` | Each street segment's bike facilities (class, direction, contraflow, buffer, raised, barrier, green paint) with their lines, in world metres (built by `scripts/world-data/build-sf-bikeways.py`) | PDDL 1.0 (DataSF / SFMTA) | `sf-bikeways.NOTICE.txt` |
+| `sf-pavement.json.gz` | Each street segment's Pavement Condition Index and latest resurfacing date, with its line, in world metres (built by `scripts/world-data/build-sf-pavement.py`) | PDDL 1.0 (DataSF / SF Public Works) | `sf-pavement.NOTICE.txt` |
 | `building-metadata/v1/` | Per-building use and ground-floor unit categories for the extract's buildings (SoMa pilot areas and citywide) | DataSF PDDL 1.0, OSM ODbL 1.0, SF Planning CC0 1.0 | sources in its `index.json` |
 | `building-metadata/v1-pack/` | The same categories citywide, including the DataSF footprint-pack lots | DataSF PDDL 1.0, OSM ODbL 1.0, SF Planning CC0 1.0 | sources in its `index.json` |
 

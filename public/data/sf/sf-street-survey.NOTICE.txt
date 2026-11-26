@@ -1,0 +1,23 @@
+sf-street-survey.json.gz - San Francisco kerbside parking and mid-block signalised crossings
+
+Source: DataSF, SFMTA:
+  Parking regulations (except non-metered color curb) (hi6h-neyh), rows updated 2026-06-13
+  Parking Meters (8vzz-qzz9), rows updated 2026-11-07
+  Traffic Signals (ybh5-27n2), rows updated 2024-05-31
+License: Open Data Commons Public Domain Dedication and License (PDDL) 1.0
+         http://opendatacommons.org/licenses/pddl/1.0/
+Attribution (courtesy): City and County of San Francisco, SFMTA, via DataSF.
+Retrieved from:
+  https://data.sf.gov/resource/hi6h-neyh.json?%24select=regulation%2Cshape&%24order=objectid&%24limit=50000
+  https://data.sf.gov/resource/8vzz-qzz9.json?%24select=on_offstreet_type%2Cactive_meter_flag%2Ccap_color%2Clongitude%2Clatitude&%24where=on_offstreet_type%3D%27ON%27&%24order=objectid&%24limit=50000
+  https://data.sf.gov/resource/ybh5-27n2.json?%24select=cnn%2Cstreet1%2Cstreet2%2Ctype%2Cped_signal%2Cshape&%24where=upper%28street1%29+like+%27%25MIDBLOCK%25%27+OR+upper%28street2%29+like+%27%25MIDBLOCK%25%27&%24order=objectid&%24limit=5000
+Source SHA-256:
+  hi6h-neyh 90aabe07d8c3a0f381071e77054171f8c48df8e13e7892e6902ddbf6d340b3d6
+  8vzz-qzz9 b71267f1dfd042ca545773d52c61134816c88f8cc6bb34c057a75ea121b7e2d7
+  ybh5-27n2 e3d1478304851accfe76ed76c5506f6b592b12c857315b7718a733dbc243f1be
+Produced by:   scripts/world-data/build-sf-street-survey.py (sf-street-survey-v1)
+Output SHA-256: 23cd1c0480f65e69f85f0000207398da8ff6e3813055e675b4523706f45974eb (sf-street-survey.json.gz)
+
+Kept: 7733 parking regulation stretches (allowed or banned; 55 others skipped), 35406 on-street meters (2470 skipped), 60 mid-block signals, beacons and flashers (26 other devices skipped).
+Carried: whether a stretch lets a car park and its line, each meter's point, and each mid-block device's
+kind and point, in the city file's local metre frame (sf-city.json.gz meta: x east, z south).

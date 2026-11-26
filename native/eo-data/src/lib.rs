@@ -22,7 +22,10 @@ pub mod external; // where the optional open assets are read from (<repo>/extern
 pub mod geo; // latitude, longitude and height above mean sea level to game coordinates
 pub mod groundscale; // the street size (the approved ground-plan deviation, 1.25)
 pub mod lidar_buildings; // per-building 3D roof, setback and penthouse massing from external/lidar
+pub mod bikeways; // each street segment's bike facility: class, two-way, barrier, green paint (DataSF / SFMTA)
 pub mod lithology; // the city's bedrock map (USGS geologic map units as rock classes)
+pub mod pavement; // each street segment's pavement condition and last resurfacing (DataSF PCI)
+pub mod street_survey; // kerbside parking (regulations, meters) and mid-block signalised crossings (DataSF / SFMTA)
 pub mod roof_colours; // measured roof colours (aerial imagery)
 pub mod sim_source;
 pub mod standards;
