@@ -685,7 +685,7 @@ fn pr_wet_bark(s: ptr<function, Surface>, w: f32, run: f32) {
 // sf:end
 // sf:FOLIAGE|PALM+
 // the least n.v a leaf's shading normal keeps (it is seen, so it faces the eye)
-const PR_LEAF_NV_MIN: f32 = 0.1;
+const PR_LEAF_NV_MIN: f32 = 0.28;
 // sf:end
 // sf:PALM+
 // ---- palm detail (`--palm-detail`; this block is in the shader only with it) ----
@@ -1577,6 +1577,12 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         if (lnv < PR_LEAF_NV_MIN) {
             s.n = normalize(s.n + v * (PR_LEAF_NV_MIN - lnv));
         }
+        // Broad leaf-sprig cards represent many tilted sub-leaves, not a single flat
+        // dielectric mirror: suppress grazing white sun-glare blowout on dry backlit cards
+        // while keeping warm translucent scatter (`pr_foliage`) and wet cuticle sheen.
+        let dry_w = 1.0 - select(0.0, skyu.wet.x, sky_on(skyu.flags.x, SKY_WET));
+        let back_glare = smoothstep(0.15, 0.85, dot(-v, look.key_dir.xyz)) * (1.0 - smoothstep(0.18, 0.62, dot(s.n, v)));
+        s.rough = max(s.rough, mix(0.90, 0.98, back_glare) * dry_w * leaf);
         // it passes the light on its far face (in the emissive slot: look_light
         // adds it before its fog); the sun's shadow there only when the sun is behind it.
         var leaf_sh = 0.0;

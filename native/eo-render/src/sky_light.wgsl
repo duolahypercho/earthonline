@@ -185,6 +185,24 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
     let r_along = mix(SKY_CINE_STREAK_ALONG, SKY_W2_RING_LOBE.y, sky_streak_pud);
     let r_across = mix(SKY_CINE_STREAK_ACROSS, SKY_W2_RING_LOBE.y, sky_streak_pud);
     let lobes = select(1, 2, SKY_W2_FULL && ring_w > 0.0);
+    // Subtle asphalt micro-aggregate slope breakup on non-puddle wet film so
+    // night taillight and streetlamp streaks shimmer organically over coarse road grain.
+    var ns = n;
+    let film_grain = 1.0 - sky_streak_pud;
+    if (film_grain > 0.02 && n.y > 0.7) {
+        let dist_s = length(world - skyu.eye.xyz);
+        let fp_s = dist_s * 2.0 * skyu.cluster.z / max(skyu.res.y, 1.0) / max(abs(dot(n, v)), 0.08);
+        let gk = (1.0 - smoothstep(0.015, 0.14, fp_s)) * film_grain;
+        if (gk > 0.01) {
+            let p1 = world.xz * 7.5;
+            let p2 = world.xz * 19.0 + vec2<f32>(4.3, 11.7);
+            let gx = (st_noise(p1 + vec2<f32>(0.25, 0.0)) - st_noise(p1)) * 0.65
+                + (st_noise(p2 + vec2<f32>(0.25, 0.0)) - st_noise(p2)) * 0.35;
+            let gz = (st_noise(p1 + vec2<f32>(0.0, 0.25)) - st_noise(p1)) * 0.65
+                + (st_noise(p2 + vec2<f32>(0.0, 0.25)) - st_noise(p2)) * 0.35;
+            ns = normalize(n + vec3<f32>(gx, 0.0, gz) * (0.14 * gk));
+        }
+    }
     var out = vec3<f32>(0.0);
     for (var k = 0u; k < count; k = k + 1u) {
         let li = sky_lights[sky_clusters[base + 1u + k]];
@@ -192,7 +210,7 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
         let d2 = max(dot(d, d), 0.04);
         let dist = sqrt(d2);
         let l = d / dist;
-        if (dot(n, l) <= 0.0) {
+        if (dot(ns, l) <= 0.0) {
             continue;
         }
         let ca = dot(-l, li.dir);
@@ -229,7 +247,7 @@ fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
         for (var lb = 0; lb < lobes; lb = lb + 1) {
             let second = lb == 1;
             let wl = select(select(1.0, 1.0 - ring_w, lobes == 2), ring_w, second);
-            f = f + wl * sky_cine_film(n, v, l, t, min(select(a_along, r_along, second) + wide, 1.0), min(select(a_across, r_across, second) + wide, 1.0));
+            f = f + wl * sky_cine_film(ns, v, l, t, min(select(a_along, r_along, second) + wide, 1.0), min(select(a_across, r_across, second) + wide, 1.0));
         }
         // a mirror's bound: no more than the film's Fresnel (<= 1) times the source's luminance
         let e = li.intensity * shape / d2;
@@ -750,7 +768,7 @@ fn sky_wet_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>
 fn sky_wet_generic_at(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>, allow_puddle: bool) {
     if (sky_w2_on()) {
         if (sky_on(skyu.flags.x, SKY_WET) && skyu.wet.x >= 0.02) {
-            sky_w2_generic(s, ng, world);
+            sky_w2_generic(s, ng, world, allow_puddle);
         }
         return;
     }
@@ -1004,19 +1022,19 @@ const SKY_W2_LEVEL: vec3<f32> = vec3<f32>(0.795, 0.225, 0.7);
 /// ground's share of the carriageway's fill (better drained).
 const SKY_W2_GUTTER: f32 = 0.22;
 const SKY_W2_WALK_FILL: f32 = 0.5;
-/// The damp halo's width in hollow units (about 8 % of a carriageway at fill
-/// 0.45), and the further darkening of its soaked ground (saturated, no film:
+/// The damp halo's width in hollow units (capillary soak ring around every
+/// puddle), and the further darkening of its soaked ground (saturated, no film:
 /// Lekner & Dorf's full darkening past the wet film's).
-const SKY_W2_HALO: f32 = 0.05;
-const SKY_W2_HALO_DARKEN: f32 = 0.82;
+const SKY_W2_HALO: f32 = 0.14;
+const SKY_W2_HALO_DARKEN: f32 = 0.64;
 /// The aggregate's relief in the hollow field (its 12 and 5 cm octaves'
 /// weight): a shore's lobes and fingers.
-const SKY_W2_GRIT: f32 = 0.07;
+const SKY_W2_GRIT: f32 = 0.085;
 /// Still water: its roughness, the darkening of the ground under it, the wind
 /// wavelets' slope (at 1 m/s) and scale (m).
 const SKY_W2_WATER_ROUGH: f32 = 0.05;
-const SKY_W2_UNDER_WATER: f32 = 0.8;
-const SKY_W2_WAVELET: vec2<f32> = vec2<f32>(0.012, 0.16);
+const SKY_W2_UNDER_WATER: f32 = 0.68;
+const SKY_W2_WAVELET: vec2<f32> = vec2<f32>(0.011, 0.15);
 /// Porosity from the dry roughness: (rough - x) / y.
 const SKY_W2_POROSITY: vec2<f32> = vec2<f32>(0.45, 0.45);
 /// Open ground and roofs (not the street): the darkening of a fully porous
@@ -1047,8 +1065,8 @@ const SKY_W2_CANYON_WIND: f32 = 0.2;
 const SKY_W2_RING_LOBE: vec2<f32> = vec2<f32>(0.15, 0.04);
 /// A ring drawn where the pixel can hold it: its wavelength (m), the speed
 /// of its front (m/s), its life (s), its peak slope; the cells drops land in (m).
-const SKY_W2_RING: vec4<f32> = vec4<f32>(0.020, 0.24, 0.42, 0.10);
-const SKY_W2_RING_CELL: f32 = 0.40;
+const SKY_W2_RING: vec4<f32> = vec4<f32>(0.024, 0.22, 0.42, 0.055);
+const SKY_W2_RING_CELL: f32 = 0.42;
 
 /// (`--wet-surfaces`) the share of the shaded surface that is water (the film
 /// and puddles): look_light reads its environment whole there (`sky_w2_env`).
@@ -1100,8 +1118,8 @@ fn sky_w2_puddle(p: vec2<f32>, kerb: f32, fill: f32, fp: f32) -> vec2<f32> {
         return vec2<f32>(0.0);
     }
     let depth = sky_w2_hollow(p, kerb, fp) - (SKY_W2_LEVEL.x - SKY_W2_LEVEL.y * pow(fill, SKY_W2_LEVEL.z));
-    // the shore: about a centimetre, widened to the footprint (the field's slope ~0.4 / m)
-    let shore = max(0.004, 0.4 * fp);
+    // the shore: soft capillary meniscus widened to the pixel footprint
+    let shore = max(0.018, 0.62 * fp);
     let pud = smoothstep(-0.5 * shore, 0.5 * shore, depth);
     let halo = smoothstep(-SKY_W2_HALO, 0.0, depth) * (1.0 - pud) * clamp(fill * 2.5, 0.0, 1.0);
     return vec2<f32>(pud, halo);
@@ -1116,7 +1134,7 @@ fn sky_w2_puddle(p: vec2<f32>, kerb: f32, fill: f32, fp: f32) -> vec2<f32> {
 fn sky_w2_rings(p: vec2<f32>, fp: f32) -> vec2<f32> {
     let rate = skyu.wet.z;
     let lam = SKY_W2_RING.x;
-    let fade = 1.0 - smoothstep(0.15 * lam, 0.35 * lam, fp);
+    let fade = 1.0 - smoothstep(0.22 * lam, 0.85 * lam, fp);
     if (rate <= 0.0 || fade <= 0.0) {
         return vec2<f32>(0.0);
     }
@@ -1154,7 +1172,7 @@ fn sky_w2_lobe(fp: f32) -> f32 {
     let a0 = SKY_W2_WATER_ROUGH * SKY_W2_WATER_ROUGH;
     let a = sqrt(a0 * a0 + SKY_W2_WAVELET_MSS.y * ws * SKY_W2_CANYON_WIND);
     sky_w2_pud_alpha = a;
-    let drawn = 1.0 - smoothstep(0.15 * SKY_W2_RING.x, 0.35 * SKY_W2_RING.x, fp);
+    let drawn = 1.0 - smoothstep(0.22 * SKY_W2_RING.x, 0.85 * SKY_W2_RING.x, fp);
     sky_w2_ring = select(0.0, (1.0 - exp(-SKY_W2_RING_LOBE.x * skyu.wet.z)) * (1.0 - drawn), skyu.wet.z > 0.0);
     return sqrt(a);
 }
@@ -1232,7 +1250,7 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
         // from it)
         film = wet_rough * sky_wr_film_k((*s).rough, asphalt);
     }
-    (*s).rough = mix(mix((*s).rough, film, soak), min(film, SKY_W2_WATER_ROUGH * 2.0), ph.y * 0.5);
+    (*s).rough = mix(mix((*s).rough, film, soak), min(film, SKY_W2_WATER_ROUGH * 2.4), ph.y * 0.65);
     var n = normalize(mix((*s).n, n_geom, clamp(soak * select(0.70, 0.75, asphalt), 0.0, 1.0)));
     if (pud > 0.01) {
         (*s).rough = mix((*s).rough, sky_w2_lobe(fp), pud);
@@ -1243,10 +1261,18 @@ fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>,
 
 /// Any other surface wet (`sky_wet_generic` with the switch on): open ground
 /// and roofs as a porous walk with their own puddles, walls in the rain's runs,
-/// soffits dry.
-fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
+/// soffits dry. Dynamic props and bodies (`!allow_puddle`) take soft dampness
+/// without standing mirror puddles or building wall runs.
+fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>, allow_puddle: bool) {
     var w = skyu.wet.x;
     let porosity = clamp(((*s).rough - SKY_W2_POROSITY.x) / SKY_W2_POROSITY.y, 0.0, 1.0) * (1.0 - (*s).metal);
+    if (!allow_puddle) {
+        let wt = w * (0.28 + 0.52 * smoothstep(0.45, 0.9, ng.y));
+        (*s).albedo = (*s).albedo * mix(1.0, mix(1.0, 0.72, porosity), wt);
+        (*s).rough = mix((*s).rough, min((*s).rough, 0.42), wt);
+        sky_w2_water = wt * 0.35;
+        return;
+    }
     let up = smoothstep(0.55, 0.9, ng.y);
     if (up > 0.0) {
         if (sky_on(skyu.flags.x, SKY_DAMP)) {
