@@ -392,8 +392,18 @@ pub fn wgsl_constants(scoring_m: f32) -> String {
         ("GRATE", crate::cc0_decals::DK_GRATE),
         ("KERB_PAINT", crate::cc0_decals::DK_KERB_PAINT),
         ("WALK_EDGE", crate::cc0_decals::DK_WALK_EDGE),
+        ("SURFACE", crate::cc0_decals::DK_SURFACE),
+        ("LANE", crate::cc0_decals::DK_LANE),
     ] {
         s.push_str(&format!("const CC0_DK_{k}: u32 = {v}u;\n"));
+    }
+    // (`--road-wear`, `--pavement-age`) the parameters a lane or surface record carries above its kind.
+    {
+        use crate::cc0_decals as d;
+        s.push_str(&format!(
+            "const CC0_RW_AGE_SHIFT: u32 = {}u;\nconst CC0_RW_AGE_UNKNOWN: u32 = {}u;\nconst CC0_RW_PCI_SHIFT: u32 = {}u;\nconst CC0_RW_PCI_UNKNOWN: u32 = {}u;\nconst CC0_RW_STOP_POS: u32 = {}u;\nconst CC0_RW_STOP_NEG: u32 = {}u;\nconst CC0_RW_BUS: u32 = {}u;\n",
+            d::RW_AGE_SHIFT, d::RW_AGE_UNKNOWN, d::RW_PCI_SHIFT, d::RW_PCI_UNKNOWN, d::RW_STOP_POS, d::RW_STOP_NEG, d::RW_BUS
+        ));
     }
     // The carriageway's tone, and the kerb-face grime's reach (caMetric('curb-height-sf-standard')).
     s.push_str(&format!("const CC0_ASPHALT_ALBEDO: f32 = {ASPHALT_ALBEDO:.6};\nconst CC0_ASPHALT_REF_LUMA: f32 = {:.6};\nconst CC0_ASPHALT_DETAIL_GAIN: f32 = {ASPHALT_DETAIL_GAIN:.6};\n", asphalt_ref_luma()));

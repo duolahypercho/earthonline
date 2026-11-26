@@ -498,6 +498,18 @@ pub const MATTE_WHEEL_PATHS: u32 = 32;
 /// only where a stone spans a few pixels: the shaded carriageway a few metres
 /// off a near-even grey as photographed, not a mosaic of pale stones.
 pub const AGED_AGGREGATE: u32 = 64;
+/// `--road-wear` (street_pbr.wgsl `rw_*`, cc0_decals.rs `DK_LANE`): each travel
+/// lane's traffic wear as the traffic lays it, soft overlapping tyre tracks
+/// with thin lines along the travel and the drips between them, most where
+/// the traffic waits (in place of the wheel strips and the drip line), the
+/// patches' tones nearer the road's; with `--street-pbr` the wheel paths'
+/// polish and glare at a share.
+pub const ROAD_WEAR: u32 = 128;
+/// `--pavement-age` (street_pbr.wgsl `rw_*`, cc0_decals.rs `DK_SURFACE`): each
+/// street's pavement by the city's survey (DataSF PCI, eo-data `pavement`):
+/// a new surface dark and filmed, without old repairs or cracks; an old or
+/// poor one worn, cracked and patched.
+pub const PAVEMENT_AGE: u32 = 256;
 /// Every natural-detail bit.
 pub const NATURE_ALL: u32 = NATURE_FOLIAGE | NATURE_LOD_FADE | NATURE_TURF | NATURE_PALM | NATURE_HILLS | NATURE_COVER | NATURE_BARE | NATURE_PALM_VARIETY | NATURE_CROWN | NATURE_FAR_PALMS | NATURE_PROP_FAR | NATURE_HILL_RELIEF | NATURE_LEAF_SHADE | NATURE_WET_FOLIAGE | NATURE_LAWN_ALBEDO;
 
@@ -1193,7 +1205,7 @@ pub struct ShaderFeatures {
     /// The street track's round-2 passes (`STREET_*` bits: `--street-wear`,
     /// `--street-glare`, `--street-aggregate`, `--plaza-setts`, `--walk-relief`;
     /// `SF_STREET_WEAR`, `SF_STREET_GLARE`, `SF_STREET_AGGREGATE`, `SF_PLAZA_SETTS`,
-    /// `SF_WALK_RELIEF`): as `street_pbr`,
+    /// `SF_WALK_RELIEF`; `--road-wear`, `--pavement-age`: `SF_ROAD_WEAR`, `SF_PAVEMENT_AGE`): as `street_pbr`,
     /// compiled in only with their switches (eo-app sets them; `ALL` leaves them out).
     pub street: u32,
     /// The sun bounce (`--sun-bounce`; `SF_SUN_BOUNCE`): the occlusion pass's
@@ -1533,6 +1545,8 @@ impl ShaderFeatures {
                 ("SF_WALK_RELIEF", self.street & WALK_RELIEF != 0),
                 ("SF_MATTE_WHEEL_PATHS", self.street & MATTE_WHEEL_PATHS != 0),
                 ("SF_AGED_AGGREGATE", self.street & AGED_AGGREGATE != 0),
+                ("SF_ROAD_WEAR", self.street & ROAD_WEAR != 0),
+                ("SF_PAVEMENT_AGE", self.street & PAVEMENT_AGE != 0),
                 // the light track
                 ("SF_SUN_BOUNCE", self.sun_bounce),
                 ("SF_AO_ALBEDO", self.ao_albedo),
@@ -1677,6 +1691,9 @@ fn sf_select_with(src: &str, weather_fx_floor: bool, aaa_buildings: bool) -> Str
         "AAA_BUILDINGS" => f.aaa_buildings != 0 && aaa_buildings,
         "AAA_AERIAL" => (f.aaa_buildings & AAA_AERIAL) != 0,
         "AAA_DETAIL" => (f.aaa_buildings & AAA_DETAIL) != 0,
+        // (`--road-wear`, `--pavement-age`) their code out of every pipeline without them: the shader as before
+        "ROAD_WEAR" => f.street & ROAD_WEAR != 0,
+        "PAVEMENT_AGE" => f.street & PAVEMENT_AGE != 0,
         _ => false,
     };
     // `A|B`: either bit in (code two features share); `A&B`: both (code that joins them);
@@ -2241,6 +2258,8 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
             "SF_WALK_RELIEF",
             "SF_MATTE_WHEEL_PATHS",
             "SF_AGED_AGGREGATE",
+            "SF_ROAD_WEAR",
+            "SF_PAVEMENT_AGE",
             "SF_FACADE_GLASS",
             "SF_FACADE_WEATHER",
             "SF_CANYON_GLASS",

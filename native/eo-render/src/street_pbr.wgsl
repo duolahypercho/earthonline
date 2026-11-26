@@ -191,14 +191,36 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
             let w = 0.3 + 0.1 * st_noise(vec2<f32>(along / 4.0, 1.7));
             // the polish broken into streaks along the road (tyre tread, the aggregate's tops)
             let streak = 0.55 + 0.45 * st_noise(vec2<f32>(along / 1.7, kd / 0.08) + 5.3);
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+            var wp = (1.0 - smoothstep(w * 0.35, w, dt)) * in_lane * mix(0.75, streak, wx_keep(0.08, fw));
+            // (`--road-wear`) a soft bell about the track, as the lanes' records draw it near, scaled by the pavement's age
+            let rk = select(1.0, min(rw_wear_scale(rw_age, rw_pci), 1.25), SF_ROAD_WEAR);
+            if (SF_ROAD_WEAR) {
+                wp = rw_gauss(dt, RW_CAR_SIGMA_M) * in_lane * mix(0.75, streak, wx_keep(0.08, fw)) * rk;
+            }
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
             let wp = (1.0 - smoothstep(w * 0.35, w, dt)) * in_lane * mix(0.75, streak, wx_keep(0.08, fw));
+// sf:end
             // drips between the wheel paths, densest at the lane's middle, in blots along it
             let blot = 0.45 + 0.55 * smoothstep(0.3, 0.75, st_noise(vec2<f32>(along / 1.3, kd / 0.25) + 2.2));
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+            let oil = (1.0 - smoothstep(0.1, 0.55, abs(lx))) * in_lane * mix(0.7, blot, wx_keep(0.25, fw)) * rk;
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
             let oil = (1.0 - smoothstep(0.1, 0.55, abs(lx))) * in_lane * mix(0.7, blot, wx_keep(0.25, fw));
+// sf:end
             wpath = wp;
             // worn binder shows the aggregate (lighter, less brown); drips darken and close the texture
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+            // (`--road-wear`: 10 % lighter at most, UKERC; the drips' band half as dark; the polish fine-scale)
+            a = a * mix(vec3<f32>(1.0), select(vec3<f32>(1.1, 1.1, 1.12), vec3<f32>(1.0 + RW_LIGHT), SF_ROAD_WEAR), wp) * (1.0 - select(0.24, 0.12, SF_ROAD_WEAR) * oil);
+            rough = mix(rough, sp_wheel_polish(), select(0.85, RW_PBR_POLISH, SF_ROAD_WEAR) * wp);
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
             a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp) * (1.0 - 0.24 * oil);
             rough = mix(rough, sp_wheel_polish(), 0.85 * wp);
+// sf:end
             rough = rough * (1.0 - 0.12 * oil);
             // rutting: each path's floor a few millimetres down (deeper and shallower
             // along the road as the base gave way), its sides leaning in
@@ -214,10 +236,23 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         // the kerb-distance lane model puts a wheel path at a lane-less street's crown,
         // where that distance has no gradient (a dark line between two polished bands)
         let wp = sw_wheel * (1.0 - lane_k);
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        if (!SF_ROAD_WEAR) {
+            // (with `--road-wear` the lanes' records lightened it already: cc0.wgsl, `rw_lane`)
+            a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp);
+        }
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp);
+// sf:end
         // (in the wet the film's water is the surface over the polished path: no smoother
         // lane down the middle for the trace to stretch a car's dark reflection along)
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        rough = mix(rough, sp_wheel_polish(), select(0.85, RW_PBR_POLISH, SF_ROAD_WEAR) * wp * (1.0 - sw_wet()));
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         rough = mix(rough, sp_wheel_polish(), 0.85 * wp * (1.0 - sw_wet()));
+// sf:end
         lean = lean + sw_wheel_lean * (1.0 - lane_k);
         dip = max(dip, sw_wheel_dip * (1.0 - lane_k));
         wpath = max(wpath, wp);
@@ -228,7 +263,12 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         // (`--street-aggregate`) the hot mix's stones near the eye: each its rock, its top
         // worn out of the binder film (most in the wheel paths) and polished, its faces
         // tilted, its arris falling into the mastic; every term over its mean
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        let ag = sa_aggregate(q, fwp, select(wpath, wpath * RW_GLARE_SHARE, SF_ROAD_WEAR));
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         let ag = sa_aggregate(q, fwp, wpath);
+// sf:end
         a = a * ag.rel;
         rough = clamp(rough * ag.rough, 0.04, 1.0);
         (*s).ao = (*s).ao * ag.ao;
@@ -257,7 +297,15 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         // their share of the view growing toward grazing; near the eye stone by
         // stone (exposed and polished, or still filmed with dull binder)
         let v = normalize(frame.cam_pos.xyz - world);
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        // (`--road-wear`: the wheel paths' extra polish at a share; `--pavement-age`: a new road's binder film still over the tops)
+        let wg = select(wpath, wpath * RW_GLARE_SHARE, SF_ROAD_WEAR);
+        let film = select(0.0, rw_film(rw_age), SF_PAVEMENT_AGE);
+        let tau = sg_top_share(n_geom, v, SG_MACRO_SLOPE, mix(SG_TOPS, SG_TOPS_WHEEL, wg)) * (1.0 - film);
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         let tau = sg_top_share(n_geom, v, SG_MACRO_SLOPE, mix(SG_TOPS, SG_TOPS_WHEEL, wpath));
+// sf:end
         var stone = select(0.3, 1.7, st_hash(floor(q / SG_AGGREGATE_M) + vec2<f32>(0.37, 5.1)) > 0.5);
         var near_k = 1.0;
         if (SF_STREET_AGGREGATE) {
@@ -267,10 +315,20 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
             stone = agg_tops;
             near_k = 1.0 - 0.6 * agg_keep;
         }
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        let k = mix(SG_POLISH, SG_POLISH_WHEEL, wg) * tau * mix(1.0, stone, wx_keep(SG_AGGREGATE_M * 1.5, fw)) * near_k;
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         let k = mix(SG_POLISH, SG_POLISH_WHEEL, wpath) * tau * mix(1.0, stone, wx_keep(SG_AGGREGATE_M * 1.5, fw)) * near_k;
+// sf:end
         // (the sealant and a lid keep their own finish)
         let fresh_fill = select(0.0, 0.7 * sw_patch, SF_STREET_WEAR);
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        sg_coat(k * (1.0 - lid) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)) * (1.0 - fresh_fill), mix(SG_COAT_ROUGH, SG_COAT_ROUGH_WHEEL, wg), n_geom, v);
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         sg_coat(k * (1.0 - lid) * (1.0 - clamp(sp_seal.x, 0.0, 1.0)) * (1.0 - fresh_fill), mix(SG_COAT_ROUGH, SG_COAT_ROUGH_WHEEL, wpath), n_geom, v);
+// sf:end
         if (SF_STREET_AGGREGATE && sky_coat > 0.0) {
             // (`--street-aggregate`) the tops' layer reflects what the road's own lobe does: through
             // look_light's lacquer path at the asphalt's own class (the same environment scale), the
@@ -384,7 +442,15 @@ fn sp_quilt(s: ptr<function, Surface>, world: vec3<f32>, fw: f32) {
         }
         let inside = smoothstep(-0.5 * fw, 0.5 * fw, e);
         let fresh = st_hash(hs + vec2<f32>(5.9, 8.3)) < WX_QUILT_FRESH * 0.8;
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        if (rw_patch_gone(fresh, h2)) {
+            continue; // (`--pavement-age`) paved over with the surface
+        }
+        var tone = rw_patch_tone(select(mix(WX_PATCH_OLD_LO, WX_PATCH_OLD_HI, h4), mix(WX_PATCH_NEW_LO, WX_PATCH_NEW_HI, h3), fresh));
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         var tone = select(mix(WX_PATCH_OLD_LO, WX_PATCH_OLD_HI, h4), mix(WX_PATCH_NEW_LO, WX_PATCH_NEW_HI, h3), fresh);
+// sf:end
         // the roller's edge: the patch's tone eases in over its last few centimetres
         // (the whole patch keeps its own tone: a repair reads from down the street)
         tone = mix(tone, 0.5 * (tone + 1.0), 1.0 - smoothstep(0.0, 0.07, e));
@@ -1997,3 +2063,179 @@ fn wr_joints(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>, al:
         sp_lean(s, lean);
     }
 }
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+
+// ---- `--road-wear`, `--pavement-age` (SF_ROAD_WEAR, SF_PAVEMENT_AGE; street_pbr.rs `RW_*`) ----
+//
+// The street's pavement by the city's survey (cc0_decals.rs `DK_SURFACE`: its
+// age since the last resurfacing and its condition index) and each travel
+// lane's traffic wear (`DK_LANE`): soft overlapping tyre tracks with thin
+// lines of rubber and polish along the travel, the drips between them, most
+// where the traffic waits. cc0.wgsl's decal loop calls `rw_surface` and
+// `rw_lane`; the weathering and the street pass read what they leave here.
+
+// The pavement here: its age (years) and condition index, -1 where unknown.
+var<private> rw_age: f32 = -1.0;
+var<private> rw_pci: f32 = -1.0;
+var<private> rw_seen: bool = false;
+// The lanes' traffic wear here (0..1), for the street pass's polish and glare.
+var<private> rw_wheel: f32 = 0.0;
+
+// A record's pavement: (age in years, PCI), -1 where unknown.
+fn rw_params(kind: u32) -> vec2<f32> {
+    let a = (kind >> CC0_RW_AGE_SHIFT) & 63u;
+    let p = (kind >> CC0_RW_PCI_SHIFT) & 63u;
+    return vec2<f32>(select(f32(a) * 0.5, -1.0, a == CC0_RW_AGE_UNKNOWN), select(f32(p) * 2.0, -1.0, p == CC0_RW_PCI_UNKNOWN));
+}
+
+// The pavement under the fragment (the first record that covers it: the
+// neighbouring stretches of a run overlap at their joins and agree).
+fn rw_note(kind: u32) {
+    if (!rw_seen) {
+        let ap = rw_params(kind);
+        rw_age = ap.x;
+        rw_pci = ap.y;
+        rw_seen = true;
+    }
+}
+
+// Fresh asphalt's tone over the weathered calibration (1 where the age is unknown).
+fn rw_age_tone(age: f32) -> f32 {
+    if (age < 0.0) {
+        return 1.0;
+    }
+    return mix(RW_FRESH_TONE, 1.0, 1.0 - exp(-age / RW_OXIDATION_YEARS));
+}
+
+// The fresh binder film still over the stones' tops (0 where the age is unknown: the calibrated aged road).
+fn rw_film(age: f32) -> f32 {
+    if (age < 0.0) {
+        return 0.0;
+    }
+    return exp(-age / RW_FILM_YEARS);
+}
+
+// How worn the lanes are by the pavement's age and condition (1: the
+// calibrated aged street, as where the survey says nothing).
+fn rw_wear_scale(age: f32, pci: f32) -> f32 {
+    var k = 1.0;
+    if (age >= 0.0) {
+        k = 1.0 - exp(-age / RW_WEAR_YEARS);
+    }
+    if (pci >= 0.0) {
+        k = k * mix(1.25, 0.7, clamp(pci / 100.0, 0.0, 1.0));
+    }
+    return k;
+}
+
+// The cracks' share by the pavement's age and condition (1 where unknown):
+// none on a new surface, more on a worse one.
+fn rw_crack_share() -> f32 {
+    if (!SF_PAVEMENT_AGE) {
+        return 1.0;
+    }
+    var c = 1.0;
+    if (rw_age >= 0.0) {
+        c = smoothstep(RW_CRACK_START_YEARS, RW_CRACK_FULL_YEARS, rw_age);
+    }
+    if (rw_pci >= 0.0) {
+        c = c * mix(1.3, 0.5, clamp(rw_pci / 100.0, 0.0, 1.0));
+    }
+    return clamp(c, 0.0, 1.0);
+}
+
+// A patch's tone with `--road-wear`: its departure from the road kept at a share.
+fn rw_patch_tone(tone: f32) -> f32 {
+    if (SF_ROAD_WEAR) {
+        return 1.0 + (tone - 1.0) * RW_PATCH_CONTRAST;
+    }
+    return tone;
+}
+
+// With `--pavement-age`, whether a repair is older than the surface (paved
+// over with it): `fresh` a recent cut (0.2-3 years), else an old repair
+// (4-20 years); `h` its hash.
+fn rw_patch_gone(fresh: bool, h: f32) -> bool {
+    if (!SF_PAVEMENT_AGE || rw_age < 0.0) {
+        return false;
+    }
+    return select(4.0 + 16.0 * h, 0.2 + 2.8 * h, fresh) > rw_age;
+}
+
+fn rw_gauss(x: f32, s: f32) -> f32 {
+    let q = x / s;
+    return exp(-0.5 * q * q);
+}
+
+// The pavement's record (DK_SURFACE): its age's tone on the asphalt.
+fn rw_surface(kind: u32) {
+    rw_note(kind);
+}
+
+// One travel lane's wear (DK_LANE): `along`, `across` in the record's frame
+// (`half` its half length and half width: the lane's), `ax`, `px` its axes;
+// the field keyed on the world (`aw`), so overlapping stretches agree.
+fn rw_lane(world: vec3<f32>, along: f32, across: f32, ax: vec2<f32>, px: vec2<f32>, half: vec2<f32>, kind: u32, seed: f32, fw: f32, mean_rough: f32) {
+    rw_note(kind);
+    let ap = rw_params(kind);
+    let k = rw_wear_scale(ap.x, ap.y);
+    if (k <= 0.002) {
+        return;
+    }
+    let aw = dot(world.xz, ax);
+    // the drivers' wander: the tracks drift across the lane over tens of metres
+    let drift = (st_noise(vec2<f32>(aw / 23.0, seed * 7.0 + 1.7)) - 0.5) * 0.3 + (st_noise(vec2<f32>(aw / 6.1, seed * 3.0 + 5.3)) - 0.5) * 0.08;
+    let u = across - drift;
+    let x = abs(u);
+    let bus = (kind & CC0_RW_BUS) != 0u;
+    var w = RW_CAR_W * rw_gauss(x - RW_CAR_HALF_M, RW_CAR_SIGMA_M) + RW_VAN_W * rw_gauss(x - RW_VAN_HALF_M, RW_VAN_SIGMA_M) + select(RW_BUS_W, RW_BUS_W_STOP, bus) * rw_gauss(x - RW_BUS_HALF_M, RW_BUS_SIGMA_M);
+    w = min(w / RW_TRACK_NORM, 1.0);
+    // reaches of heavier and lighter wear along the road
+    let gain = 0.55 + 0.45 * smoothstep(0.25, 0.75, st_noise(vec2<f32>(aw / 17.0, seed * 11.0 + 1.3)));
+    // a stop end: the tracks spread into the junction's turns over its last metres; the drips gather in the queue
+    let to_pos = half.x - along;
+    let to_neg = half.x + along;
+    var fade = 1.0;
+    var wait = 0.0;
+    if ((kind & CC0_RW_STOP_POS) != 0u) {
+        fade = min(fade, smoothstep(0.0, RW_STOP_FADE_M, to_pos));
+        wait = max(wait, 1.0 - smoothstep(4.0, RW_QUEUE_M, to_pos));
+    }
+    if ((kind & CC0_RW_STOP_NEG) != 0u) {
+        fade = min(fade, smoothstep(0.0, RW_STOP_FADE_M, to_neg));
+        wait = max(wait, 1.0 - smoothstep(4.0, RW_QUEUE_M, to_neg));
+    }
+    // inside the lane (its paint keeps its own wear)
+    let inside = 1.0 - smoothstep(0.88, 1.0, abs(across) / max(half.y, 0.1));
+    let wp = w * gain * fade * inside * min(k, 1.25);
+    // the tyres' lines: thin streaks of rubber and polish along the travel, their mean past a pixel
+    let lk = wx_keep(RW_LINE_M, fw);
+    let ln = st_noise(vec2<f32>(aw / 2.3 + seed * 3.1, u / RW_LINE_M + seed * 17.0));
+    let lines = mix(0.12, smoothstep(0.58, 0.86, ln), lk);
+    cc0_p_dark = cc0_p_dark * (1.0 + RW_LIGHT * wp) * (1.0 - RW_RUBBER * lines * wp);
+    // the polish: a little smoother in the tracks; the coarse texture stays rough
+    cc0_p_rough = vec2<f32>(mean_rough * (1.0 - RW_POLISH), max(cc0_p_rough.y, wp * 0.6));
+    rw_wheel = max(rw_wheel, wp);
+    if (SF_STREET_WEAR) {
+        // the ruts under each side's tracks (street_pbr's own, for its water and the lean of their sides)
+        let ra = u - RW_CAR_HALF_M;
+        let rb = u + RW_CAR_HALF_M;
+        if (abs(ra) < 0.45) {
+            sw_note_wheel(wp, aw, ra, 0.45, seed, px);
+        }
+        if (abs(rb) < 0.45) {
+            sw_note_wheel(wp, aw, rb, 0.45, seed + 0.5, px);
+        }
+    }
+    // the drips between the tracks, densest where the traffic waits (under the wet film they no longer show)
+    let cov = sw_drips(aw, u, RW_DRIP_HALF_M, seed, fw) * mix(0.7, 1.0, wait) * inside * min(k * 1.4, 1.0) * (1.0 - sw_wet());
+    cc0_p_dark = cc0_p_dark * (1.0 - SW_DRIP_DARK * cov);
+}
+
+// After the decal loop: the pavement's age on its tone.
+fn rw_finish() {
+    if (SF_PAVEMENT_AGE && rw_seen) {
+        cc0_p_dark = cc0_p_dark * rw_age_tone(rw_age);
+    }
+}
+// sf:end

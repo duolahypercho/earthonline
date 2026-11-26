@@ -1884,7 +1884,14 @@ fn cc0_reset_post() {
 // cracks) change `f` in the JS set's normalised space; the rest (oil, covers,
 // gum, stains) is carried to `cc0_street_post`.
 fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: vec3<f32>, dpy: vec3<f32>, mean: vec3<f32>, mean_rough: f32, mean_ao: f32) {
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+    // (`--pavement-age`) past the decals' reach the pavement's age is still read, and nothing else
+    let far = length(frame.cam_pos.xyz - world) > CC0_EXTRA_FAR;
+    if (!cc0_on(CC0_RUN_DECALS) || (far && !SF_PAVEMENT_AGE)) {
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
     if (!cc0_on(CC0_RUN_DECALS) || length(frame.cam_pos.xyz - world) > CC0_EXTRA_FAR) {
+// sf:end
         return;
     }
     let tk = vec2<i32>(floor(world.xz / CC0_TILE_M));
@@ -1920,10 +1927,31 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
         }
         let kind = u32(d1.z + 0.5);
         let seed = d1.w;
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        let k8 = kind & 255u;
+        if (far && k8 != CC0_DK_SURFACE) {
+            continue;
+        }
+// sf:end
         // Decal-space gradients (metres per pixel along / across).
         let gxa = vec2<f32>(dot(dpx.xz, ax), dot(dpx.xz, px));
         let gya = vec2<f32>(dot(dpy.xz, ax), dot(dpy.xz, px));
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        if (SF_PAVEMENT_AGE && k8 == CC0_DK_SURFACE) {
+            // (`--pavement-age`, street_pbr.wgsl `rw_*`) the pavement's age and condition from the city's survey
+            if (asphalt) {
+                rw_surface(kind);
+            }
+        } else if (SF_ROAD_WEAR && k8 == CC0_DK_LANE) {
+            // (`--road-wear`, street_pbr.wgsl `rw_lane`) a travel lane's tyre tracks and drips
+            if (asphalt) {
+                rw_lane(world, along, across, ax, px, d1.xy, kind, seed, length(gxa) + length(gya), mean_rough);
+            }
+        } else if (kind == CC0_DK_WHEEL) {
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         if (kind == CC0_DK_WHEEL) {
+// sf:end
                 if (asphalt) {
                     let w = (1.0 - smoothstep(0.35, 1.0, abs(across) / d1.y)) * smoothstep(d1.x, d1.x - 2.5, abs(along)) * (0.55 + 0.45 * st_noise(vec2<f32>(along / 4.0, seed * 37.0)));
                     let lw = CC0_L_WORN_ASPHALT;
@@ -2002,7 +2030,14 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     cc0_p_metal = max(cc0_p_metal, a * 0.5);
                 }
             } else if (kind == CC0_DK_PATCH) {
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+                // (`--pavement-age`) a cut older than the surface was paved over with it
+                let paved_over = SF_PAVEMENT_AGE && rw_age >= 0.0 && 0.2 + 2.8 * fract(seed * 5.17) > rw_age;
+                if ((asphalt || gutter) && !paved_over) {
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
                 if (asphalt || gutter) {
+// sf:end
                     // Fresh hot-mix inside a saw cut: the clean set, darker and tighter; a sealed seam on the cut.
                     let lp = CC0_L_CLEAN_ASPHALT;
                     let ip = cc0_linv(lp);
@@ -2018,10 +2053,22 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                         sw_patch = 1.0;
                         sw_patch_seam = max(sw_patch_seam, seam);
                     } else {
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+                        // (`--road-wear`: its departure from the road kept at a share, street_pbr.wgsl `rw_patch`)
+                        cc0_p_dark = cc0_p_dark * select(0.74, 1.0 + (0.74 - 1.0) * RW_PATCH_CONTRAST, SF_ROAD_WEAR) * (1.0 - 0.35 * seam);
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
                         cc0_p_dark = cc0_p_dark * 0.74 * (1.0 - 0.35 * seam);
+// sf:end
                     }
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+                    // (`--street-pbr`, `--road-wear`: the hot-mix as open-textured as the road round it, no sheen of its own)
+                    cc0_p_rough = vec2<f32>(mean_rough * select(0.82, 1.0, SF_STREET_PBR || SF_ROAD_WEAR), max(cc0_p_rough.y, 1.0));
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
                     // (`--street-pbr`: the hot-mix as open-textured as the road round it, no sheen of its own)
                     cc0_p_rough = vec2<f32>(mean_rough * select(0.82, 1.0, SF_STREET_PBR), max(cc0_p_rough.y, 1.0));
+// sf:end
                     if (SF_STREET_PBR) {
                         // (`--street-pbr`, street_pbr.wgsl) the saw cut sealed with a bead of binder, drawn as bitumen
                         let ea = d1.x - abs(along) < d1.y - abs(across);
@@ -2033,7 +2080,13 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                 if ((asphalt && kind == CC0_DK_CRACK) || (walk && kind == CC0_DK_WALK_CRACK)) {
                     let uv = vec2<f32>(along / (2.0 * d1.x) + 0.5, across / (2.0 * d1.y) + 0.5);
                     let t = cc0_dtap(uv, gxa / (2.0 * d1.x), gya / (2.0 * d1.y), CC0_D_ASPHALTDAMAGE001);
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+                    // (`--pavement-age`: none on a new surface, more on a worse one; street_pbr.wgsl `rw_crack_share`)
+                    let a = t.alb.a * smoothstep(1.0, 0.8, max(abs(along) / d1.x, abs(across) / d1.y)) * select(1.0, rw_crack_share(), kind == CC0_DK_CRACK);
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
                     let a = t.alb.a * smoothstep(1.0, 0.8, max(abs(along) / d1.x, abs(across) / d1.y));
+// sf:end
                     let dm = cc0_dmean(CC0_D_ASPHALTDAMAGE001);
                     (*f).albedo = mix((*f).albedo, (*f).albedo * clamp(t.alb.rgb / max(dm.rgb, vec3<f32>(1e-3)), vec3<f32>(0.2), vec3<f32>(1.3)), a * 0.9);
                     (*f).tn = mix((*f).tn, ax * t.n.x - px * t.n.y, a);
@@ -2095,6 +2148,13 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     wx_edge = max(wx_edge, 1.0 - smoothstep(0.1, 1.0, abs(across) / d1.y + (rag - 0.5) * 0.6));
                 }
             }
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+    }
+    // (`--pavement-age`, street_pbr.wgsl) the pavement's age on its tone
+    rw_finish();
+    if (far) {
+        return;
+// sf:end
     }
     if (sl_level() != 0u) {
         // street life (`--street-life`, street_life.wgsl; its decals in cells of their own): litter, leaves, grit, marks.

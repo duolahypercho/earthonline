@@ -83,6 +83,82 @@ pub const SLAB_NEW_SHARE: f64 = 0.06;
 pub const SLAB_NEW_TONE: f64 = 1.2;
 pub const SLAB_STAINED_SHARE: f64 = 0.05;
 
+// ---- `--road-wear`, `--pavement-age` (look::ROAD_WEAR, look::PAVEMENT_AGE; street_pbr.wgsl `rw_*`) ----
+//
+// Each travel lane's traffic wear as the traffic lays it, and each street's
+// pavement by its age and condition (the city's survey, eo-data `pavement`,
+// cc0_decals.rs `DK_LANE`, `DK_SURFACE`). A wheel path is not one stripe:
+// the tyres of cars, vans and buses run at their own tracks, each wandering
+// about its lane (a bell, no edges), so a path is a few overlapping tracks
+// with thin lines of rubber and polish along the travel; between them the
+// drips gather, most where the traffic waits at a stop. Real wheel paths are
+// only a little lighter than the lane round them (cores trafficked two years
+// and more: 10-20 % higher lightness, UK Energy Research Centre report "The
+// effect of pavement material on road lighting performance"), and the polish
+// is fine-scale under a coarse texture that stays rough: a glint toward a low
+// sun, not a mirror of the sky.
+
+/// Fresh asphalt's albedo over the weathered calibration: new binder ~0.05
+/// against aged 0.10-0.15 (the reference sheet 2.1, LBNL / EPA, as
+/// weathering.rs `PATCH_NEW`), 0.05 / 0.11.
+pub const RW_FRESH_TONE: f64 = 0.45;
+/// The binder's oxidation and wear toward the weathered grey (years, the
+/// e-folding time): most of the change in the first few years. INFERRED.
+pub const RW_OXIDATION_YEARS: f64 = 2.5;
+/// The fresh binder film over the stones' tops, worn off by the traffic
+/// (years): a new road shows no polished aggregate. INFERRED.
+pub const RW_FILM_YEARS: f64 = 1.5;
+/// The lanes' wear growing with the pavement's age (years, e-folding). INFERRED.
+pub const RW_WEAR_YEARS: f64 = 4.0;
+/// The tracks: half a vehicle's track (tyre centre from the lane's line of
+/// travel, m), the spread of its wander (m: lateral wander's standard
+/// deviation 0.2-0.6 m, Timm & Priest, "Wheel wander at the NCAT test track";
+/// a tyre's width folded in) and its share. Vehicle dimensions, not street
+/// ones: a passenger car's track 1.5-1.65 m; vans and SUVs ~1.7 m; a transit
+/// bus's rear duals ~1.8 m centre to centre (bus axle listings 1756-1840 mm)
+/// and its front ~2.1 m. INFERRED shares.
+pub const RW_CAR_HALF_M: f64 = 0.78;
+pub const RW_CAR_SIGMA_M: f64 = 0.20;
+pub const RW_CAR_W: f64 = 1.0;
+pub const RW_VAN_HALF_M: f64 = 0.86;
+pub const RW_VAN_SIGMA_M: f64 = 0.22;
+pub const RW_VAN_W: f64 = 0.55;
+pub const RW_BUS_HALF_M: f64 = 0.95;
+pub const RW_BUS_SIGMA_M: f64 = 0.17;
+pub const RW_BUS_W: f64 = 0.3;
+/// A bus's share in a kerb lane beside a transit stop (it pulls in and stands).
+pub const RW_BUS_W_STOP: f64 = 0.8;
+/// The tracks' sum at its fullest (it saturates there: 1).
+pub const RW_TRACK_NORM: f64 = 1.35;
+/// The wheel path's lift in albedo at its fullest (10-20 % lightness, UKERC).
+pub const RW_LIGHT: f64 = 0.14;
+/// The tyres' lines inside it: darker rubber and polish streaks, their
+/// spacing across (m: a tread rib's) and their darkening. INFERRED.
+pub const RW_LINE_M: f64 = 0.045;
+pub const RW_RUBBER: f64 = 0.18;
+/// The polish: the lanes' roughness eased this share in the tracks (the coarse
+/// texture stays rough). INFERRED.
+pub const RW_POLISH: f64 = 0.12;
+/// With `--street-pbr`: the polished roughness's share in the tracks (0.85 before).
+pub const RW_PBR_POLISH: f64 = 0.3;
+/// With `--street-glare`, `--street-aggregate`: the wheel paths' extra polish
+/// and exposed tops taken at this share (1 before).
+pub const RW_GLARE_SHARE: f64 = 0.35;
+/// The tracks spread into the junction's turns over this much before a stop end (m),
+/// and the drips gather over a queue of this length behind it (m: four cars). INFERRED.
+pub const RW_STOP_FADE_M: f64 = 6.0;
+pub const RW_QUEUE_M: f64 = 28.0;
+/// The drips' band about the lane's line of travel (half-width, m: under the
+/// engine and gearbox, between the tracks). INFERRED.
+pub const RW_DRIP_HALF_M: f64 = 0.45;
+/// The weathering's and street pass's patches: their tone's departure from
+/// the road's kept at this share (old patches 16-38 % lighter before). INFERRED.
+pub const RW_PATCH_CONTRAST: f64 = 0.35;
+/// The road's cracks by its age: none on a new surface, all of them by the
+/// second figure (years). INFERRED.
+pub const RW_CRACK_START_YEARS: f64 = 1.5;
+pub const RW_CRACK_FULL_YEARS: f64 = 6.0;
+
 // ---- `--street-wear` (look::STREET_WEAR; street_pbr.wgsl `sw_*`) ----------------------
 //
 // The carriageway's distress laid out by its causes, as the FHWA's Distress
@@ -717,6 +793,33 @@ pub fn wgsl() -> String {
         ("SW_SEAL_ROUGH_AGED", WEAR_SEAL_ROUGH_AGED),
         ("SW_DRIP_CELL_M", WEAR_DRIP_CELL_M),
         ("SW_DRIP_DARK", WEAR_DRIP_DARK),
+        ("RW_FRESH_TONE", RW_FRESH_TONE),
+        ("RW_OXIDATION_YEARS", RW_OXIDATION_YEARS),
+        ("RW_FILM_YEARS", RW_FILM_YEARS),
+        ("RW_WEAR_YEARS", RW_WEAR_YEARS),
+        ("RW_CAR_HALF_M", RW_CAR_HALF_M),
+        ("RW_CAR_SIGMA_M", RW_CAR_SIGMA_M),
+        ("RW_CAR_W", RW_CAR_W),
+        ("RW_VAN_HALF_M", RW_VAN_HALF_M),
+        ("RW_VAN_SIGMA_M", RW_VAN_SIGMA_M),
+        ("RW_VAN_W", RW_VAN_W),
+        ("RW_BUS_HALF_M", RW_BUS_HALF_M),
+        ("RW_BUS_SIGMA_M", RW_BUS_SIGMA_M),
+        ("RW_BUS_W", RW_BUS_W),
+        ("RW_BUS_W_STOP", RW_BUS_W_STOP),
+        ("RW_TRACK_NORM", RW_TRACK_NORM),
+        ("RW_LIGHT", RW_LIGHT),
+        ("RW_LINE_M", RW_LINE_M),
+        ("RW_RUBBER", RW_RUBBER),
+        ("RW_POLISH", RW_POLISH),
+        ("RW_PBR_POLISH", RW_PBR_POLISH),
+        ("RW_GLARE_SHARE", RW_GLARE_SHARE),
+        ("RW_STOP_FADE_M", RW_STOP_FADE_M),
+        ("RW_QUEUE_M", RW_QUEUE_M),
+        ("RW_DRIP_HALF_M", RW_DRIP_HALF_M),
+        ("RW_PATCH_CONTRAST", RW_PATCH_CONTRAST),
+        ("RW_CRACK_START_YEARS", RW_CRACK_START_YEARS),
+        ("RW_CRACK_FULL_YEARS", RW_CRACK_FULL_YEARS),
         ("SG_MACRO_SLOPE", GLARE_MACRO_SLOPE),
         ("SG_TOPS", GLARE_TOPS),
         ("SG_TOPS_WHEEL", GLARE_TOPS_WHEEL),
