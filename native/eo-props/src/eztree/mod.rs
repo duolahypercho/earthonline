@@ -43,6 +43,7 @@ pub use street::{
     street_tree_species_id, street_tree_trunk_radius, street_tree_variant_count, street_tree_variant_for,
     surveyed_form_variant, surveyed_tree_variant,
 };
+pub use street::{GENUS_MODELS, SPECIES_MODELS, species_model, species_tree_variant, street_crown_widths}; // (`--tree-species`, `--tree-sizes`)
 
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;

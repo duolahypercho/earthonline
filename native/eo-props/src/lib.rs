@@ -44,6 +44,7 @@ pub mod signal_lamps; // street lights on the signal mast poles (eo-app `--no-si
 pub mod signals;
 pub mod sign_models; // the SFMTA sign plates as Blender models (eo-app `--no-sign-models`)
 pub mod signs;
+pub mod tree_survey; // the list trees joined to the current DataSF records (`--tree-sizes`, `--tree-species`)
 pub mod trees;
 pub mod yards; // rear-yard fences and ground measured from parcels, lidar and aerial (eo-app `--yard-detail`)
 

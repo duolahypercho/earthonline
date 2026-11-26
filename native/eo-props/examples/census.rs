@@ -5,7 +5,13 @@
 //! counts per model (every street-furniture kind has its own), the
 //! district lights, and the plan time per tile (mean, p95, max). The game plans
 //! tiles on three worker threads; `threads` (default 3) sets this run's.
+//! `EO_TREE_KEEP=1`, `EO_TREE_SIZES=1`, `EO_TREE_SPECIES=1` plan as eo-app's
+//! `--tree-keep`, `--tree-sizes`, `--tree-species` do.
 fn main() {
+    let on = |k: &str| std::env::var(k).is_ok_and(|v| v == "1");
+    eo_props::furniture::set_tree_keep(on("EO_TREE_KEEP"));
+    eo_props::furniture::set_tree_sizes(on("EO_TREE_SIZES"));
+    eo_props::furniture::set_tree_species(on("EO_TREE_SPECIES"));
     let t0 = std::time::Instant::now();
     let paths = eo_data::DataPaths::discover().unwrap();
     let w = std::sync::Arc::new(eo_props::load_world(&paths).unwrap());
