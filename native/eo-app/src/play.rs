@@ -578,6 +578,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             | "--canyon-glass" | "--no-canyon-glass" | "--far-relief" | "--no-far-relief" | "--facade-patina" | "--no-facade-patina"
             | "--window-depth" | "--no-window-depth" | "--room-atlas" | "--no-room-atlas"
             | "--street-pbr" | "--no-street-pbr" | "--street-wear" | "--no-street-wear" | "--street-glare" | "--no-street-glare"
+            | "--road-wear" | "--no-road-wear" | "--pavement-age" | "--no-pavement-age" | "--street-tapers" | "--no-street-tapers" | "--bikeways" | "--no-bikeways" | "--survey-parking" | "--no-survey-parking" | "--midblock-crossings" | "--no-midblock-crossings"
             | "--street-aggregate" | "--no-street-aggregate" | "--plaza-setts" | "--no-plaza-setts" | "--walk-relief" | "--no-walk-relief" | "--matte-wheel-paths" | "--no-matte-wheel-paths" | "--aged-aggregate" | "--no-aged-aggregate" => {}
             "--traffic-street-plan" | "--no-traffic-street-plan" | "--no-traffic-passing" | "--no-traffic-model-footprints" => {}
             flag if test_character.parse(flag, &mut val)? => {}

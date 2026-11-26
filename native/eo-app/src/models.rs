@@ -308,6 +308,13 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     if street_switch("aged-aggregate", crate::aged_aggregate()) {
         features.street |= eo_render::look::AGED_AGGREGATE; // (`--aged-aggregate`)
     }
+    // (`--road-wear`, `--pavement-age`) opt-in in every mode, play included: the street tiles' records and the shader together
+    if crate::road_wear() {
+        features.street |= eo_render::look::ROAD_WEAR;
+    }
+    if crate::pavement_age() {
+        features.street |= eo_render::look::PAVEMENT_AGE;
+    }
     eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(
         ctx,
@@ -392,6 +399,9 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     r.look.set_options(&ctx.device, args.look);
     // surface weathering (`--grime`): its street decals (kerb paint, building-line dirt) placed from the first tile on.
     eo_render::cc0_decals::set_weathering(args.look.grime > 0);
+    // (`--road-wear`, `--pavement-age`) the lanes' wear and the pavement's age, placed from the first tile on.
+    eo_render::cc0_decals::set_road_wear(crate::road_wear());
+    eo_render::cc0_decals::set_pavement_age(crate::pavement_age());
     // street life (`--street-life`): its level, and the land-use survey its decals place by (read beside the load).
     crate::street_life::start(args.look.street_life, world.city.clone(), world.paths.repo_root.clone(), world.structures.clone());
     // the street's scanned sets (written once, before the first frame).
