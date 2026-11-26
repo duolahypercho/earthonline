@@ -46,6 +46,9 @@ fn standards() -> eo_props::Standards {
 }
 
 fn props_world(structures: Option<Arc<StructureWorld>>) -> PropsWorld {
+    // The poster hoardings drawn, as they were when `BEFORE` was recorded (eo-app
+    // `--poster-hoardings`; set before any world plans, the same in every test here).
+    eo_props::furniture::set_poster_hoardings(true);
     let r = real();
     let w = PropsWorld::new(r.street.clone(), Arc::new(eo_props::JsProps::load().unwrap()), standards()).with_structures(structures);
     w.install_furniture(&r.city.buildings).unwrap();
