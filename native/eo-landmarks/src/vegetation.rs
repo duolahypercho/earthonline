@@ -286,7 +286,7 @@ pub fn grass2() -> Grass2 {
 /// them, [`Grass3::from_args`] reads them. `--no-grass3` restores the second
 /// pass's output. Every feature acts inside the second pass's meadow cover
 /// (`--no-meadow-cover` or `--no-grass2` leave nothing for it to change).
-pub const GRASS3_SWITCHES: &[&str] = &["--no-grass3", "--no-scrub-mounds", "--no-scrub-bloom", "--no-bare-ground", "--no-meadow-breakup"];
+pub const GRASS3_SWITCHES: &[&str] = &["--no-grass3", "--no-scrub-mounds", "--no-scrub-bloom", "--no-bare-ground", "--no-meadow-breakup", "--no-mat-free-meadow"];
 
 /// The third grass pass's features, each with its `--no-` switch ([`GRASS3_SWITCHES`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -308,18 +308,26 @@ pub struct Grass3 {
     /// jittered per patch (no level band across the view) and the mats' rims
     /// lobed so the terrain's tone shows between them.
     pub breakup: bool,
+    /// `--no-mat-free-meadow`: the meadow and bare-soil patches draw no ground
+    /// disc ("mat") under their blades; the terrain under them is the meadow's
+    /// floor. Each mat was an opaque disc about 1.9 m across in its own
+    /// colour, darkened to 0.6 within 5-26 m of the eye: on a slope the mats
+    /// overlapped as dark plates with hard rims (the hills loop's A/B,
+    /// Docs/HILLS-PLAN.md stage H1). The bluff patches'
+    /// (buckwheat, bluff herbs) mats go too.
+    pub mats_free: bool,
 }
 
 impl Grass3 {
-    pub const ALL: Grass3 = Grass3 { scrub: true, bloom: true, bare: true, breakup: true };
-    pub const NONE: Grass3 = Grass3 { scrub: false, bloom: false, bare: false, breakup: false };
+    pub const ALL: Grass3 = Grass3 { scrub: true, bloom: true, bare: true, breakup: true, mats_free: true };
+    pub const NONE: Grass3 = Grass3 { scrub: false, bloom: false, bare: false, breakup: false, mats_free: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
         if has("--no-grass3") {
             return Self::NONE;
         }
-        Grass3 { scrub: !has("--no-scrub-mounds"), bloom: !has("--no-scrub-bloom"), bare: !has("--no-bare-ground"), breakup: !has("--no-meadow-breakup") }
+        Grass3 { scrub: !has("--no-scrub-mounds"), bloom: !has("--no-scrub-bloom"), bare: !has("--no-bare-ground"), breakup: !has("--no-meadow-breakup"), mats_free: !has("--no-mat-free-meadow") }
     }
 }
 
@@ -1872,6 +1880,7 @@ mod tests {
         assert_eq!(a(&["--no-grass3"]), Grass3::NONE);
         assert_eq!(a(&["--no-bare-ground"]), Grass3 { bare: false, ..Grass3::ALL });
         assert_eq!(a(&["--no-scrub-mounds", "--no-meadow-breakup"]), Grass3 { scrub: false, breakup: false, ..Grass3::ALL });
+        assert_eq!(a(&["--no-mat-free-meadow"]), Grass3 { mats_free: false, ..Grass3::ALL });
     }
 
     #[test]

@@ -406,6 +406,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
+            s if eo_landmarks::vegetation::GRASS2_SWITCHES.contains(&s) || eo_landmarks::vegetation::GRASS3_SWITCHES.contains(&s) => {} // read by its crate (the grass passes)
             "--no-external" => {} // main's `external_flag`
             // Round-2 AAA feature switches & kill switches (all parsed cleanly in `--play`)
             "--sun-bounce" | "--no-sun-bounce" => a.look.sun_bounce = s == "--sun-bounce",

@@ -682,7 +682,7 @@ selection:
 | Scanned rock | `--no-gg3-rock` (all of these), `--no-scan-rocks`, `--no-cliff-dressing`, `--no-surf-rocks`, `--no-scan-riprap`, `--no-rock-geology` |
 | Coastal vegetation, round 3 | `--no-gg3-vegetation` (all of these), `--no-naip-planting`, `--no-cliff-rock-cover`, `--no-far-species`, `--no-far-tree-light`, `--no-bloom-date`, `--no-grass-color-variety`; reserved: `--no-veg-scans` |
 | Grass, second pass | `--no-grass2` (all of these: run 1's meadow), `--no-meadow-cover`, `--no-meadow-types`, `--no-blade-shading` |
-| Grass, third pass | `--no-grass3` (all of these: run 2's meadow), `--no-scrub-mounds`, `--no-scrub-bloom`, `--no-bare-ground`, `--no-meadow-breakup` |
+| Grass, third pass | `--no-grass3` (all of these: run 2's meadow), `--no-scrub-mounds`, `--no-scrub-bloom`, `--no-bare-ground`, `--no-meadow-breakup`, `--no-mat-free-meadow` |
 | Flora (scrub species, grassland season, chert, serpentinite, flowers) | `--no-flora` (all of these: the third grass pass's output), `--no-scrub-species`, `--no-grass-ramp`, `--no-bluff-scrub`, `--no-chert-ground`, `--no-serpentinite`, `--no-flora-flowers` |
 | Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
@@ -896,7 +896,12 @@ bare, red-brown soil, warm bare knoll tops) back to the meadow and the
 terrain's bare class back to sward, instead of a red-brown soil mat with
 sparse tufts; `--no-meadow-breakup` keeps the meadow's round type and cure
 patches, the patch levels' fixed distances (a band across the view) and the
-mats' full discs.
+mats' full discs; `--no-mat-free-meadow` puts back the ground disc ("mat",
+about 1.9 m across, in its own colour and darkened near the eye) that every
+meadow and bare-soil patch laid under its blades, which on a slope overlapped
+as dark plates with hard rims (without it the terrain is the meadow's floor;
+the bluff patches' mats go too; [the hills plan](../Docs/HILLS-PLAN.md), stage
+H1).
 
 The surf and bathymetry (`--no-gg3-water`, eo-water `switches`; the CUDEM
 tiles under `EO_SURVEY_ROOT`): `--no-bathymetry` keeps the geometric exposure

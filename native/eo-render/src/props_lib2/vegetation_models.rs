@@ -951,7 +951,9 @@ fn bluff_patch(b: &mut Builder, mats: &MeadowMats, kind: u8, lod: u32, seed: u32
     use eo_landmarks::vegetation as v;
     let live = v::MEADOW_LIVE[kind as usize];
     let g = MEADOW_GROUND;
-    mat(b, mats.mat, 0.9, 0.3, v::MEADOW_LIVE[v::MEADOW_FESCUE as usize], seed);
+    if !v::grass3().mats_free {
+        mat(b, mats.mat, 0.9, 0.3, v::MEADOW_LIVE[v::MEADOW_FESCUE as usize], seed); // (`--no-mat-free-meadow`)
+    }
     let f = [1.0f32, 0.4, 0.15][lod as usize];
     let n = |c: u32| ((c as f32 * f).round() as u32).max(1);
     let wide = [1.0f32, 1.6, 2.6][lod as usize];
@@ -1079,7 +1081,9 @@ fn bloom(b: &mut Builder, m: u32, lod: u32, seed: u32) {
 fn bare_tufts(b: &mut Builder, mats: &MeadowMats, soil: u32, lod: u32, seed: u32) {
     use eo_landmarks::vegetation as v;
     let live = v::MEADOW_LIVE[v::MEADOW_BARE as usize];
-    mat(b, soil, 0.95, 0.08, live, seed);
+    if !v::grass3().mats_free {
+        mat(b, soil, 0.95, 0.08, live, seed); // (`--no-mat-free-meadow`)
+    }
     let wide = [1.0f32, 1.7, 3.0][lod as usize];
     // a tuft in about every other patch's metre (each patch two, the far level one).
     let tufts = [2u32, 2, 1][lod as usize];
@@ -1332,7 +1336,9 @@ fn meadow(b: &mut Builder, mats: &MeadowMats, kind: u8, lod: u32, seed: u32) {
         v::MEADOW_ICE_PLANT => 0.92,
         _ => 0.55,
     };
-    mat(b, mats.mat, 0.95, share, if kind == v::MEADOW_ICE_PLANT { live } else { sward_live }, seed);
+    if !v::grass3().mats_free {
+        mat(b, mats.mat, 0.95, share, if kind == v::MEADOW_ICE_PLANT { live } else { sward_live }, seed); // (`--no-mat-free-meadow`)
+    }
     let f = [1.0f32, 0.29, 0.04][lod as usize];
     let wide = [1.0f32, 1.7, 3.2][lod as usize];
     let segs = if lod == 0 { 2 } else { 1 };
