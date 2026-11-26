@@ -21,6 +21,7 @@ eo-props = { path = "../eo-props" } # props
 eo-sky = { path = "../eo-sky" } # sky
 eo-water = { path = "../eo-water" } # water
 eo-landmarks = { path = "../eo-landmarks" } # landmarks
+eo-hills = { path = "../eo-hills" } # the hill builder's cooked maps (aerial_ground.rs)
 eo-farshore = { path = "../eo-farshore" } # farshore
 gltf = { version = "1.4.1", default-features = false, features = ["utils", "names", "KHR_materials_emissive_strength"] } # props
 png = "0.18.1" # props

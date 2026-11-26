@@ -650,6 +650,7 @@ selection:
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-ground-beach-fit` (the sand round a mapped beach spreads as the JS rule does: over lawns and paving mapped beside it and along a seawall's quay), `--no-terrain-lod` |
 | Water | `--no-water` (the flat sea plane), `--no-water-instanced` (the pass needs multi-draw-indirect-count, as before; without it the flat sea plane), `--no-water-brdf` (the earlier Fresnel, roughness, sun lobe and reflection march), `--no-water-body` (the earlier body colour), `--no-water-foam-cover` (the earlier whitecap cover and foam sampling), `--no-water-glint` (the earlier hashed sparkle), `--no-water-turbid` (the earlier three-wavelength body), `--no-water-shore` (the earlier waterline, wall collar and the lift under piers), `--no-water-foam-lit` (the earlier whitecap shapes and foam light), `--no-water-ppr` (the reflection march alone), `--no-water-wind-texture` (no gust patches, tidal current or rotated chop; drawn from the `high` tier up, `--water-wind-texture` below it), `--no-water-grazing` (one mean Fresnel times the sky in one direction) |
 | Waterfront corridor | `--no-ferry-building` (its record's plain box instead), `--no-tram-tracks` (no streetcar rails), `--no-quay-railing` (no guard on the Embarcadero quay wall), `--no-ferry-building-detail` (the Ferry Building's first pass: no ashlar course scale, rustication, deep reveals, modillions, granite plinth, weathering or tower balustrades), `--no-rail-finish` (one bare-steel rail head and a black groove), `--no-corridor-palms` (no Embarcadero palms), `--no-guard-detail` (the quay guard's first pass, on the JS crest: no kick plate, solid pickets), `--no-pier-sheds` (the Ferry Plaza's JS shed boxes), `--no-rail-polish` (the rails' worn band whole at roughness 0.4, no burnished strip or sealant joints), `--no-facade-relief` (the Ferry Building's second pass: one glazing pane an opening, the second pass's reveal tone and dirt under the cornices, no fanlight frames or voussoir tones), `--no-palm-detail` (the corridor palms' first pass: no tree well, root initials, scar lattice, senescent leaves or spear, and unsurveyed palms at the median size) |
+| The hills ([Docs/HILLS-PLAN.md](../Docs/HILLS-PLAN.md)) | `--no-aerial-ground` (the terrain's colour from its vertex tones, not the hill builder's aerial macro map) |
 | Scanned surfaces | `--no-cc0` (all), `--no-area-paint` (a lane-wide marking worn as coloured pavement, not as a line), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-lamp-spread`, `--no-far-street-light` (past ~300 m the streets lit from a map of every lamp's pool), `--no-sky-vis`, `--no-contact-shadows`, `--no-atmosphere`, `--no-phys-sky`, `--no-ap-lut`, `--no-night-shaping`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-cloud-depth-haze`, `--no-volumetric-clouds`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Lighting additions (opt-in) | `--no-cascade-blend`, `--no-far-shadows`, `--no-ambient-volume`, `--no-probe-grid`, `--no-light-shadows`, `--no-light-shadow-moving`, `--no-headlight-shadows`, `--no-lit-fog`, `--no-smooth-time`, `--no-ground-bounce`, `--no-sun-bounce`, `--no-ao-albedo`, `--no-soft-shadows`, `--no-screen-gi`, `--no-occluder-light`, `--no-dome-env`, `--no-shadow-slope-bias`, `--no-grime`, `--no-street-life`, `--no-photo-finish`, `--no-facade-clutter`, `--no-shop-light`, `--no-car-detail`, `--no-look`, `--no-night-photometry`, `--no-lamp-bounce`, `--no-urban-sky`, `--no-office-floors`, `--no-room-depth`, `--no-lit-rooms`, `--no-lamp-units`, `--no-luminaires`, `--no-rear-lamps`, `--no-signal-spill`, `--no-wire-light` (each wins over `--quality`), `--no-rt-gi`, `--no-rt-reflect` (no tier turns `--rt-gi` or `--rt-reflect` on) |
@@ -1128,6 +1129,26 @@ It reads, all tracked in the repository:
 | `native/assets/roof-colours-v1.bin.gz`, `ground-green-v1.bin.gz` | Measured roof colours and vegetation shares | Derived from USDA NAIP aerial imagery (public domain) |
 | `scripts/world-data/sources/california-street-standards.json` | The cited street-standards table | California manuals; see [Docs/CALIFORNIA-STREET-STANDARDS.md](../Docs/CALIFORNIA-STREET-STANDARDS.md) |
 | `public/assets/` | Hand-built building exteriors, vehicles, a few street props, texture atlases | Each with a provenance file beside it |
+
+It also reads, when present, what the hill builder (`eo-hills`,
+[Docs/HILLS-PLAN.md](../Docs/HILLS-PLAN.md)) cooked into the cache folder:
+
+| File | What | Source and licence |
+| --- | --- | --- |
+| `<cache>/hills/aerial-macro-v1.bin` | The open ground's colour at 2 m (BC7 sRGB with its mips), drawn as the terrain's base colour (eo-render `aerial_ground.rs`; `--no-aerial-ground`) | Cooked from USDA NAIP 0.3 m RGB and 0.6 m CIR tiles (public domain), every tile checked against its manifest digest; the header records the inputs, the class rules and palette, and the NAIP credit |
+
+```sh
+EO_AERIAL_DIR=<NAIP folder from native/tools/fetch-aerial.mjs> \
+  cargo run --release -p eo-hills --example cook -- macro [--preview out.png]
+```
+
+The cook classifies each 2 m texel softly as lawn, cured grass, bare soil,
+paving, scrub or tree canopy (the near-infrared vigour, brightness, hue,
+slope and the mapped greens and paths) and gives each class the renderer's
+own tone (the lawn's at the measured turf luminance, the meadow's cured
+blades' hue, ground2.rs's scrub and grove, terrain_detail.rs's soils), with
+the photograph's pattern within the class kept. Without the file the
+terrain draws as before.
 
 Each data file has a `*.NOTICE.txt` beside it with its source, retrieval,
 digest and required attribution. Models and textures under `public/assets/`

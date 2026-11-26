@@ -1812,6 +1812,7 @@ fn city_shader_parts(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels
         + "\n" + &crate::light_shadow::use_wgsl(shadow != ShadowLevels::Far && shader_features().light_shadows()) // lamp and headlight shadows; the far layer lies past the lights' clusters, and without the option the test is compiled out (lighting, stage P1)
         + &crate::landmarks::city_wgsl() // landmarks
         + "\n" + include_str!("cc0.wgsl") + &crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()) // cc0
+        + &crate::aerial_ground::wgsl() // the open ground's colour from the aerial survey (`--no-aerial-ground`)
         + "\n" + include_str!("far_box.wgsl") // the far box's facade
         + "\n" + include_str!("fitted_finish.wgsl") + "\n" + include_str!("window_optics.wgsl") + "\n" + include_str!("porch_light.wgsl") // the playable house (`--house-*`; every term behind SF_HOUSE)
         + "\n" + include_str!("weathering.wgsl") + &crate::weathering::wgsl() // the weathering level (`--grime`; every term behind it)

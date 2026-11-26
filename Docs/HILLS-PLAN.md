@@ -54,8 +54,8 @@ grass, scrub, tree and rock systems take their placements from the lists.
 | Stage | What | Status |
 | --- | --- | --- |
 | H0 | Matched capture set (nine hills on foot and from the air, the Moscone mound), A/B tooling | done |
-| H1 | Meadow mats: no plates (the cover blends into the ground) | in progress |
-| H2 | Aerial macro colour: de-lit NAIP as the open ground's base colour | planned |
+| H1 | Meadow mats: no plates (the cover blends into the ground); `--no-mat-free-meadow` | done |
+| H2 | Aerial macro colour: NAIP classified into lawn, cured grass, soil, paving, scrub, canopy, each in the renderer's own tone with the photo's pattern; `--no-aerial-ground` | done (first pass) |
 | H3 | 1 m relief on open ground citywide (generalise `terrain_detail` regions) | planned |
 | H4 | Structure cleanup in the ground (roof decks, Moscone South) | planned |
 | H5 | Surface map as material IDs in the terrain shader | planned |

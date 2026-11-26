@@ -68,6 +68,7 @@ pub mod rt_reflect; // ray-traced reflections (`--rt-reflect`)
 pub mod rt_scene; // the traced scene every ray-traced pass shares (`--rt-gi`, `--rt-reflect`)
 pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
 pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
+pub mod aerial_ground; // the open ground's colour from the aerial survey (`--no-aerial-ground`, Docs/HILLS-PLAN.md H2)
 pub mod sky; // sky
 mod sky_reflect; // (`--screen-reflect`) the histories' mip chain (the reflect track)
 pub mod smooth_time; // the drawn hour following the clock (`--smooth-time`)
@@ -696,6 +697,8 @@ pub struct Renderer {
     pub facade: facade::FacadeGpu,
     /// the shop signs' lettering (group 0 binding 28, stage S1).
     pub signs: sign_letters::SignLettersGpu,
+    /// the open ground's colour from the aerial survey (`--no-aerial-ground`; a 1 x 1 stand-in without it).
+    pub aerial: aerial_ground::AerialGround,
     /// runtime switches (facade::RUN_*), read by draw.wgsl from the frame uniform.
     pub facade_flags: std::sync::atomic::AtomicU32,
     pub bytes: GpuBytes,
@@ -839,6 +842,7 @@ fn make_draw_bg(
     probe_sh: &wgpu::Buffer,
     cc0: &cc0::Cc0Gpu, // cc0
     signs: &wgpu::TextureView, // the shop signs' lettering (stage S1)
+    aerial: &wgpu::TextureView, // the open ground's colour from the aerial survey (`--no-aerial-ground`)
 ) -> wgpu::BindGroup {
     let (av, nv, mv) = (array_view(kit[0]), array_view(kit[1]), array_view(kit[2]));
     let cb = cc0.bind(); // cc0
@@ -880,6 +884,8 @@ fn make_draw_bg(
             wgpu::BindGroupEntry { binding: 27, resource: cb.decals.as_entire_binding() },
             // the shop signs' lettering (stage S1; a stand-in without the facade clutter).
             wgpu::BindGroupEntry { binding: 28, resource: wgpu::BindingResource::TextureView(signs) },
+            // the open ground's colour from the aerial survey (`--no-aerial-ground`; aerial_ground.rs).
+            wgpu::BindGroupEntry { binding: 29, resource: wgpu::BindingResource::TextureView(aerial) },
         ],
     })
 }
@@ -1221,6 +1227,13 @@ impl Renderer {
                 buf_entry(27, fs, storage(true)),
                 // the shop signs' lettering (stage S1, sign_letters.rs; draw.wgsl `sgn_atlas`).
                 tex_entry(28),
+                // the open ground's colour from the aerial survey (aerial_ground.rs; draw.wgsl `hm_tex`).
+                wgpu::BindGroupLayoutEntry {
+                    binding: 29,
+                    visibility: fs,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
             ],
         });
         // the JS street scans' sampler (`configureSurfaceTexture`: repeat, trilinear, anisotropy 8).
@@ -1360,8 +1373,9 @@ impl Renderer {
         let cc0_gpu = cc0::Cc0Gpu::new(d); // placeholders until attached
         // the shop signs' words (stage S1): drawn with `--facade-clutter` (waits for the worker), else a stand-in.
         let sign_gpu = sign_letters::SignLettersGpu::new(d, &ctx.queue);
-        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view));
-        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view));
+        let aerial_gpu = aerial_ground::AerialGround::new(d, &ctx.queue); // (`--no-aerial-ground`)
+        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view));
+        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view));
 
         let bytes = GpuBytes {
             vertex: vb_bytes,
@@ -1370,7 +1384,7 @@ impl Renderer {
             draws: draw_bytes + (COUNTER_WORDS * 4) as u64 + occlusion_gpu.vis_buf.size(), // + per-object flags
             materials: std::mem::size_of_val(init.materials) as u64,
             groups: std::mem::size_of_val(groups.as_slice()) as u64 + hlod_map_buf.size() + hlod_state_buf.size() + hlod_flags_buf.size(), // + the far layer's per-group words
-            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; the signs' words (0 without them)
+            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes + aerial_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; the signs' words (0 without them)
         };
         // (`--rt-gi`) the traced scene with its static cells, and the pass.
         let rt_scene = rt_live.then(|| {
@@ -1453,6 +1467,7 @@ impl Renderer {
             look: look_gpu,
             facade: facade_gpu,
             signs: sign_gpu,
+            aerial: aerial_gpu,
             facade_flags: std::sync::atomic::AtomicU32::new(facade::RUN_AGE | facade::RUN_DETAIL | facade::RUN_ATLAS2 | facade::RUN_PROBE | facade::RUN_ROOMS | facade::RUN_AGENT_HZB | facade::RUN_PROBE_DEFER), // + rooms, agent pyramid test, probe deferral
             bytes,
             multiplier: n,
@@ -2099,8 +2114,8 @@ impl Renderer {
         hitch::mark(hitch::Mark::BindGroupCreated, 4);
         let st = self.street_textures.lock().unwrap();
         let kit = [&self.kit_textures[0], &self.kit_textures[1], &self.kit_textures[2]];
-        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view));
-        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view));
+        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view));
+        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view));
         *self.draw_bg.lock().unwrap() = bg;
         *self.probe_draw_bg.lock().unwrap() = pbg;
     }

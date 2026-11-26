@@ -111,6 +111,21 @@ const CITY_LANDMARK: u32 = 3u;
 // cell, r the letters' fill, g a neon tube (sign_letters.rs; a 1 x 1 stand-in
 // without the clutter or a font).
 @group(0) @binding(28) var sgn_atlas: texture_2d_array<f32>;
+// (`--no-aerial-ground`, Docs/HILLS-PLAN.md H2) the open ground's colour from the
+// aerial survey: the hill builder's macro map, sRGB, alpha 1 on open ground
+// (aerial_ground.rs; a 1 x 1 stand-in with HM_ON false without it).
+@group(0) @binding(29) var hm_tex: texture_2d<f32>;
+
+// The aerial survey's ground colour (linear) and its open-ground weight at a
+// world point, with the fragment's world-space derivatives (no implicit ones:
+// the terrain branch is not uniform). Zero off the map.
+fn hm_ground(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> vec4<f32> {
+    let uv = (world.xz - HM_ORIGIN) / HM_SIZE;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return vec4<f32>(0.0);
+    }
+    return textureSampleGrad(hm_tex, cc0_samp, uv, dpx.xz / HM_SIZE, dpy.xz / HM_SIZE);
+}
 
 /// Offset of stress copy k: a 4-wide grid of small shifts (see scene::copy_offset).
 fn copy_offset(k: u32) -> vec3<f32> {
@@ -1693,6 +1708,16 @@ fn shade(in: VOut) -> vec4<f32> {
     if (gg3_ground) {
         gg3_terrain(&s, in.world, n, dpx, dpy, in.aux.y);
     }
+    // (`--no-aerial-ground`) the open ground's colour from the aerial survey, before the
+    // tone decides the scans, the turf and the cover: plain terrain vertices only (not the
+    // sand, the surveyed materials or the bare-ground marks, which carry their own).
+    var hm_w = 0.0;
+    if (HM_ON && cc0_plain && in.aux.x > 254.5 && in.world.y > LM_SEA_LEVEL_Y + 0.5) {
+        let hm = hm_ground(in.world, dpx, dpy);
+        hm_w = hm.a;
+        s.albedo = mix(s.albedo, hm.rgb, hm_w);
+    }
+    hm_ground_w = hm_w; // (cc0.wgsl `hm_cured`: the scans and the turf read the survey's cured grass as grass)
 // sf:BARE+
     var nb_w = vec3<f32>(0.0);
     if (cc0_plain) {
@@ -1716,6 +1741,9 @@ fn shade(in: VOut) -> vec4<f32> {
 // sf:end
 // sf:COVER&BARE+
     nc_w.x = nc_w.x * (1.0 - nb_w.x);
+// sf:end
+// sf:COVER+
+    nc_w.x = nc_w.x * (1.0 - hm_w); // (`--no-aerial-ground`) the survey's colour already carries the hills' real mosaic
 // sf:end
 // sf:BARE-
     if (cc0_plain) {

@@ -322,11 +322,25 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
 // structure around it: a set chosen by the tone's kind (turf, dry grass,
 // understorey, bare earth, hard yard), two sets height-blended under a slow
 // field, normalised to mean one, with their relief and roughness.
+// (`--no-aerial-ground`) the aerial survey's share of this fragment's ground colour
+// (draw.wgsl sets it before the scans; 0 everywhere else).
+var<private> hm_ground_w: f32 = 0.0;
+
+// (`--no-aerial-ground`) a cured grass colour of the aerial survey's palette: the hue of the
+// meadow's cured blades (green 0.66-0.95 of red, red over 1.25 x blue), which the
+// vertex tones' dry-grass test (green within 12 % of red) reads as bare earth.
+fn hm_cured(c: vec3<f32>) -> f32 {
+    return hm_ground_w * step(0.66 * c.r, c.g) * step(c.g, 0.95 * c.r) * step(1.25 * c.b, c.r);
+}
+
 fn cc0_ground_sets(c: vec3<f32>) -> vec3<i32> {
     // (set A, set B, contrast in hundredths)
     let l = dot(c, CC0_LUMA);
     if (l < 0.012) {
         return vec3<i32>(-1, -1, 0); // water and the seabed's dark tone
+    }
+    if (hm_cured(c) > 0.5) {
+        return vec3<i32>(CC0_L_WITHERED_GRASS, CC0_L_PARK_DIRT, 85); // (`--no-aerial-ground`) the survey's cured grass
     }
     let warm = c.r / max(c.b, 1e-4);
     if (c.g > c.r * 1.08 && c.g > c.b * 1.2) {

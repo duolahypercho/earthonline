@@ -1886,7 +1886,7 @@ fn nt_turf_weight(c: vec3<f32>) -> vec2<f32> {
     let green = smoothstep(1.03, 1.12, c.g / max(c.r, 1e-4)) * smoothstep(1.12, 1.3, c.g / max(c.b, 1e-4));
     let lawn = green * smoothstep(0.035, 0.06, l);
     let warm = c.r / max(c.b, 1e-4);
-    let straw = (1.0 - smoothstep(0.1, 0.16, abs(c.r - c.g) / max(c.g, 1e-4))) * smoothstep(1.2, 1.35, warm);
+    let straw = max((1.0 - smoothstep(0.1, 0.16, abs(c.r - c.g) / max(c.g, 1e-4))) * smoothstep(1.2, 1.35, warm), hm_cured(c)); // (+ the aerial survey's cured grass)
     return vec2<f32>(lawn, max(green, straw) * smoothstep(0.012, 0.02, l));
 }
 

@@ -905,6 +905,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-gg2-far" | "--no-far-fallback" | "--no-landmark-far-models" | "--no-far-tree-density" | "--no-presidio-rule" | "--no-far-paint" => {} // read by its crate (the far layer)
             "--no-corridor-traffic" | "--no-deck-walkers" => {} // read by its crate (the corridor traffic)
             "--no-gg2-vegetation" | "--no-coastal-trees" => {} // read by its crate (the vegetation; --no-ground-cover handled above)
+            "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs: the open ground's colour from the aerial survey)
             // the round-3 tracks' switches: one list per track, each in a file the track owns (read by its crate)
             s if eo_render::pace::GG3_SWITCHES.contains(&s) => {} // read by its crate (the frame budget; --no-gg3 every track's roll-up)
             s if s == eo_render::CityClasses::SWITCH => {} // read by its crate (the city pass's classes, one pipeline each)
