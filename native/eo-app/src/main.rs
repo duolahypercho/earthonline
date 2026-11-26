@@ -908,6 +908,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs: the open ground's colour from the aerial survey)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`: the hill builder's 2 m relief over the city's hills)
             "--no-city-planting" => {} // read by props/vegetation.rs (the hill builder's planting map)
+            s if s == crate::props::vegetation::CITY_LITHOLOGY_SWITCH => {} // read by props/vegetation.rs (the rock by the city's bedrock map)
             s if s == eo_landmarks::vegetation::CITY_GRASS_SWITCH => {} // read by its crate (the city's annual grassland canopy, props/vegetation.rs passes it on)
             // the round-3 tracks' switches: one list per track, each in a file the track owns (read by its crate)
             s if eo_render::pace::GG3_SWITCHES.contains(&s) => {} // read by its crate (the frame budget; --no-gg3 every track's roll-up)

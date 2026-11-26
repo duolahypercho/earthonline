@@ -410,6 +410,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`)
             "--no-city-planting" => {} // read by props/vegetation.rs
+            s if s == crate::props::vegetation::CITY_LITHOLOGY_SWITCH => {} // read by props/vegetation.rs (the city's bedrock map)
             s if s == eo_landmarks::vegetation::CITY_GRASS_SWITCH => {} // read by its crate (the city's annual grassland)
             "--no-external" => {} // main's `external_flag`
             // Round-2 AAA feature switches & kill switches (all parsed cleanly in `--play`)

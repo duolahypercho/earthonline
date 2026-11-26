@@ -261,10 +261,17 @@ const BAKER_STRIP_SOUTH_LAT: f64 = 37.7885;
 /// -122.4770, north of Baker Beach's south end (`BAKER_STRIP_SOUTH_LAT`) and
 /// within `SERPENTINE_SHORE_M` of the shore (the bluff band, INFERRED).
 /// Elsewhere south of the strait the rock is the Franciscan sandstone.
+/// (`--no-city-lithology`) These boxes are the fallback: where the city's bedrock map
+/// has a bedrock unit, it decides ([`VegGround::lithology_at`]).
 fn serpentine_bound() -> (f64, f64) {
     (game_xz(37.80, -122.4770).0, game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1)
 }
-pub const SERPENTINE_SHORE_M: f64 = 200.0;
+pub const SERPENTINE_SHORE_M: f64 = eo_landmarks::flora::BLUFF_SHORE_M;
+
+/// (Docs/HILLS-PLAN.md H7) The switch that keeps the boxes alone for the rock: without
+/// it the city's bedrock map (`native/assets/sf-lithology-v1.json.gz`, the USGS geologic
+/// maps' units) decides wherever it maps bedrock.
+pub const CITY_LITHOLOGY_SWITCH: &str = "--no-city-lithology";
 
 /// The Presidio's mapped park polygon: the largest park green holding
 /// `PRESIDIO_POINT` (None when the greens cannot be read).
@@ -296,6 +303,9 @@ pub struct VegGround {
     /// same NAIP rules' class counts from the citywide 0.3 m tiles (eo-hills `planting`),
     /// read wherever the survey's image is not.
     city: Option<eo_hills::planting::Planting>,
+    /// (`--no-city-lithology`, Docs/HILLS-PLAN.md H7) the city's bedrock map (eo-data
+    /// `lithology`), in surveyed plan metres.
+    bedrock: Option<eo_data::lithology::LithologyMap>,
     presidio: (f64, f64, f64, f64),
     /// The Presidio's mapped park polygon (game metres), if the greens were read.
     presidio_ring: Option<Vec<[f64; 2]>>,
@@ -360,7 +370,22 @@ impl VegGround {
         } else {
             None
         };
-        let g = VegGround { grid, street, land, water, switches, g3, naip, city, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
+        let bedrock = if std::env::args().any(|a| a == CITY_LITHOLOGY_SWITCH) {
+            None
+        } else {
+            let t = std::time::Instant::now();
+            match eo_data::lithology::LithologyMap::load(&eo_data::DataPaths { repo_root: repo_root.to_path_buf() }) {
+                Ok(m) => {
+                    eprintln!("vegetation: the rock by the city's bedrock map ({}, USGS geologic maps; read in {:.0} ms)", m.version, t.elapsed().as_secs_f64() * 1e3);
+                    Some(m)
+                }
+                Err(e) => {
+                    eprintln!("vegetation: the city's bedrock map is not used ({e:#}); the rock by its boxes");
+                    None
+                }
+            }
+        };
+        let g = VegGround { grid, street, land, water, switches, g3, naip, city, bedrock, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
         g.probe_from_env();
         g
     }
@@ -513,6 +538,31 @@ impl VegGround {
         eo_landmarks::vegetation::naip_tree_ok(&self.extra(), x, z)
     }
 
+    /// The rock at (x, z) (`far`: the land north of the strait; `s` the signed shore
+    /// distance): (`--no-city-lithology`, Docs/HILLS-PLAN.md H7) the city's bedrock map
+    /// where it maps a bedrock unit (its chert, serpentinite and greenstone as they are,
+    /// its sandstone, melange and other bedrock as sandstone), else the boxes: chert
+    /// north of the strait, the Presidio's serpentinite bluff band, sandstone elsewhere
+    /// (on the map's Quaternary deposits, whose blocks are the rock under them, and off it).
+    pub fn lithology_at(&self, x: f64, z: f64, far: bool, s: f64) -> Lithology {
+        use eo_data::lithology::RockClass;
+        let gs = eo_data::groundscale::scale();
+        match self.bedrock.as_ref().and_then(|m| m.class_at(x / gs, z / gs)) {
+            Some(RockClass::Chert) => return Lithology::Chert,
+            Some(RockClass::Serpentinite) => return Lithology::Serpentinite,
+            Some(RockClass::Greenstone) => return Lithology::Greenstone,
+            Some(RockClass::Sandstone | RockClass::Other) => return Lithology::Sandstone,
+            Some(RockClass::Surficial | RockClass::Water) | None => {}
+        }
+        if far {
+            Lithology::Chert
+        } else if x < self.serpentine.0 && z < self.serpentine.1 && s.abs() < SERPENTINE_SHORE_M {
+            Lithology::Serpentinite
+        } else {
+            Lithology::Sandstone
+        }
+    }
+
     /// The drawn ground at (x, z) and what grows there (None: nothing can).
     pub fn site(&self, x: f64, z: f64) -> Option<Site> {
         let sea = eo_water::SEA_LEVEL_Y;
@@ -602,13 +652,7 @@ impl VegGround {
         let normal = [-gx / l, 1.0 / l, -gz / l];
         let r = 12.0;
         let ring: f64 = (0..8).map(|k| (k as f64 * std::f64::consts::FRAC_PI_4).sin_cos()).map(|(sn, cs)| h(cs * r, sn * r)).sum::<f64>() / 8.0;
-        let lithology = if far {
-            Lithology::Chert
-        } else if x < self.serpentine.0 && z < self.serpentine.1 && s.abs() < SERPENTINE_SHORE_M {
-            Lithology::Serpentinite
-        } else {
-            Lithology::Sandstone
-        };
+        let lithology = self.lithology_at(x, z, far, s);
         // round 3 (`--no-naip-planting`): on the open ground the NAIP image plants, the blades
         // take the season's grass (eo_look::season on the day, the far layer's green and
         // cured-grass albedos, which the terrain's far land uses too), not the drawn

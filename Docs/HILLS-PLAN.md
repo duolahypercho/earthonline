@@ -25,7 +25,8 @@ same place, judged under [VISUAL_QUALITY_GATE.md](VISUAL_QUALITY_GATE.md).
   blades, shaded apart from the ground and darkened to 0.6 within 5-26 m.
   On a slope these read as dark plates with hard edges.
 - Trees: generic models on a 14 m lattice inside OSM greens.
-- Rock: procedural blocks, "sandstone" outside two boxes.
+- Rock: procedural blocks, "sandstone" outside two boxes (H7: by the city's
+  bedrock map where it maps bedrock).
 - Structures in the survey: the bare-earth DEM keeps some roof decks as
   ground. Moscone South (4th St, Howard-Folsom) becomes a 6-11 m earth mound.
 
@@ -62,7 +63,7 @@ grass, scrub, tree and rock systems take their placements from the lists.
 | H6a | The planting's NAIP rules citywide from the hill builder's class-count map; parks with cured ground are grassland, not lawn; `--no-city-planting` | done (first pass) |
 | H6b | Grass that reads as a canopy on foot: the city's open grassland as a standing annual canopy (wild oats and the other annual grasses 0.4-0.9 m with seed heads over their litter, darker down in the canopy; a floor darkened near the eye was tried and rejected: a camera-centred halo); `--no-city-grass` | first pass |
 | H6c | Trees from lidar (height, crown) instead of the 14 m park lattice | planned |
-| H7 | Rock by lithology (chert on Twin Peaks, Bernal, Mount Davidson) | planned |
+| H7 | Rock by lithology: the hill rock and the planting read the city's bedrock map (`native/assets/sf-lithology-v1.json.gz`, the USGS geologic map units of MF-2337, OF 98-354 and MF-2342 as rock classes): chert on Twin Peaks, Mount Davidson, Bernal Heights, Corona Heights and Tank Hill, serpentinite on Potrero Hill, greenstone where mapped; Quaternary deposits and unmapped ground keep the boxes; `--no-city-lithology` | first pass |
 
 Each stage ships with two matched capture sets (before, after), the bench
 cost per path, and a kill switch.

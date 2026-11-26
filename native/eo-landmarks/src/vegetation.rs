@@ -77,12 +77,17 @@ pub enum Cover {
     Cliff,
 }
 
-/// The rock a slope is cut in (its colour).
+/// The rock a slope is cut in (its colour). The app reads it from the city's bedrock
+/// map where a bedrock unit is mapped (`--no-city-lithology`: the boxes alone; eo-data
+/// `lithology`, Docs/HILLS-PLAN.md H7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lithology {
     Chert,
     Serpentinite,
     Sandstone,
+    /// Franciscan greenstone (altered pillow basalt), as the bedrock map has it on the
+    /// city's hills.
+    Greenstone,
 }
 
 /// The drawn ground at a point, as the app samples it.
@@ -926,7 +931,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
         let steep = 1.0 - 0.6 * smoothstep(40.0, 60.0, slope);
         let r = hash(ix, iz, 3);
         let flowers = f * bloom * smoothstep(0.35, 0.8, field(x, z, 14.0, 43));
-        if ex.fl.bluff && ex.g2.cover && s.lithology == Lithology::Serpentinite && z > marin_z() && matches!(cover, Cover::Cliff | Cover::Bare | Cover::Rock) {
+        if ex.fl.bluff && ex.g2.cover && serpentine_bluff(&s, z) && matches!(cover, Cover::Cliff | Cover::Bare | Cover::Rock) {
             // the flora pass: the serpentine bluff faces' sparse low scrub over the rock
             // (20-50 % plant cover, field guide 1.4, estimate), none on the steepest faces.
             let share = 0.45 * (1.0 - outcrop_patch(x, z, cover)) * (1.0 - smoothstep(48.0, 62.0, slope)) + 0.1;
@@ -1022,7 +1027,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 let sc = 0.75 + 0.55 * hash(ix, iz, 4) as f32;
                 out.push(Plant { kind: Kind::Flower(if field(x, z, 25.0, 47) < 0.6 { 0 } else { 1 }), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad(), tip: TIP_NONE });
             }
-            if ex.fl.bluff && s.lithology == Lithology::Serpentinite && z > marin_z() {
+            if ex.fl.bluff && serpentine_bluff(&s, z) {
                 // the flora pass: the serpentine bluff's low scrub in place of the meadow.
                 let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
                 let kind = crate::flora::bluff_kind(x, z, ix, iz);
@@ -1428,7 +1433,15 @@ fn push_bloom(host: &Plant, kind: u8, host_h: f32, day_of_year: f64, female: boo
 fn scrub_terrain(s: &Site, fl: crate::flora::Flora) -> f64 {
     let w = if fl.species { crate::flora::terrain_weight(s) } else { 1.0 };
     // the serpentine bluff's coyote brush is sparse (`Flora::bluff`; guide 6: "sparse coyote brush").
-    if fl.bluff && s.lithology == Lithology::Serpentinite { w * 0.35 } else { w }
+    if fl.bluff && s.lithology == Lithology::Serpentinite && s.shore_m < crate::flora::BLUFF_SHORE_M { w * 0.35 } else { w }
+}
+
+/// The serpentine bluff's ground (`Flora::bluff`): serpentinite south of the strait within
+/// [`crate::flora::BLUFF_SHORE_M`] of the shore. Its low coast bluff scrub is the sea
+/// bluffs'; the city's inland serpentinite the bedrock map adds (Potrero Hill, the Hunters
+/// Point ridge) keeps its grassland and its own rock.
+pub fn serpentine_bluff(s: &Site, z: f64) -> bool {
+    s.lithology == Lithology::Serpentinite && z > marin_z() && s.shore_m < crate::flora::BLUFF_SHORE_M
 }
 
 /// Mounds a 1 m cell carries where the scrub is closed: a mound is 1.3-2.2 m
@@ -1770,6 +1783,21 @@ mod tests {
         let mut lawn = vec![];
         plant_coarse(0.0, 0.0, 128.0, 128.0, &flat(Cover::Lawn), Switches::ALL, &mut lawn);
         assert!(lawn.is_empty());
+    }
+
+    /// The coast bluff flora keeps to the bluff band (H7): the bedrock map's inland
+    /// serpentinite (Potrero Hill) is serpentinite rock, not the sea bluff's scrub.
+    #[test]
+    fn the_bluff_flora_keeps_to_the_shore() {
+        let z = marin_z() + 3000.0;
+        let site = |lithology: Lithology, shore_m: f64| Site { y: 30.0, normal: [0.0, 1.0, 0.0], ground: [0.1; 3], cover: Some(Cover::WildGrass), lithology, shore_m, hollow_m: 0.0 };
+        assert!(serpentine_bluff(&site(Lithology::Serpentinite, 50.0), z));
+        assert!(!serpentine_bluff(&site(Lithology::Serpentinite, crate::flora::BLUFF_SHORE_M + 1.0), z));
+        assert!(!serpentine_bluff(&site(Lithology::Serpentinite, 50.0), marin_z() - 10.0));
+        assert!(!serpentine_bluff(&site(Lithology::Greenstone, 50.0), z));
+        let fl = crate::flora::Flora::ALL;
+        assert_eq!(scrub_terrain(&site(Lithology::Serpentinite, 900.0), fl), scrub_terrain(&site(Lithology::Sandstone, 900.0), fl));
+        assert!(scrub_terrain(&site(Lithology::Serpentinite, 50.0), fl) < scrub_terrain(&site(Lithology::Sandstone, 50.0), fl));
     }
 
     #[test]

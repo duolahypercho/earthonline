@@ -132,7 +132,7 @@ pub const GREENSTONE_TOP_M: f64 = 25.0;
 pub fn unit_srgb(u: Unit) -> [u8; 3] {
     match u {
         Unit::Chert => [98, 64, 57],
-        Unit::Greenstone => [86, 94, 84],
+        Unit::Greenstone => crate::hill_rock::GREENSTONE_SRGB,
         Unit::Serpentinite => crate::hill_rock::SERPENTINITE_SRGB,
         Unit::Sandstone => crate::hill_rock::SANDSTONE_SRGB,
     }
