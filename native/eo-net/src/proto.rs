@@ -21,6 +21,11 @@
 //! since decks, ramps and tunnels change the collision world and the
 //! traffic. The byte is the last field before the padding, so a hello
 //! written without it reads as 0, "none" (the setting every world had before).
+//! Its `STREET_TAPERS` bit carries `--street-tapers` the same way: the street's
+//! tapered kerbs are part of the collision world; `STREET_BIKEWAYS`
+//! `--bikeways` (a bike lane's raised island is), `STREET_SURVEY_PARKING`
+//! `--survey-parking` (the kerbs it moves) and `STREET_MIDBLOCK`
+//! `--midblock-crossings` (the kerb ramps it cuts).
 //!
 //! The request and response are padded so a spoofed source address cannot
 //! make the server send more bytes than it received (no amplification); the
@@ -69,17 +74,31 @@ pub fn ground_scale_ppm() -> u32 {
 }
 
 /// A world's grade-separated roads as the handshake carries them: 0 none,
-/// `STRUCTURES_ON` with `--structures`, plus `STRUCTURES_TUNNELS` with `--tunnels`.
+/// `STRUCTURES_ON` with `--structures`, plus `STRUCTURES_TUNNELS` with `--tunnels`;
+/// plus `STREET_TAPERS` with `--street-tapers` (this process's street worlds,
+/// eo-street `options::tapers`: the tapered kerbs change the collision world).
 pub fn structures_code(s: Option<eo_structures::StructureOptions>) -> u8 {
-    match s {
-        None => 0,
-        Some(o) => STRUCTURES_ON | if o.tunnels { STRUCTURES_TUNNELS } else { 0 },
-    }
+    let tapers = if eo_street::options::tapers() { STREET_TAPERS } else { 0 };
+    let bikes = if eo_street::options::bikeways() { STREET_BIKEWAYS } else { 0 };
+    let parking = if eo_street::options::survey_parking() { STREET_SURVEY_PARKING } else { 0 };
+    let mid = if eo_street::options::midblock() { STREET_MIDBLOCK } else { 0 };
+    tapers
+        | bikes
+        | parking
+        | mid
+        | match s {
+            None => 0,
+            Some(o) => STRUCTURES_ON | if o.tunnels { STRUCTURES_TUNNELS } else { 0 },
+        }
 }
 
 /// `structures_code` bits.
 pub const STRUCTURES_ON: u8 = 1;
 pub const STRUCTURES_TUNNELS: u8 = 2;
+pub const STREET_TAPERS: u8 = 4;
+pub const STREET_BIKEWAYS: u8 = 8;
+pub const STREET_SURVEY_PARKING: u8 = 16;
+pub const STREET_MIDBLOCK: u8 = 32;
 
 /// A `structures_code` as the switches that give it, for messages.
 pub fn structures_switches(code: u8) -> &'static str {
@@ -87,6 +106,10 @@ pub fn structures_switches(code: u8) -> &'static str {
         0 => "no --structures",
         STRUCTURES_ON => "--structures",
         c if c == STRUCTURES_ON | STRUCTURES_TUNNELS => "--structures --tunnels",
+        STREET_TAPERS => "no --structures, --street-tapers",
+        c if c == STRUCTURES_ON | STREET_TAPERS => "--structures --street-tapers",
+        c if c == STRUCTURES_ON | STRUCTURES_TUNNELS | STREET_TAPERS => "--structures --tunnels --street-tapers",
+        c if c & (STREET_BIKEWAYS | STREET_SURVEY_PARKING | STREET_MIDBLOCK) != 0 => "a setting with --bikeways, --survey-parking or --midblock-crossings (compare --structures, --tunnels, --street-tapers, --bikeways, --survey-parking, --midblock-crossings)",
         _ => "an unknown structures setting",
     }
 }
@@ -458,6 +481,13 @@ mod tests {
             server_salt: 11,
             cookie: 22,
         }
+    }
+
+    #[test]
+    fn street_tapers_bit_names_its_switch() {
+        assert_eq!(structures_switches(STRUCTURES_ON | STREET_TAPERS), "--structures --street-tapers");
+        assert_eq!(structures_switches(STREET_TAPERS), "no --structures, --street-tapers");
+        assert_eq!(structures_switches(STRUCTURES_ON | STRUCTURES_TUNNELS | STREET_TAPERS), "--structures --tunnels --street-tapers");
     }
 
     #[test]

@@ -101,6 +101,12 @@ fn server_config(f: &Flags) -> Result<ServerConfig> {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let f = Flags { args: args.clone() };
+    // `--street-tapers` / `--no-street-tapers` before any street world is built (eo-street
+    // `options::set_tapers`; the handshake compares it, eo-net `structures_code`).
+    eo_street::options::set_tapers(f.switch("--street-tapers", "--no-street-tapers", false));
+    eo_street::options::set_bikeways(f.switch("--bikeways", "--no-bikeways", false));
+    eo_street::options::set_survey_parking(f.switch("--survey-parking", "--no-survey-parking", false));
+    eo_street::options::set_midblock(f.switch("--midblock-crossings", "--no-midblock-crossings", false));
     // `--ground-scale S` before anything reads the scale (no other thread yet).
     if let Some(v) = f.get("--ground-scale") {
         eo_data::groundscale::parse_scale(&v)?;
