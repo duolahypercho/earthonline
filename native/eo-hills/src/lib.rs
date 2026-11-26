@@ -9,6 +9,7 @@
 //! cargo run --release -p eo-hills --example cook -- relief [--preview <dir>]
 //! EO_AERIAL_DIR=<NAIP folder> cargo run --release -p eo-hills --example cook -- planting
 //! cargo run --release -p eo-hills --example cook -- decks [--survey]
+//! cargo run --release -p eo-hills --example cook -- trees [--preview <dir>]
 //! ```
 //!
 //! * [`macro_map`]: the aerial macro colour map (stage H2), a de-lit ground
@@ -22,6 +23,8 @@
 //!   texel citywide (stage H6a), in `<cache>/hills/planting-v1.bin`.
 //! * [`relief`]: the ground's relief at 2 m from the USGS 1 m DEM (stage H3),
 //!   in `<cache>/hills/relief-v1.bin`.
+//! * [`trees`]: the hill parks' trees measured from the USGS 3DEP lidar
+//!   (stage H6c: position, height, crown), in `<cache>/hills/trees-v1.bin`.
 //! * `cook decks` (stage H4) writes the roof decks the bare-earth DEM keeps
 //!   as ground into `native/assets/sf-decks-v1.json` (read by eo-data `decks`).
 
@@ -31,6 +34,7 @@ pub mod planting;
 pub mod raster;
 pub mod relief;
 pub mod transfer;
+pub mod trees;
 
 use std::path::PathBuf;
 

@@ -13,6 +13,9 @@
 //! `planting`: the vegetation planting's NAIP rules counted per 2 m texel
 //! citywide (see `cook/planting.rs`).
 //!
+//! `trees`: the hill parks' trees measured from the USGS 3DEP lidar (see
+//! `cook/trees.rs`).
+//!
 //! `macro`: the aerial macro colour map (`eo_hills::macro_map`, stage H2)
 //! into `<cache>/hills/aerial-macro-v1.bin`, `<cache>` being
 //! `EO_NATIVE_CACHE`, else `native/cache`. Inputs: the USDA NAIP 0.3 m RGB
@@ -54,6 +57,8 @@ mod relief; // `relief`: the 2 m relief from the 1 m DEM (stage H3)
 mod decks; // `decks`: structures the bare-earth DEM keeps as ground (stage H4)
 #[path = "cook/planting.rs"]
 mod planting; // `planting`: the vegetation planting's NAIP rules counted citywide (stage H6a)
+#[path = "cook/trees.rs"]
+mod trees; // `trees`: the hill parks' trees from the USGS 3DEP lidar (stage H6c)
 
 struct Probe {
     name: String,
@@ -74,12 +79,14 @@ fn main() {
         eprintln!("       cook relief [--preview <dir>]   (EO_DEM1M_DIR: the 1 m DEM tiles, default <repo>/external/dem/1m)");
         eprintln!("       cook decks [--survey] [--probe x0,z0,x1,z1[,step] [--dump <dir>]]   (EO_DEM1M_DIR: the 1 m DEM tiles)");
         eprintln!("       cook planting [--samples n]   (EO_AERIAL_DIR: the NAIP folder; EO_SURVEY_ROOT: the survey, to validate)");
+        eprintln!("       cook trees [--area name ...] [--preview <dir>]   (EO_LIDAR_DIR: the lidar areas, default <repo>/external/lidar)");
         std::process::exit(2)
     };
     let sub: Option<fn(&[String]) -> Result<()>> = match args.first().map(String::as_str) {
         Some("relief") => Some(relief::run),
         Some("planting") => Some(planting::run),
         Some("decks") => Some(decks::run),
+        Some("trees") => Some(trees::run),
         _ => None,
     };
     if let Some(run) = sub {
