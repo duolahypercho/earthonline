@@ -164,6 +164,8 @@ const ROAD_SRGB: [u8; 3] = [142, 143, 140];
 /// The renderer's own ground colours, read from its sources (one source of truth), all linear.
 struct Tones {
     lawn_lum: f32,
+    /// The surface car parks' tone (ground_cover.rs "lotAsphalt" pair, the linear mean).
+    lot: [f32; 3],
     palette: tr::Palette,
     /// The matrix's targets: dry grass at its own luminance, canopy (`CANOPY`) at `CANOPY_LUM`.
     matrix_dry: [f32; 3],
@@ -195,6 +197,14 @@ fn renderer_tones() -> Result<Tones> {
     }
     let (a, b) = (hex_linear(hexes[0])?, hex_linear(hexes[1])?);
     let lawn = scale_to_lum([0, 1, 2].map(|k| (a[k] + b[k]) * 0.5), lawn_lum);
+    // ground_cover.rs: "lotAsphalt" => (...): the surface car parks' tone, the pair's linear mean.
+    let line = line_of(&read(gc)?, gc, "\"lotAsphalt\" => (\"#")?;
+    let lh: Vec<&str> = line.split('"').filter(|s| s.starts_with('#')).collect();
+    if lh.len() != 2 {
+        bail!("{gc}: {line}");
+    }
+    let (la, lb) = (hex_linear(lh[0])?, hex_linear(lh[1])?);
+    let lot = [0, 1, 2].map(|k| (la[k] + lb[k]) * 0.5);
     // const NAME: [u8; 3] = [r, g, b];
     let srgb_const = |rel: &str, src: &str, name: &str| -> Result<[f32; 3]> {
         let line = line_of(src, rel, &format!("const {name}: [u8; 3] ="))?;
@@ -239,7 +249,7 @@ fn renderer_tones() -> Result<Tones> {
         v[1],
         mm::luminance(dry)
     );
-    Ok(Tones { lawn_lum, palette, matrix_dry: dry, matrix_canopy: scale_to_lum(srgb_const(g2, &src, "CANOPY")?, CANOPY_LUM), source })
+    Ok(Tones { lawn_lum, lot, palette, matrix_dry: dry, matrix_canopy: scale_to_lum(srgb_const(g2, &src, "CANOPY")?, CANOPY_LUM), source })
 }
 
 /// The tiles of `list` that are on disk, each checked against its digest
@@ -468,6 +478,26 @@ fn green_classes(paths: &eo_data::DataPaths, pg: &PlanGrid) -> Result<Vec<u8>> {
     Ok(class)
 }
 
+/// The mapped surface car parks (sf-lots-parks `lots` that are not buildings), with their holes.
+fn surface_lots(paths: &eo_data::DataPaths, pg: &PlanGrid) -> Result<Vec<bool>> {
+    let p = paths.sf("sf-lots-parks.json.gz");
+    let v: serde_json::Value = serde_json::from_slice(&eo_data::read_maybe_gzip(&p)?).with_context(|| format!("parsing {}", p.display()))?;
+    let mut lot = vec![false; pg.width * pg.height];
+    let flat = |a: &serde_json::Value| a.as_array().map(|a| a.iter().filter_map(|x| x.as_f64()).collect::<Vec<f64>>()).unwrap_or_default();
+    for l in v["lots"].as_array().context("sf-lots-parks: no lots")? {
+        if l["building"].as_bool().unwrap_or(false) {
+            continue;
+        }
+        let mut rings = vec![raster::ring_of_flat(&flat(&l["polygon"]))];
+        for h in l["holes"].as_array().into_iter().flatten() {
+            rings.push(raster::ring_of_flat(&flat(h)));
+        }
+        let refs: Vec<&[[f64; 2]]> = rings.iter().filter(|r| r.len() >= 3).map(|r| r.as_slice()).collect();
+        raster::fill_rings(pg, &refs, |i, j| lot[j * pg.width + i] = true);
+    }
+    Ok(lot)
+}
+
 /// Mapped trails and bare ground (the soil rule's): a path, footway, track,
 /// bridleway or steps at grade within 1.5 m inside a park, grassland, scrub,
 /// wood or golf course, or mapped bare ground; and every way at grade within 3 m.
@@ -573,6 +603,8 @@ struct Layers {
     dry_region: Vec<bool>,
     wood_region: Vec<bool>,
     scrub_region: Vec<bool>,
+    /// A mapped surface car park (sf-lots-parks `lots`, not a building).
+    lot: Vec<bool>,
 }
 
 impl Layers {
@@ -712,7 +744,9 @@ fn colour_by_classes(img: &mut Image, ly: &Layers, tones: &Tones, t0: Instant) -
             }
             let k = j0 * w + o;
             let f = ly.features(px, k);
-            let c = tr::transfer(&f, &tr::weights(&f, &p), &pal, &refs, &p, paving_gain);
+            // a surface car park in its lots' asphalt tone: the photograph's parked cars
+            // are not baked into the ground (the renderer's scans give it its detail)
+            let c = if ly.lot[k] { tones.lot } else { tr::transfer(&f, &tr::weights(&f, &p), &pal, &refs, &p, paving_gain) };
             px[0] = c[0];
             px[1] = c[1];
             px[2] = c[2];
@@ -956,6 +990,7 @@ fn cook_macro(preview: Option<&Path>, probes: &[Probe], ridge: f32, mode: Mode) 
         dry_region: raster::erode(&class.iter().zip(&wc).map(|(&c, &v)| matches!(c, C_PARK | C_GRASSLAND) || (v == 30 && !matches!(c, C_LAWN | C_WOOD | C_SCRUB))).collect::<Vec<_>>(), w, h),
         wood_region: raster::erode(&class.iter().map(|&c| c == C_WOOD).collect::<Vec<_>>(), w, h),
         scrub_region: raster::erode(&class.iter().map(|&c| c == C_SCRUB).collect::<Vec<_>>(), w, h),
+        lot: surface_lots(&paths, &pg)?,
         class,
         wc,
         road,
