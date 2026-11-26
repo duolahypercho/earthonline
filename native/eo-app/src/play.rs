@@ -587,6 +587,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
         a.look.ao_albedo = want("--ao-albedo", "--no-ao-albedo");
         a.look.occluder_light = a.look.lighting.ambient_volume > 0 && want("--occluder-light", "--no-occluder-light");
         a.look.sun_bounce = a.look.lighting.far_shadows > 0 && want("--sun-bounce", "--no-sun-bounce");
+        a.look.screen_gi = want("--screen-gi", "--no-screen-gi");
         a.look.soft_shadows = want("--soft-shadows", "--no-soft-shadows");
         // 5. Reflect track (porosity & puddles, Hi-Z GGX screen reflections, rut ponding, wet tail-lamp streaks)
         a.look.sky.wet_surfaces = want("--wet-surfaces", "--no-wet-surfaces");
@@ -2733,7 +2734,7 @@ mod play_defaults_tests {
         assert!(a.look.ocean_life && a.look.ocean_reef && a.look.coastal_habitat && a.cove_detail && a.underwater_habitats);
         assert!(a.beaver_house && a.house_finishes && a.house_patina && a.house_furniture && a.house_photo);
         assert!(!o.beaver_spawn, "plain --play should keep the downtown spawn while loading the house in the city");
-        assert!(a.look.dome_env && a.look.ao_albedo && a.look.occluder_light && a.look.sun_bounce && a.look.soft_shadows);
+        assert!(a.look.dome_env && a.look.ao_albedo && a.look.occluder_light && a.look.sun_bounce && a.look.screen_gi && a.look.soft_shadows);
         assert!(a.look.sky.wet_surfaces && a.look.sky.screen_reflect && a.look.sky.wet_relief && a.look.sky.lamp_streaks);
         assert_eq!((a.look.car_materials, a.look.car_contact, a.look.car_reflections, a.look.car_finish), (1, 1, 1, 1));
         assert_eq!((a.look.car_lamps, a.look.car_wet), (0, 0), "car-lamps/car-wet remain opt-in for Apple Metal compiler safety");
