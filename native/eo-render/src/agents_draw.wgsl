@@ -372,8 +372,16 @@ fn ag_surface(in: AgOut, bore: bool) -> AgSurf {
         let inv = inverseSqrt(max(max(dot(t, t), dot(b, b)), 1e-20));
         // glTF's v runs down the image: the derived bitangent is flipped (three's
         // GLTFLoader negates normalScale.y for meshes without tangents).
-        let nm = normalize(t * inv * nt.x * m.params.z - b * inv * nt.y * m.params.z + n * max(nt.z, 0.05));
-        if (all(nm == nm)) {
+        let nm0 = normalize(t * inv * nt.x * m.params.z - b * inv * nt.y * m.params.z + n * max(nt.z, 0.05));
+        if (all(nm0 == nm0)) {
+            // Keep normal-mapped skin/hair/cloth in the eye's hemisphere so silhouette
+            // pixels never drop to nv -> 0 (which caused blinding white grazing Fresnel rims).
+            let g_soft = smoothstep(0.04, 0.28, dot(n, v));
+            var nm = normalize(mix(n, nm0, mix(0.25, 1.0, g_soft)));
+            let snv = dot(nm, v);
+            if (snv < 0.14) {
+                nm = normalize(nm + v * (0.14 - snv));
+            }
             s.n = nm;
         }
     }
@@ -445,15 +453,15 @@ fn pp_class(rough: f32) -> u32 {
 const PP_SKIN_MFP_MM: vec3<f32> = vec3<f32>(3.67, 1.37, 0.68);
 const PP_SKIN_FEATURE_MM: f32 = 15.0;
 const PP_SKIN_F0: f32 = 0.028;
-const PP_SKIN_SHARP_ROUGH: f32 = 0.3;
-const PP_SKIN_SHARP_WEIGHT: f32 = 0.15;
+const PP_SKIN_SHARP_ROUGH: f32 = 0.34;
+const PP_SKIN_SHARP_WEIGHT: f32 = 0.10;
 // Cloth: the fibres' grazing sheen, the Charlie sheen (Estevez and Kulla
 // 2017) with the Neubelt-Pettineo visibility, from the key, its colour the
 // fabric's own at half strength (sqrt(albedo), the cloth model's default
 // sheen colour, x 0.5: everyday cotton, denim and wool, not velvet) and a
 // broad roughness.
-const PP_CLOTH_SHEEN: f32 = 0.5;
-const PP_CLOTH_SHEEN_ROUGH: f32 = 0.7;
+const PP_CLOTH_SHEEN: f32 = 0.42;
+const PP_CLOTH_SHEEN_ROUGH: f32 = 0.72;
 // Hair: Kajiya-Kay strand highlights (1989) on two shifted lobes (Scheuermann
 // 2004: a white primary shifted toward the tip, a broader secondary in the
 // hair's colour toward the root, the light that passes through a strand), the
@@ -461,7 +469,7 @@ const PP_CLOTH_SHEEN_ROUGH: f32 = 0.7;
 // no strand direction).
 const PP_HAIR_SHIFT: vec2<f32> = vec2<f32>(0.08, -0.08);
 const PP_HAIR_EXP: vec2<f32> = vec2<f32>(80.0, 20.0);
-const PP_HAIR_SPEC: vec2<f32> = vec2<f32>(0.10, 0.25);
+const PP_HAIR_SPEC: vec2<f32> = vec2<f32>(0.032, 0.09);
 
 // The Gaussian-blurred terminator's addition to the key's Lambert term, per
 // channel (sigma in radians): d Phi(d / sigma) + sigma phi(d / sigma) - max(d, 0),
@@ -478,7 +486,7 @@ fn pp_charlie(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, alpha: f32) -> f32 {
     let h = normalize(l + v);
     let nh = clamp(dot(n, h), 0.0, 1.0);
     let nl = max(dot(n, l), 0.0);
-    let nv = max(dot(n, v), 1e-4);
+    let nv = max(dot(n, v), 0.12);
     let sin2 = max(1.0 - nh * nh, 0.0);
     let inv = 1.0 / alpha;
     let d = (2.0 + inv) * pow(sin2, 0.5 * inv) / (2.0 * LK_PI);
@@ -530,12 +538,15 @@ fn pp_lobes(g: AgSurf, cls: u32, l: vec3<f32>, nl: f32, key: vec3<f32>) -> vec3<
     } else {
         let down = vec3<f32>(0.0, -1.0, 0.0);
         let t0 = down - n * dot(n, down);
-        if (dot(t0, t0) > 1e-6) {
-            let t = normalize(t0);
+        let t_len = length(t0);
+        if (t_len > 1e-3) {
+            let t = t0 / t_len;
             let h = normalize(l + v);
+            // Fade the vertical-strand highlight smoothly near the crown pole (where gravity tangent degenerates).
+            let pole_fade = smoothstep(0.08, 0.42, t_len);
             let s1 = pp_strand(t, n, h, PP_HAIR_SHIFT.x, PP_HAIR_EXP.x) * PP_HAIR_SPEC.x;
             let s2 = pp_strand(t, n, h, PP_HAIR_SHIFT.y, PP_HAIR_EXP.y) * PP_HAIR_SPEC.y;
-            out = key * smoothstep(0.0, 0.25, nl) * (vec3<f32>(s1) + s2 * g.s.albedo);
+            out = key * smoothstep(0.0, 0.25, nl) * pole_fade * (vec3<f32>(s1) + s2 * g.s.albedo);
         }
     }
     return out;
@@ -687,7 +698,12 @@ fn pb_ground(foot: vec3<f32>) -> vec4<f32> {
         if (z <= 0.0 || abs(zr - z) > PB_DEPTH_TOL.x + PB_DEPTH_TOL.y * zr) {
             continue;
         }
-        sum = sum + textureSampleLevel(sky_prev, lk_ao_samp, uv, 0.0).rgb;
+        // Soft-compress specular HDR spikes from wet-pavement lamp reflections so
+        // only diffuse ground bounce lights a pedestrian's chin and undersides.
+        let tap = max(textureSampleLevel(sky_prev, lk_ao_samp, uv, 0.0).rgb, vec3<f32>(0.0));
+        let tl = dot(tap, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let soft = tl / (1.0 + tl / 1.4);
+        sum = sum + tap * (soft / max(tl, 1e-4));
         found = found + 1.0;
     }
     if (found < 1.0) {
@@ -1187,9 +1203,12 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
     let arch = length(local.yz - piv.yz) / r;
     var occ = 1.0;
     if (role != AG_ROLE_TYRE && role != AG_ROLE_WHEEL && role != AG_ROLE_BRAKE) {
-        occ = mix(0.35, 1.0, smoothstep(1.0, 1.45, arch) + smoothstep(0.0, 0.12, abs(local.x) - abs(piv.x) + 0.1));
+        occ = mix(0.14, 1.0, smoothstep(1.0, 1.48, arch) + smoothstep(0.0, 0.14, abs(local.x) - abs(piv.x) + 0.1));
+    } else {
+        // Shade the upper half of wheels/tyres tucked inside the wheel well.
+        occ = mix(1.0, 0.36, smoothstep(0.15, 0.85, (local.y - piv.y) / r));
     }
-    occ = min(occ, mix(1.0, 0.35, smoothstep(0.1, 0.7, -nb.y)));
+    occ = min(occ, mix(1.0, 0.16, smoothstep(0.05, 0.65, -nb.y)));
     (*g).s.ao = (*g).s.ao * clamp(occ, 0.0, 1.0);
     if (lamp != 0u) {
         // Lamps (lit as ag_lamp lights them): LED colours, the LEDs' structure.
@@ -1586,10 +1605,11 @@ fn ag_car_finish(c_in: vec4<f32>, k: AgCar, world: vec3<f32>, g: AgSurf, local: 
     }
     var far = vec3<f32>(0.0);
     if (SF_CAR_REFLECTIONS && k.far != 0u) {
+        let far_occ = g.s.ao * smoothstep(-0.28, 0.08, g.s.n.y);
         if (k.far == 1u) {
-            far = sky_coat * ag_car_far_lights(world, g.n, g.v, vec3<f32>(0.04), k.far_rough);
+            far = sky_coat * far_occ * ag_car_far_lights(world, g.n, g.v, vec3<f32>(0.04), k.far_rough);
         } else {
-            far = ag_car_far_lights(world, g.s.n, g.v, mix(vec3<f32>(0.04), g.s.albedo, g.s.metal), g.s.rough);
+            far = far_occ * ag_car_far_lights(world, g.s.n, g.v, mix(vec3<f32>(0.04), g.s.albedo, g.s.metal), g.s.rough);
         }
         if (SF_CAR_FINISH && k.fx.w > 0.0 && px < AG_CF_GLINT_PX) {
             // (`--car-finish`) drops too small for their lens: the lamps they mirror

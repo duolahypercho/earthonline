@@ -614,41 +614,46 @@ fn w_rain_impacts(p: vec2<f32>, t: f32, rain: f32, v: vec3<f32>, footprint: f32)
         if (fract(h * 97.1) > density) {
             continue;
         }
-        let centre = c + vec2<f32>(0.22 + 0.56 * h, 0.22 + 0.56 * h2);
+        let centre = c + vec2<f32>(0.30 + 0.40 * h, 0.30 + 0.40 * h2);
         let phase = fract(t * freq + h * 7.3 + f32(k) * 0.37);
         let d = q - centre;
         let d_m = d / sc;
         let r_m = length(d_m);
-        let size = (0.65 + 0.75 * h2) * mix(0.86, 1.22, heavy_r);
-        // Expanding concentric capillary ripple rings.
-        if (ring_vis > 0.001) {
-            let x = (r_m - phase * 0.15 * size) * 85.0 / size;
-            let env = exp(-x * x * 0.075) * (1.0 - phase) * (1.0 - phase) * ring_vis;
-            g = g + (d_m / max(r_m, 1e-4)) * (cos(x) * env * 0.78 * vigor);
+        let cell_r = 0.28 / sc;
+        let cell_fade = 1.0 - wg_smooth(cell_r * 0.62, cell_r, r_m);
+        let onset = wg_smooth(0.0, 0.08, phase);
+        let size = (0.70 + 0.50 * h2) * mix(0.88, 1.12, heavy_r);
+        let travel = min(0.115 * size, cell_r * 0.85);
+        // Expanding concentric capillary ripple rings bounded smoothly inside each cell.
+        if (ring_vis > 0.001 && cell_fade > 0.001) {
+            let lam = 0.017 * (0.85 + 0.30 * h2);
+            let x = (r_m - phase * travel) / lam;
+            let env = exp(-x * x * 0.45) * onset * (1.0 - phase) * (1.0 - phase) * cell_fade * ring_vis;
+            g = g + (d_m / max(r_m, 1e-4)) * (sin(6.2831853 * x) * env * 0.22 * vigor);
         }
-        // Delicate splash crown (0..0.09) + crisp pinpoint rebounding droplet (0.02..0.18).
-        if (drop_vis > 0.001 && phase < 0.18) {
+        // Delicate splash crown + subtle pinpoint rebounding droplet.
+        if (drop_vis > 0.001 && phase < 0.16) {
             let px_m = max(footprint * 0.55, 0.003);
             var sp = 0.0;
-            if (phase < 0.09) {
-                let ct = phase / 0.09;
-                let cr_r = (0.004 + ct * 0.022) * size;
+            if (phase < 0.08) {
+                let ct = phase / 0.08;
+                let cr_r = (0.003 + ct * 0.017) * size;
                 let ang = atan2(d_m.y, d_m.x);
                 let asym = 0.68 + 0.32 * sin(ang * 3.0 + h * 19.0) * cos(ang * 5.0 - h2 * 13.0);
-                let rw = max(px_m * 0.95, 0.0032);
+                let rw = max(px_m * 0.9, 0.0030);
                 let dr = (r_m - cr_r) / rw;
-                sp = sp + exp(-dr * dr) * sin(ct * WG_PI) * asym * 0.48;
+                sp = sp + exp(-dr * dr) * sin(ct * WG_PI) * asym * 0.15;
             }
-            if (phase > 0.018 && phase < 0.175) {
-                let jt = (phase - 0.018) / 0.157;
-                let h_jet_m = 0.036 * size * sin(jt * WG_PI);
+            if (phase > 0.018 && phase < 0.155) {
+                let jt = (phase - 0.018) / 0.137;
+                let h_jet_m = 0.030 * size * sin(jt * WG_PI);
                 let p_jet = d_m + view_par * h_jet_m;
-                let bw = max(px_m * 0.85, 0.0038);
-                sp = sp + exp(-dot(p_jet, p_jet) / (bw * bw)) * sin(jt * WG_PI) * 1.15;
+                let bw = max(px_m * 0.8, 0.0035);
+                sp = sp + exp(-dot(p_jet, p_jet) / (bw * bw)) * sin(jt * WG_PI) * 0.32;
             }
             // Energy-preserving attenuation as pixel size grows past the 4 mm droplet.
-            let sub_att = clamp(0.006 / max(px_m, 0.006), 0.18, 1.0);
-            spark = spark + sp * drop_vis * sub_att * vigor * (0.55 + 0.65 * h3);
+            let sub_att = clamp(0.006 / max(px_m, 0.006), 0.16, 1.0);
+            spark = spark + sp * drop_vis * sub_att * vigor * (0.55 + 0.45 * h3);
         }
     }
     // Subtle circular pinpoint rain-pock glints at medium range (no square tiles).

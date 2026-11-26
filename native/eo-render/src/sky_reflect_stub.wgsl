@@ -24,7 +24,7 @@ fn sky_w2_env(e: f32) -> f32 {
 fn sky_w2_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>, kerb: f32, asphalt: bool) {
 }
 
-fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>) {
+fn sky_w2_generic(s: ptr<function, Surface>, ng: vec3<f32>, world: vec3<f32>, allow_puddle: bool) {
 }
 
 // (`--wet-relief`) off here too: the streak lobes as the look has them.

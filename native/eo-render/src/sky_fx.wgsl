@@ -127,7 +127,7 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
         core = max(LUM_LANTERN_LAMP_M, 1.5 * px);
     }
     let vc_rain_h = select(0.0, smoothstep(0.5, 18.0, skyu.wet.z), sky_vol_clouds_on(skyu.cirrus));
-    let halo = (1.2 + 2.5 * (skyu.bloom_w2.w - 1.0)) * (1.0 + 0.42 * vc_rain_h) * max(1.0, core / FX_LENS_M);
+    let halo = (0.72 + 1.35 * (skyu.bloom_w2.w - 1.0)) * (1.0 + 0.22 * vc_rain_h) * max(1.0, core / FX_LENS_M);
     let size = max(core, halo);
     let c = fx_corner(vi);
     let p = head + (skyu.cam_right.xyz * c.x + skyu.cam_up.xyz * c.y) * size;
@@ -183,7 +183,7 @@ fn sprite_fs(in: FxOut) -> @location(0) vec4<f32> {
     // fog and rain (lamp-haze.js weather gains), falling off as 1/r^2.
     let halo = in.extra.x;
     let vc_rain_h = select(0.0, smoothstep(0.5, 18.0, skyu.wet.z), sky_vol_clouds_on(skyu.cirrus));
-    let a = skyu.bloom_w2.w * (1.0 + 0.65 * vc_rain_h) * 0.002 * in.extra.y / (1.0 + (r * r) / (0.04 * halo * halo)) * (1.0 - smoothstep(0.5 * halo, halo, r)) * (1.0 - in.extra.z);
+    let a = skyu.bloom_w2.w * (1.0 + 0.30 * vc_rain_h) * 0.0010 * in.extra.y / (1.0 + (r * r) / (0.025 * halo * halo)) * (1.0 - smoothstep(0.45 * halo, halo, r)) * (1.0 - in.extra.z);
     let lum = in.color.rgb * c + in.color.rgb / max(lk_luma(in.color.rgb), 1e-6) * a;
     return vec4<f32>(lum, 0.0);
 }
@@ -499,13 +499,13 @@ fn rain_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> 
     // (`--weather-fx` / `--volumetric-clouds`) passing spatial shower-band modulation and
     // intensity-varied drop gauge: fine silver threads in light rain, dense sweeping sheets in storms.
     let shower_var = select(1.0, 0.74 + 0.38 * sin(dot(world.xz, vec2<f32>(0.024, 0.019)) - t * 0.52) * cos(dot(world.xz, vec2<f32>(-0.017, 0.029)) - t * 0.36), weather_fx);
-    let gauge = select(1.0, mix(0.82, select(1.38, select(1.42, 1.12, near), vc_on), heavy_r), weather_fx);
-    // the close-drop term 0.006 (0.016: 1-4 m away a drop drew a 2 cm thick white
-    // stick; real drops at that range are a thin blurred streak).
-    let close_k = select(0.006, 0.0038, vc_on);
-    let diam = ((0.0008 + 0.0042 * s * s) * (1.0 - 0.6 * drizzle) + close_k * (1.0 - smoothstep(1.1, 4.0, d)) * (s + 0.5)) * gauge;
+    let gauge = select(1.0, mix(0.76, select(1.12, select(1.14, 0.92, near), vc_on), heavy_r), weather_fx);
+    // Keep raindrop streaks physically gossamer-thin so they read as blurred water wisps,
+    // never thick solid needles floating in front of shaded walls.
+    let close_k = select(0.006, 0.0022, vc_on);
+    let diam = ((0.0006 + 0.0024 * s * s) * (1.0 - 0.55 * drizzle) + close_k * (1.0 - smoothstep(1.2, 4.2, d)) * (s + 0.45)) * gauge;
     let px = fx_pixel_m(z);
-    let wpx = max(diam / px, 1.0);
+    let wpx = max(diam / px, 0.85);
     let cover = min(diam / px, 1.0);
     let ca = fx_clip(a);
     let cb = fx_clip(b);
@@ -520,33 +520,36 @@ fn rain_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> 
     let along = select(cb, ca, c.y < 0.0);
     out.clip = vec4<f32>(along.xy + nrm * c.x * along.w, along.z, along.w);
     out.uv = vec2<f32>(c.x, c.y);
-    let vc_str = select(1.0, select(mix(1.85, 2.75, heavy_r), mix(1.35, 1.95, heavy_r), near), vc_on);
-    let strength = skyu.rain.w * clamp(0.55 + 0.45 * sqrt(rate / 25.0), 0.0, 1.0) * (1.0 - 0.35 * drizzle) * shower_var * select(1.0, 1.0 + 0.25 * heavy_r, weather_fx) * vc_str;
+    let vc_str = select(1.0, select(mix(1.00, 1.45, heavy_r), mix(0.95, 1.25, heavy_r), near), vc_on);
+    let strength = skyu.rain.w * clamp(0.50 + 0.50 * sqrt(rate / 25.0), 0.0, 1.0) * (1.0 - 0.35 * drizzle) * shower_var * select(1.0, 1.0 + 0.20 * heavy_r, weather_fx) * vc_str;
     // Radiance: the scene's fog colour (the drop refracts the sky and street
     // round it), lifted by the drop gain and the lightning.
     // At night the drops are lit by the street lamps they fall past (a lit
     // road's radiance, ~10 lux over pi at the lamps' scale, x lamps on).
-    let lamp_lit = vec3<f32>(1.0, 0.72, 0.42) * skyu.night.x * skyu.bloom_w2.z * (select(10.0, 18.0, vc_on) / 3.14159);
-    // (`--weather-fx` / `--volumetric-clouds`) Sunshower sparkle: direct sun shining through falling drops lights
-    // streaks with crisp silver-gold glints.
+    let lamp_lit = vec3<f32>(1.0, 0.72, 0.42) * skyu.night.x * skyu.bloom_w2.z * (select(10.0, 12.0, vc_on) / 3.14159);
+    // (`--weather-fx` / `--volumetric-clouds`) Sunshower sparkle kept subtle so drops inside
+    // building shadows do not glow like solid white/peach sticks.
     let sun_shower = select(0.0, smoothstep(0.35, 0.72, skyu.beam.x) * smoothstep(0.03, 0.14, skyu.atmo.y), weather_fx);
-    let sun_lit = look.key.xyz * sun_shower * (0.24 + select(0.0, 0.85, h2 < 0.22));
-    // x 1.1 (2.5: the needles measured 2.5 x the storm sky behind them)
-    let glint_drop = select(0.0, select(0.0, 0.65, h2 < 0.08 && near), weather_fx);
+    let sun_lit = look.key.xyz * sun_shower * (0.09 + select(0.0, 0.26, h2 < 0.14));
+    let glint_drop = select(0.0, select(0.0, 0.24, h2 < 0.06 && near), weather_fx);
     let flash_tint = vec3<f32>(1.0) + vec3<f32>(2.4, 3.0, 4.4) * skyu.wind.w;
-    let base_tint = (look.fog_color.xyz * select(1.1, mix(1.22, 1.42, heavy_r), vc_on) + lamp_lit + sun_lit);
-    let tint = base_tint * select(vec3<f32>(1.0 + 3.0 * skyu.wind.w), flash_tint, vc_on) * (1.0 + 0.45 * (h1 - 0.5) + select(0.0, 0.48, h2 < 0.14) + glint_drop);
-    let cov_floor = select(0.18, select(mix(0.28, 0.42, heavy_r), mix(0.20, 0.30, heavy_r), near), vc_on);
-    let alpha_cap = select(1.0, select(0.54, 0.34, near), vc_on);
+    let base_tint = (look.fog_color.xyz * select(1.1, mix(0.98, 1.14, heavy_r), vc_on) + lamp_lit + sun_lit);
+    let tint = base_tint * select(vec3<f32>(1.0 + 3.0 * skyu.wind.w), flash_tint, vc_on) * (1.0 + 0.35 * (h1 - 0.5) + select(0.0, 0.28, h2 < 0.12) + glint_drop);
+    let cov_floor = select(0.18, select(mix(0.11, 0.20, heavy_r), mix(0.09, 0.16, heavy_r), near), vc_on);
+    let alpha_cap = select(1.0, select(0.28, 0.20, near), vc_on);
     out.color = vec4<f32>(tint, min(strength * fade * max(cover, cov_floor), alpha_cap));
     return out;
 }
 
 @fragment
 fn rain_fs(in: FxOut) -> @location(0) vec4<f32> {
-    let edge = 1.0 - abs(in.uv.x);
+    let e = max(1.0 - abs(in.uv.x), 0.0);
     let vc_on = sky_vol_clouds_on(skyu.cirrus);
-    let along = select(0.6 + 0.4 * (1.0 - abs(in.uv.y)), 0.35 + 0.65 * (1.0 - in.uv.y * in.uv.y), vc_on);
+    let edge = select(e, e * e, vc_on);
+    // Smoothly taper to zero at both tips so motion-blurred drops have silky soft ends,
+    // slightly weighted toward the falling lower droplet head.
+    let tip = max(1.0 - in.uv.y * in.uv.y, 0.0);
+    let along = select(0.6 + 0.4 * (1.0 - abs(in.uv.y)), tip * (0.65 + 0.35 * clamp(-in.uv.y, 0.0, 1.0)), vc_on);
     let a = in.color.w * edge * along;
-    return vec4<f32>(in.color.rgb * a, 0.35 * a);
+    return vec4<f32>(in.color.rgb * a, 0.25 * a);
 }

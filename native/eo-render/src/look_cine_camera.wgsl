@@ -301,25 +301,23 @@ fn cam_flare(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
     let col = mix(vec3<f32>(1.0), key / max(dot(key, CAM_LW), 1e-6), 0.6);
     let d = pos - sp;
     let r = length(d) / px;
-    // the veiling glare: the core whitens a little toward its middle, the skirt keeps the sun's colour.
-    let core = pow(1.0 + (r / 7.0) * (r / 7.0), -1.5);
-    let skirt = 1.0 / (1.0 + (r / 32.0) * (r / 32.0));
-    var out = (mix(col, vec3<f32>(1.0), 0.3 * core) * (1.6 * core) + col * skirt) * cine.cam4.z;
-    // the starburst: three blades' rays a little over a pixel wide, widening outward, r^-1.6.
+    // the veiling glare: compact core and tighter skirt so nearby buildings stay crisp.
+    let core = pow(1.0 + (r / 6.0) * (r / 6.0), -1.6);
+    let skirt = 1.0 / (1.0 + (r / 18.0) * (r / 18.0));
+    var out = (mix(col, vec3<f32>(1.0), 0.3 * core) * (1.2 * core) + col * (0.55 * skirt)) * cine.cam4.z;
+    // the starburst: subtle three-blade diffraction rays, kept compact.
     let ss = smoothstep(CAM_FLARE_EV.x + 1.5, CAM_FLARE_EV.y + 1.0, le);
     var star = 0.0;
     for (var k = 0; k < 3; k = k + 1) {
         let ang = 0.2618 + f32(k) * 1.0471976;
         let across = abs(dot(d, vec2<f32>(-sin(ang), cos(ang)))) / px;
-        let w = 1.3 + 0.012 * r;
+        let w = 1.1 + 0.008 * r;
         star = star + exp(-(across * across) / (w * w));
     }
-    let len = 260.0 * (0.5 + 0.5 * ss);
-    let fall = pow(1.0 + r / 8.0, -1.6) * (1.0 - smoothstep(0.3 * len, len, r));
-    out = out + col * (star * fall * 1.4 * ss);
-    // the ghosts: the aperture's hexagon along the line from the sun through the centre
-    // (t: 0 the sun, 1 the centre's mirror), tinted by the coatings, a faint body and a
-    // dispersed rim.
+    let len = 140.0 * (0.5 + 0.5 * ss);
+    let fall = pow(1.0 + r / 6.0, -1.8) * (1.0 - smoothstep(0.3 * len, len, r));
+    out = out + col * (star * fall * 0.65 * ss);
+    // coated-prime ghosts kept very faint so artificial colored hexagon rings do not clutter the view.
     let axis = vec2<f32>(0.5) - suv;
     let rot = vec2<f32>(cos(0.2618), sin(0.2618));
     for (var i = 0; i < 6; i = i + 1) {
@@ -336,11 +334,11 @@ fn cam_flare(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
         let gc = (suv + axis * g.x) * dims;
         let rad = g.y * px;
         let h = cam_hex(pos - gc, rad, rot);
-        let soft = 0.2 * rad;
+        let soft = 0.28 * rad;
         let body = 1.0 - smoothstep(-soft, soft, h);
-        let rim = exp(-(h * h) / (0.02 * rad * rad));
+        let rim = exp(-(h * h) / (0.04 * rad * rad));
         let disp = mix(vec3<f32>(0.55, 0.75, 1.0), vec3<f32>(1.0, 0.6, 0.35), smoothstep(-0.12 * rad, 0.12 * rad, h));
-        out = out + tint * (g.z * select(1.0, CAM_FLARE_GHOST_GAIN, SF_CAM_FLARE) * (0.35 * body + 0.65 * rim * disp));
+        out = out + tint * (0.18 * g.z * select(1.0, CAM_FLARE_GHOST_GAIN, SF_CAM_FLARE) * (0.45 * body + 0.55 * rim * disp));
     }
     return out * s;
 }
@@ -348,10 +346,10 @@ fn cam_flare(pos: vec2<f32>, dims: vec2<f32>) -> vec3<f32> {
 /// The camera model's display value of a pixel.
 fn cine_camera(pos: vec2<f32>, dims: vec2<f32>) -> vec4<f32> {
     var c = cam_lens(pos, dims);
-    // the depth of field (its circle from the resolve's distance), before anything spreads light.
+    // keep gameplay crisp: only apply subtle shallow-focus soften past a 1.25 px circle of confusion.
     let a0 = textureLoad(hdr, vec2<i32>(pos), 0).a;
     let coc0 = cam_coc(a0, dims);
-    if (coc0 > 0.6 && cine.cam2.z < 1.5) {
+    if (coc0 > 1.25 && cine.cam2.z < 1.5) {
         c = cam_dof(pos, dims, c, a0, coc0);
     }
     if (any(c != c)) {
