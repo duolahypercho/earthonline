@@ -6,6 +6,7 @@
 //!
 //! ```text
 //! EO_AERIAL_DIR=<NAIP folder> cargo run --release -p eo-hills --example cook -- macro [--preview out.png]
+//! cargo run --release -p eo-hills --example cook -- relief [--preview <dir>]
 //! ```
 //!
 //! * [`macro_map`]: the aerial macro colour map (stage H2), a de-lit ground
@@ -15,10 +16,13 @@
 //!   writes (the grid of `eo-kit/examples/roof_survey.rs`), and the survey's haze.
 //! * [`raster`]: plan polygons (footprints, greens, roads) onto a texel grid.
 //! * [`transfer`]: the macro map's classified colour transfer.
+//! * [`relief`]: the ground's relief at 2 m from the USGS 1 m DEM (stage H3),
+//!   in `<cache>/hills/relief-v1.bin`.
 
 pub mod macro_map;
 pub mod naip;
 pub mod raster;
+pub mod relief;
 pub mod transfer;
 
 use std::path::PathBuf;

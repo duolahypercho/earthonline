@@ -5,6 +5,8 @@
 //!     [--preview out.png] [--probe name,x,z ...] [--colour classes|matrix] [--ridge r]
 //! ```
 //!
+//! `relief`: the ground's relief at 2 m (see `cook/relief.rs`).
+//!
 //! `macro`: the aerial macro colour map (`eo_hills::macro_map`, stage H2)
 //! into `<cache>/hills/aerial-macro-v1.bin`, `<cache>` being
 //! `EO_NATIVE_CACHE`, else `native/cache`. Inputs: the USDA NAIP 0.3 m RGB
@@ -40,6 +42,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+#[path = "cook/relief.rs"]
+mod relief; // `relief`: the 2 m relief from the 1 m DEM (stage H3)
+
 struct Probe {
     name: String,
     x: f64,
@@ -56,8 +61,16 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || -> ! {
         eprintln!("usage: cook macro [--preview out.png] [--probe name,x,z ...] [--colour classes|matrix] [--ridge r]   (EO_AERIAL_DIR: the NAIP folder; EO_NATIVE_CACHE: where the map goes)");
+        eprintln!("       cook relief [--preview <dir>]   (EO_DEM1M_DIR: the 1 m DEM tiles, default <repo>/external/dem/1m)");
         std::process::exit(2)
     };
+    if args.first().map(String::as_str) == Some("relief") {
+        if let Err(e) = relief::run(&args[1..]) {
+            eprintln!("cook: {e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if args.first().map(String::as_str) != Some("macro") {
         usage();
     }

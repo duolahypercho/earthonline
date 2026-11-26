@@ -701,6 +701,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "eo-data",
+ "eo-farshore",
  "intel_tex_2",
  "jpeg-decoder",
  "png",
