@@ -16,6 +16,7 @@
 
 mod hill_rock; // the hill rock's mid ring past the props tiles
 pub(crate) mod vegetation; // the Golden Gate's coastal trees, ground cover and hill rock on the props tiles
+pub(crate) mod lidar_trees; // (`--no-lidar-trees`) the hill parks' trees from the USGS 3DEP lidar (eo-hills trees)
 
 use eo_props::{Live, Model, ParkedCar, PropsWorld, TilePlacement};
 use eo_render::props::{EMPTY, GpuLampLight, GpuPropInstance, GpuWireSeg, INSTANCE_CAPACITY, LAMP_CAPACITY, LIGHT_CAPACITY, WIRE_CAPACITY};
@@ -1177,6 +1178,10 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             if !vegetation::park_tree_canopy_ok(tr.x, tr.z) {
                 continue;
             }
+            // (`--no-lidar-trees`) where the lidar measured the park's trees, they stand instead (below).
+            if lidar_trees::covers(tr.x, tr.z) {
+                continue;
+            }
             // a mapped wood's tree as a mature coastal tree (the Presidio forest's species), on the drawn ground.
             if let Some(v) = veg.filter(|v| v.switches.coastal_trees && (cover.tree_class_at(tr.x, tr.z) == 1 || v.in_presidio(tr.x, tr.z))) {
                 let site = v.site(tr.x, tr.z);
@@ -1206,6 +1211,24 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             // Park trees keep clear of the grade-separated roads' decks, girders and columns (`--structures`; unchanged without).
             if let Some(tree) = world.clear_prop(tree) {
                 props.push(tree);
+            }
+        }
+        // (`--no-lidar-trees`, Docs/HILLS-PLAN.md H6c) the hill parks' trees as the USGS 3DEP lidar
+        // measured them (position, height, crown), in the lattice's place; the distant cards
+        // (main.rs `hlod_trees`) read the same trees.
+        for p in lidar_trees::placed_in(x0, z0, x0 + t, z0 + t, &|x, z| world.ground(x, z), &blocked) {
+            match p.form {
+                lidar_trees::Form::Coastal(sp) => {
+                    let k = 0.85 + 0.3 * p.draw as f32;
+                    let tint = eo_landmarks::vegetation::TREE_LEAF_TINT[sp as usize].map(|c| c * k);
+                    plants.push(eo_landmarks::vegetation::Plant { kind: eo_landmarks::vegetation::Kind::Tree(sp), pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), rank: 0.0, tint, grad: [0.0; 2], tip: eo_landmarks::vegetation::TIP_NONE });
+                }
+                lidar_trees::Form::Broadleaf => {
+                    let tree = eo_props::Prop { model: Model::Tree, pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), variant: variant_of(lidar_trees::BROADLEAF_SPECIES), live: Live::None };
+                    if let Some(tree) = world.clear_prop(tree) {
+                        props.push(tree);
+                    }
+                }
             }
         }
     }

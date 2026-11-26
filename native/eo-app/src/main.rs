@@ -907,6 +907,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-gg2-vegetation" | "--no-coastal-trees" => {} // read by its crate (the vegetation; --no-ground-cover handled above)
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs: the open ground's colour from the aerial survey)
             "--no-city-canopy-trees" => {} // read by props/vegetation.rs (park_tree_canopy_ok: the park trees only under the aerial image's canopy)
+            "--no-lidar-trees" => {} // read by props/lidar_trees.rs (the hill parks' trees from the lidar, not the greens' lattice)
             "--no-deck-ground" => {} // read by eo-data (decks.rs: the roof decks the survey keeps as ground, Moscone South's, down to the streets' grade)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`: the hill builder's 2 m relief over the city's hills)
             "--no-city-planting" => {} // read by props/vegetation.rs (the hill builder's planting map)
@@ -1567,7 +1568,12 @@ pub fn load_world(args: &Args) -> Result<World> {
                     let blocked = |x: f64, z: f64| sw.buildings.contains(x, z) || sw.paved_at(x, z).is_some() || sw.ground(x, z) < sea + 0.3;
                     let ground = |x, z| sw.ground(x, z);
                     // (`--no-city-canopy-trees`) as the near tier: a park tree only under the aerial image's canopy
-                    trees.extend(eo_render::hlod_trees::park_trees(cover, g.0, g.1, g.2, g.3, &ground, &blocked).into_iter().filter(|t| crate::props::vegetation::park_tree_canopy_ok(t.pos[0] as f64, t.pos[2] as f64)));
+                    // (`--no-lidar-trees`) and, where the lidar measured the park's trees, none (they stand below).
+                    trees.extend(eo_render::hlod_trees::park_trees(cover, g.0, g.1, g.2, g.3, &ground, &blocked).into_iter().filter(|t| crate::props::vegetation::park_tree_canopy_ok(t.pos[0] as f64, t.pos[2] as f64) && !crate::props::lidar_trees::covers(t.pos[0] as f64, t.pos[2] as f64)));
+                    // (`--no-lidar-trees`, Docs/HILLS-PLAN.md H6c) the hill parks' trees as the USGS 3DEP lidar
+                    // measured them, each the near tier's model as a card (props/lidar_trees.rs).
+                    let far_species = eo_landmarks::vegetation::gg3().far_species;
+                    trees.extend(crate::props::lidar_trees::placed_in(g.0, g.1, g.2, g.3, &ground, &blocked).iter().map(|p| crate::props::lidar_trees::far_tree(p, far_species)));
                     if cove_detail {
                         eo_render::hlod_trees::fill_black_point(&mut trees, cover, &ground, &blocked);
                     }
