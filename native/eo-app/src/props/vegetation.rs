@@ -171,6 +171,13 @@ pub fn naip_box(side: f64, scale: f64) -> (i64, i64) {
 /// columns and rows ([`naip_box`]) about the pixel holding (x, z), with the
 /// two-pixel margin the classifier's 5 x 5 brightness reads (None outside the
 /// image). The planting reads it; so can the terrain's tone.
+/// (`--no-city-planting`) A park's open share (low plus bare) in the image over which its
+/// ground is unmown grassland, not lawn, when it is not green either (INFERRED: the cured
+/// summer grass of the hills' parks reads 0.9-1.0 low or bare, a watered lawn's lush and
+/// green shares 0.3 and more).
+const WILD_PARK_OPEN: f32 = 0.6;
+const WILD_PARK_LUSH: f32 = 0.3;
+
 pub fn naip_shares_at(n: &eo_farshore::survey::naip::Naip, x: f64, z: f64, side: f64, slope_deg: f64) -> Option<eo_landmarks::vegetation::Naip> {
     let (lon, lat) = lon_lat(x, z);
     let (c0, r0) = naip_pixel(lon, lat)?;
@@ -285,6 +292,10 @@ pub struct VegGround {
     /// The 0.6 m NAIP image (survey group A1, read through `EO_SURVEY_ROOT`;
     /// None without it or with `--no-naip-planting`: the round-2 rules).
     naip: Option<eo_farshore::survey::naip::Naip>,
+    /// (`--no-city-planting`, Docs/HILLS-PLAN.md H6a) the hill builder's planting map: the
+    /// same NAIP rules' class counts from the citywide 0.3 m tiles (eo-hills `planting`),
+    /// read wherever the survey's image is not.
+    city: Option<eo_hills::planting::Planting>,
     presidio: (f64, f64, f64, f64),
     /// The Presidio's mapped park polygon (game metres), if the greens were read.
     presidio_ring: Option<Vec<[f64; 2]>>,
@@ -329,7 +340,27 @@ impl VegGround {
         } else {
             None
         };
-        let g = VegGround { grid, street, land, water, switches, g3, naip, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
+        let city = if g3.naip_planting && !std::env::args().any(|a| a == "--no-city-planting") {
+            let p = eo_hills::planting::file_path(&eo_hills::cache_dir());
+            if p.is_file() {
+                match eo_hills::planting::Planting::open(&p) {
+                    Ok(c) => {
+                        eprintln!("vegetation: the city planting map (eo-hills planting) plants by the NAIP rules outside the survey");
+                        Some(c)
+                    }
+                    Err(e) => {
+                        eprintln!("vegetation: the city planting map is not used ({e:#})");
+                        None
+                    }
+                }
+            } else {
+                eprintln!("vegetation: no city planting map at {} (eo-hills cook planting)", p.display());
+                None
+            }
+        } else {
+            None
+        };
+        let g = VegGround { grid, street, land, water, switches, g3, naip, city, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
         g.probe_from_env();
         g
     }
@@ -409,14 +440,35 @@ impl VegGround {
     /// is centred on the pixel holding (x, z), at most 15 a side, with the two-pixel
     /// margin the classifier's 5 x 5 brightness reads.
     pub fn naip_at(&self, x: f64, z: f64, side: f64) -> Option<eo_landmarks::vegetation::Naip> {
-        let n = self.naip.as_ref()?;
-        naip_shares_at(n, x, z, side, self.site_slope_deg(x, z).unwrap_or(0.0))
+        if let Some(n) = self.naip.as_ref().filter(|_| self.in_survey(x, z)) {
+            return naip_shares_at(n, x, z, side, self.site_slope_deg(x, z).unwrap_or(0.0));
+        }
+        // (`--no-city-planting`) the city planting map, in surveyed plan metres
+        let gs = eo_data::groundscale::scale();
+        self.city.as_ref()?.shares(x / gs, z / gs, side / gs)
     }
 
-    /// Whether (x, z) is inside the NAIP image and the image is read (`--no-naip-planting`: never).
-    pub fn in_naip(&self, x: f64, z: f64) -> bool {
+    /// Whether (x, z) is inside the survey's NAIP image and the image is read.
+    fn in_survey(&self, x: f64, z: f64) -> bool {
         let (lon, lat) = lon_lat(x, z);
         self.naip.is_some() && naip_pixel(lon, lat).is_some()
+    }
+
+    /// Whether (x, z) is inside a NAIP image that is read (`--no-naip-planting`: never): the
+    /// survey's, or (`--no-city-planting`) the city planting map's.
+    pub fn in_naip(&self, x: f64, z: f64) -> bool {
+        self.in_survey(x, z) || self.city.as_ref().is_some_and(|c| {
+            let gs = eo_data::groundscale::scale();
+            c.shares(x / gs, z / gs, 2.0).is_some()
+        })
+    }
+
+    /// (`--no-city-planting`) A mapped park's ground the image shows as cured or bare open
+    /// ground, not an irrigated lawn: in the summer image the annual grass has cured, so
+    /// a park lawn that is not green is unmown grassland (Bernal Heights, McLaren, the
+    /// hills' parks), which the parks' "grass" tone otherwise plants as a mown lawn.
+    fn wild_park(&self, x: f64, z: f64) -> bool {
+        self.city.is_some() && self.naip_at(x, z, eo_landmarks::vegetation::NAIP_TREE_BOX_M).is_some_and(|n| n.low + n.bare >= WILD_PARK_OPEN && n.lush < WILD_PARK_LUSH && n.green < WILD_PARK_LUSH)
     }
 
     /// The drawn ground's slope at (x, z) across one grid cell (degrees).
@@ -505,6 +557,7 @@ impl VegGround {
                     "grass" if self.in_presidio(x, z) && class == 10 => Some(Cover::Wood),
                     "grass" if self.in_presidio(x, z) && (class == 20 || class == 90) => Some(Cover::Scrub),
                     "grass" if slope > 18.0 || (self.in_presidio(x, z) && class == 60) => Some(Cover::WildGrass),
+                    "grass" if self.wild_park(x, z) => Some(Cover::WildGrass),
                     "grass" => Some(Cover::Lawn),
                     "understory" if tc == 1 => Some(Cover::WoodGreen),
                     "understory" => Some(Cover::Scrub),

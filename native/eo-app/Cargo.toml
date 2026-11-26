@@ -26,6 +26,7 @@ eo-structures = { path = "../eo-structures" } # structures: grade-separated road
 eo-ui = { path = "../eo-ui" }
 eo-water = { path = "../eo-water" } # water
 eo-landmarks = { path = "../eo-landmarks" } # landmarks
+eo-hills = { path = "../eo-hills" } # the hill builder's planting map (props/vegetation.rs)
 eo-look = { path = "../eo-look" } # the daylight's ground classes, the day of the year
 eo-farshore = { path = "../eo-farshore" } # farshore
 glam = "0.34.3"

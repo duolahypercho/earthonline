@@ -409,6 +409,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             s if eo_landmarks::vegetation::GRASS2_SWITCHES.contains(&s) || eo_landmarks::vegetation::GRASS3_SWITCHES.contains(&s) => {} // read by its crate (the grass passes)
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`)
+            "--no-city-planting" => {} // read by props/vegetation.rs
             "--no-external" => {} // main's `external_flag`
             // Round-2 AAA feature switches & kill switches (all parsed cleanly in `--play`)
             "--sun-bounce" | "--no-sun-bounce" => a.look.sun_bounce = s == "--sun-bounce",
