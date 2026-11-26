@@ -60,7 +60,7 @@ grass, scrub, tree and rock systems take their placements from the lists.
 | H4 | Structure cleanup in the ground (roof decks, Moscone South) | planned |
 | H5 | Surface map as material IDs in the terrain shader | planned |
 | H6a | The planting's NAIP rules citywide from the hill builder's class-count map; parks with cured ground are grassland, not lawn; `--no-city-planting` | done (first pass) |
-| H6b | Grass that reads as a canopy on foot (denser, taller cured blades; a floor darkened near the eye was tried and rejected: a camera-centred halo) | planned |
+| H6b | Grass that reads as a canopy on foot: the city's open grassland as a standing annual canopy (wild oats and the other annual grasses 0.4-0.9 m with seed heads over their litter, darker down in the canopy; a floor darkened near the eye was tried and rejected: a camera-centred halo); `--no-city-grass` | first pass |
 | H6c | Trees from lidar (height, crown) instead of the 14 m park lattice | planned |
 | H7 | Rock by lithology (chert on Twin Peaks, Bernal, Mount Davidson) | planned |
 

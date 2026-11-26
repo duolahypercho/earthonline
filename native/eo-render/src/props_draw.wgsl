@@ -1363,7 +1363,9 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
                 // narrow cone of sky, so it is darker and cooler (sky-lit); the tips
                 // stand in the open. (A blade's position along itself stands in for
                 // its depth in the canopy.)
-                let open = clamp(0.3 + 0.7 * along, 0.0, 1.0);
+                // (`--no-city-grass`) the city's annual canopy carries its depth in its
+                // vertex colours (vegetation_models.rs `canopy_light`): not again per blade.
+                let open = select(clamp(0.3 + 0.7 * along, 0.0, 1.0), 1.0, inst.model == PR_VEG_BASE + PR_VEG_ANNUAL);
                 s.albedo = s.albedo * mix(vec3<f32>(0.68, 0.75, 0.85), vec3<f32>(1.0), open);
                 s.ao = mix(0.45, 1.0, open);
                 // the blade's keel (a V fold at the midrib) and rolled margins as a

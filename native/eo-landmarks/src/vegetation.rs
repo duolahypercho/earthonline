@@ -341,6 +341,19 @@ pub fn grass3() -> Grass3 {
     })
 }
 
+/// (Docs/HILLS-PLAN.md stage H6b) The switch that keeps the city's hill parks on the
+/// third pass's short meadow patches instead of the annual grassland's standing canopy
+/// ([`MEADOW_ANNUAL`]); eo-app accepts it, [`city_grass`] reads it.
+pub const CITY_GRASS_SWITCH: &str = "--no-city-grass";
+
+/// Whether this process plants the city's annual grassland ([`CITY_GRASS_SWITCH`] not
+/// given; read once from the command line). The app's planting context passes it on
+/// ([`Extra::annual`]).
+pub fn city_grass() -> bool {
+    static S: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *S.get_or_init(|| !std::env::args().any(|a| a == CITY_GRASS_SWITCH))
+}
+
 /// The round-3 switches of this process (read once from the command line).
 pub fn gg3() -> Gg3 {
     static S: std::sync::OnceLock<Gg3> = std::sync::OnceLock::new();
@@ -561,12 +574,17 @@ pub struct Extra<'a> {
     pub fl: crate::flora::Flora,
     /// The shares round a point in a box of about the given side (m).
     pub naip: Box<dyn Fn(f64, f64, f64) -> Option<Naip> + 'a>,
+    /// (`--no-city-grass`: never) Whether a point is the city's open ground, where the
+    /// meadow's grass patches stand as the annual grassland's canopy ([`MEADOW_ANNUAL`])
+    /// while the grasses stand: eo-app answers outside the survey's image box, where the
+    /// hill builder's planting map is read. The Golden Gate's tuned meadow is never here.
+    pub annual: Box<dyn Fn(f64, f64) -> bool + 'a>,
 }
 
 impl Extra<'_> {
     /// Round 2's planting (no NAIP, every round-3 switch off).
     pub fn none() -> Extra<'static> {
-        Extra { g3: Gg3::NONE, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| None) }
+        Extra { g3: Gg3::NONE, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| None), annual: Box::new(|_, _| false) }
     }
     fn at(&self, x: f64, z: f64, side: f64) -> Option<Naip> {
         if self.g3.naip_planting { (self.naip)(x, z, side) } else { None }
@@ -1018,6 +1036,14 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
             }
             let n0 = out.len();
             plant_meadow(x, z, ix, iz, &s, cover, naip, season, ex.g2, ex.g3x.breakup, out);
+            // (`--no-city-grass`) the city's open grassland: its grass patches stand as the
+            // annual grassland's canopy while the grasses stand (before the ramp's bleach).
+            if naip.is_some() && ex.g2.types {
+                let stand = annual_stand(day_of_year);
+                if stand > ANNUAL_STAND_MIN && (ex.annual)(x, z) {
+                    annual_patch(out.get_mut(n0), x, z, ix, iz, &s, season, stand, ex.g3x.breakup);
+                }
+            }
             if ex.fl.ramp {
                 // September and October's bleached grey-tan on the patch.
                 if let Some(Plant { kind: Kind::Meadow(k), tint, .. }) = out.get_mut(n0) {
@@ -1109,8 +1135,24 @@ pub const MEADOW_LUPINE: u8 = 8;
 /// Bare eroded soil (`Grass3::bare`): a ragged mat of red-brown soil (the
 /// Tamalpais series' eroded horizon) with a few sparse tufts of short grass.
 pub const MEADOW_BARE: u8 = 9;
-/// The flora pass's scrub species follow (`crate::flora::MEADOW_POISON_OAK` .. `MEADOW_TOYON`).
-pub const MEADOW_TYPES: u8 = 19;
+/// The flora pass's scrub species follow (`crate::flora::MEADOW_POISON_OAK` .. `MEADOW_TOYON`),
+/// then the flora pass's grassland, bluff and flower types (`crate::flora::MEADOW_SEED_STALKS`
+/// .. `MEADOW_BLOOM`), then:
+///
+/// The city's annual grassland (`--no-city-grass`, Docs/HILLS-PLAN.md stage H6b): a
+/// standing canopy of wild oats and the other annual grasses over their own cured
+/// leaves, about 0.4-0.9 m tall, with nodding panicles and spikes, darker down in the
+/// canopy (eo-render `vegetation_models::annual`). It replaces the short sward, oats
+/// and thatch patches on the open grassland of the city's hill parks (Bernal Heights,
+/// McLaren Park, Twin Peaks, Corona Heights), outside the survey's image, while the
+/// grasses stand ([`annual_stand`]). Slender and common wild oats (Avena barbata,
+/// A. fatua) grow in nearly every grassland of the state, on poor and sandy soils
+/// as well (Cal-IPC "Avena barbata" profile, read 25 Nov 2026); wild oat grows to
+/// about 1.2 m, its spikelets hanging "like pendants from the flowering branches"
+/// (UC IPM Weed Gallery, "Wild oat", read 25 Nov 2026). The hills' thin-soiled,
+/// windy slopes stand lower: 0.4-0.9 m (INFERRED).
+pub const MEADOW_ANNUAL: u8 = 19;
+pub const MEADOW_TYPES: u8 = 20;
 
 /// Each type's living tissue in its green state (linear albedo, the mean of its
 /// blades' vertex colours, eo-render) and cured (or, for ice plant, drought-
@@ -1150,6 +1192,8 @@ pub const MEADOW_LIVE: [[f32; 3]; MEADOW_TYPES as usize] = [
     // the mustard's leaves (the measured near-field green (90,103,43) [P:spencer]), the bloom's white.
     [0.102, 0.136, 0.024],
     [0.8, 0.8, 0.8],
+    // the city's annual grassland: the wild oats' green.
+    [0.072, 0.104, 0.036],
 ];
 pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.215, 0.178, 0.100],
@@ -1171,9 +1215,12 @@ pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.150, 0.170, 0.100],
     [0.102, 0.136, 0.024],
     [0.8, 0.8, 0.8],
+    // the city's annual grassland: the wild oats' straw (the canopy's lit top; its
+    // depth is in the model's vertex colours).
+    [0.280, 0.228, 0.112],
 ];
 /// The scrub is evergreen (its summer dullness is the dust and the older leaves: not drawn).
-pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.2, 0.3, 0.0, 0.0];
+pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.2, 0.3, 0.0, 0.0, 1.0];
 /// Dead thatch, weathered pale straw (linear albedo; dry grass litter 0.15-0.25
 /// in the visible, USGS v7 "dry grass" and litter spectra; INFERRED): the mat's
 /// and the lying blades' colour (eo-render bakes it in the dead material).
@@ -1266,7 +1313,7 @@ pub fn meadow_kind(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, nai
 /// earliest, the annuals' seed set; INFERRED), a little value spread per patch.
 pub fn meadow_patch_tint(kind: u8, cured: f64, w: f32) -> [f32; 3] {
     let k = kind.min(MEADOW_TYPES - 1) as usize;
-    let lead = if kind == MEADOW_OATS { 0.15 } else { 0.0 };
+    let lead = if kind == MEADOW_OATS || kind == MEADOW_ANNUAL { 0.15 } else { 0.0 };
     let d = ((cured + lead).clamp(0.0, 1.0) as f32) * MEADOW_CURE[k];
     let c = mix3(MEADOW_LIVE[k], MEADOW_CURED[k], d);
     [0, 1, 2].map(|i| (c[i] / MEADOW_LIVE[k][i] * w).min(3.9))
@@ -1303,6 +1350,50 @@ pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, na
         let (jx, jz) = (hash(ix, iz, 102) - 0.5, hash(ix, iz, 103) - 0.5);
         out.push(Plant { kind: Kind::Shrub(k as u8), pos: [x + jx * 0.6, s.y - 0.08, z + jz * 0.6], yaw: hash(ix, iz, 104) * std::f64::consts::TAU, scale: [wd, h, wd], rank: hash(ix, iz, 105) as f32, tint, grad: s.grad(), tip: TIP_NONE });
     }
+}
+
+/// How far the annual grasses stand on a day of the year (0 .. 1): heading from
+/// March, at full height from May through the summer (standing dead straw once
+/// cured), flattened by the autumn rains before the November flush (the field
+/// guide's month table, [`crate::flora::grass_cure`]'s source: March "grass
+/// heading", April "seed heads up", October "flattened"; the ramps' days INFERRED
+/// from those words).
+pub fn annual_stand(day_of_year: f64) -> f64 {
+    let d = day_of_year.rem_euclid(365.0);
+    smoothstep(60.0, 120.0, d) * (1.0 - smoothstep(285.0, 320.0, d))
+}
+
+/// The stand below which the city's grassland keeps the short meadow patches (the
+/// winter's new flush under last year's flattened thatch; INFERRED).
+pub const ANNUAL_STAND_MIN: f64 = 0.2;
+/// The canopy's height at the start of heading, a share of its summer height (INFERRED).
+pub const ANNUAL_STAND_LOW: f64 = 0.5;
+/// The annual canopy's height factor over its model (culms 0.42-0.78 m, eo-render
+/// `vegetation_models::annual`) in clumps: 0.85 .. 1.2, so the culms stand 0.36-0.94 m
+/// ([`MEADOW_ANNUAL`]'s 0.4-0.9 m, INFERRED).
+pub const ANNUAL_TALL: (f64, f64) = (0.85, 1.2);
+
+/// (`--no-city-grass`) A meadow patch of the city's open grassland as the annual
+/// grassland's canopy ([`MEADOW_ANNUAL`]): a sward, wild oats or thatch patch only
+/// (the fescue tussocks, clover, ice plant and the scrub keep theirs). Its height
+/// in clumps (a 4 m field and the patch), lower on steep slopes and ridge crests
+/// (thin, dry soil; INFERRED a quarter and a tenth), and by the season's stand.
+#[allow(clippy::too_many_arguments)]
+fn annual_patch(p: Option<&mut Plant>, x: f64, z: f64, ix: i64, iz: i64, s: &Site, season: f64, stand: f64, breakup: bool) {
+    let Some(p) = p else { return };
+    if !matches!(p.kind, Kind::Meadow(MEADOW_SWARD | MEADOW_OATS | MEADOW_THATCH)) {
+        return;
+    }
+    let cured = meadow_cured(x, z, s, season, breakup);
+    let w = 0.93 + 0.14 * hash(ix, iz, 20) as f32;
+    let (lo, hi) = ANNUAL_TALL;
+    let tall = lo + (hi - lo) * (0.75 * field(x, z, 4.0, 211) + 0.25 * hash(ix, iz, 212));
+    let soil = 1.0 - 0.25 * smoothstep(25.0, 40.0, s.slope_deg()) - 0.1 * smoothstep(0.5, 2.0, -s.hollow_m);
+    let h = (tall * soil * (ANNUAL_STAND_LOW + (1.0 - ANNUAL_STAND_LOW) * stand)) as f32;
+    let sc = p.scale[0];
+    p.kind = Kind::Meadow(MEADOW_ANNUAL);
+    p.scale = [sc, sc * h, sc];
+    p.tint = meadow_patch_tint(MEADOW_ANNUAL, cured, w);
 }
 
 /// One annual mustard clump (the flora pass's flowers, `crate::flora::MEADOW_MUSTARD`), 0.55-1.05 m.
@@ -1819,7 +1910,7 @@ mod tests {
         // a cliff over a beach and mapped bare rock: rock only (hill_rock), no plant.
         for cover in [Cover::Cliff, Cover::Rock] {
             let mut out = vec![];
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(none) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(none), annual: Box::new(|_, _| false) };
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(cover), all, &ex, &mut out);
             plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(cover), 100.0, all, &ex, &mut out);
             assert!(out.iter().all(|p| matches!(p.kind, Kind::Rock(_))), "{cover:?}");
@@ -1830,7 +1921,7 @@ mod tests {
         }
         // the image's canopy: closed scrub; its open grass: none.
         let count = |n: Naip| {
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(move |_, _, _| Some(n)) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(move |_, _, _| Some(n)), annual: Box::new(|_, _| false) };
             let mut out = vec![];
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(Cover::TallScrub), all, &ex, &mut out);
             out.iter().filter(|p| matches!(p.kind, Kind::Shrub(_))).count()
@@ -1839,7 +1930,7 @@ mod tests {
         assert!(count(Naip { canopy: 1.0, low: 0.0, bare: 0.0, ..Default::default() }) > cells * 9 / 10);
         assert!(count(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() }) < cells / 20);
         // and the sward on the open grass.
-        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() })) };
+        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() })), annual: Box::new(|_, _| false) };
         let mut out = vec![];
         plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(Cover::WildGrass), 265.0, all, &ex, &mut out);
         assert!(out.iter().filter(|p| p.kind == Kind::Grass).count() > 32 * 32 * 8 / 10);
@@ -1881,6 +1972,50 @@ mod tests {
         assert_eq!(a(&["--no-bare-ground"]), Grass3 { bare: false, ..Grass3::ALL });
         assert_eq!(a(&["--no-scrub-mounds", "--no-meadow-breakup"]), Grass3 { scrub: false, breakup: false, ..Grass3::ALL });
         assert_eq!(a(&["--no-mat-free-meadow"]), Grass3 { mats_free: false, ..Grass3::ALL });
+    }
+
+    #[test]
+    fn the_city_grassland_stands_as_the_annual_canopy_only_where_gated() {
+        // flat open grassland the image shows cured (the city planting map's shares).
+        let n = Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() };
+        let site = |_x: f64, _z: f64| Some(Site { y: 10.0, normal: [0.0, 1.0, 0.0], ground: [0.2, 0.16, 0.09], cover: Some(Cover::WildGrass), lithology: Lithology::Sandstone, shore_m: 800.0, hollow_m: 0.0 });
+        let run = |gate: bool, day: f64| {
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::ALL, g3x: Grass3::ALL, fl: crate::flora::Flora::ALL, naip: Box::new(move |_, _, _| Some(n)), annual: Box::new(move |_, _| gate) };
+            let mut out = vec![];
+            plant_fine_with(0.0, 0.0, 32.0, 32.0, &site, day, Switches::ALL, &ex, &mut out);
+            out
+        };
+        let (off, on) = (run(false, 200.0), run(true, 200.0));
+        // the same plants in the same places (the gate off is the third pass's output):
+        // only the grass patches' type, height and tint change.
+        assert_eq!(off.len(), on.len());
+        let mut annual = 0;
+        for (a, b) in off.iter().zip(&on) {
+            assert_eq!(a.pos, b.pos);
+            match (a.kind, b.kind) {
+                (Kind::Meadow(k), Kind::Meadow(MEADOW_ANNUAL)) => {
+                    assert!(matches!(k, MEADOW_SWARD | MEADOW_OATS | MEADOW_THATCH), "{k}");
+                    let h = b.scale[1] / b.scale[0];
+                    assert!(h >= ANNUAL_TALL.0 as f32 - 1e-3 && h <= ANNUAL_TALL.1 as f32 + 1e-3, "{h}");
+                    annual += 1;
+                }
+                (x, y) => assert_eq!(x, y),
+            }
+        }
+        let patches = on.iter().filter(|p| matches!(p.kind, Kind::Meadow(_))).count();
+        assert!(annual as f64 > 0.6 * patches as f64, "{annual} of {patches}");
+        assert!(!off.iter().any(|p| p.kind == Kind::Meadow(MEADOW_ANNUAL)));
+        // in the winter's flush (the grasses flattened) the city keeps the short patches.
+        assert!(!run(true, 10.0).iter().any(|p| p.kind == Kind::Meadow(MEADOW_ANNUAL)));
+        assert_eq!(annual_stand(10.0), 0.0);
+        assert_eq!(annual_stand(200.0), 1.0);
+        assert!(annual_stand(340.0) < ANNUAL_STAND_MIN && annual_stand(100.0) > 0.5);
+        // fully cured, the canopy's top is the wild oats' straw (the tint is over its green).
+        let t = meadow_patch_tint(MEADOW_ANNUAL, 1.0, 1.0);
+        for i in 0..3 {
+            assert!((t[i] * MEADOW_LIVE[MEADOW_ANNUAL as usize][i] - MEADOW_CURED[MEADOW_OATS as usize][i]).abs() < 1e-4);
+        }
+        assert!(CITY_GRASS_SWITCH.starts_with("--no-"));
     }
 
     #[test]
