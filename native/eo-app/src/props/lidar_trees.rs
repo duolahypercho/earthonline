@@ -11,9 +11,9 @@
 //! A tree stands where the lattice's own tests let a park tree stand
 //! (`blocked`: a footprint, the drawn street, water; the ground cover's
 //! `tree_ground_ok`: not on a mapped beach or a face too steep), on the drawn
-//! ground. Its position follows the ground plan's scale
-//! (`eo_data::groundscale`); its height and crown stay real size, as every
-//! model does.
+//! ground (in the near tier on the drawn relief, [`placed_in`]). Its position
+//! follows the ground plan's scale (`eo_data::groundscale`); its height and
+//! crown stay real size, as every model does.
 //!
 //! Its form ([`form_of`]): most of these hills' trees are planted blue gum,
 //! Monterey cypress and Monterey pine groves (the coastal species of
@@ -174,11 +174,16 @@ impl Placed {
 /// The measured trees whose position lies in [x0, x1) x [z0, z1) (game
 /// metres) and that stand where the lattice lets a park tree stand: nothing
 /// `blocked` (a footprint, the drawn street, water) within one 2 m cell, and
-/// the ground cover's `tree_ground_ok` on the drawn ground `ground`
-/// (`--no-cliff-rock-cover`: not tested, as the lattice). None without the
-/// file or with [`SWITCH`]. Both tiers call this with their own ground and
-/// `blocked`, which are the same street world's.
-pub fn placed_in(x0: f64, z0: f64, x1: f64, z1: f64, ground: &dyn Fn(f64, f64) -> f64, blocked: &dyn Fn(f64, f64) -> bool) -> Vec<Placed> {
+/// the ground cover's `tree_ground_ok` on the ground `ground` (the 8 m
+/// surface; `--no-cliff-rock-cover`: not tested, as the lattice). None
+/// without the file or with [`SWITCH`]. Both tiers call this with their own
+/// ground and `blocked`, which are the same street world's. With `relief`
+/// a tree stands on the drawn relief where the hill builder's 2 m relief
+/// moved the ground (`eo_data::detail_ground`, as the coastal plants do),
+/// else on `ground`: the near tier's, cooked once the scene has set it; the
+/// distant cards are gathered while the scene loads, so they keep `ground`
+/// (at least 270 m off, the relief's metre or so does not show).
+pub fn placed_in(x0: f64, z0: f64, x1: f64, z1: f64, ground: &dyn Fn(f64, f64) -> f64, blocked: &dyn Fn(f64, f64) -> bool, relief: bool) -> Vec<Placed> {
     let Some(lt) = installed() else { return vec![] };
     let gs = eo_data::groundscale::scale();
     let cover = eo_landmarks::ground_cover::installed();
@@ -193,7 +198,7 @@ pub fn placed_in(x0: f64, z0: f64, x1: f64, z1: f64, ground: &dyn Fn(f64, f64) -
         if [-1.0, 0.0, 1.0].iter().any(|dz| [-1.0, 0.0, 1.0].iter().any(|dx| blocked(x + dx * 2.0, z + dz * 2.0))) {
             continue;
         }
-        let y = ground(x, z);
+        let y = if relief { eo_data::detail_ground::height(x, z).unwrap_or_else(|| ground(x, z)) } else { ground(x, z) };
         if !y.is_finite() {
             continue;
         }

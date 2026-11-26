@@ -1216,7 +1216,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
         // (`--no-lidar-trees`, Docs/HILLS-PLAN.md H6c) the hill parks' trees as the USGS 3DEP lidar
         // measured them (position, height, crown), in the lattice's place; the distant cards
         // (main.rs `hlod_trees`) read the same trees.
-        for p in lidar_trees::placed_in(x0, z0, x0 + t, z0 + t, &|x, z| world.ground(x, z), &blocked) {
+        for p in lidar_trees::placed_in(x0, z0, x0 + t, z0 + t, &|x, z| world.ground(x, z), &blocked, true) {
             match p.form {
                 lidar_trees::Form::Coastal(sp) => {
                     let k = 0.85 + 0.3 * p.draw as f32;
