@@ -215,8 +215,14 @@ fn lf_light(index: u32, li: LfLight, p: vec3<f32>, to_eye: vec3<f32>, t_eye: f32
         return vec3<f32>(0.0);
     }
     let tau_l = sigma * dist;
-    let e = inten * shape * w * w / max(dist * dist, rmin * rmin) * exp(-tau_l * (1.0 - LF_G)) * lf_light_visibility(index, li, p);
-    return li.color * (e * lf_phase(dot(lt, to_eye), tau_l + sigma * t_eye));
+    // Soften the near-field singularity and fade froxels within 2.5 m of the camera
+    // so nearby unshadowed lamps/headlights in rain do not paint blinding white blur orbs
+    // directly over close pedestrians and sidewalks.
+    let rmin_eff = max(rmin, 0.55);
+    let near_eye = smoothstep(0.6, 2.5, t_eye);
+    let e = inten * shape * w * w * near_eye / max(dist * dist, rmin_eff * rmin_eff) * exp(-tau_l * (1.0 - LF_G)) * lf_light_visibility(index, li, p);
+    let phase = min(lf_phase(dot(lt, to_eye), tau_l + sigma * t_eye), 5.0);
+    return li.color * (e * phase);
 }
 
 /// The clustered lights at a fog point (`sky_local_lights`' lookup).
@@ -264,7 +270,12 @@ fn lf_inject(@builtin(global_invocation_id) gid: vec3<u32>) {
     let ndc = vec2<f32>(v.x / (skyu.cluster.z * skyu.cluster.w), v.y / skyu.cluster.z);
     var cur = vec4<f32>(0.0, 0.0, 0.0, sigma);
     if (sigma > 0.0) {
-        cur = vec4<f32>(lf_lights_at(p, z, ndc, to_eye, t_eye, sigma, rmin) * LF_ALBEDO, sigma);
+        var lf_rgb = lf_lights_at(p, z, ndc, to_eye, t_eye, sigma, rmin) * LF_ALBEDO;
+        let lf_l = dot(lf_rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+        if (lf_l > 1.2) {
+            lf_rgb = lf_rgb * ((1.2 + log(lf_l / 1.2) * 0.4) / lf_l);
+        }
+        cur = vec4<f32>(lf_rgb, sigma);
     }
     if (any(cur != cur) || any(abs(cur) > vec4<f32>(6e4))) {
         cur = vec4<f32>(0.0, 0.0, 0.0, sigma);

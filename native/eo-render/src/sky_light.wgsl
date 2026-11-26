@@ -589,47 +589,54 @@ fn sky_rain_floor_fx(world: vec3<f32>, pud: f32, w: f32, v: vec3<f32>) -> vec3<f
         if (fract(h * 89.3) > density) {
             continue;
         }
-        let centre = cell + vec2<f32>(0.22 + 0.56 * h, 0.22 + 0.56 * h2);
+        let centre = cell + vec2<f32>(0.30 + 0.40 * h, 0.30 + 0.40 * h2);
         let phase = fract(t * freq + h * 7.3 + f32(k) * 0.37);
         let d_m = (q - centre) / sc;
         let r_m = length(d_m);
-        let size = (0.64 + 0.72 * h2) * mix(0.86, 1.22, heavy_r);
-        // Concentric ripples on standing water (and brief wet-film dimple outside).
-        if (ring_vis > 0.001) {
+        // Keep every expanding capillary ring strictly within its 0.30/sc cell margin with a smooth
+        // circular boundary mask so rings never clip into artificial square tiles.
+        let cell_r = 0.28 / sc;
+        let cell_fade = 1.0 - smoothstep(cell_r * 0.62, cell_r, r_m);
+        let onset = smoothstep(0.0, 0.08, phase);
+        let size = (0.70 + 0.50 * h2) * mix(0.88, 1.12, heavy_r);
+        let travel = min(0.115 * size, cell_r * 0.85);
+        // Gentle, organic capillary ripples on standing water (and subtle dimple on wet film).
+        if (ring_vis > 0.001 && cell_fade > 0.001) {
             if (pud > 0.02) {
-                let x = (r_m - phase * 0.155 * size) * 86.0 / size;
-                let env = exp(-x * x * 0.075) * (1.0 - phase) * (1.0 - phase) * ring_vis * pud;
-                g = g + (d_m / max(r_m, 1e-4)) * (cos(x) * env * 0.56 * vigor);
-            } else if (phase < 0.15) {
-                let x = (r_m - phase * 0.065 * size) * 110.0 / size;
-                let env = exp(-x * x * 0.16) * (1.0 - phase / 0.15) * ring_vis * w * 0.12 * vigor;
-                g = g + (d_m / max(r_m, 1e-4)) * (cos(x) * env);
+                let lam = 0.016 * (0.85 + 0.30 * h2);
+                let x = (r_m - phase * travel) / lam;
+                let env = exp(-x * x * 0.45) * onset * (1.0 - phase) * (1.0 - phase) * cell_fade * ring_vis * pud;
+                g = g + (d_m / max(r_m, 1e-4)) * (sin(6.2831853 * x) * env * 0.18 * vigor);
+            } else if (phase < 0.14) {
+                let x = (r_m - phase * min(0.045 * size, cell_r * 0.6)) / 0.012;
+                let env = exp(-x * x * 0.55) * onset * (1.0 - phase / 0.14) * cell_fade * ring_vis * w * 0.05 * vigor;
+                g = g + (d_m / max(r_m, 1e-4)) * (sin(6.2831853 * x) * env);
             }
         }
-        // Crisp gossamer splash crown + parallaxed rebounding droplet bead.
-        let crown_dur = mix(0.085, 0.115, pud);
-        let jet_end = mix(0.15, 0.21, pud);
-        if (drop_vis > 0.001 && phase < jet_end) {
+        // Understated splash glint on standing puddles (avoid bright painted white rings on asphalt).
+        let crown_dur = mix(0.06, 0.085, pud);
+        let jet_end = mix(0.11, 0.16, pud);
+        if (drop_vis > 0.001 && phase < jet_end && pud > 0.05) {
             let px_m = max(fp * 0.7, 0.0035);
             var sp = 0.0;
             if (phase < crown_dur) {
                 let ct = phase / crown_dur;
-                let cr_r = (0.004 + ct * mix(0.018, 0.026, pud)) * size;
+                let cr_r = (0.003 + ct * 0.016) * size;
                 let ang = atan2(d_m.y, d_m.x);
                 let asym = 0.65 + 0.35 * sin(ang * 3.0 + h * 23.0) * cos(ang * 5.0 - h2 * 17.0);
-                let rw = max(px_m * 1.05, 0.0038);
+                let rw = max(px_m * 0.95, 0.0032);
                 let dr = (r_m - cr_r) / rw;
-                sp = sp + exp(-dr * dr) * sin(ct * 3.14159) * asym * mix(0.55, 0.78, pud);
+                sp = sp + exp(-dr * dr) * sin(ct * 3.14159) * asym * 0.18 * pud;
             }
             if (phase > 0.015 && phase < jet_end) {
                 let jt = (phase - 0.015) / (jet_end - 0.015);
-                let h_jet_m = mix(0.028, 0.048, pud) * size * sin(jt * 3.14159);
+                let h_jet_m = 0.030 * size * sin(jt * 3.14159);
                 let p_jet = d_m + view_par * h_jet_m;
-                let bw = max(px_m * 0.95, 0.0045);
-                sp = sp + exp(-dot(p_jet, p_jet) / (bw * bw)) * sin(jt * 3.14159) * mix(1.05, 1.55, pud);
+                let bw = max(px_m * 0.85, 0.0038);
+                sp = sp + exp(-dot(p_jet, p_jet) / (bw * bw)) * sin(jt * 3.14159) * 0.36 * pud;
             }
-            let sub_att = clamp(0.010 / max(px_m, 0.010), 0.38, 1.0);
-            spark = spark + sp * drop_vis * sub_att * vigor * (0.6 + 0.6 * h3);
+            let sub_att = clamp(0.008 / max(px_m, 0.008), 0.25, 1.0);
+            spark = spark + sp * drop_vis * sub_att * vigor * (0.55 + 0.45 * h3);
         }
     }
     return vec3<f32>(g.x, g.y, spark * rain * max(w, pud));
@@ -1040,8 +1047,8 @@ const SKY_W2_CANYON_WIND: f32 = 0.2;
 const SKY_W2_RING_LOBE: vec2<f32> = vec2<f32>(0.15, 0.04);
 /// A ring drawn where the pixel can hold it: its wavelength (m), the speed
 /// of its front (m/s), its life (s), its peak slope; the cells drops land in (m).
-const SKY_W2_RING: vec4<f32> = vec4<f32>(0.022, 0.25, 0.42, 0.16);
-const SKY_W2_RING_CELL: f32 = 0.25;
+const SKY_W2_RING: vec4<f32> = vec4<f32>(0.020, 0.24, 0.42, 0.10);
+const SKY_W2_RING_CELL: f32 = 0.40;
 
 /// (`--wet-surfaces`) the share of the shaded surface that is water (the film
 /// and puddles): look_light reads its environment whole there (`sky_w2_env`).
@@ -1122,11 +1129,14 @@ fn sky_w2_rings(p: vec2<f32>, fp: f32) -> vec2<f32> {
         let h = st_hash(s);
         let age = fract(skyu.wet.w / SKY_W2_RING.z + h);
         let live = step(st_hash(s + vec2<f32>(5.3, 1.7) + floor(skyu.wet.w / SKY_W2_RING.z + h)), cover);
-        let c = (cell - o + 0.3 + 0.4 * vec2<f32>(st_hash(s + 9.2), st_hash(s + 4.4))) * SKY_W2_RING_CELL;
+        let c = (cell - o + 0.32 + 0.36 * vec2<f32>(st_hash(s + 9.2), st_hash(s + 4.4))) * SKY_W2_RING_CELL;
         let d = p - c;
         let r = length(d);
+        let cell_r = 0.30 * SKY_W2_RING_CELL;
+        let cell_fade = 1.0 - smoothstep(cell_r * 0.62, cell_r, r);
+        let onset = smoothstep(0.0, 0.10, age);
         let x = (r - age * SKY_W2_RING.z * SKY_W2_RING.y) / lam;
-        let amp = SKY_W2_RING.w * (1.0 - age) * (1.0 - age) * exp(-0.5 * x * x) / (1.0 + r / 0.03);
+        let amp = SKY_W2_RING.w * onset * (1.0 - age) * (1.0 - age) * cell_fade * exp(-0.5 * x * x) / (1.0 + r / 0.035);
         sl = sl + d / max(r, 1e-4) * sin(6.2831853 * x) * amp * live;
     }
     return sl * fade;

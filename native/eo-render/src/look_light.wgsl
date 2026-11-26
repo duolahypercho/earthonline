@@ -149,6 +149,15 @@ fn lk_cascade(c: i32, world: vec3<f32>, ng: vec3<f32>, bounded: bool) -> f32 {
 // constant Vogel tables (PS_SEARCH_DISC, PS_FILTER_DISC) turned by `rot`
 // (cos, sin): one rotation a pixel, not a sine and a cosine a tap.
 fn lk_cascade_soft(c: i32, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>, rot: vec2<f32>) -> f32 {
+    let nl = dot(ng, look.key_dir.xyz);
+    // On grazing faces the clamped receiver-plane slope cannot extrapolate accurately
+    // across a wide PCF disc and causes diagonal shadow-map texel diamonds; fall back
+    // to the tight 3x3 hardware tent where direct sun is already grazing out.
+    if (nl <= 0.14) {
+        return -1.0;
+    }
+    let g_fade = smoothstep(0.14, 0.48, nl);
+    let grazing_pad = (1.0 - clamp(nl, 0.0, 1.0)) * 0.75 * b.y;
     let dims = vec2<f32>(textureDimensions(lk_shadow_map).xy);
     let texel = 1.0 / dims.x;
     // the receiver's plane: dz per uv (rows r0, r1 and the normal solved for the tangent offset).
@@ -165,21 +174,28 @@ fn lk_cascade_soft(c: i32, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>, r
     }
     let gmax = PS_MAX_PLANE_SLOPE * b.z / (b.w * texel);
     g = clamp(g, vec2<f32>(-gmax), vec2<f32>(gmax));
-    // the casters round the point.
+    // Coherent blocker search capped to a dense texel footprint so adjacent pixels
+    // agree smoothly on caster distance instead of producing salt-and-pepper shadow dots.
     let base = uv * dims;
-    let rs = clamp(PS_MAX_SPREAD_M / b.z, 1.0, PS_MAX_RADIUS_TEXELS);
-    let ms = mat2x2<f32>(rot.x, rot.y, -rot.y, rot.x) * rs;
+    let rs = clamp(PS_MAX_SPREAD_M / b.z, 1.0, min(PS_MAX_RADIUS_TEXELS, 9.0)) * g_fade;
+    if (rs <= PS_TENT_TEXELS) {
+        return -1.0;
+    }
     var nb = 0.0;
-    var dz = 1e9;
+    var dz_min = 1e9;
+    var dz_sum = 0.0;
+    var dz_cnt = 0.0;
     for (var i = 0u; i < PS_SEARCH_TAPS; i = i + 1u) {
-        let t = clamp(floor(base + ms * PS_SEARCH_DISC[i]), vec2<f32>(0.0), dims - 1.0);
+        let t = clamp(floor(base + PS_SEARCH_DISC[i] * rs), vec2<f32>(0.0), dims - 1.0);
         let d = textureLoad(lk_shadow_map, vec2<i32>(t), c, 0);
-        let zp = z + dot(g, (t + 0.5 - base) * texel);
+        let zp = z + grazing_pad + dot(g, (t + 0.5 - base) * texel);
         if (d < zp) {
             nb = nb + 1.0;
             let h = (zp - d) * b.w;
             if (h > PS_MIN_CASTER_M) {
-                dz = min(dz, h);
+                dz_min = min(dz_min, h);
+                dz_sum = dz_sum + h;
+                dz_cnt = dz_cnt + 1.0;
             }
         }
     }
@@ -190,68 +206,63 @@ fn lk_cascade_soft(c: i32, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>, r
     if (nb > f32(PS_SEARCH_TAPS) - 0.5) {
         return 0.0;
     }
-    // only casters touching the receiver: the tent. Else the filter's radius
-    // in texels for the edge dz metres up the beam (never past the search's,
-    // so the band is the same either side).
-    if (dz > 1e8) {
+    if (dz_cnt < 0.5) {
         return -1.0;
     }
-    let rf = min(0.5 * dz * PS_TAN_DIAMETER / b.z, rs);
+    // Blend nearest caster with mean caster distance for spatial stability, and keep the
+    // filter radius within the dense coverage of 16 overlapping 2x2 bilinear hardware PCF taps
+    // so the penumbra reads as a continuous soft shadow rather than isolated stipple dots.
+    let dz = mix(dz_min, dz_sum / dz_cnt, 0.35);
+    let rf = min(0.5 * dz * PS_TAN_DIAMETER / b.z, min(rs, 6.0)) * g_fade;
     if (rf <= PS_TENT_TEXELS) {
         return -1.0;
     }
-    // the filter's disc turned a further 1.7 rad from the search's (cos 1.7, sin 1.7).
-    let rq = vec2<f32>(rot.x * -0.12884449 - rot.y * 0.99166481, rot.y * -0.12884449 + rot.x * 0.99166481);
-    let mf = mat2x2<f32>(rq.x, rq.y, -rq.y, rq.x) * (rf * texel);
+    let mf = mat2x2<f32>(rot.x, rot.y, -rot.y, rot.x) * (rf * texel);
     var s = 0.0;
+    var wsum = 0.0;
     for (var i = 0u; i < PS_FILTER_TAPS; i = i + 1u) {
-        let o = mf * PS_FILTER_DISC[i];
-        s = s + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + o, c, z + dot(g, o));
+        let tap = PS_FILTER_DISC[i];
+        let o = mf * tap;
+        let w = exp(-1.25 * dot(tap, tap));
+        s = s + w * textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + o, c, z + grazing_pad + dot(g, o));
+        wsum = wsum + w;
     }
-    return s / f32(PS_FILTER_TAPS);
+    return s / max(wsum, 1e-6);
 }
 
 // (`--soft-shadows`) the cascades' visibility through the sun's disc while the
 // penumbra runs (look.cascade_bias[c].w the cascade's depth range; never in
-// the probe pass). In the cascade blend's band one cascade is looked up, not
-// two: the next one where the pixel's noise falls under the blend's weight
-// (the frame's temporal resolve averages the two), so every pixel runs the
-// search and filter at most once (a shader the size Apple's compiler takes
-// for the agents' pipelines with the cars' materials too, and half the work
-// in the band).
+// the probe pass). Uses a tiny spatially-ordered 2x2 phase rotation instead of
+// per-pixel random noise and blends cascade splits smoothly rather than
+// stochastically dithering them, eliminating crawling dot patterns in live play.
 fn lk_cascades_soft(c0: i32, world: vec3<f32>, ng: vec3<f32>, vd: f32) -> f32 {
-    // per pixel and per frame noise (interleaved gradient noise on the pixel).
     let cp = frame.view_proj * vec4<f32>(world, 1.0);
     let sp = (cp.xy / max(cp.w, 1e-6) * vec2<f32>(0.5, -0.5) + 0.5) * vec2<f32>(textureDimensions(lk_ao)) * 2.0;
-    let ign = fract(52.9829189 * fract(dot(floor(sp) + look.post2.w * 5.588238, vec2<f32>(0.06711056, 0.00583715))));
-    var c = c0;
+    let q2 = vec2<u32>(abs(floor(sp))) & vec2<u32>(1u);
+    let bayer = f32((q2.x ^ (q2.y << 1u)) + (q2.y << 1u)) * 0.25;
+    // Small coherent sub-tap turn (~0..22 deg) keeps overlapping bilinear PCF smooth on every frame.
+    let a = bayer * 0.3926991;
+    let b = look.cascade_bias[c0];
+    let clip = look.cascade_vp[c0] * vec4<f32>(world + ng * b.x, 1.0);
+    let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
+    let z = clip.z + b.y;
+    var vis = lk_cascade_soft(c0, uv, z, b, ng, vec2<f32>(cos(a), sin(a)));
+    if (vis < 0.0) {
+        vis = lk_cascade(c0, world, ng, false);
+    }
     if (LK_SHADOW_BLEND && c0 < 2 && lk_lx_on(LX_BIT_CASCADE_BLEND)) {
         let split = look.cascade_split;
         let end = select(split.x, split.y, c0 == 1);
         let start = select(0.0, split.x, c0 == 1);
         let t = lk_smooth(end - (end - start) * LK_CASCADE_BLEND_BAND, end, vd);
-        // the noise turned half a period, so the cascade's pick and the disc's turn are not one pattern;
-        // the next cascade only where its box holds the point (else the blend kept its own).
-        if (fract(ign + 0.5) < t) {
-            let b1 = look.cascade_bias[c0 + 1];
-            let clip1 = look.cascade_vp[c0 + 1] * vec4<f32>(world + ng * b1.x, 1.0);
-            let uv1 = vec2<f32>(clip1.x * 0.5 + 0.5, 0.5 - clip1.y * 0.5);
-            let z1 = clip1.z + b1.y;
-            if (all(uv1 >= vec2<f32>(0.0)) && all(uv1 <= vec2<f32>(1.0)) && z1 >= 0.0 && z1 <= 1.0) {
-                c = c0 + 1;
+        if (t > 0.0) {
+            let next = lk_cascade(c0 + 1, world, ng, true);
+            if (next >= 0.0) {
+                vis = mix(vis, next, t);
             }
         }
     }
-    let b = look.cascade_bias[c];
-    let clip = look.cascade_vp[c] * vec4<f32>(world + ng * b.x, 1.0);
-    let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
-    let z = clip.z + b.y;
-    let a = ign * 6.2831853;
-    let soft = lk_cascade_soft(c, uv, z, b, ng, vec2<f32>(cos(a), sin(a)));
-    if (soft >= 0.0) {
-        return soft;
-    }
-    return lk_cascade(c, world, ng, false);
+    return vis;
 }
 
 // (`--soft-shadows`, eo-look `penumbra::resolves`) whether the widest penumbra
@@ -679,10 +690,10 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let local_lit = sky_local_lights_ao(world, n, v, diffuse, f0, rough, ao); // street lamps, headlamps (`ao` and their shadows only with the light shadows on)
     lit = lit + local_lit;
     if (sky_weather_fx_on(skyu.cirrus) && sky_rain_spark > 0.001) {
-        // (`--weather-fx`) raindrop splash crowns & rebounding beads illuminated by
-        // the sky dome, sun/moon key and nearby streetlamps/headlights.
-        let sp_light = (irr / LK_PI) * 1.45 + look.hemi_sky.xyz * 0.28 + key * 0.9 + local_lit * 3.0;
-        lit = lit + sp_light * min(sky_rain_spark, 1.5);
+        // (`--weather-fx`) subtle raindrop specular glints on standing puddles,
+        // kept understated so impacts read as delicate water droplets rather than painted dots.
+        let sp_light = (irr / LK_PI) * 0.42 + look.hemi_sky.xyz * 0.08 + key * 0.35 + local_lit * 0.85;
+        lit = lit + sp_light * min(sky_rain_spark, 0.45);
     }
     sky_rain_spark = 0.0;
 // sf:end

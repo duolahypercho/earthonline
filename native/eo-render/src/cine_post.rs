@@ -348,8 +348,9 @@ pub const CAM_SHARPEN_OVERSHOOT: f64 = 0.08;
 /// (`--lens-flare`) the most point sources the meter keeps a frame.
 pub const CAM_FLARE_SOURCES: u32 = 64;
 /// (`--lens-flare`) a cell's brightest 4 x 4 block counts as a source over this
-/// mean exposed luminance (about 4.2 EV over grey: a lamp's core, not its pool).
-pub const CAM_FLARE_DETECT: f64 = 3.3;
+/// mean exposed luminance (raised so wet metal hydrants and sign poles do not
+/// trigger artificial 6-ray diffraction starbursts, only true point lamps).
+pub const CAM_FLARE_DETECT: f64 = 7.5;
 /// (`--lens-flare`) a source's brightest pixel stands at least this many times
 /// over the mean of a ring `CAM_FLARE_RING_PX` round it (a point or a lamp's globe,
 /// not an area of light such as a lit window), or `CAM_FLARE_ORB` times that over a
@@ -369,11 +370,11 @@ pub const CAM_FLARE_FLUX_CAP: f64 = 400.0;
 /// The falloff's power is a straight edge's diffraction (intensity ~ 1/r^2 along the
 /// spike), so a spike is visible out to a length that grows as the square root of
 /// its source's flux: a brighter lamp's spikes are longer, a dim one's short or none.
-pub const CAM_FLARE_SPIKE: [f64; 4] = [0.004, 2.0, 3.0, 0.003];
+pub const CAM_FLARE_SPIKE: [f64; 4] = [0.0022, 2.0, 2.4, 0.003];
 /// (`--lens-flare`) the drawn length's cap and floor (px of a 1080-line frame): no
 /// spike crosses a third of the frame; a source whose spikes would be shorter than
 /// the floor draws none (a faint far light keeps its round bloom).
-pub const CAM_FLARE_SPIKE_MAX_PX: f64 = 140.0;
+pub const CAM_FLARE_SPIKE_MAX_PX: f64 = 90.0;
 pub const CAM_FLARE_SPIKE_MIN_PX: f64 = 12.0;
 /// (`--lens-flare`) a spike's width (px of a 1080-line frame) at its core and its
 /// growth along it (px per px): it fans out softly and its energy along a unit of
@@ -426,11 +427,10 @@ pub const CAM_SHOW_KEEP: f64 = 0.75;
 /// the veil's share grows by `CAM_HAL_GAIN[0]` x h and the halation's by `[1]` x h.
 pub const CAM_HAL_HAZE: f64 = 0.5;
 pub const CAM_HAL_RAIN_MMH: f64 = 3.0;
-pub const CAM_HAL_GAIN: [f64; 2] = [0.8, 1.6];
+pub const CAM_HAL_GAIN: [f64; 2] = [0.22, 0.45];
 /// (`--lens-halation`) the bloom's cap on a source's energy (`CAM_BLOOM_CAP`)
-/// rises by this x h: a lamp's whole light, not a sun-safe share of it, is
-/// scattered by the water in the air.
-pub const CAM_HAL_CAP: f64 = 3.0;
+/// rises by this x h: a lamp's light spreads cleanly in mist/rain without blowing out into a fog ball.
+pub const CAM_HAL_CAP: f64 = 0.8;
 
 /// The day's share over the sun's altitude (0 night, 1 day; -9 .. +2 deg).
 pub fn day_share(sun_alt_deg: f64) -> f64 {
@@ -627,7 +627,7 @@ pub const CAM_VIGNETTE: f64 = 0.5;
 pub const CAM_GRAIN: [f64; 2] = [0.0065, 0.0042];
 /// The lens's lateral colour: red against blue at the frame's corner (px of a
 /// 1080-line frame), growing as the square of the radius (faint, at the edges only).
-pub const CAM_LATERAL_CA: f64 = 2.0;
+pub const CAM_LATERAL_CA: f64 = 0.35;
 /// The shares of the frame at each end of its range the local exposure fits
 /// into the display's room: the dark end of the meter's weight (the street, not
 /// the sky's corners), the bright end of the whole frame unweighted (a sky gap
@@ -659,34 +659,29 @@ pub const CAM_DETAIL_SPAN: f64 = 1.5;
 /// at most `CAM_DOF_MAX_PX` across (px of a 1080-line frame). At f/4 a street
 /// 3 m off with the focus far away blurs by about 2.5 px; past 10 m nothing does.
 pub const CAM_SENSOR_MM: f64 = 24.0;
-pub const CAM_F_NUMBER: [f64; 2] = [2.8, 4.0];
+pub const CAM_F_NUMBER: [f64; 2] = [5.6, 8.0];
 pub const CAM_FOCUS_RATE: f64 = 4.0;
 pub const CAM_DOF_TAPS: u32 = 16;
-pub const CAM_DOF_MAX_PX: f64 = 8.0;
+pub const CAM_DOF_MAX_PX: f64 = 2.5;
 
 /// The sun's glare (starburst and ghosts) at full strength, exposed units.
-pub const CAM_FLARE_GAIN: f64 = 1.0;
+pub const CAM_FLARE_GAIN: f64 = 0.65;
 /// The sun's veiling glare (the lens's scatter round the source: a core and a
-/// long 1/r^2 skirt over the frame), exposed units at its core with the sun
-/// fully visible.
-pub const CAM_GLARE_VEIL: f64 = 2.5;
+/// compact 1/r^2 skirt), exposed units at its core with the sun fully visible.
+pub const CAM_GLARE_VEIL: f64 = 0.75;
 /// The sun's measured energy (mean exposed luminance over its disc) where its
 /// glare starts and where it is full: log2.
 pub const CAM_FLARE_EV: [f64; 2] = [2.5, 6.0];
 
-/// The bloom: the share of every pixel the lens spreads (veiling glare: a
-/// coated prime's 1-2 %; at 3 % the shadows took a milky lift), the
-/// added share of a bright one (the highlights' halation through a light
-/// diffusion), from `CAM_BLOOM_MIST_EV[0]` to `[1]` (log2, exposed: +1.5 and
-/// +4 EV over middle grey); above `CAM_BLOOM_CAP` (exposed) a source's energy
-/// grows only logarithmically (the sun's disc, a glint).
-pub const CAM_BLOOM_VEIL: f64 = 0.012;
-pub const CAM_BLOOM_MIST: f64 = 0.10;
-pub const CAM_BLOOM_MIST_EV: [f64; 2] = [-1.0, 1.5];
-pub const CAM_BLOOM_CAP: f64 = 64.0;
-/// The levels' weights (half resolution to 1/128), summing to 1: about equal
-/// energy an octave of radius, a 1/r^2 tail.
-pub const CAM_BLOOM_WEIGHTS: [f64; crate::sky::CAM_BLOOM_LEVELS] = [0.20, 0.17, 0.15, 0.14, 0.13, 0.11, 0.10];
+/// The bloom: a tight optical PSF so normal sunlit walls and clouds stay sharp
+/// while genuinely bright light sources glow cleanly without milky blur halos.
+pub const CAM_BLOOM_VEIL: f64 = 0.0018;
+pub const CAM_BLOOM_MIST: f64 = 0.022;
+pub const CAM_BLOOM_MIST_EV: [f64; 2] = [0.8, 3.0];
+pub const CAM_BLOOM_CAP: f64 = 24.0;
+/// The levels' weights (half resolution to 1/128), summing to 1 and weighted toward
+/// tight inner octaves so highlights glow crisply rather than smearing across the frame.
+pub const CAM_BLOOM_WEIGHTS: [f64; crate::sky::CAM_BLOOM_LEVELS] = [0.42, 0.27, 0.15, 0.08, 0.04, 0.025, 0.015];
 
 /// The level weights for sky.rs (`--cine-camera`).
 pub fn bloom_level_weights() -> [f32; crate::sky::CAM_BLOOM_LEVELS] {
