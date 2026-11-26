@@ -17,12 +17,25 @@ pub struct KitCity {
     pub build_ms: f64,
 }
 
-/// `native/eo-kit/data/kit-exclusions.json`: the authored registry's ids.
+/// `native/eo-kit/data/kit-exclusions.json`: the authored registry's ids that
+/// this build draws itself. The file (exported from the browser version)
+/// lists the ids its Blender builds and its code-built modules drew. Native
+/// draws the Blender builds (`native/assets/blender-buildings/b<id>.js`,
+/// eo-assets `manifest::GENERATED_DIR`); the code-built modules were never
+/// ported, so an id with no build here is left to the kit. Excluding it
+/// left nothing but the far layer's flat box in its place at every
+/// distance: the Children's Creativity Museum on 4th Street, among six.
+/// A landmark that draws such a record still claims it (eo-app main.rs).
 pub fn load_exclusions() -> HashSet<String> {
-    let path = eo_data::native_dir().join("eo-kit/data/kit-exclusions.json");
+    let native = eo_data::native_dir();
+    let path = native.join("eo-kit/data/kit-exclusions.json");
     let Ok(text) = std::fs::read_to_string(path) else { return HashSet::new() };
     let v: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
-    v["ids"].as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(|s| s.to_string())).collect()).unwrap_or_default()
+    let builds = native.join("assets/blender-buildings");
+    v["ids"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|s| s.as_str()).filter(|id| builds.join(format!("b{}.js", id.trim_start_matches("sf-building-"))).is_file()).map(|s| s.to_string()).collect())
+        .unwrap_or_default()
 }
 
 impl KitCity {
