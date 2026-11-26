@@ -134,6 +134,80 @@ pub struct StreetOptions {
     /// Landing elevations requested by the connected bridge profiles, in the game frame.
     pub landings: Vec<([f64; 2], crate::joins::Rise)>,
     pub structures: Option<std::sync::Arc<crate::joins::StructureJoins>>,
+    /// (`--street-tapers`) a run joined end to end with a narrower one (a
+    /// plain joint: no junction, no trim) narrows to its width over the
+    /// lane-reduction taper (`caMetric('lane-reduction-taper')` at the prima
+    /// facie speed, CA MUTCD 3B.12), kerb, gutter and crown with it, its
+    /// building line held, instead of a kerb jog and a lip across the road at
+    /// the joint (`StreetWorld::half_at`). Off, the default: as before. The
+    /// collision world reads the drawn street, so client and server must
+    /// agree (the handshake compares it, eo-net `structures_code`).
+    pub tapers: bool,
+    /// (`--bikeways`, crate::bikeway) each kerbside bike lane drawn as the
+    /// city's bike network says it is built: green only where painted green,
+    /// a raised concrete island or tubular markers in its buffer, diagonal
+    /// buffer markings, a two-way bikeway's centre line, the bicycle symbol
+    /// and arrow after each intersection. Off, the default: as before. The
+    /// island is part of the collision world (the handshake compares it).
+    pub bikeways: bool,
+    /// (`--survey-parking`, `StreetCity::apply_parking_survey`) a kerbside bike
+    /// lane's side that the city's parking regulations or meters show cars park
+    /// along, and that the street data drew with no parking lane, given one
+    /// outside the lane's buffer (traffic | parking | buffer or island | bike
+    /// lane | kerb), the carriageway widened by it and each footway narrowed by
+    /// half of it (the building line held). Off, the default: as before.
+    pub survey_parking: bool,
+    /// (`--midblock-crossings`, `StreetWorld::plan_midblock`) each signalised,
+    /// beaconed or flashing crossing between junctions (DataSF Traffic
+    /// Signals' MIDBLOCK devices) drawn: a continental crosswalk across the
+    /// run, kerb ramps both sides, limit lines for the traffic arriving, the
+    /// lane lines and a bike lane's island broken across it. Off: as before.
+    pub midblock: bool,
+}
+
+/// `--survey-parking` for every street world this process builds (as `set_tapers`).
+static SURVEY_PARKING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `--midblock-crossings` for every street world this process builds.
+static MIDBLOCK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_survey_parking(on: bool) {
+    SURVEY_PARKING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn survey_parking() -> bool {
+    SURVEY_PARKING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_midblock(on: bool) {
+    MIDBLOCK.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn midblock() -> bool {
+    MIDBLOCK.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `--bikeways` for every street world this process builds (as `set_tapers`).
+static BIKEWAYS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_bikeways(on: bool) {
+    BIKEWAYS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn bikeways() -> bool {
+    BIKEWAYS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `--street-tapers` for every street world this process builds (eo-app,
+/// eo-server, before the first build); every `StreetOptions::parse` reads it,
+/// so the drawn street, the props world and the collision world agree.
+static TAPERS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_tapers(on: bool) {
+    TAPERS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn tapers() -> bool {
+    TAPERS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 fn num(v: &Value, key: &str) -> Result<f64> {
@@ -280,6 +354,10 @@ impl StreetOptions {
             foundation_embed_m: num(d, "foundationEmbedM")?,
             structures: None,
             landings: vec![],
+            tapers: tapers(),
+            bikeways: bikeways(),
+            survey_parking: survey_parking(),
+            midblock: midblock(),
         })
     }
 
@@ -306,6 +384,14 @@ impl StreetOptions {
         };
         if let Some(survey) = &self.surveyed_junction {
             tag.push_str(&format!(":surveyed-junction-v1:{:016x}", survey.digest));
+        }
+        // the switches that move kerbs or cut ramps (`--street-tapers`, `--survey-parking`,
+        // `--midblock-crossings`): their own keys; none of them on, the key as before
+        for (on, name) in [(self.tapers, "tapers-v1"), (self.survey_parking, "survey-parking-v1"), (self.midblock, "midblock-v1")] {
+            if on {
+                tag.push_str(if tag.is_empty() { "street:" } else { ":" });
+                tag.push_str(name);
+            }
         }
         tag
     }

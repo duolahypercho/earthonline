@@ -234,7 +234,82 @@ impl StreetCity {
             c.segments.push(leaf);
         }
         c.apply_ground_scale();
+        if crate::options::survey_parking() {
+            let n = c.apply_parking_survey();
+            eprintln!("survey parking: {n} kerbside bike lane sides given the parking lane the city's regulations and meters show");
+        }
         Ok(c)
+    }
+
+    /// (`--survey-parking`) Each kerbside bike lane's side drawn with no
+    /// parking lane where the city's survey (eo-data `street_survey`: parking
+    /// regulations and meters, DataSF / SFMTA) shows cars park along it: at
+    /// least `SURVEY_PARKING_ALLOWED` of the kerb under regulations that allow
+    /// parking, or meters for `SURVEY_PARKING_METERED` of its stalls
+    /// (`caMetric('parking-stall-desirable-size')`), and no more than half of
+    /// it under a ban. The lane given is the other side's parking lane, else
+    /// `caMetric('parking-space-marking-layout').laneWidth`; the carriageway
+    /// widens by it, the travel lanes move off that side by half of it and
+    /// each footway narrows by half of it (the building line held), never
+    /// under `caMetric('sidewalk-throughway-zone-sf').default`. The segments
+    /// are already on the scaled plan; the survey is not. Returns the sides given one.
+    pub fn apply_parking_survey(&mut self) -> usize {
+        let Ok(paths) = eo_data::DataPaths::discover() else { return 0 };
+        let (survey, ca) = match (eo_data::street_survey::StreetSurvey::load(&paths), eo_data::CaStandards::load(&paths)) {
+            (Ok(s), Ok(c)) => (s, c),
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("survey parking: {e:#}; parking as before");
+                return 0;
+            }
+        };
+        let (Ok(lane_w), Ok(stall), Ok(through)) = (
+            ca.metric_key("parking-space-marking-layout", "laneWidth"),
+            ca.metric_key("parking-stall-desirable-size", "length"),
+            ca.metric_key("sidewalk-throughway-zone-sf", "default"),
+        ) else {
+            eprintln!("survey parking: a parking or sidewalk standard is missing; parking as before");
+            return 0;
+        };
+        let s = eo_data::groundscale::scale();
+        let mut n = 0;
+        for g in &mut self.segments {
+            for k in 0..2 {
+                if !(g.cycle_kerbside[k] && g.cycle[k] > 0.0 && g.parking[k] <= 0.0) {
+                    continue;
+                }
+                let line: Vec<[f64; 2]> = g.points.iter().map(|p| [p[0] / s, p[1] / s]).collect();
+                let len: f64 = line.windows(2).map(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1])).sum();
+                if len < 2.0 * stall {
+                    continue;
+                }
+                let half = g.width / 2.0 / s;
+                let side = if k == 0 { 1.0 } else { -1.0 };
+                let (ok, banned, meters) = survey.parking_along(&line, side, SURVEY_PARKING_LAT_MIN * half, half + SURVEY_PARKING_REACH_M);
+                let parks = (ok >= SURVEY_PARKING_ALLOWED * len || meters as f64 >= SURVEY_PARKING_METERED * len / stall) && banned <= 0.5 * len;
+                if !parks {
+                    continue;
+                }
+                let p = if g.parking[1 - k] > 0.0 { g.parking[1 - k] } else { lane_w * s };
+                let walk = |w: Option<f64>| w.or(g.sidewalk_w);
+                let (wl, wr) = (walk(g.sidewalk_left), walk(g.sidewalk_right));
+                if [wl, wr].iter().any(|w| w.is_some_and(|w| w - p / 2.0 < through * s)) {
+                    continue;
+                }
+                g.width += p;
+                g.parking[k] = p;
+                g.sidewalk_left = wl.map(|w| w - p / 2.0);
+                g.sidewalk_right = wr.map(|w| w - p / 2.0);
+                g.sidewalk_w = g.sidewalk_w.map(|w| w - p / 2.0);
+                if let Some(l) = g.lane_layout.as_mut() {
+                    // lateral = -u; the parking takes the +u side for k = 0
+                    for lane in l {
+                        lane.lateral += side * p / 2.0;
+                    }
+                }
+                n += 1;
+            }
+        }
+        n
     }
 
     /// groundscale (the street size, 1.25 by default): the street plan scaled
@@ -305,3 +380,13 @@ impl StreetCity {
         Ok(c)
     }
 }
+
+/// (`--survey-parking`) A kerb side parks where at least this share of it is
+/// under regulations that allow parking, or where meters stand for this share
+/// of its stalls; the survey's points are read this far in from the kerb (a
+/// share of the half width) to this far past it (m, the footway where meters
+/// stand). INFERRED.
+pub const SURVEY_PARKING_ALLOWED: f64 = 0.35;
+pub const SURVEY_PARKING_METERED: f64 = 0.4;
+pub const SURVEY_PARKING_LAT_MIN: f64 = 0.4;
+pub const SURVEY_PARKING_REACH_M: f64 = 8.0;

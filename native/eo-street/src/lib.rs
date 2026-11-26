@@ -25,6 +25,7 @@ pub mod joins;
 pub mod material;
 pub mod mesh;
 pub mod options;
+pub mod bikeway; // (`--bikeways`) kerbside bike lanes as the city's bike network builds them
 pub mod paint;
 pub mod plan;
 pub mod road_openings;
@@ -503,6 +504,28 @@ pub struct StreetWorld {
     /// `ground`: each junction's pad outline (the convex hull of its approach
     /// mouths' corners; empty under three approaches), built on first use.
     pub(crate) node_hulls: std::sync::OnceLock<Vec<Vec<[f64; 2]>>>,
+    /// (`--street-tapers`, `StreetOptions::tapers`) each run's taper at its
+    /// start and end: (how much narrower it is drawn at the joint, m; over
+    /// how long, m), (0, 0) where it keeps its width (`half_at`).
+    pub tapers: Vec<[(f64, f64); 2]>,
+    /// (`--bikeways`, `StreetOptions::bikeways`) each run's kerbside bike
+    /// lane as the city's network builds it (None: drawn as before), and the
+    /// markings' dimensions from the standards table.
+    pub bikeways: Vec<Option<bikeway::BikeStyle>>,
+    pub bike_dims: Option<bikeway::BikeDims>,
+    /// (`--midblock-crossings`, `StreetOptions::midblock`) each run's crossings
+    /// between junctions, by arc length.
+    pub midblock: Vec<Vec<MidCrossing>>,
+}
+
+/// (`--midblock-crossings`) A signalised, beaconed or flashing crossing
+/// between junctions on a run: its centre's arc length, the crosswalk's depth
+/// along the run, the device (1 signal, 2 beacon, 3 flasher).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MidCrossing {
+    pub s: f64,
+    pub depth: f64,
+    pub kind: u8,
 }
 
 /// (x, z, carpet height) -> the carpet height at the shore.
@@ -513,6 +536,11 @@ pub type GroundCut = Arc<dyn Fn(f64, f64) -> Option<f64> + Send + Sync>;
 
 /// (x, z) -> whether the water's press moves the drawn terrain there (eo-water).
 pub type GroundWater = Arc<dyn Fn(f64, f64) -> bool + Send + Sync>;
+
+/// (`--midblock-crossings`) A mid-block device is on a run when it stands
+/// within the run's half width and this far past it (m on the surveyed plan:
+/// the footway where a signal pole or beacon stands). INFERRED.
+pub const MIDBLOCK_REACH_M: f64 = 6.0;
 
 /// The index of the centreline piece of run `e` starting at point `a`.
 fn seg_index(e: &plan::Entry, a: [f64; 2]) -> usize {
@@ -688,9 +716,22 @@ impl StreetWorld {
             pads: plan::PadIndex::default(),
             node_hulls: std::sync::OnceLock::new(),
             joints: vec![],
+            tapers: vec![],
+            bikeways: vec![],
+            bike_dims: None,
+            midblock: vec![],
         };
         if plan::walk_yield_strict() {
             w.pads = plan::PadIndex::new(&w.plan.nodes, &w.plan.entries);
+        }
+        if w.o.tapers {
+            w.tapers = w.plan_tapers();
+        }
+        if w.o.bikeways {
+            w.plan_bikeways();
+        }
+        if w.o.midblock {
+            w.plan_midblock();
         }
         w.rises_ok = w.check_rises();
         w.geoms = (0..w.plan.entries.len()).map(|ei| w.entry_geom(ei)).collect();
@@ -771,6 +812,275 @@ impl StreetWorld {
 
     pub fn ground(&self, x: f64, z: f64) -> f64 {
         self.terrain.ground(x, z)
+    }
+
+    /// (`--street-tapers`) The half-width run `ei` is drawn at, at arc length
+    /// `s`: its own, less what it gives up toward a narrower run it meets end
+    /// to end (`tapers`), eased over the taper (a smooth step: no kink at
+    /// either end of it). Without tapers, `e.half` everywhere.
+    pub fn half_at(&self, ei: usize, s: f64) -> f64 {
+        let e = &self.plan.entries[ei];
+        let Some(t) = self.tapers.get(ei) else { return e.half };
+        let mut h = e.half;
+        for (end, &(delta, len)) in t.iter().enumerate() {
+            if !(delta > 0.0 && len > 0.0) {
+                continue;
+            }
+            let d = if end == 0 { s - e.s0() } else { e.s1() - s };
+            let x = (d / len).clamp(0.0, 1.0);
+            h -= delta * (1.0 - x * x * (3.0 - 2.0 * x));
+        }
+        h
+    }
+
+    /// (`--bikeways`) Each run with a kerbside bike lane joined to the city's
+    /// bike network by its middle and heading (the network's line within 14 m
+    /// and 25 degrees, in the surveyed plan), and its markings adjusted: no
+    /// green where the network records no green paint, no buffer line where
+    /// an island fills the buffer, a second solid line bounding a marked
+    /// buffer (Section 9E.07 para 14).
+    fn plan_bikeways(&mut self) {
+        let ca = eo_data::DataPaths::discover().ok().and_then(|p| eo_data::CaStandards::load(&p).ok());
+        let net = eo_data::DataPaths::discover().ok().and_then(|p| eo_data::bikeways::Bikeways::load(&p).ok());
+        let (Some(ca), Some(net)) = (ca, net) else {
+            eprintln!("bikeways: the standards table or sf-bikeways.json.gz did not load; bike lanes as before");
+            return;
+        };
+        match bikeway::BikeDims::load(&ca, &self.o) {
+            Ok(d) => self.bike_dims = Some(d),
+            Err(e) => {
+                eprintln!("bikeways: {e:#}; bike lanes as before");
+                return;
+            }
+        }
+        let s = eo_data::groundscale::scale();
+        let mut out = vec![None; self.plan.entries.len()];
+        for (ei, e) in self.plan.entries.iter().enumerate() {
+            if e.structure_leg.is_some() || !self.lines[ei].iter().any(|l| l.role == "cycle-lane") {
+                continue;
+            }
+            let (s0, s1) = (e.s0(), e.s1());
+            if s1 - s0 < 2.0 {
+                continue;
+            }
+            let (a, b) = (e.frame(s0, false), e.frame(s1, false));
+            let mid = e.frame((s0 + s1) / 2.0, false);
+            let l = ((b.x - a.x).powi(2) + (b.z - a.z).powi(2)).sqrt().max(1e-9);
+            let found = net.segment_at([mid.x / s, mid.z / s], [(b.x - a.x) / l, (b.z - a.z) / l], 14.0, 25.0);
+            out[ei] = found.and_then(|(rec, _)| bikeway::BikeStyle::from_record(rec));
+        }
+        for (ei, st) in out.iter().enumerate() {
+            let Some(st) = st else { continue };
+            let lines = &mut self.lines[ei];
+            let mut add = vec![];
+            let edge_w = self.o.edge_line_width;
+            for l in lines.iter_mut() {
+                if l.role == "cycle-lane" && l.paint == paint::Paint::White {
+                    // a lane between the traffic and the parking, drawn before as one white band:
+                    // its fill green or bare, bounded by solid white bike lane lines (Section 9E.04)
+                    l.paint = if st.green { paint::Paint::Green } else { paint::Paint::None };
+                    for side in [-1.0, 1.0] {
+                        add.push(paint::Line { role: "cycle-lane-edge", u: l.u + side * (l.width / 2.0 + edge_w / 2.0), width: edge_w, dashed: false, paint: paint::Paint::White, direction: 0, side: 0 });
+                    }
+                }
+                if l.role == "cycle-lane" && l.paint == paint::Paint::Green && !st.green {
+                    l.paint = paint::Paint::None;
+                }
+                if l.role == "cycle-buffer-edge" && st.island {
+                    l.paint = paint::Paint::None;
+                }
+            }
+            if !st.island {
+                // the buffer's inner bounding line (its outer one is `cycle-buffer-edge`)
+                for l in lines.iter() {
+                    if l.role == "cycle-buffer" && l.width > 0.2 {
+                        let edge = lines.iter().filter(|x| x.role == "cycle-buffer-edge").min_by(|x, y| (x.u - l.u).abs().total_cmp(&(y.u - l.u).abs()));
+                        if let Some(edge) = edge {
+                            let away = (l.u - edge.u).signum();
+                            add.push(paint::Line { role: "cycle-buffer-inner", u: l.u + away * (l.width / 2.0 - edge.width / 2.0), width: edge.width, dashed: false, paint: paint::Paint::White, direction: 0, side: 0 });
+                        }
+                    }
+                }
+            }
+            lines.extend(add);
+        }
+        let n = out.iter().filter(|x| x.is_some()).count();
+        eprintln!("bikeways: {n} runs with a kerbside bike lane joined to the bike network");
+        self.bikeways = out;
+    }
+
+    /// (`--midblock-crossings`) Each mid-block device of the city's survey
+    /// (eo-data `street_survey`, DataSF Traffic Signals' MIDBLOCK rows) on the
+    /// run whose carriageway it stands on or beside (within its half width and
+    /// `MIDBLOCK_REACH_M` on the scaled plan), clear of the run's ends by a
+    /// crosswalk and a ramp's flare: a crossing there, the crosswalk as deep
+    /// as a junction's of the run's class (`crossing_band_depth`), and a kerb
+    /// ramp reserved on each kerb with a footway wide enough (as
+    /// `planCrossingRamps` reserves a junction's).
+    fn plan_midblock(&mut self) {
+        let Some(survey) = eo_data::DataPaths::discover().ok().and_then(|p| eo_data::street_survey::StreetSurvey::load(&p).ok()) else {
+            eprintln!("midblock crossings: sf-street-survey.json.gz did not load; none drawn");
+            return;
+        };
+        let s = eo_data::groundscale::scale();
+        let o = self.o.clone();
+        let mut out: Vec<Vec<MidCrossing>> = vec![vec![]; self.plan.entries.len()];
+        let mut placed = 0;
+        for mb in &survey.midblock {
+            let p = [mb.at[0] * s, mb.at[1] * s];
+            let key = ((p[0] / 32.0).floor() as i32, (p[1] / 32.0).floor() as i32);
+            let mut best: Option<(usize, f64, f64)> = None; // (entry, station, |lateral|)
+            for &id in self.road_cells.get(&key).map(|v| v.as_slice()).unwrap_or(&[]) {
+                let (ei, a, b, half) = self.road_pieces[id as usize];
+                let e = &self.plan.entries[ei as usize];
+                let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                let l2 = dx * dx + dz * dz;
+                if l2 < 1e-9 {
+                    continue;
+                }
+                let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / l2;
+                if !(0.0..=1.0).contains(&t) {
+                    continue;
+                }
+                let lat = ((p[0] - a[0]) * -dz + (p[1] - a[1]) * dx).abs() / l2.sqrt();
+                if lat > half + MIDBLOCK_REACH_M * s {
+                    continue;
+                }
+                let i = seg_index(e, a);
+                let station = e.cum[i] + t * l2.sqrt();
+                if best.is_none_or(|bb| lat < bb.2) {
+                    best = Some((ei as usize, station, lat));
+                }
+            }
+            let Some((ei, station, _)) = best else { continue };
+            let e = &mut self.plan.entries[ei];
+            let depth = plan::crossing_band_depth(e.class_rank, &o);
+            let margin = depth / 2.0 + o.crosswalk_clearance + o.stop_bar_clearance + o.stop_bar_depth + o.ramp_flare_run;
+            if station < e.s0() + margin || station > e.s1() - margin {
+                continue;
+            }
+            let flat = o.ramp_width.clamp(plan::RAMP_MIN_CLEAR_WIDTH, depth.max(plan::RAMP_MIN_CLEAR_WIDTH));
+            let (lo, hi) = (station - flat / 2.0, station + flat / 2.0);
+            let reach = o.curb_top_width + o.ramp_run;
+            for k in 0..2 {
+                if e.walks[k] > reach + 0.05 {
+                    e.kerb_ramps[k].push(plan::RampWin { lo, hi, flare_lo: lo - o.ramp_flare_run, flare_hi: hi + o.ramp_flare_run, node: usize::MAX, at_start: true });
+                }
+            }
+            out[ei].push(MidCrossing { s: station, depth, kind: mb.kind });
+            placed += 1;
+        }
+        eprintln!("midblock crossings: {placed} of {} surveyed devices on a run", survey.midblock.len());
+        self.midblock = out;
+    }
+
+    /// (`--midblock-crossings`) The stretches of run `ei` its mid-block
+    /// crossings keep the lane lines off: the crosswalk and the limit lines
+    /// either side of it.
+    pub fn midblock_gaps(&self, ei: usize) -> Vec<[f64; 2]> {
+        let o = &self.o;
+        self.midblock
+            .get(ei)
+            .map(|v| v.iter().map(|c| {
+                let r = c.depth / 2.0 + o.stop_bar_clearance + o.stop_bar_depth + 0.1;
+                [c.s - r, c.s + r]
+            }).collect())
+            .unwrap_or_default()
+    }
+
+    /// `[lo, hi]` less run `ei`'s mid-block gaps.
+    pub fn cut_midblock(&self, ei: usize, lo: f64, hi: f64) -> Vec<[f64; 2]> {
+        let mut out = vec![[lo, hi]];
+        for g in self.midblock_gaps(ei) {
+            out = out
+                .into_iter()
+                .flat_map(|[a, b]| {
+                    if g[1] <= a || g[0] >= b {
+                        vec![[a, b]]
+                    } else {
+                        let mut v = vec![];
+                        if g[0] > a {
+                            v.push([a, g[0]]);
+                        }
+                        if g[1] < b {
+                            v.push([g[1], b]);
+                        }
+                        v
+                    }
+                })
+                .collect();
+        }
+        out
+    }
+
+    /// (`--bikeways`) A run's kerbside bike lane style, None where drawn as before.
+    pub fn bikeway(&self, ei: usize) -> Option<&bikeway::BikeStyle> {
+        self.bikeways.get(ei).and_then(|b| b.as_ref())
+    }
+
+    /// (`--street-tapers`) How far a run's tapers reach in from its start and
+    /// its end (m; 0 without one): the kerb there is no place to park.
+    pub fn taper_reach(&self, ei: usize) -> [f64; 2] {
+        self.tapers.get(ei).map(|t| [t[0].1, t[1].1]).unwrap_or([0.0, 0.0])
+    }
+
+    /// (`--street-tapers`) The plain joints (two runs end to end at a point
+    /// no junction claims, neither trimmed there) where the runs' widths
+    /// differ: the wider narrows to the other's width over the lane-reduction
+    /// taper, L = W v^2 / 11.991 m below 20.1 m/s (W the offset, v the prima
+    /// facie speed of a business or residence district), never under the
+    /// urban minimum (`caMetric('lane-reduction-taper')`,
+    /// `caMetric('speed-prima-facie-business-residence')`), and no longer
+    /// than 0.45 of the run, so a short run keeps room for both ends.
+    fn plan_tapers(&self) -> Vec<[(f64, f64); 2]> {
+        let mut out = vec![[(0.0, 0.0); 2]; self.plan.entries.len()];
+        let Some(ca) = eo_data::DataPaths::discover().ok().and_then(|p| eo_data::CaStandards::load(&p).ok()) else {
+            eprintln!("street tapers: the street-standards table did not load; no tapers");
+            return out;
+        };
+        let (Ok(v), Ok(div), Ok(hi_from), Ok(hi_k), Ok(min_l)) = (
+            ca.metric("speed-prima-facie-business-residence"),
+            ca.metric_key("lane-reduction-taper", "lowSpeedDivisor"),
+            ca.metric_key("lane-reduction-taper", "highSpeedFrom"),
+            ca.metric_key("lane-reduction-taper", "highSpeedFactor"),
+            ca.metric_key("lane-reduction-taper", "minUrban"),
+        ) else {
+            eprintln!("street tapers: a lane-reduction-taper or prima facie speed value is missing from the standards table; no tapers");
+            return out;
+        };
+        let taper_len = |w: f64| if v < hi_from { w * v * v / div } else { w * v * hi_k }.max(min_l);
+        let mut ends: HashMap<(i64, i64), Vec<(usize, usize)>> = HashMap::new();
+        for (ei, e) in self.plan.entries.iter().enumerate() {
+            if e.structure_leg.is_some() || e.points.len() < 2 {
+                continue;
+            }
+            for (end, p) in [(0usize, e.points[0]), (1, e.points[e.points.len() - 1])] {
+                ends.entry(((p[0] * 4.0).round() as i64, (p[1] * 4.0).round() as i64)).or_default().push((ei, end));
+            }
+        }
+        let plain = |ei: usize, end: usize| {
+            let e = &self.plan.entries[ei];
+            let (app, trim) = if end == 0 { (e.approach_start, e.trim_start) } else { (e.approach_end, e.trim_end) };
+            app.is_none() && trim < 0.01 && e.structure_ends[end].is_none()
+        };
+        for v in ends.values() {
+            if v.len() != 2 || !plain(v[0].0, v[0].1) || !plain(v[1].0, v[1].1) {
+                continue;
+            }
+            let (a, b) = (&self.plan.entries[v[0].0], &self.plan.entries[v[1].0]);
+            let ((wi, wend), narrow) = if a.half > b.half { (v[0], b.half) } else { (v[1], a.half) };
+            let w = &self.plan.entries[wi];
+            let delta = w.half - narrow;
+            if delta < 0.05 {
+                continue;
+            }
+            let room = 0.45 * (w.s1() - w.s0()).max(0.0);
+            let len = taper_len(delta).min(room);
+            if len > 0.5 {
+                out[wi][wend] = (delta, len);
+            }
+        }
+        out
     }
     /// The ground carpet's vertex at a terrain grid vertex (world position as
     /// eo-render/scene.rs computes it, in f32): the terrain lifted by

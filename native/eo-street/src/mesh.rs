@@ -88,6 +88,9 @@ const RAISED_M: f64 = 0.02;
 /// never shares a plane with the structure's own end face at the same end.
 /// A drawing offset, not a street dimension.
 const CAP_SET_BACK_M: f64 = 0.02;
+/// (`--bikeways`) A bike lane's raised island stops this short of the run's
+/// marked ends (m), its nose clear of the crosswalk. INFERRED.
+const ISLAND_END_M: f64 = 1.5;
 
 /// The kerb depression of side `k` at station `i` (0 when none recorded).
 fn mesh_dep(g: &EntryGeom, k: usize, i: usize) -> f64 {
@@ -295,6 +298,16 @@ impl TileMesh {
         if area2 > 1e-9 {
             self.indices.extend_from_slice(&[base, base + 2, base + 3]);
             self.layers.push(layer);
+        }
+    }
+
+    /// `tri`, recording each vertex's across-the-marking coordinate (a
+    /// marking's wear mask reads it; -1, `tri`'s, reads as worn away).
+    fn tri_kerb(&mut self, layer: Layer, p: [[f64; 3]; 3], c: [[u8; 3]; 3], kerb: [f32; 3]) {
+        let first = self.positions.len();
+        self.tri(layer, p, c);
+        if self.positions.len() == first + 3 {
+            self.kerb[first..first + 3].copy_from_slice(&kerb);
         }
     }
 
@@ -691,102 +704,140 @@ impl StreetWorld {
         let (a, b) = (g.paving_frame(i), g.paving_frame(i + 1));
         let (da, db) = (g.datums[i], g.datums[i + 1]);
         let half = e.half;
+        // (`--street-tapers`) the carriageway's drawn half at each station: `half`
+        // without a taper; the kerb, gutter and crown follow it, the building line holds.
+        let (mut ha, mut hb) = (self.half_at(ei, a.s), self.half_at(ei, b.s));
         // The JS palette's tint for this run's highway class (the per-block
         // tone the JS varies in its shader's macro field, not per run).
         let (asphalt, walk_tint) = self.run_tints(ei);
         // Carriageway and gutter pans.
-        let offs = g.section_offsets(o, half);
-        let gutter_start = (half - o.gutter_width).max(0.0);
         let gutter = GUTTER();
-        let col = |u: f64| if u.abs() <= gutter_start + 1e-9 { asphalt } else { gutter };
-        // (`seams`) the part of the section each station draws: a busier run's
-        // carriageway alongside covers the rest. The band both stations draw
-        // is laid in whole strips (each strip's offset the same at both ends:
-        // the renderer takes the road's frame from the kerb distance's
-        // gradient, and a strip clamped differently at its two ends turned
-        // its patches askew triangle by triangle); the sliver between the two
-        // stations' clips is fanned from the narrower one's edge.
-        let ((la, ha), (lb, hb)) = (g.clip(i, half), g.clip(i + 1, half));
-        let kd = |u: f64| (half - u.abs()).max(0.0) as f32;
-        let (cl, ch) = (la.max(lb), ha.min(hb));
-        if ch - cl > 1e-4 {
-            let mut us = vec![cl];
-            us.extend(offs.iter().copied().filter(|&u| u > cl + 1e-4 && u < ch - 1e-4));
-            us.push(ch);
-            for w in us.windows(2) {
-                let (u0, u1) = (w[0], w[1]);
+        let tapered = (ha - half).abs() > 1e-4 || (hb - half).abs() > 1e-4;
+        if tapered && g.lo.is_empty() {
+            let (offs_a, offs_b) = (g.section_offsets(o, ha), g.section_offsets(o, hb));
+            let (offs_a, offs_b) = if offs_a.len() == offs_b.len() {
+                (offs_a, offs_b)
+            } else {
+                ha = half;
+                hb = half;
+                (g.section_offsets(o, half), g.section_offsets(o, half))
+            };
+            let (gs_a, gs_b) = ((ha - o.gutter_width).max(0.0), (hb - o.gutter_width).max(0.0));
+            let col = |u: f64, gs: f64| if u.abs() <= gs + 1e-9 { asphalt } else { gutter };
+            let kd = |h: f64, u: f64| (h - u.abs()).max(0.0) as f32;
+            for k in 0..offs_a.len() - 1 {
+                let (u0a, u1a, u0b, u1b) = (offs_a[k], offs_a[k + 1], offs_b[k], offs_b[k + 1]);
                 m.quad_kerb(
                     Layer::Carriageway,
                     [
-                        p3(a.at(u0), g.pavement_y(o, i, u0, half)),
-                        p3(b.at(u0), g.pavement_y(o, i + 1, u0, half)),
-                        p3(b.at(u1), g.pavement_y(o, i + 1, u1, half)),
-                        p3(a.at(u1), g.pavement_y(o, i, u1, half)),
+                        p3(a.at(u0a), g.pavement_y(o, i, u0a, ha)),
+                        p3(b.at(u0b), g.pavement_y(o, i + 1, u0b, hb)),
+                        p3(b.at(u1b), g.pavement_y(o, i + 1, u1b, hb)),
+                        p3(a.at(u1a), g.pavement_y(o, i, u1a, ha)),
                     ],
-                    [col(u0), col(u0), col(u1), col(u1)],
-                    [kd(u0), kd(u0), kd(u1), kd(u1)],
+                    [col(u0a, gs_a), col(u0b, gs_b), col(u1b, gs_b), col(u1a, gs_a)],
+                    [kd(ha, u0a), kd(hb, u0b), kd(hb, u1b), kd(ha, u1a)],
                 );
             }
-        }
-        if ch - cl <= 1e-4 {
-            // no band both draw (a run going under a busier one): each strip clamped at both ends.
-            for k in 0..offs.len() - 1 {
-                let (u0, u1) = (offs[k], offs[k + 1]);
-                let (a0, a1, b0, b1) = (u0.clamp(la, ha), u1.clamp(la, ha), u0.clamp(lb, hb), u1.clamp(lb, hb));
-                if a1 - a0 < 1e-4 && b1 - b0 < 1e-4 {
+        } else {
+            let offs = g.section_offsets(o, half);
+            let (gs_a, gs_b) = ((ha - o.gutter_width).max(0.0), (hb - o.gutter_width).max(0.0));
+            let col = |u: f64, gs: f64| if u.abs() <= gs + 1e-9 { asphalt } else { gutter };
+            let kd = |h: f64, u: f64| (h - u.abs()).max(0.0) as f32;
+            // (`seams`) the part of the section each station draws: a busier run's
+            // carriageway alongside covers the rest. The band both stations draw
+            // is laid in whole strips (each strip's offset the same at both ends:
+            // the renderer takes the road's frame from the kerb distance's
+            // gradient, and a strip clamped differently at its two ends turned
+            // its patches askew triangle by triangle); the sliver between the two
+            // stations' clips is fanned from the narrower one's edge.
+            let ((cla, cha), (clb, chb)) = (g.clip(i, half), g.clip(i + 1, half));
+            let (cla, cha) = (cla.clamp(-ha, ha), cha.clamp(-ha, ha));
+            let (clb, chb) = (clb.clamp(-hb, hb), chb.clamp(-hb, hb));
+            let (cl, ch) = (cla.max(clb), cha.min(chb));
+            if ch - cl > 1e-4 {
+                let mut us = vec![cl];
+                us.extend(offs.iter().copied().filter(|&u| u > cl + 1e-4 && u < ch - 1e-4));
+                us.push(ch);
+                for w in us.windows(2) {
+                    let (u0, u1) = (w[0], w[1]);
+                    m.quad_kerb(
+                        Layer::Carriageway,
+                        [
+                            p3(a.at(u0), g.pavement_y(o, i, u0, ha)),
+                            p3(b.at(u0), g.pavement_y(o, i + 1, u0, hb)),
+                            p3(b.at(u1), g.pavement_y(o, i + 1, u1, hb)),
+                            p3(a.at(u1), g.pavement_y(o, i, u1, ha)),
+                        ],
+                        [col(u0, gs_a), col(u0, gs_b), col(u1, gs_b), col(u1, gs_a)],
+                        [kd(ha, u0), kd(hb, u0), kd(hb, u1), kd(ha, u1)],
+                    );
+                }
+            }
+            if ch - cl <= 1e-4 {
+                // no band both draw (a run going under a busier one): each strip clamped at both ends.
+                for k in 0..offs.len() - 1 {
+                    let (u0, u1) = (offs[k], offs[k + 1]);
+                    let (a0, a1, b0, b1) = (u0.clamp(cla, cha), u1.clamp(cla, cha), u0.clamp(clb, chb), u1.clamp(clb, chb));
+                    if a1 - a0 < 1e-4 && b1 - b0 < 1e-4 {
+                        continue;
+                    }
+                    m.quad_kerb(
+                        Layer::Carriageway,
+                        [
+                            p3(a.at(a0), g.pavement_y(o, i, a0, ha)),
+                            p3(b.at(b0), g.pavement_y(o, i + 1, b0, hb)),
+                            p3(b.at(b1), g.pavement_y(o, i + 1, b1, hb)),
+                            p3(a.at(a1), g.pavement_y(o, i, a1, ha)),
+                        ],
+                        [col(a0, gs_a), col(b0, gs_b), col(b1, gs_b), col(a1, gs_a)],
+                        [kd(ha, a0), kd(hb, b0), kd(hb, b1), kd(ha, a1)],
+                    );
+                }
+            }
+            // the slivers: (edge at a, edge at b, the band's edge)
+            for (ea, eb, inner) in [(cla, clb, cl), (cha, chb, ch)] {
+                if (ea - eb).abs() < 1e-4 || ch - cl <= 1e-4 {
                     continue;
                 }
-                m.quad_kerb(
-                    Layer::Carriageway,
-                    [
-                        p3(a.at(a0), g.pavement_y(o, i, a0, half)),
-                        p3(b.at(b0), g.pavement_y(o, i + 1, b0, half)),
-                        p3(b.at(b1), g.pavement_y(o, i + 1, b1, half)),
-                        p3(a.at(a1), g.pavement_y(o, i, a1, half)),
-                    ],
-                    [col(a0), col(b0), col(b1), col(a1)],
-                    [kd(a0), kd(b0), kd(b1), kd(a1)],
-                );
-            }
-        }
-        // the slivers: (edge at a, edge at b, the band's edge)
-        for (ea, eb, inner) in [(la, lb, cl), (ha, hb, ch)] {
-            if (ea - eb).abs() < 1e-4 || ch - cl <= 1e-4 {
-                continue;
-            }
-            let a_wide = (ea - inner).abs() > (eb - inner).abs();
-            let (edge, iw, in_) = if a_wide { (ea, i, i + 1) } else { (eb, i + 1, i) };
-            let (wide, narrow) = if a_wide { (&a, &b) } else { (&b, &a) };
-            let (lo_u, hi_u) = (edge.min(inner), edge.max(inner));
-            let mut us = vec![lo_u];
-            us.extend(offs.iter().copied().filter(|&u| u > lo_u + 1e-4 && u < hi_u - 1e-4));
-            us.push(hi_u);
-            let apex = p3(narrow.at(inner), g.pavement_y(o, in_, inner, half));
-            for w in us.windows(2) {
-                let (u0, u1) = (w[0], w[1]);
-                let (p0, p1) = (p3(wide.at(u0), g.pavement_y(o, iw, u0, half)), p3(wide.at(u1), g.pavement_y(o, iw, u1, half)));
-                // the strip's winding: a at u0, b at u0, b at u1, a at u1
-                let (q, c, k) = if a_wide {
-                    ([p0, apex, apex, p1], [col(u0), col(inner), col(inner), col(u1)], [kd(u0), kd(inner), kd(inner), kd(u1)])
+                let a_wide = (ea - inner).abs() > (eb - inner).abs();
+                let (edge, iw, in_, hw, hn, gsw, gsn) = if a_wide {
+                    (ea, i, i + 1, ha, hb, gs_a, gs_b)
                 } else {
-                    ([apex, p0, p1, apex], [col(inner), col(u0), col(u1), col(inner)], [kd(inner), kd(u0), kd(u1), kd(inner)])
+                    (eb, i + 1, i, hb, ha, gs_b, gs_a)
                 };
-                m.quad_kerb(Layer::Carriageway, q, c, k);
-            }
-        }
-        // (`seams`) a busier run at another level along a clipped edge: a face between the two.
-        if !g.face_lo.is_empty() {
-            for (faces, side, ea, eb) in [(&g.face_hi, 1.0, ha, hb), (&g.face_lo, -1.0, la, lb)] {
-                let (ya, yb) = (faces[i], faces[i + 1]);
-                if !(ya.is_finite() && yb.is_finite()) || (ea - side * half).abs() < 1e-3 || (eb - side * half).abs() < 1e-3 {
-                    continue;
+                let (wide, narrow) = if a_wide { (&a, &b) } else { (&b, &a) };
+                let (lo_u, hi_u) = (edge.min(inner), edge.max(inner));
+                let mut us = vec![lo_u];
+                us.extend(offs.iter().copied().filter(|&u| u > lo_u + 1e-4 && u < hi_u - 1e-4));
+                us.push(hi_u);
+                let apex = p3(narrow.at(inner), g.pavement_y(o, in_, inner, hn));
+                for w in us.windows(2) {
+                    let (u0, u1) = (w[0], w[1]);
+                    let (p0, p1) = (p3(wide.at(u0), g.pavement_y(o, iw, u0, hw)), p3(wide.at(u1), g.pavement_y(o, iw, u1, hw)));
+                    // the strip's winding: a at u0, b at u0, b at u1, a at u1
+                    let (q, c, k) = if a_wide {
+                        ([p0, apex, apex, p1], [col(u0, gsw), col(inner, gsn), col(inner, gsn), col(u1, gsw)], [kd(hw, u0), kd(hn, inner), kd(hn, inner), kd(hw, u1)])
+                    } else {
+                        ([apex, p0, p1, apex], [col(inner, gsn), col(u0, gsw), col(u1, gsw), col(inner, gsn)], [kd(hn, inner), kd(hw, u0), kd(hw, u1), kd(hn, inner)])
+                    };
+                    m.quad_kerb(Layer::Carriageway, q, c, k);
                 }
-                let (oa, ob) = (g.pavement_y(o, i, ea, half), g.pavement_y(o, i + 1, eb, half));
-                // facing the lower side
-                let up = (oa + ob) > (ya + yb);
-                let n = [side * (a.nx + b.nx) / 2.0, side * (a.nz + b.nz) / 2.0];
-                let face = if up { n } else { [-n[0], -n[1]] };
-                m.quad(Layer::CurbFace, [p3(a.at(ea), oa), p3(b.at(eb), ob), p3(b.at(eb), yb), p3(a.at(ea), ya)], [CURB_FACE(); 4], Some(face));
+            }
+            // (`seams`) a busier run at another level along a clipped edge: a face between the two.
+            if !g.face_lo.is_empty() {
+                for (faces, side, ea, eb) in [(&g.face_hi, 1.0, cha, chb), (&g.face_lo, -1.0, cla, clb)] {
+                    let (ya, yb) = (faces[i], faces[i + 1]);
+                    if !(ya.is_finite() && yb.is_finite()) || (ea - side * ha).abs() < 1e-3 || (eb - side * hb).abs() < 1e-3 {
+                        continue;
+                    }
+                    let (oa, ob) = (g.pavement_y(o, i, ea, ha), g.pavement_y(o, i + 1, eb, hb));
+                    // facing the lower side
+                    let up = (oa + ob) > (ya + yb);
+                    let n = [side * (a.nx + b.nx) / 2.0, side * (a.nz + b.nz) / 2.0];
+                    let face = if up { n } else { [-n[0], -n[1]] };
+                    m.quad(Layer::CurbFace, [p3(a.at(ea), oa), p3(b.at(eb), ob), p3(b.at(eb), yb), p3(a.at(ea), ya)], [CURB_FACE(); 4], Some(face));
+                }
             }
         }
         let first_footway = (m.layers.len(), m.positions.len());
@@ -806,7 +857,7 @@ impl StreetWorld {
                     let (out_a, out_b) = ([side * a.nx, side * a.nz], [side * b.nx, side * b.nz]);
                     // Retain the narrow approach at its road edge. A sloping
                     // earth bank here can project across the adjacent ramp.
-                    let (left, right) = (a.at(side * half), b.at(side * half));
+                    let (left, right) = (a.at(side * ha), b.at(side * hb));
                     let (ya, yb) = (da - o.gutter_depth, db - o.gutter_depth);
                     if retained {
                         self.ring_edge(m, left, ya, out_a, right, yb, out_b, true);
@@ -835,32 +886,34 @@ impl StreetWorld {
             // each vertex's height above the gutter flow line (the renderer's kerb-face grime).
             m.quad_kerb_face(
                 Layer::CurbFace,
-                [p3(a.at(side * half), ia), p3(b.at(side * half), ib), p3(b.at(side * half), kb), p3(a.at(side * half), ka)],
+                [p3(a.at(side * ha), ia), p3(b.at(side * hb), ib), p3(b.at(side * hb), kb), p3(a.at(side * ha), ka)],
                 [CURB_FACE(); 4],
                 Some(face),
                 [0.0, 0.0, (kb - ib).max(0.0) as f32, (ka - ia).max(0.0) as f32],
             );
-            let (wya, wyb) = (o.sidewalk_surface_y(da, half + ra, half), o.sidewalk_surface_y(db, half + rb, half));
+            let (wya, wyb) = (o.sidewalk_surface_y(da, ha + ra, ha), o.sidewalk_surface_y(db, hb + rb, hb));
             let (ramp_c, top_c) = (RAMP(), CURB_TOP());
             let top_col = |d: f64| if d > 0.0 { ramp_c } else { top_c };
             m.quad(
                 if pa > 0.0 || pb > 0.0 { Layer::Ramp } else { Layer::CurbTop },
-                [p3(a.at(side * half), ka), p3(b.at(side * half), kb), p3(b.at(side * (half + rb)), wyb), p3(a.at(side * (half + ra)), wya)],
+                [p3(a.at(side * ha), ka), p3(b.at(side * hb), kb), p3(b.at(side * (hb + rb)), wyb), p3(a.at(side * (ha + ra)), wya)],
                 [top_col(pa), top_col(pb), top_col(pb), top_col(pa)],
                 None,
             );
-            // (`seams`) a walk narrowed to a busier one alongside meets it at its edge.
+            // (`seams`) a walk narrowed to a busier one alongside meets it at its edge;
+            // (`--street-tapers`) the walk widens over a taper, its outer edge held at `half + walk`.
             let (wwa, wwb) = (g.walk_at(k, i, walk), g.walk_at(k, i + 1, walk));
             let met = g.walk_met(k, i, walk) || g.walk_met(k, i + 1, walk);
-            let outer_y = |j: usize, d: f64, w: f64| g.walk_y[k].get(j).copied().filter(|y| y.is_finite()).unwrap_or_else(|| o.sidewalk_surface_y(d, half + w, half));
-            let (eya, eyb) = (outer_y(i, da, wwa), outer_y(i + 1, db, wwb));
-            if wwa > ra + 0.02 || wwb > rb + 0.02 {
+            let outer_y = |j: usize, d: f64, w: f64, h: f64| g.walk_y[k].get(j).copied().filter(|y| y.is_finite()).unwrap_or_else(|| o.sidewalk_surface_y(d, half + w, h));
+            let (eya, eyb) = (outer_y(i, da, wwa, ha), outer_y(i + 1, db, wwb, hb));
+            let (wa, wb) = (half + wwa - ha, half + wwb - hb);
+            if wa > ra + 0.02 || wb > rb + 0.02 {
                 let wc = walk_tint;
-                let (wa2, wb2) = (wwa.max(ra), wwb.max(rb));
+                let (wa2, wb2) = (wa.max(ra), wb.max(rb));
                 // each vertex's distance across the walk from the kerb line.
                 m.quad_kerb(
                     Layer::Sidewalk,
-                    [p3(a.at(side * (half + ra)), wya), p3(b.at(side * (half + rb)), wyb), p3(b.at(side * (half + wb2)), eyb), p3(a.at(side * (half + wa2)), eya)],
+                    [p3(a.at(side * (ha + ra)), wya), p3(b.at(side * (hb + rb)), wyb), p3(b.at(side * (hb + wb2)), eyb), p3(a.at(side * (ha + wa2)), eya)],
                     [wc; 4],
                     [ra as f32, rb as f32, wb2 as f32, wa2 as f32],
                 );
@@ -873,7 +926,7 @@ impl StreetWorld {
             // Frontage: level with the walk edge, FRONTAGE_LIFT_M proud.
             let (fa, fb) = if met { (0.0, 0.0) } else { (self.frontage_depth(ei, &a, side, walk), self.frontage_depth(ei, &b, side, walk)) };
             let step = o.frontage_step;
-            let (mut ox_a, mut ox_b, mut oy_a, mut oy_b) = (half + wwa.max(ra), half + wwb.max(rb), eya, eyb);
+            let (mut ox_a, mut ox_b, mut oy_a, mut oy_b) = (ha + wa.max(ra), hb + wb.max(rb), eya, eyb);
             if fa > step || fb > step {
                 let (ya, yb) = (eya + o.frontage_lift, eyb + o.frontage_lift);
                 m.quad(
@@ -910,7 +963,17 @@ impl StreetWorld {
         }
         self.trim_arterial_footway(m, ei, first_footway.0, first_footway.1);
         // Lane paint along this span.
-        if with_edges { self.emit_span_paint(m, ei, i); }
+        if with_edges {
+            self.emit_span_paint(m, ei, i);
+            // (`--bikeways`) the kerbside bike lane as the city's network builds it.
+            if self.bikeway(ei).is_some() {
+                self.emit_bikeway(m, ei, i);
+            }
+            // (`--midblock-crossings`) a crossing between junctions whose centre lies in this span.
+            if self.midblock.get(ei).is_some_and(|v| !v.is_empty()) {
+                self.emit_midblock(m, ei, i);
+            }
+        }
         // a stub's end at a structure (`joins`): its open section capped.
         if e.structure_ends[0].is_some() && i == 0 && e.approach_start.is_none() {
             self.emit_stub_cap(m, ei, 0);
@@ -1041,6 +1104,244 @@ impl StreetWorld {
         }
     }
 
+    /// The bike lane's green: the palette's, or with `--bikeways` the green
+    /// colored pavement of the standards (crate::bikeway).
+    fn bike_green(&self) -> [u8; 3] {
+        match &self.bike_dims {
+            Some(d) if self.o.bikeways => crate::bikeway::albedo_bytes(d.green),
+            _ => GREEN(),
+        }
+    }
+
+    /// (`--bikeways`) A run's kerbside bike lane in span `i` (crate::bikeway):
+    /// a two-way bikeway's broken yellow centre line, the buffer's diagonal
+    /// markings, its tubular markers or its raised island, and the bicycle
+    /// symbol with its arrow downstream after each intersection, per
+    /// direction the lane carries. Each piece is drawn by the span its start
+    /// lies in.
+    fn emit_bikeway(&self, m: &mut TileMesh, ei: usize, i: usize) {
+        let (Some(st), Some(d)) = (self.bikeway(ei).copied(), self.bike_dims) else { return };
+        let o = &self.o;
+        let e = &self.plan.entries[ei];
+        let g = &self.geoms[ei];
+        let (a, b) = (g.stations[i], g.stations[i + 1]);
+        let (da, db) = (g.datums[i], g.datums[i + 1]);
+        let span = (b.s - a.s).max(1e-9);
+        let (m0, m1) = (e.marking_trim_start.max(e.s0()), (e.length - e.marking_trim_end).min(e.s1()));
+        let (lo, hi) = (a.s.max(m0), b.s.min(m1));
+        if !(hi - lo > 0.05) {
+            return;
+        }
+        // a point on the drawn surface (its markings scaled with a taper as the paint is)
+        let pt = |s: f64, u: f64, lift: f64| -> [f64; 3] {
+            let h = self.half_at(ei, s);
+            let u = if h == e.half { u } else { u * h / e.half.max(1e-6) };
+            let t = (s - a.s) / span;
+            let (pa, pb) = (a.at(u), b.at(u));
+            let dat = da + (db - da) * t;
+            [pa[0] + (pb[0] - pa[0]) * t, o.cross_section_y(dat, u, h) + lift, pa[1] + (pb[1] - pa[1]) * t]
+        };
+        let lines = &self.lines[ei];
+        let white = WHITE();
+        for lane in lines.iter().filter(|l| l.role == "cycle-lane") {
+            let (uc, w) = (lane.u, lane.width);
+            let buffer = lines.iter().filter(|l| l.role == "cycle-buffer").min_by(|x, y| (x.u - uc).abs().total_cmp(&(y.u - uc).abs())).map(|l| (l.u, l.width));
+            // a. a two-way bikeway's broken yellow centre line (Section 9E.13), phased from the run's start
+            if st.two_way {
+                let period = d.centre_segment + d.centre_gap;
+                let mut k = ((lo - m0) / period).floor();
+                loop {
+                    let s0 = m0 + k * period;
+                    if s0 >= hi {
+                        break;
+                    }
+                    let (p0, p1) = (s0.max(lo), (s0 + d.centre_segment).min(hi));
+                    for [p0, p1] in self.cut_midblock(ei, p0, p1) {
+                        if p1 > p0 + 0.02 {
+                            let hw = d.line_width / 2.0;
+                            m.quad_kerb(Layer::Marking, [pt(p0, uc - hw, o.marking_lift), pt(p1, uc - hw, o.marking_lift), pt(p1, uc + hw, o.marking_lift), pt(p0, uc + hw, o.marking_lift)], [YELLOW(); 4], [0.0, 0.0, 1.0, 1.0]);
+                        }
+                    }
+                    k += 1.0;
+                }
+            }
+            if buffer.is_none() && st.posts {
+                // c'. no marked buffer: tubular markers along the lane's line on the traffic side
+                let edge = lines.iter().filter(|l| l.role == "cycle-lane-edge").min_by(|x, y| x.u.abs().total_cmp(&y.u.abs())).map(|l| l.u);
+                if let Some(ue) = edge {
+                    let (mark, gap) = crate::paint::broken_line_pattern(&self.city.segments[e.road], &e.highway, o);
+                    let step = ((mark + gap) / 2.0).max(1.0);
+                    let mut k = ((lo - m0 - step / 2.0) / step).ceil().max(0.0);
+                    loop {
+                        let sp = m0 + step / 2.0 + k * step;
+                        if sp >= hi || sp > m1 - step / 2.0 {
+                            break;
+                        }
+                        if !self.midblock_gaps(ei).iter().any(|g| sp > g[0] && sp < g[1]) {
+                            self.tubular_marker(m, pt(sp, ue, 0.0), d.post_width / 2.0, d.post_height);
+                        }
+                        k += 1.0;
+                    }
+                }
+            }
+            if let Some((ub, wb)) = buffer {
+                let (u_in, u_out) = (ub - wb / 2.0, ub + wb / 2.0);
+                if st.island {
+                    // d. the raised island over the buffer, a kerb's height, short of the run's ends
+                    // (at a plain joint the island runs on into the next run: no nose, no gap)
+                    let (j0, j1) = (e.approach_start.is_some(), e.approach_end.is_some());
+                    let (is0, is1) = (if j0 { m0 + ISLAND_END_M } else { m0 }, if j1 { m1 - ISLAND_END_M } else { m1 });
+                    let gaps = self.midblock_gaps(ei);
+                    for [s0, s1] in self.cut_midblock(ei, lo.max(is0), hi.min(is1)) {
+                    // a nose where the island stops for a junction or a mid-block crossing
+                    let (nose0, nose1) = ((j0 && s0 == is0) || gaps.iter().any(|g| g[1] == s0), (j1 && s1 == is1) || gaps.iter().any(|g| g[0] == s1));
+                    if s1 > s0 + 0.02 {
+                        let hgt = o.curb_face_height;
+                        let top = |s: f64, u: f64| pt(s, u, hgt);
+                        let base = |s: f64, u: f64| pt(s, u, 0.0);
+                        m.quad(Layer::CurbTop, [top(s0, u_in), top(s1, u_in), top(s1, u_out), top(s0, u_out)], [CURB_TOP(); 4], None);
+                        let nrm = [a.nx, a.nz];
+                        for (u, out) in [(u_in, -1.0), (u_out, 1.0)] {
+                            m.quad_kerb_face(Layer::CurbFace, [base(s0, u), base(s1, u), top(s1, u), top(s0, u)], [CURB_FACE(); 4], Some([nrm[0] * out, nrm[1] * out]), [0.0, 0.0, hgt as f32, hgt as f32]);
+                        }
+                        let tan = [a.tx, a.tz];
+                        for (sx, out, here) in [(s0, -1.0, nose0), (s1, 1.0, nose1)] {
+                            if here {
+                                m.quad_kerb_face(Layer::CurbFace, [base(sx, u_in), base(sx, u_out), top(sx, u_out), top(sx, u_in)], [CURB_FACE(); 4], Some([tan[0] * out, tan[1] * out]), [0.0, 0.0, hgt as f32, hgt as f32]);
+                            }
+                        }
+                    }
+                    }
+                } else if wb >= d.buffer_chevrons_from {
+                    // b. diagonal buffer markings at 45 degrees (Section 9E.07 paras 15-16)
+                    let lw = d.line_width * std::f64::consts::SQRT_2;
+                    let mut k = ((lo - m0) / d.chevron_spacing).ceil();
+                    loop {
+                        let s0 = m0 + k * d.chevron_spacing;
+                        if s0 >= hi {
+                            break;
+                        }
+                        let gapped = self.midblock_gaps(ei).iter().any(|g| s0 + wb + lw > g[0] && s0 < g[1]);
+                        if s0 + wb + lw <= m1 && !gapped {
+                            m.quad_kerb(Layer::Marking, [pt(s0, u_in, o.marking_lift), pt(s0 + lw, u_in, o.marking_lift), pt(s0 + wb + lw, u_out, o.marking_lift), pt(s0 + wb, u_out, o.marking_lift)], [white; 4], [0.0, 0.0, 1.0, 1.0]);
+                        }
+                        k += 1.0;
+                    }
+                }
+                if st.posts {
+                    // c. tubular markers down the buffer's middle, N / 2 apart (Sections 3I.02, 3B.16)
+                    let (mark, gap) = crate::paint::broken_line_pattern(&self.city.segments[e.road], &e.highway, o);
+                    let step = ((mark + gap) / 2.0).max(1.0);
+                    let mut k = ((lo - m0 - step / 2.0) / step).ceil().max(0.0);
+                    loop {
+                        let sp = m0 + step / 2.0 + k * step;
+                        if sp >= hi || sp > m1 - step / 2.0 {
+                            break;
+                        }
+                        if !self.midblock_gaps(ei).iter().any(|g| sp > g[0] && sp < g[1]) {
+                            self.tubular_marker(m, pt(sp, ub, 0.0), d.post_width / 2.0, d.post_height);
+                        }
+                        k += 1.0;
+                    }
+                }
+            }
+            // e. the bicycle symbol, its arrow downstream, after each intersection per direction served
+            let dirs: Vec<(f64, f64)> = if st.two_way {
+                vec![(1.0, uc + w / 4.0), (-1.0, uc - w / 4.0)]
+            } else if e.oneway {
+                vec![(1.0, uc)]
+            } else {
+                vec![(if uc >= 0.0 { 1.0 } else { -1.0 }, uc)]
+            };
+            let need = 2.0 * d.symbol_gap + d.symbol_len + d.arrow_len;
+            if m1 - m0 < need {
+                continue;
+            }
+            for (dir, u0) in dirs {
+                // after an intersection only (a plain joint between two runs is mid-block)
+                if (dir > 0.0 && e.approach_start.is_none()) || (dir < 0.0 && e.approach_end.is_none()) {
+                    continue;
+                }
+                let start = if dir > 0.0 { m0 + d.symbol_gap } else { m1 - d.symbol_gap };
+                let arrow_at = start + dir * (d.symbol_len + d.symbol_gap);
+                for (shape, at) in [(crate::bikeway::bicycle(d.symbol_len), start), (crate::bikeway::arrow(d.arrow_len), arrow_at)] {
+                    if !(at >= lo && at < hi) || (dir < 0.0 && at == hi) {
+                        continue;
+                    }
+                    for t in &shape {
+                        let p = t.map(|q| pt(at + dir * q[0], u0 + dir * q[1], o.marking_lift * 1.5));
+                        m.tri_kerb(Layer::Marking, p, [white; 3], [0.5; 3]);
+                    }
+                }
+            }
+        }
+    }
+
+    /// (`--midblock-crossings`) The crossings between junctions whose centre
+    /// lies in span `i` of run `ei`: the continental crosswalk across the
+    /// carriageway (`crossing_stripes`, as a junction's), and for a signal or
+    /// a beacon the limit line of each direction's traffic arriving, set back
+    /// from the crosswalk by `stopBarClearance` (right-hand traffic: the +s
+    /// direction keeps to the +u side of the run's centre line).
+    fn emit_midblock(&self, m: &mut TileMesh, ei: usize, i: usize) {
+        let o = &self.o;
+        let e = &self.plan.entries[ei];
+        let g = &self.geoms[ei];
+        let (a, b) = (g.stations[i].s, g.stations[i + 1].s);
+        let at = |s: f64, u: f64, lift: f64| -> [f64; 3] {
+            let h = self.half_at(ei, s);
+            let f = e.frame(s, false);
+            let datum = self.datum_at_station(g, s).unwrap_or_else(|| self.ground(f.x, f.z) + o.road_lift);
+            let xz = f.at(u);
+            [xz[0], o.cross_section_y(datum, u, h) + lift, xz[1]]
+        };
+        for c in self.midblock[ei].iter().filter(|c| c.s >= a && c.s < b) {
+            let h = self.half_at(ei, c.s);
+            let (b0, b1) = (c.s - c.depth / 2.0, c.s + c.depth / 2.0);
+            let lift = o.junction_paint_lift;
+            for v in &crate::paint::crossing_stripes(h, o).stripes {
+                for [d0, d1] in [[b0, c.s], [c.s, b1]] {
+                    m.quad_kerb(Layer::Marking, [at(d0, v[0], lift), at(d1, v[0], lift), at(d1, v[1], lift), at(d0, v[1], lift)], [CROSSWALK(); 4], [0.0, 0.0, 1.0, 1.0]);
+                }
+            }
+            if c.kind > 2 {
+                continue;
+            }
+            let boundary = self.lines[ei].iter().find(|l| l.role == "centre" || l.role == "unpainted-centre" || l.role == "centre-turn-boundary").map(|l| l.u).unwrap_or(0.0);
+            let inset = o.stop_bar_edge_inset;
+            let mut bars = vec![];
+            if e.oneway {
+                bars.push((b0 - o.stop_bar_clearance, -1.0, -h + inset, h - inset));
+            } else {
+                bars.push((b0 - o.stop_bar_clearance, -1.0, boundary.max(-h + inset), h - inset));
+                bars.push((b1 + o.stop_bar_clearance, 1.0, -h + inset, boundary.min(h - inset)));
+            }
+            for (d_near, dir, lo, hi) in bars {
+                if hi - lo < 0.5 {
+                    continue;
+                }
+                let d_far = d_near + dir * o.stop_bar_depth;
+                m.quad_kerb(Layer::Marking, [at(d_near, lo, lift), at(d_far, lo, lift), at(d_far, hi, lift), at(d_near, hi, lift)], [WHITE(); 4], [0.0, 1.0, 1.0, 0.0]);
+            }
+        }
+    }
+
+    /// (`--bikeways`) A tubular marker: an octagonal white post of radius
+    /// `r`, `h` tall, standing at `base`.
+    fn tubular_marker(&self, m: &mut TileMesh, base: [f64; 3], r: f64, h: f64) {
+        let n = 8;
+        let c = WHITE();
+        let p = |k: usize, y: f64| {
+            let t = k as f64 / n as f64 * std::f64::consts::TAU;
+            [base[0] + r * t.cos(), base[1] + y, base[2] + r * t.sin()]
+        };
+        for k in 0..n {
+            let t = (k as f64 + 0.5) / n as f64 * std::f64::consts::TAU;
+            m.quad_kerb_face(Layer::Marking, [p(k, 0.0), p(k + 1, 0.0), p(k + 1, h), p(k, h)], [c; 4], Some([t.cos(), t.sin()]), [0.5; 4]);
+            m.tri_kerb(Layer::Marking, [[base[0], base[1] + h, base[2]], p(k, h), p(k + 1, h)], [c; 3], [0.5; 3]);
+        }
+    }
+
     fn emit_span_paint(&self, m: &mut TileMesh, ei: usize, i: usize) {
         let o = &self.o;
         let e = &self.plan.entries[ei];
@@ -1059,17 +1360,21 @@ impl StreetWorld {
         let span = (b.s - a.s).max(1e-9);
         let at = |s: f64, u: f64| -> [f64; 3] {
             let t = ((s - a.s) / span).clamp(0.0, 1.0);
+            // (`--street-tapers`) the markings eased in with the kerb: every line at its
+            // share of the drawn half, so none is cut and the layout narrows as one
+            let h = self.half_at(ei, s);
+            let u = if h == e.half { u } else { u * h / e.half.max(1e-6) };
             let (pa, pb) = (a.at(u), b.at(u));
             let xz = [pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t];
             let d = da + (db - da) * t;
-            [xz[0], o.cross_section_y(d, u, e.half) + o.marking_lift, xz[1]]
+            [xz[0], o.cross_section_y(d, u, h) + o.marking_lift, xz[1]]
         };
         let (mark, gap) = crate::paint::broken_line_pattern(&self.city.segments[e.road], &e.highway, o);
         for l in lines {
             let c = match l.paint {
                 crate::paint::Paint::White => WHITE(),
                 crate::paint::Paint::Yellow => YELLOW(),
-                crate::paint::Paint::Green => GREEN(),
+                crate::paint::Paint::Green => self.bike_green(),
                 crate::paint::Paint::None => continue,
             };
             if !(l.width > 0.0) {
@@ -1101,6 +1406,8 @@ impl StreetWorld {
             if u0 < cl - 0.01 || u1 > ch + 0.01 {
                 continue;
             }
+            // (`--midblock-crossings`) no lane line across a mid-block crosswalk and its limit lines
+            let pieces: Vec<[f64; 2]> = pieces.into_iter().flat_map(|p| self.cut_midblock(ei, p[0], p[1])).filter(|p| p[1] > p[0] + 0.02).collect();
             for [s0, s1] in pieces {
                 if e.in_yield_span((s0 + s1) / 2.0) {
                     continue;
@@ -1726,12 +2033,16 @@ impl StreetWorld {
         let (a, b) = (g.paving_frame(i), g.paving_frame(j));
         let (da, db) = (g.datums[i], g.datums[j]);
         let h = e.half;
-        // (`seams`) the drawn part of the section at each end.
-        let ((la, ha), (lb, hb)) = (g.clip(i, h), g.clip(j, h));
-        if ha - la > 1e-4 || hb - lb > 1e-4 {
+        // (`--street-tapers`) the drawn half at each end; the walk's outer edge held
+        // (`seams`) clamped to the drawn part of the section at each end.
+        let (ha, hb) = (self.half_at(ei, a.s), self.half_at(ei, b.s));
+        let ((cla, cha), (clb, chb)) = (g.clip(i, h), g.clip(j, h));
+        let (cla, cha) = (cla.clamp(-ha, ha), cha.clamp(-ha, ha));
+        let (clb, chb) = (clb.clamp(-hb, hb), chb.clamp(-hb, hb));
+        if cha - cla > 1e-4 || chb - clb > 1e-4 {
             m.quad(
                 Layer::Carriageway,
-                [p3(a.at(la), da), p3(b.at(lb), db), p3(b.at(hb), db), p3(a.at(ha), da)],
+                [p3(a.at(cla), da), p3(b.at(clb), db), p3(b.at(chb), db), p3(a.at(cha), da)],
                 [self.run_tints(ei).0; 4],
                 None,
             );
@@ -1742,10 +2053,10 @@ impl StreetWorld {
             if !(w >= o.min_sidewalk_width) || g.side_clipped(i, k, h) || g.side_clipped(j.saturating_sub(1), k, h) {
                 continue;
             }
-            let (ya, yb) = (o.sidewalk_surface_y(da, h + w, h), o.sidewalk_surface_y(db, h + w, h));
+            let (ya, yb) = (o.sidewalk_surface_y(da, h + w, ha), o.sidewalk_surface_y(db, h + w, hb));
             m.quad(
                 Layer::Sidewalk,
-                [p3(a.at(side * h), o.curb_top_y(da)), p3(b.at(side * h), o.curb_top_y(db)), p3(b.at(side * (h + w)), yb), p3(a.at(side * (h + w)), ya)],
+                [p3(a.at(side * ha), o.curb_top_y(da)), p3(b.at(side * hb), o.curb_top_y(db)), p3(b.at(side * (h + w)), yb), p3(a.at(side * (h + w)), ya)],
                 [self.run_tints(ei).1; 4],
                 None,
             );

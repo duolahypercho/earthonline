@@ -1403,7 +1403,7 @@ pub fn node_earns_junction_paint(signalised: bool, degree: usize, max_rank: i32,
     footway_legs >= 3
 }
 
-const RAMP_MIN_CLEAR_WIDTH: f64 = 1.2;
+pub(crate) const RAMP_MIN_CLEAR_WIDTH: f64 = 1.2;
 
 /// `planNodePaint` without crossing evidence, and `planCrossingRamps`.
 fn plan_node_paint(ni: usize, node: &mut Node, entries: &mut [Entry], o: &StreetOptions, ev: Option<&crate::evidence::Evidence>, city: &StreetCity) {
