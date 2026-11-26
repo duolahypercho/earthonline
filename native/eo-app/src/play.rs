@@ -408,6 +408,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
             s if eo_landmarks::vegetation::GRASS2_SWITCHES.contains(&s) || eo_landmarks::vegetation::GRASS3_SWITCHES.contains(&s) => {} // read by its crate (the grass passes)
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs)
+            "--no-deck-ground" => {} // read by eo-data (decks.rs)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`)
             "--no-city-planting" => {} // read by props/vegetation.rs
             s if s == crate::props::vegetation::CITY_LITHOLOGY_SWITCH => {} // read by props/vegetation.rs (the city's bedrock map)

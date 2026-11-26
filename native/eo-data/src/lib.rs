@@ -11,6 +11,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub mod shelf;
+pub mod decks; // roof decks the bare-earth survey keeps as ground, brought down to the streets' grade (--no-deck-ground)
 pub mod detail_ground; // a finer drawn ground than the 8 m grid, when a provider is set (none yet)
 pub mod external; // where the optional open assets are read from (<repo>/external/<set>, or the set's variable)
 pub mod geo; // latitude, longitude and height above mean sea level to game coordinates
@@ -638,6 +639,12 @@ pub struct ElevationGrid {
 impl ElevationGrid {
     pub fn load(paths: &DataPaths) -> Result<Self> {
         let mut g = Self::decode(&read_maybe_gzip(&paths.sf("sf-elevation.bin.gz"))?)?;
+        // (`--no-deck-ground`) the roof decks the survey keeps as ground, down to the streets' grade
+        if let Some(t) = decks::table() {
+            if let Err(e) = decks::apply(t, &mut g) {
+                eprintln!("deck ground: {e:#}; the ground as surveyed");
+            }
+        }
         // the grid's horizontal frame scaled (origin and cell), its heights not:
         // the ground under a scaled street is the ground that was under the real one.
         let gs = groundscale::scale();

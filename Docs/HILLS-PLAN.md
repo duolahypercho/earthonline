@@ -28,7 +28,8 @@ same place, judged under [VISUAL_QUALITY_GATE.md](VISUAL_QUALITY_GATE.md).
 - Rock: procedural blocks, "sandstone" outside two boxes (H7: by the city's
   bedrock map where it maps bedrock).
 - Structures in the survey: the bare-earth DEM keeps some roof decks as
-  ground. Moscone South (4th St, Howard-Folsom) becomes a 6-11 m earth mound.
+  ground. Moscone South (4th St, Howard-Folsom) becomes a 6-11 m earth mound
+  (H4: brought down to the streets' grade).
 
 ## The hill builder
 
@@ -58,7 +59,7 @@ grass, scrub, tree and rock systems take their placements from the lists.
 | H1 | Meadow mats: no plates (the cover blends into the ground); `--no-mat-free-meadow` | done |
 | H2 | Aerial macro colour: NAIP classified into lawn, cured grass, soil, paving, scrub, canopy, each in the renderer's own tone with the photo's pattern; `--no-aerial-ground` | done (first pass) |
 | H3 | 1 m relief on open ground citywide: the hill builder's cooked high-pass drawn as 2 m patches over the hills and wild parks; `--no-city-relief` | done (first pass) |
-| H4 | Structure cleanup in the ground (roof decks, Moscone South) | planned |
+| H4 | Roof decks out of the ground: the decks the bare-earth survey keeps as ground, listed by hand from the hill builder's `cook decks` (Moscone Center South's roof: 5-9 m over 4th and Folsom Streets, drawn as an earth mound with 25 m banks), their 8 m cells brought down to the streets' grade by a harmonic fill (`native/assets/sf-decks-v1.json`, eo-data `decks`, applied as the grid loads, so the terrain, collision, streets, buildings and planting agree); the deck's garden is not yet drawn raised on a podium; `--no-deck-ground` | first pass |
 | H5 | Surface map as material IDs in the terrain shader | planned |
 | H6a | The planting's NAIP rules citywide from the hill builder's class-count map; parks with cured ground are grassland, not lawn; `--no-city-planting` | done (first pass) |
 | H6b | Grass that reads as a canopy on foot: the city's open grassland as a standing annual canopy (wild oats and the other annual grasses 0.4-0.9 m with seed heads over their litter, darker down in the canopy; a floor darkened near the eye was tried and rejected: a camera-centred halo); `--no-city-grass` | first pass |

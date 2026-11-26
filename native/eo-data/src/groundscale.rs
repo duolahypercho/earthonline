@@ -103,7 +103,8 @@ pub fn plan32(p: [f32; 2]) -> [f32; 2] {
 /// scale 1 with heights 1 (the surveyed world's keys unchanged), else the
 /// scale and `PLAN_VERSION`, and (hills) the height scale and
 /// `HEIGHT_VERSION` whenever heights are not the surveyed ones (plan 1.25
-/// with heights 1.0 keeps the keys it had before heights followed the plan).
+/// with heights 1.0 keeps the keys it had before heights followed the plan),
+/// and (hills, H4) the roof deck table while it is applied (`decks::cache_tag`).
 pub fn cache_tag() -> String {
     let (s, h) = (scale(), height_scale());
     let mut t = String::new();
@@ -115,6 +116,14 @@ pub fn cache_tag() -> String {
             t.push(' ');
         }
         t.push_str(&format!("heights {h} {HEIGHT_VERSION}"));
+    }
+    // (`--no-deck-ground`) the roof decks brought down to the streets' grade change the ground
+    let decks = crate::decks::cache_tag();
+    if !decks.is_empty() {
+        if !t.is_empty() {
+            t.push(' ');
+        }
+        t.push_str(&decks);
     }
     t
 }

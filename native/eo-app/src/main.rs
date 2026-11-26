@@ -906,6 +906,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-corridor-traffic" | "--no-deck-walkers" => {} // read by its crate (the corridor traffic)
             "--no-gg2-vegetation" | "--no-coastal-trees" => {} // read by its crate (the vegetation; --no-ground-cover handled above)
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs: the open ground's colour from the aerial survey)
+            "--no-deck-ground" => {} // read by eo-data (decks.rs: the roof decks the survey keeps as ground, Moscone South's, down to the streets' grade)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`: the hill builder's 2 m relief over the city's hills)
             "--no-city-planting" => {} // read by props/vegetation.rs (the hill builder's planting map)
             s if s == crate::props::vegetation::CITY_LITHOLOGY_SWITCH => {} // read by props/vegetation.rs (the rock by the city's bedrock map)

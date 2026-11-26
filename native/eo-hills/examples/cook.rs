@@ -7,6 +7,9 @@
 //!
 //! `relief`: the ground's relief at 2 m (see `cook/relief.rs`).
 //!
+//! `decks`: the roof decks the bare-earth DEM keeps as ground, brought down to
+//! the streets' grade (see `cook/decks.rs`).
+//!
 //! `planting`: the vegetation planting's NAIP rules counted per 2 m texel
 //! citywide (see `cook/planting.rs`).
 //!
@@ -47,6 +50,8 @@ use std::time::Instant;
 
 #[path = "cook/relief.rs"]
 mod relief; // `relief`: the 2 m relief from the 1 m DEM (stage H3)
+#[path = "cook/decks.rs"]
+mod decks; // `decks`: structures the bare-earth DEM keeps as ground (stage H4)
 #[path = "cook/planting.rs"]
 mod planting; // `planting`: the vegetation planting's NAIP rules counted citywide (stage H6a)
 
@@ -67,12 +72,14 @@ fn main() {
     let usage = || -> ! {
         eprintln!("usage: cook macro [--preview out.png] [--probe name,x,z ...] [--colour classes|matrix] [--ridge r]   (EO_AERIAL_DIR: the NAIP folder; EO_NATIVE_CACHE: where the map goes)");
         eprintln!("       cook relief [--preview <dir>]   (EO_DEM1M_DIR: the 1 m DEM tiles, default <repo>/external/dem/1m)");
+        eprintln!("       cook decks [--survey] [--probe x0,z0,x1,z1[,step] [--dump <dir>]]   (EO_DEM1M_DIR: the 1 m DEM tiles)");
         eprintln!("       cook planting [--samples n]   (EO_AERIAL_DIR: the NAIP folder; EO_SURVEY_ROOT: the survey, to validate)");
         std::process::exit(2)
     };
     let sub: Option<fn(&[String]) -> Result<()>> = match args.first().map(String::as_str) {
         Some("relief") => Some(relief::run),
         Some("planting") => Some(planting::run),
+        Some("decks") => Some(decks::run),
         _ => None,
     };
     if let Some(run) = sub {

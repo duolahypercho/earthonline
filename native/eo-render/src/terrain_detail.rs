@@ -394,9 +394,20 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
             let hit = (0..16).filter(|s| cover.and_then(|c| c.tone_name_at(x0 + ((s % 4) as f64 + 0.5) * pm / 4.0, z0 + ((s / 4) as f64 + 0.5) * pm / 4.0)).is_some_and(|n| OPEN_TONES.contains(&n) || n == "grass")).count();
             hit as f64 / 16.0
         };
+        // (`--no-deck-ground`) no relief over a roof deck brought down to the streets' grade: its
+        // cooked relief is the deck's walls over the survey's ground (eo-data `decks`)
+        let mut on_deck: HashSet<(i64, i64)> = HashSet::new();
+        for (i, j) in eo_data::decks::table().into_iter().flat_map(|t| t.cells()) {
+            let (i, j) = (i as i64, j as i64);
+            for ki in [i / PATCH_CELLS, (i - 1).div_euclid(PATCH_CELLS)] {
+                for kj in [j / PATCH_CELLS, (j - 1).div_euclid(PATCH_CELLS)] {
+                    on_deck.insert((ki, kj));
+                }
+            }
+        }
         let mut more: Vec<(i64, i64)> = r
             .keys()
-            .filter(|k| !have.contains(k) && k.0 >= 0 && k.1 >= 0 && k.0 < pw && k.1 < ph && r.info(k.0, k.1).is_some_and(|b| b.built_share <= COOKED_BUILT_MAX && b.max_abs_m >= COOKED_RELIEF_MIN) && green(k) >= COOKED_GREEN_MIN)
+            .filter(|k| !have.contains(k) && !on_deck.contains(k) && k.0 >= 0 && k.1 >= 0 && k.0 < pw && k.1 < ph && r.info(k.0, k.1).is_some_and(|b| b.built_share <= COOKED_BUILT_MAX && b.max_abs_m >= COOKED_RELIEF_MIN) && green(k) >= COOKED_GREEN_MIN)
             .collect();
         more.sort();
         keys.extend(more);

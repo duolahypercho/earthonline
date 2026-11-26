@@ -103,7 +103,8 @@ carries its sources under `meta.sources`.
 - **OpenStreetMap**: © OpenStreetMap contributors, Open Database License
   (ODbL) 1.0, https://www.openstreetmap.org/copyright. Used in
   `sf-city.json.gz`, `sf-lots-parks.json.gz`, `sf-map-citywide.json.gz` and
-  `building-metadata/`. These are Derivative Databases of OpenStreetMap and
+  `building-metadata/`, and through the street grades of
+  `native/assets/sf-decks-v1.json`. These are Derivative Databases of OpenStreetMap and
   are offered under the ODbL; publishing a modified version of them obliges
   you to publish it under the ODbL too. The ODbL does not apply to the code.
 - **DataSF**, City and County of San Francisco: Open Data Commons Public
@@ -115,7 +116,7 @@ carries its sources under `meta.sources`.
 - **SF Planning, San Francisco Land Use** (`c5ge-t6pj`): CC0 1.0, as
   recorded in `public/data/sf/building-metadata/*/index.json`.
 - **U.S. Geological Survey, 3D Elevation Program** (1 m DEM in
-  `sf-elevation.bin.gz`; 1 arc-second DEM for the far shore, read when
+  `sf-elevation.bin.gz` and `native/assets/sf-decks-v1.json`; 1 arc-second DEM for the far shore, read when
   present): public domain (U.S. Government work). Credit: U.S. Geological
   Survey.
 - **NOAA NCEI Continuously Updated Digital Elevation Model (CUDEM)**, 1/9

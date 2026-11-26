@@ -75,14 +75,14 @@ impl DenseTile {
 }
 
 /// The DEM: the tiles, primaries first.
-struct Dem {
+pub(super) struct Dem {
     tiles: Vec<DenseTile>,
     frame: PlanFrame,
 }
 
 impl Dem {
     /// The NAVD88 height (m) at surveyed plan (x, z).
-    fn at_plan(&self, x: f64, z: f64) -> Option<f32> {
+    pub(super) fn at_plan(&self, x: f64, z: f64) -> Option<f32> {
         let (lon, lat) = self.frame.to_lonlat(x, z);
         let (e, n) = UTM10N_NAD83.forward(lon, lat);
         self.tiles.iter().find_map(|t| t.at(e, n))
@@ -139,30 +139,12 @@ fn verified_tiles(dir: &Path) -> Result<(Vec<rl::TileInput>, rl::Inputs)> {
     Ok((tiles, inputs))
 }
 
-/// One block's outcome.
-struct Outcome {
-    key: (i64, i64),
-    land: bool,
-    kept: bool,
-    info: BlockInfo,
-    cm: Vec<i16>,
-    raw_max: f64,
-    raw_max_open: f64,
-}
-
-pub fn run(args: &[String]) -> Result<()> {
-    let t0 = Instant::now();
-    let mut preview: Option<PathBuf> = None;
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        match a.as_str() {
-            "--preview" => preview = Some(PathBuf::from(it.next().context("--preview needs a folder")?)),
-            _ => bail!("usage: cook relief [--preview <dir>]   (EO_DEM1M_DIR: the 1 m DEM tiles; EO_NATIVE_CACHE: where the relief goes)"),
-        }
-    }
+/// The 1 m DEM in memory (every tile checked against PROVENANCE.json and its
+/// copy against `TiledRaster::at`), the data paths and the city at 1:1.
+pub(super) fn load_dem(t0: Instant) -> Result<(Dem, rl::Inputs, eo_data::DataPaths, eo_data::City)> {
     // 1. The tiles, each against PROVENANCE.json, copied into memory.
     let dir = dem_dir()?;
-    let (tiles, mut inputs) = verified_tiles(&dir)?;
+    let (tiles, inputs) = verified_tiles(&dir)?;
     eprintln!("{} DEM tiles verified in {} ({:.1} s)", tiles.len(), dir.display(), t0.elapsed().as_secs_f64());
     let paths = eo_data::DataPaths::discover()?;
     let city = eo_data::City::load_at(&paths, 1.0).context("the city at 1:1")?;
@@ -199,8 +181,35 @@ pub fn run(args: &[String]) -> Result<()> {
         eprintln!("  {} ({}): {} x {} px, {:.1}% with data", d.name, t.role, d.w, d.h, 100.0 * d.px.iter().filter(|v| !v.is_nan()).count() as f64 / d.px.len() as f64);
     }
     let dem = Dem { tiles: dense, frame };
-    let sample = |x: f64, z: f64| dem.at_plan(x, z);
     eprintln!("DEM in memory, checked against TiledRaster::at ({:.1} s)", t0.elapsed().as_secs_f64());
+    Ok((dem, inputs, paths, city))
+}
+
+/// One block's outcome.
+struct Outcome {
+    key: (i64, i64),
+    land: bool,
+    kept: bool,
+    info: BlockInfo,
+    cm: Vec<i16>,
+    raw_max: f64,
+    raw_max_open: f64,
+}
+
+pub fn run(args: &[String]) -> Result<()> {
+    let t0 = Instant::now();
+    let mut preview: Option<PathBuf> = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--preview" => preview = Some(PathBuf::from(it.next().context("--preview needs a folder")?)),
+            _ => bail!("usage: cook relief [--preview <dir>]   (EO_DEM1M_DIR: the 1 m DEM tiles; EO_NATIVE_CACHE: where the relief goes)"),
+        }
+    }
+    // 1. The tiles, each against PROVENANCE.json, copied into memory.
+    let (dem, mut inputs, paths, city) = load_dem(t0)?;
+    let frame = PlanFrame::from_meta(&city.meta);
+    let sample = |x: f64, z: f64| dem.at_plan(x, z);
 
     // 2. The 8 m grid (the elevation grid's cell centres) and its low-pass.
     let elev_path = paths.sf("sf-elevation.bin.gz");

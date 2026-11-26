@@ -8,6 +8,7 @@
 //! EO_AERIAL_DIR=<NAIP folder> cargo run --release -p eo-hills --example cook -- macro [--preview out.png]
 //! cargo run --release -p eo-hills --example cook -- relief [--preview <dir>]
 //! EO_AERIAL_DIR=<NAIP folder> cargo run --release -p eo-hills --example cook -- planting
+//! cargo run --release -p eo-hills --example cook -- decks [--survey]
 //! ```
 //!
 //! * [`macro_map`]: the aerial macro colour map (stage H2), a de-lit ground
@@ -21,6 +22,8 @@
 //!   texel citywide (stage H6a), in `<cache>/hills/planting-v1.bin`.
 //! * [`relief`]: the ground's relief at 2 m from the USGS 1 m DEM (stage H3),
 //!   in `<cache>/hills/relief-v1.bin`.
+//! * `cook decks` (stage H4) writes the roof decks the bare-earth DEM keeps
+//!   as ground into `native/assets/sf-decks-v1.json` (read by eo-data `decks`).
 
 pub mod macro_map;
 pub mod naip;
