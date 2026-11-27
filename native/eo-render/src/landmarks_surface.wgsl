@@ -3108,7 +3108,28 @@ fn nt_bare(s: ptr<function, Surface>, wt: vec3<f32>, world: vec3<f32>, n: vec3<f
         let hollow = smoothstep(0.55, 0.85, st_noise(p / 2.6 + vec2<f32>(4.2, 6.6)));
         let kg = 1.0 - smoothstep(0.03, 0.12, fw);
         let grit = mix(1.0, 0.82 + 0.36 * st_noise(p / 0.11 + vec2<f32>(2.0, 1.0)), kg);
+        // Mid-range rocky scree / erosion-rill breakup (0.5 m -> 4 m) so bare hillside
+        // earth past 80 m keeps granular soil/rock texture and sunlit micro-relief instead
+        // of collapsing to a flat smooth orange patch once pebbles and tufts filter out.
+        let km_mid = 1.0 - smoothstep(0.55, 1.8, fw);
+        let km_sub = 1.0 - smoothstep(0.16, 0.55, fw);
         var a = mix(NB_FINES, NB_HUMUS, hollow * 0.55 + margin * 0.15) * grit;
+        if (km_mid > 0.0) {
+            let eps_b = clamp(fw * 1.25, 0.22, 1.8);
+            let wp = p + (vec2<f32>(st_noise(p / 11.0 + vec2<f32>(2.1, 6.4)), st_noise(p / 11.0 + vec2<f32>(8.7, 1.3))) - 0.5) * 1.8;
+            let n0 = (st_noise(wp / 3.2 + vec2<f32>(5.4, 9.1)) - 0.5) * 0.55 * km_mid
+                + (st_noise(wp / 1.15 + vec2<f32>(12.7, 3.8)) - 0.5) * 0.45 * km_sub;
+            let nx = (st_noise((wp + vec2<f32>(eps_b, 0.0)) / 3.2 + vec2<f32>(5.4, 9.1)) - 0.5) * 0.55 * km_mid
+                + (st_noise((wp + vec2<f32>(eps_b, 0.0)) / 1.15 + vec2<f32>(12.7, 3.8)) - 0.5) * 0.45 * km_sub;
+            let nz = (st_noise((wp + vec2<f32>(0.0, eps_b)) / 3.2 + vec2<f32>(5.4, 9.1)) - 0.5) * 0.55 * km_mid
+                + (st_noise((wp + vec2<f32>(0.0, eps_b)) / 1.15 + vec2<f32>(12.7, 3.8)) - 0.5) * 0.45 * km_sub;
+            let scree_w = smoothstep(0.84, 0.56, n.y);
+            let scree_col = mix(vec3<f32>(0.155, 0.145, 0.128), vec3<f32>(0.178, 0.132, 0.102), smoothstep(-0.2, 0.25, n0));
+            a = mix(a, scree_col, scree_w * 0.65) * clamp(1.0 + n0 * 0.72, 0.72, 1.30);
+            ao = clamp(ao * (0.90 + 0.22 * n0), 0.72, 1.0);
+            let slope_mid = vec2<f32>(-(nx - n0) / eps_b, -(nz - n0) / eps_b) * (0.95 * km_mid);
+            nn = nb_bend(n, slope_mid, 1.0);
+        }
         // the stones: two grids (5.5 cm and 3.7 cm, the second turned), their mean where a pixel spans them
         let dens = mix(0.2, 0.8, gravel) * (1.0 - 0.6 * hollow);
         let kp = 1.0 - smoothstep(0.012, 0.04, fw);

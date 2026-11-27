@@ -812,12 +812,203 @@ fn cc0_ground_apply(s: ptr<function, Surface>, n: vec3<f32>, rel: vec3<f32>, rou
     (*s).albedo = (*s).albedo * max(mix(vec3<f32>(1.0), detail, contrast), vec3<f32>(0.0));
     (*s).rough = clamp((*s).rough * mix(1.0, rough, 0.8), 0.15, 1.0);
     (*s).ao = clamp((*s).ao * mix(1.0, ao, 0.8), 0.3, 1.0);
-    // Planar relief: u along +x, image-up along -z.
-    let ta = normalize(vec3<f32>(1.0, 0.0, 0.0) - n * n.x);
-    let tb = normalize(vec3<f32>(0.0, 0.0, -1.0) + n * n.z);
+    // Planar relief: u along +x, image-up along -z (orthonormal fallback on vertical cliffs).
+    let vx = vec3<f32>(1.0, 0.0, 0.0) - n * n.x;
+    let ta = select(normalize(cross(vec3<f32>(0.0, 1.0, 0.0), n)), normalize(vx), dot(vx, vx) > 1e-4);
+    let tb = normalize(cross(n, ta));
     let z = sqrt(max(0.0, 1.0 - dot(tn, tn)));
     (*s).n = normalize(ta * tn.x + tb * tn.y + n * z);
 }
+
+// sf:COVER+
+// Multi-scale pixel-footprint-filtered hillside micro-relief heightfield in [0, 1],
+// breaking up smooth 2 m aerial / 8 m vertex terrain at 80-700 m without shimmering.
+fn cc0_hill_h(p: vec2<f32>, k5: f32, k15: f32, k04: f32) -> f32 {
+    let w0 = vec2<f32>(st_noise(p / 15.0 + vec2<f32>(1.7, 5.3)), st_noise(p / 15.0 + vec2<f32>(8.9, 2.1))) - 0.5;
+    let q = p + w0 * 2.1;
+    var h = 0.5;
+    // Drive normal relief from mid/fine earth, tussock and scree scales (3.4 m -> 0.38 m)
+    // rather than coarse 14 m billows, keeping slopes crisp and matte instead of pillowy.
+    h = h + (st_noise(q / 3.4 + vec2<f32>(11.2, 4.7)) - 0.5) * 0.34 * k5;
+    if (k15 > 0.0) {
+        let q2 = vec2<f32>(q.x * 0.81 - q.y * 0.58, q.x * 0.58 + q.y * 0.81);
+        h = h + (st_noise(q2 / 1.25 + vec2<f32>(6.3, 13.8)) - 0.5) * 0.32 * k15;
+    }
+    if (k04 > 0.0) {
+        h = h + (st_noise(q / 0.38 + vec2<f32>(19.1, 2.6)) - 0.5) * 0.22 * k04;
+    }
+    return clamp(h, 0.0, 1.0);
+}
+
+// Organic ridged-multifractal Franciscan cliff rock (folded greywacke / sandstone /
+// chert outcrops and irregular tectonic fractures) on a vertical face plane
+// `uv = (horizontal_m, world_y_m)`. No periodic modulo courses.
+// Returns (luma_factor, crevice_ao, height, warmth).
+fn cc0_cliff_strata(uv: vec2<f32>, fw: f32) -> vec4<f32> {
+    let k_mid = 1.0 - smoothstep(0.22, 1.1, fw);
+    let k_fine = 1.0 - smoothstep(0.06, 0.30, fw);
+    // Two-scale domain warp breaks straight bands into folded geological bedding.
+    let w1 = vec2<f32>(
+        st_noise(uv / 8.5 + vec2<f32>(2.3, 6.7)),
+        st_noise(uv / 8.5 + vec2<f32>(11.4, 3.1))
+    ) - 0.5;
+    let w2 = vec2<f32>(
+        st_noise(uv / 2.7 + vec2<f32>(5.8, 1.9)),
+        st_noise(uv / 2.7 + vec2<f32>(9.3, 8.2))
+    ) - 0.5;
+    let p = uv + w1 * 2.4 + w2 * (0.65 * k_mid);
+    // Dipping folded strata (incommensurate scales, never periodic brick courses).
+    let sy = p.y + 0.28 * p.x;
+    let bed_a = st_noise(vec2<f32>(p.x / 11.0 + 1.3, sy / 2.9 + 4.1));
+    let bed_b = st_noise(vec2<f32>(p.x / 4.7 + 5.7, sy / 1.05 + 8.3));
+    // Ridged noise along two non-orthogonal fracture planes for angular rock crevices.
+    let f1_p = vec2<f32>(p.x * 0.92 - p.y * 0.39, p.x * 0.39 + p.y * 0.92);
+    let f2_p = vec2<f32>(p.x * 0.61 + p.y * 0.79, -p.x * 0.79 + p.y * 0.61);
+    let r1 = abs(st_noise(f1_p / 3.1 + vec2<f32>(3.4, 7.1)) * 2.0 - 1.0);
+    let r2 = abs(st_noise(f2_p / 1.7 + vec2<f32>(8.2, 2.5)) * 2.0 - 1.0);
+    let crev1 = (1.0 - smoothstep(0.0, 0.22, r1)) * k_mid;
+    let crev2 = (1.0 - smoothstep(0.0, 0.18, r2)) * k_mid;
+    let crack = max(crev1 * 0.85, crev2 * 0.70);
+    // Fine craggy rock grain.
+    let fine = st_noise(p / 0.48 + vec2<f32>(14.2, 5.8)) * k_fine + 0.5 * (1.0 - k_fine);
+    let h = clamp(0.54 + (bed_a - 0.5) * 0.28 + (bed_b - 0.5) * 0.26 * k_mid + (fine - 0.5) * 0.18 - crack * 0.30, 0.0, 1.0);
+    let lum = (0.80 + 0.34 * bed_a) * mix(1.0, 0.84 + 0.32 * bed_b, k_mid) * mix(1.0, 0.88 + 0.24 * fine, k_fine) * (1.0 - 0.28 * crack);
+    let ao = clamp(1.0 - 0.36 * crack - 0.12 * (1.0 - bed_b) * k_mid, 0.52, 1.0);
+    let warm = clamp(bed_a * 0.65 + bed_b * 0.35, 0.0, 1.0);
+    return vec4<f32>(lum, ao, h, warm);
+}
+
+// Steep-face rock scan on the face's dominant vertical plane (`zy` or `xy`), with
+// a rotated second phase inside 160 m to prevent repeat tiling on cliffs.
+fn cc0_cliff_scan(world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, dist: f32) -> Cc0Tap {
+    let l = select(CC0_L_GRAVEL_FLOOR_03, CC0_L_SEASIDE_ROCK, GG3_MATERIALS);
+    let inv = cc0_linv(l);
+    let ew = abs(n.x) >= abs(n.z);
+    let p = select(vec2<f32>(world.x, -world.y), vec2<f32>(world.z, -world.y), ew);
+    let gx = select(vec2<f32>(dpx.x, -dpx.y), vec2<f32>(dpx.z, -dpx.y), ew) * inv;
+    let gy = select(vec2<f32>(dpy.x, -dpy.y), vec2<f32>(dpy.z, -dpy.y), ew) * inv;
+    let uv = p * inv;
+    var t = cc0_tap2(uv, gx, gy, l);
+    let lm = cc0_lmean(l);
+    t.alb = vec4<f32>(t.alb.rgb / max(lm.rgb, vec3<f32>(1e-3)), t.alb.a);
+    t.h = clamp(dot(t.alb.rgb, CC0_LUMA) * 0.5, 0.0, 1.0);
+    if (cc0_on(CC0_RUN_TILING) && dist < 160.0) {
+        let uv2 = cc0_turn(uv) + vec2<f32>(0.43, 0.29);
+        let t2 = cc0_tap2(uv2, cc0_turn(gx), cc0_turn(gy), l);
+        let a2 = t2.alb.rgb / max(lm.rgb, vec3<f32>(1e-3));
+        let h2 = clamp(dot(a2, CC0_LUMA) * 0.5, 0.0, 1.0);
+        let w = clamp((st_noise(p / 8.5 + 3.1) - 0.5) * 3.0 + (h2 - t.h) * 1.4 + 0.5, 0.0, 1.0);
+        let c = 0.8139;
+        let sn = 0.5810;
+        let n2 = vec2<f32>(t2.n.x * c - t2.n.y * sn, t2.n.x * sn + t2.n.y * c);
+        t.alb = vec4<f32>(mix(t.alb.rgb, a2, w), t.alb.a);
+        t.n = mix(t.n, n2, w);
+        t.h = mix(t.h, h2, w);
+    }
+    return t;
+}
+
+// Apply multi-scale hillside micro-relief and steep-cliff Franciscan rock strata/scans
+// (`--ground-cover`), eliminating smooth mid-range blobs and planar-XZ cliff smearing.
+fn cc0_ground_relief(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, dist: f32, base_alb: vec3<f32>) {
+    let fw = max(length(dpx), length(dpy));
+    let far_m = 1.0 - smoothstep(700.0, 1400.0, dist);
+    if (far_m <= 0.0) {
+        return;
+    }
+    let k5 = 1.0 - smoothstep(0.55, 1.8, fw);
+    let k15 = 1.0 - smoothstep(0.16, 0.55, fw);
+    let k04 = 1.0 - smoothstep(0.05, 0.16, fw);
+    let rock_w = smoothstep(0.76, 0.44, n.y);
+
+    // 1. Mid- and fine-scale hillside grain and subtle matte surface-gradient normal relief.
+    if (rock_w < 0.99 && k5 > 0.0) {
+        let eps = clamp(fw * 1.25, 0.25, 2.0);
+        let h0 = cc0_hill_h(world.xz, k5, k15, k04);
+        let hx = cc0_hill_h(world.xz + vec2<f32>(eps, 0.0), k5, k15, k04);
+        let hz = cc0_hill_h(world.xz + vec2<f32>(0.0, eps), k5, k15, k04);
+        let gx_h = (hx - h0) / eps;
+        let gz_h = (hz - h0) / eps;
+        let grain_w = (1.0 - rock_w) * far_m;
+        let mid_boost = mix(0.55, 1.0, smoothstep(60.0, 160.0, dist));
+        let macro_v = st_noise(world.xz / 13.0 + vec2<f32>(4.2, 9.7)) - 0.5;
+        let alb_mod = (1.0 + (h0 - 0.5) * 0.40 * mid_boost * grain_w) * (1.0 + macro_v * 0.14 * grain_w);
+        (*s).albedo = (*s).albedo * clamp(alb_mod, 0.74, 1.26);
+        (*s).ao = clamp((*s).ao * mix(1.0, 0.88 + 0.22 * h0, grain_w * 0.8), 0.40, 1.0);
+        (*s).rough = clamp(max((*s).rough, 0.91 - 0.05 * h0), 0.86, 0.98);
+        let vx = vec3<f32>(1.0, 0.0, 0.0) - n * n.x;
+        let ta = select(normalize(cross(vec3<f32>(0.0, 1.0, 0.0), n)), normalize(vx), dot(vx, vx) > 1e-4);
+        let tb = normalize(cross(n, ta));
+        let bump = 0.85 * grain_w * mid_boost;
+        (*s).n = normalize((*s).n + (-ta * gx_h + tb * gz_h) * bump);
+    }
+
+    // 2. Steep embankments & cliffs (> 40 deg): organic triplanar Franciscan rock strata
+    // and dominant-axis scanned rock relief, replacing vertically smeared planar-XZ projections.
+    if (rock_w > 0.005) {
+        let wx = n.x * n.x / max(n.x * n.x + n.z * n.z, 1e-4);
+        let eps_r = clamp(fw * 1.35, 0.20, 1.8);
+        var st = vec4<f32>(0.0);
+        var st_u = 0.0;
+        var st_v = 0.0;
+        if (wx > 0.01) {
+            let p_ew = vec2<f32>(world.z, world.y);
+            let s0 = cc0_cliff_strata(p_ew, fw);
+            let su = cc0_cliff_strata(p_ew + vec2<f32>(eps_r, 0.0), fw).z;
+            let sv = cc0_cliff_strata(p_ew + vec2<f32>(0.0, eps_r), fw).z;
+            st = st + s0 * wx;
+            st_u = st_u + ((su - s0.z) / eps_r) * wx;
+            st_v = st_v + ((sv - s0.z) / eps_r) * wx;
+        }
+        if (wx < 0.99) {
+            let wz = 1.0 - wx;
+            let p_ns = vec2<f32>(world.x, world.y);
+            let s0 = cc0_cliff_strata(p_ns, fw);
+            let su = cc0_cliff_strata(p_ns + vec2<f32>(eps_r, 0.0), fw).z;
+            let sv = cc0_cliff_strata(p_ns + vec2<f32>(0.0, eps_r), fw).z;
+            st = st + s0 * wz;
+            st_u = st_u + ((su - s0.z) / eps_r) * wz;
+            st_v = st_v + ((sv - s0.z) / eps_r) * wz;
+        }
+        // Anchor cliff rock luminance to the local terrain so shaded and sunlit faces harmonize.
+        let base_l = clamp(dot(base_alb, CC0_LUMA), 0.075, 0.22);
+        let greywacke = vec3<f32>(0.155, 0.148, 0.132);
+        let sandstone = vec3<f32>(0.190, 0.158, 0.122);
+        let chert = vec3<f32>(0.172, 0.120, 0.095);
+        var rock_pal = mix(greywacke, sandstone, smoothstep(0.25, 0.75, st.w));
+        rock_pal = mix(rock_pal, chert, smoothstep(0.68, 0.92, st.w) * 0.45);
+        let pal_l = max(dot(rock_pal, CC0_LUMA), 1e-3);
+        let anchor_l = mix(pal_l, base_l, 0.45);
+        var rock_alb = rock_pal * (anchor_l / pal_l) * st.x;
+        var rock_ao = st.y;
+        var rock_rough = clamp(0.93 - 0.07 * st.z, 0.84, 0.98);
+
+        // Dominant-axis face tangent frame (tu horizontal along cliff, tv up along cliff).
+        let ew = abs(n.x) >= abs(n.z);
+        let raw_u = select(vec3<f32>(1.0, 0.0, 0.0) - n * n.x, vec3<f32>(0.0, 0.0, 1.0) - n * n.z, ew);
+        let tu = normalize(raw_u);
+        let tv = normalize(vec3<f32>(0.0, 1.0, 0.0) - n * n.y);
+        var rock_n = normalize(n + (-tu * st_u - tv * st_v) * (1.25 * far_m));
+
+        let rock_near = 1.0 - smoothstep(180.0, 280.0, dist);
+        if (rock_near > 0.0) {
+            let tr = cc0_cliff_scan(world, n, dpx, dpy, dist);
+            let rl = dot(tr.alb.rgb, CC0_LUMA);
+            let rdet = mix(vec3<f32>(rl), tr.alb.rgb, 0.50);
+            rock_alb = rock_alb * clamp(mix(vec3<f32>(1.0), rdet, 0.85 * rock_near), vec3<f32>(0.50), vec3<f32>(1.55));
+            let tn = tr.n * (0.72 * rock_near);
+            let tz = sqrt(max(0.0, 1.0 - dot(tn, tn)));
+            rock_n = normalize(tu * tn.x + tv * tn.y + rock_n * tz);
+        }
+
+        let rw = rock_w * far_m;
+        (*s).albedo = mix((*s).albedo, rock_alb, rw);
+        (*s).n = normalize(mix((*s).n, rock_n, rw));
+        (*s).ao = clamp(mix((*s).ao, (*s).ao * rock_ao, rw), 0.42, 1.0);
+        (*s).rough = mix((*s).rough, rock_rough, rw);
+    }
+}
+// sf:end
 
 fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
     // Not the seabed (seen through the water, if at all, as before).
@@ -828,6 +1019,7 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     if (sets.x < 0) {
         return;
     }
+    let base_alb = (*s).albedo;
     let dist = length(frame.cam_pos.xyz - world);
     let near = select(1.0 - smoothstep(130.0, 190.0, dist), 1.0 - smoothstep(260.0, 420.0, dist), SF_AAA_DETAIL);
     let slope = 1.0 - clamp(n.y, 0.0, 1.0);
@@ -920,19 +1112,31 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     let ma = cc0_lmean(sets.x);
     let mb = cc0_lmean(sets.y);
     let hue_b = (mb.rgb / max(mb.w, 1e-3)) / max(ma.rgb / max(ma.w, 1e-3), vec3<f32>(1e-3));
+// sf:COVER-
     let shift = mix(vec3<f32>(1.0), clamp(hue_b, vec3<f32>(0.4), vec3<f32>(2.5)), 0.4);
+// sf:end
+// sf:COVER+
+    // Where the aerial survey supplies real hillside colour (`hm_ground_w`), suppress
+    // the synthetic set-to-set hue shift so hue-threshold boundaries never invert into
+    // artificial slate-blue vs rust-orange contour bands.
+    let shift = mix(vec3<f32>(1.0), clamp(hue_b, vec3<f32>(0.4), vec3<f32>(2.5)), 0.4 * (1.0 - hm_ground_w));
+// sf:end
     let coarse = st_noise(world.xz / 41.0 + 3.3);
     let far_fade = 1.0 - smoothstep(2500.0, 4000.0, dist);
     if (near <= 0.0) {
         let wf = clamp((coarse + slope * 0.8 - 0.62) * 4.0 + 0.5, 0.0, 1.0) * far_fade;
         (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), shift, wf);
         if (SF_AAA_DETAIL && dot(aaa_tn, aaa_tn) > 1e-5) {
-            let ta = normalize(vec3<f32>(1.0, 0.0, 0.0) - n * n.x);
-            let tb = normalize(vec3<f32>(0.0, 0.0, -1.0) + n * n.z);
+            let vx = vec3<f32>(1.0, 0.0, 0.0) - n * n.x;
+            let ta = select(normalize(cross(vec3<f32>(0.0, 1.0, 0.0), n)), normalize(vx), dot(vx, vx) > 1e-4);
+            let tb = normalize(cross(n, ta));
             let tn_c = clamp(aaa_tn, vec2<f32>(-0.55), vec2<f32>(0.55));
             let z = sqrt(max(0.0, 1.0 - dot(tn_c, tn_c)));
             (*s).n = normalize(ta * tn_c.x + tb * tn_c.y + n * z);
         }
+// sf:COVER+
+        cc0_ground_relief(s, world, n, dpx, dpy, dist, base_alb);
+// sf:end
         return;
     }
     let field = coarse * 0.65 + st_noise(world.xz / 9.0 + 8.1) * 0.35;
@@ -944,10 +1148,20 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     var tb: Cc0Tap;
     var w = 0.0;
     if (w0 <= -1.0) {
+// sf:COVER-
         ta = cc0_ground_tap(world, dpx, dpy, sets.x, 0.0, false);
+// sf:end
+// sf:COVER+
+        ta = gg3_ground_tap(world, dpx, dpy, sets.x, 0.0);
+// sf:end
         tb = ta;
     } else if (w0 >= 2.0) {
+// sf:COVER-
         tb = cc0_ground_tap(world, dpx, dpy, sets.y, 0.37, false);
+// sf:end
+// sf:COVER+
+        tb = gg3_ground_tap(world, dpx, dpy, sets.y, 0.37);
+// sf:end
         ta = tb;
         w = 1.0;
     } else {
@@ -961,6 +1175,9 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     }
     let out_tn = clamp(mix(ta.n, tb.n, w) * near + aaa_tn, vec2<f32>(-0.75), vec2<f32>(0.75));
     cc0_ground_apply(s, n, rel, mix(ta.rough, tb.rough, w), mix(ta.ao, tb.ao, w), out_tn, f32(sets.z) / 100.0 * near);
+// sf:COVER+
+    cc0_ground_relief(s, world, n, dpx, dpy, dist, base_alb);
+// sf:end
     if (aaa_paved) {
         // Paved waterfront / urban concrete terrain (`w27146063` Embarcadero promenade in `08`):
         // applied after `cc0_ground_apply` so architectural joint grooves & bevelled normals survive intact.
