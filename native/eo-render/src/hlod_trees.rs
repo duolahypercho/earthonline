@@ -42,6 +42,15 @@ pub const SPECIES_FORM_MASK: u32 = 15;
 pub const SPECIES_BAKED: u32 = 16;
 pub const SPECIES_MODEL_SHIFT: u32 = 8;
 
+/// (`--crown-light`, hlod_trees.wgsl `ft_leaf_r`) A crown's leaf reflectance:
+/// its luminance held in a measured leaf's range (LOPEX93 broadleaf and
+/// conifer, `FT_LEAF_LUM`), its chroma (reflectance over luminance) its tint's
+/// pulled `LEAF_PULL` of the way to a mature broadleaf leaf's (linear, about
+/// 0.055 / 0.10 / 0.043: `FT_LEAF_CHROMA`).
+pub const LEAF_LUM: [f32; 2] = [0.07, 0.11];
+pub const LEAF_CHROMA: [f32; 3] = [0.64, 1.17, 0.50];
+pub const LEAF_PULL: f32 = 0.6;
+
 fn rgb(r: u8, g: u8, b: u8) -> u32 {
     r as u32 | ((g as u32) << 8) | ((b as u32) << 16) | (255 << 24)
 }
@@ -398,10 +407,16 @@ pub fn draw_shader_source(fallback: bool, late_discard: bool) -> String {
         "fn ft_index(ii: u32) -> u32 { return ii; }\n"
     };
     crate::look::sf_select(&format!(
-        "{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\nconst FT_FORM_MASK: u32 = {SPECIES_FORM_MASK}u;\nconst FT_BAKED: u32 = {SPECIES_BAKED}u;\nconst FT_MODEL_SHIFT: u32 = {SPECIES_MODEL_SHIFT}u;\n{WGSL}\n{index}const FT_LATE_DISCARD: bool = {late_discard};\n",
+        "{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\nconst FT_FORM_MASK: u32 = {SPECIES_FORM_MASK}u;\nconst FT_BAKED: u32 = {SPECIES_BAKED}u;\nconst FT_MODEL_SHIFT: u32 = {SPECIES_MODEL_SHIFT}u;\nconst FT_LEAF_LUM: vec2<f32> = vec2<f32>({:?}, {:?});\nconst FT_LEAF_CHROMA: vec3<f32> = vec3<f32>({:?}, {:?}, {:?});\nconst FT_LEAF_PULL: f32 = {:?};\n{WGSL}\n{index}const FT_LATE_DISCARD: bool = {late_discard};\n",
         crate::look::city_shader_source_far(),
         cove_canopy::VIEWS,
-        cove_canopy::LAYERS
+        cove_canopy::LAYERS,
+        LEAF_LUM[0],
+        LEAF_LUM[1],
+        LEAF_CHROMA[0],
+        LEAF_CHROMA[1],
+        LEAF_CHROMA[2],
+        LEAF_PULL
     ))
 }
 

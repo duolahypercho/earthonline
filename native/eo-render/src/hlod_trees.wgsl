@@ -479,7 +479,7 @@ fn ft_foliage(albedo: vec3<f32>, n: vec3<f32>, v: vec3<f32>, world: vec3<f32>) -
 // down to the tints' 0.045: the park pines read black from the air), and the
 // sky's light takes the same multiple scattering as the sun's.
 const FT_SIGMA: f32 = 0.3; // 1/m: clumping 0.6 x G 0.5 x leaf area density 1.0 m2/m3
-const FT_LEAF_LUM: vec2<f32> = vec2<f32>(0.07, 0.11);
+// FT_LEAF_LUM (0.07, 0.11): hlod_trees.rs `LEAF_LUM`
 // sf:end
 // sf:CROWN&!LEAF_SHADE+
 const FT_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.55, 0.85, 0.3); // props_draw.wgsl PR_LEAF_T_OVER_R
@@ -488,8 +488,8 @@ const FT_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.55, 0.85, 0.3); // props_draw.wg
 const FT_LEAF_T_OVER_R: vec3<f32> = vec3<f32>(0.8, 0.95, 0.35); // (`--leaf-shade`) props_draw.wgsl PR_LEAF_T_OVER_R
 // sf:end
 // sf:CROWN+
-// a mature broadleaf leaf's reflectance over its luminance (linear, about 0.055 / 0.10 / 0.043)
-const FT_LEAF_CHROMA: vec3<f32> = vec3<f32>(0.64, 1.17, 0.50);
+// FT_LEAF_CHROMA, FT_LEAF_PULL: a mature broadleaf leaf's reflectance over its
+// luminance, and how far a tint's own chroma is pulled to it (hlod_trees.rs `LEAF_CHROMA`, `LEAF_PULL`)
 // the hotspot's angular width (rad): a leaf's size over the crown's depth
 const FT_HOTSPOT_RAD: f32 = 0.08;
 
@@ -509,7 +509,7 @@ fn ft_exit(q: vec3<f32>, w: vec3<f32>, inv: vec3<f32>) -> f32 {
 // (FT_LEAF_LUM), each tree a little its own.
 fn ft_leaf_r(tint: vec3<f32>, seed: f32) -> vec3<f32> {
     let lum = max(dot(tint, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4);
-    let c = mix(tint / lum, FT_LEAF_CHROMA, 0.6);
+    let c = mix(tint / lum, FT_LEAF_CHROMA, FT_LEAF_PULL);
     return c * clamp(lum, FT_LEAF_LUM.x, FT_LEAF_LUM.y) * (0.85 + 0.3 * fract(seed * 0.6180339));
 }
 
