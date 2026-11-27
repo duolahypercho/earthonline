@@ -292,10 +292,108 @@ pub(crate) fn walker_decks(world: &World, crowd: bool) -> Option<Arc<eo_agents::
     (!floors.is_empty()).then(|| Arc::new(eo_agents::feed::Decks::new(floors)))
 }
 
+/// Inset a plaza outline inward by `inset_m` along each edge's inward normal
+/// so walkers on its outline and chord ends stand inside the paving and clear
+/// of bordering building walls. Falls back to a smaller inset (or the original
+/// ring) if a narrow peninsula would invert or self-intersect.
+pub fn inset_plaza_ring(ring: &[[f64; 2]], inset_m: f64) -> Vec<[f64; 2]> {
+    let mut r: Vec<[f64; 2]> = Vec::with_capacity(ring.len());
+    for &p in ring {
+        if r.last().is_none_or(|l| (l[0] - p[0]).hypot(l[1] - p[1]) > 1e-4) {
+            r.push(p);
+        }
+    }
+    if r.len() >= 2 && (r[0][0] - r[r.len() - 1][0]).hypot(r[0][1] - r[r.len() - 1][1]) <= 1e-4 {
+        r.pop();
+    }
+    if r.len() < 3 || !(inset_m > 0.0) {
+        return ring.to_vec();
+    }
+    let shoelace = |poly: &[[f64; 2]]| -> f64 {
+        let mut a = 0.0;
+        for i in 0..poly.len() {
+            let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+            a += p[0] * q[1] - q[0] * p[1];
+        }
+        a * 0.5
+    };
+    let area0 = shoelace(&r);
+    if area0.abs() < 1e-3 {
+        return ring.to_vec();
+    }
+    let sign = if area0 > 0.0 { 1.0 } else { -1.0 };
+    let inward = |a: [f64; 2], b: [f64; 2]| -> [f64; 2] {
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let l = dx.hypot(dz).max(1e-9);
+        if sign > 0.0 { [-dz / l, dx / l] } else { [dz / l, -dx / l] }
+    };
+    let segs_cross = |a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]| -> bool {
+        let orient = |p: [f64; 2], q: [f64; 2], s: [f64; 2]| (q[0] - p[0]) * (s[1] - p[1]) - (q[1] - p[1]) * (s[0] - p[0]);
+        let (o1, o2, o3, o4) = (orient(a, b, c), orient(a, b, d), orient(c, d, a), orient(c, d, b));
+        (o1 * o2 < -1e-9) && (o3 * o4 < -1e-9)
+    };
+    let n = r.len();
+    for scale in [1.0, 0.65, 0.35] {
+        let d = inset_m * scale;
+        let mut cand = Vec::with_capacity(n);
+        for i in 0..n {
+            let prev = r[(i + n - 1) % n];
+            let curr = r[i];
+            let next = r[(i + 1) % n];
+            let n0 = inward(prev, curr);
+            let n1 = inward(curr, next);
+            let denom = 1.0 + n0[0] * n1[0] + n0[1] * n1[1];
+            let mut m = if denom > 0.25 {
+                [(n0[0] + n1[0]) / denom, (n0[1] + n1[1]) / denom]
+            } else {
+                let s = [n0[0] + n1[0], n0[1] + n1[1]];
+                let sl = s[0].hypot(s[1]);
+                if sl > 1e-6 { [s[0] / sl, s[1] / sl] } else { n1 }
+            };
+            let ml = m[0].hypot(m[1]);
+            if ml > 2.5 {
+                m = [m[0] * 2.5 / ml, m[1] * 2.5 / ml];
+            }
+            cand.push([curr[0] + m[0] * d, curr[1] + m[1] * d]);
+        }
+        let area = shoelace(&cand);
+        if area * sign <= 0.0 || area.abs() < area0.abs() * 0.1 {
+            continue;
+        }
+        let inside_ok = (0..n).all(|i| {
+            let p = cand[i];
+            let q = cand[(i + 1) % n];
+            let mid = [0.5 * (p[0] + q[0]), 0.5 * (p[1] + q[1])];
+            eo_street::point_in_ring(p[0], p[1], &r) && eo_street::point_in_ring(mid[0], mid[1], &r)
+        });
+        if !inside_ok {
+            continue;
+        }
+        let mut self_hit = false;
+        'outer: for i in 0..n {
+            for j in i + 2..n {
+                if i == 0 && j == n - 1 {
+                    continue;
+                }
+                if segs_cross(cand[i], cand[(i + 1) % n], cand[j], cand[(j + 1) % n]) {
+                    self_hit = true;
+                    break 'outer;
+                }
+            }
+        }
+        if !self_hit {
+            return cand;
+        }
+    }
+    ring.to_vec()
+}
+
 /// `--crowd`: the plazas' walks (eo-sim `plaza_walks`): each crossed by
-/// straight walks between points of its outline and walked round.
-pub fn plaza_paths(rings: &[(String, Vec<[f64; 2]>)]) -> Vec<eo_sim::native::PathWay> {
-    rings.iter().flat_map(|(id, r)| eo_sim::native::plaza_walks(id, r)).collect()
+/// straight walks between points of its inset outline and walked round, set in
+/// by the street standards' frontage zone plus half a throughway so walkers
+/// stay inside the paving and clear of bordering building walls.
+pub fn plaza_paths(rings: &[(String, Vec<[f64; 2]>)], inset_m: f64) -> Vec<eo_sim::native::PathWay> {
+    rings.iter().flat_map(|(id, r)| eo_sim::native::plaza_walks(id, &inset_plaza_ring(r, inset_m))).collect()
 }
 
 /// `--crowd`: every building edge of the city file as a front the footways
@@ -751,7 +849,8 @@ impl AgentRuntime {
                         let mut zebras = vec![];
                         if let Some(sw) = &street {
                             let rings = plaza_rings(&paths.repo_root, sw);
-                            walks.extend(plaza_paths(&rings));
+                            let inset = source.dims.frontage_zone_m + 0.5 * source.dims.throughway_m;
+                            walks.extend(plaza_paths(&rings, inset));
                             *plazas_out.lock().unwrap() = Some(Arc::new(eo_agents::feed::Plazas::new(rings.into_iter().map(|(_, r)| r).collect())));
                             sections = drawn_sections(sw);
                             if people_crosswalks() {
@@ -1802,5 +1901,106 @@ mod tests {
         assert!(!remote.startup_failed());
         remote.feed_failed = true;
         assert!(remote.startup_failed());
+    }
+
+    /// Full-city plaza regression check around the Bay Area Metro Center plaza
+    /// (`[3060, -1420]`, 16:15): no simulated or separated walker stands inside a
+    /// building footprint or within shoulder clearance of a bordering wall.
+    #[test]
+    #[ignore]
+    fn plaza_walkers_clear_of_bordering_buildings() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let city = eo_data::City::load(&paths).unwrap();
+        let elev = eo_data::ElevationGrid::load(&paths).unwrap();
+        let o = eo_street::StreetOptions::load().unwrap();
+        let sc = eo_street::StreetCity::load().unwrap();
+        let plan = eo_street::plan::build_plan(&sc, &o);
+        let rings: Vec<Vec<[f64; 2]>> = city.buildings.iter().map(|b| b.ring.iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
+        let lift = o.open_ground_lift;
+        let sw = Arc::new(eo_street::StreetWorld::from_plan(o, sc, plan, eo_street::Terrain { grid: Arc::new(elev), carpet_lift: lift }, eo_street::BuildingIndex::new(rings)));
+        let prings = plaza_rings(&paths.repo_root, &sw);
+        PEOPLE_GROUPS.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_CROSSWALKS.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_WINDOWS.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_STAGGER.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_EVENING.store(true, std::sync::atomic::Ordering::Relaxed);
+        eo_agents::feed::set_personal_space(true);
+        let mut walks = walk_paths(&paths, &city);
+        let base_src = eo_sim::native::load(&paths).unwrap();
+        let inset = base_src.dims.frontage_zone_m + 0.5 * base_src.dims.throughway_m;
+        walks.extend(plaza_paths(&prings, inset));
+        let sections = drawn_sections(&sw);
+        let zebras = drawn_zebras(&sw);
+        let src = base_src.with_frontage(frontage_edges(&city)).with_paths(walks).with_sections(sections).with_crossings(crossing_points(&paths)).with_zebras(zebras);
+        let focus = [3060.0, -1420.0, 1.9198621909637936];
+        let w = build_sim(&src, focus, 1, Some(16.25), Some(16.25), None, WARMUP_STEPS);
+        let r = &w.regions[0];
+        let dist_to_bldg = |x: f64, z: f64| -> (bool, f64) {
+            let inside = sw.buildings.contains(x, z);
+            let mut best = f64::INFINITY;
+            for ring in &sw.buildings.rings {
+                if ring.is_empty() || (ring[0][0] - x).hypot(ring[0][1] - z) > 150.0 {
+                    continue;
+                }
+                for k in 0..ring.len() {
+                    let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
+                    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                    let l2 = (dx * dx + dz * dz).max(1e-12);
+                    let t = (((x - a[0]) * dx + (z - a[1]) * dz) / l2).clamp(0.0, 1.0);
+                    best = best.min((x - (a[0] + dx * t)).hypot(z - (a[1] + dz * t)));
+                }
+            }
+            (inside, best)
+        };
+        let mut feed_pos: Vec<[f64; 2]> = Vec::with_capacity(r.crowd.walkers.len());
+        let mut sim_in = 0usize;
+        for i in 0..r.crowd.walkers.len() {
+            let (x, z) = (r.crowd.x[i], r.crowd.z[i]);
+            feed_pos.push([x, z]);
+            if (x - 3060.0).hypot(z + 1420.0) <= 80.0 && sw.buildings.contains(x, z) {
+                sim_in += 1;
+            }
+        }
+        assert_eq!(sim_in, 0, "no simulated walker inside a building near the plaza");
+        eo_agents::feed::keep_out_of_buildings(&mut feed_pos, &sw.buildings, eo_agents::feed::WALL_CLEARANCE_M);
+        eo_agents::feed::keep_personal_space(&mut feed_pos);
+        eo_agents::feed::separate(&mut feed_pos, &[]);
+        eo_agents::feed::keep_out_of_buildings(&mut feed_pos, &sw.buildings, eo_agents::feed::WALL_CLEARANCE_M);
+        eo_agents::feed::separate(&mut feed_pos, &[]);
+        eo_agents::feed::keep_out_of_buildings(&mut feed_pos, &sw.buildings, eo_agents::feed::WALL_CLEARANCE_M);
+        for &[x, z] in &feed_pos {
+            let (inside, d) = dist_to_bldg(x, z);
+            assert!(!inside, "fed walker at ({x:.2}, {z:.2}) stands inside a building");
+            assert!(d >= eo_agents::feed::WALL_CLEARANCE_M - 0.01, "fed walker at ({x:.2}, {z:.2}) only {d:.3} m from a building wall");
+        }
+    }
+
+    /// `inset_plaza_ring` pulls every edge inward by the setback, keeping all
+    /// corners inside the original plaza, and degrades cleanly on narrow slivers.
+    #[test]
+    fn plaza_ring_inset_stays_inside_and_clear_of_edges() {
+        // Real Bay Area Metro Center plaza rectangle (~17 x 104 m).
+        let ring = vec![[3026.125, -1405.375], [3038.0, -1392.875], [3112.25, -1466.25], [3101.25, -1477.75]];
+        let inset = 1.9;
+        let inner = inset_plaza_ring(&ring, inset);
+        assert_eq!(inner.len(), 4);
+        for &p in &inner {
+            assert!(eo_street::point_in_ring(p[0], p[1], &ring), "corner {p:?} left plaza");
+            // Distance to every outer edge is at least inset (within rounding).
+            for k in 0..ring.len() {
+                let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
+                let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                let t = (((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz)).clamp(0.0, 1.0);
+                let d = (p[0] - (a[0] + dx * t)).hypot(p[1] - (a[1] + dz * t));
+                assert!(d >= inset - 0.05, "corner {p:?} only {d:.3} m from edge {k}");
+            }
+        }
+        // Narrow 2 m strip falls back cleanly without inverting.
+        let sliver = vec![[0.0, 0.0], [20.0, 0.0], [20.0, 2.0], [0.0, 2.0]];
+        let inner_s = inset_plaza_ring(&sliver, 2.0);
+        assert_eq!(inner_s.len(), 4);
+        for &p in &inner_s {
+            assert!(eo_street::point_in_ring(p[0], p[1], &sliver), "sliver corner {p:?} left plaza");
+        }
     }
 }

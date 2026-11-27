@@ -176,6 +176,140 @@ impl BuildingIndex {
     pub fn contains(&self, x: f64, z: f64) -> bool {
         self.at(x, z).is_some()
     }
+
+    /// Unique building indices whose bucket bounds reach within `margin` of `(x, z)`.
+    fn nearby(&self, x: f64, z: f64, margin: f64, out: &mut Vec<u32>) {
+        out.clear();
+        let m = margin.max(0.0);
+        let gx0 = ((x - m) / self.cell).floor() as i32;
+        let gx1 = ((x + m) / self.cell).floor() as i32;
+        let gz0 = ((z - m) / self.cell).floor() as i32;
+        let gz1 = ((z + m) / self.cell).floor() as i32;
+        for gz in gz0..=gz1 {
+            for gx in gx0..=gx1 {
+                let Some(list) = self.buckets.get(&(gx, gz)) else { continue };
+                for &i in list {
+                    if !out.contains(&i) {
+                        out.push(i);
+                    }
+                }
+            }
+        }
+    }
+
+    /// If `(x, z)` lies inside a building footprint or closer than `margin` to
+    /// any of its walls, return a nearby point pushed outside to distance
+    /// `margin` from the wall (None when already clear).
+    pub fn push_outside(&self, x: f64, z: f64, margin: f64) -> Option<[f64; 2]> {
+        let margin = margin.max(0.0);
+        let mut cands = Vec::new();
+        self.nearby(x, z, margin, &mut cands);
+        if cands.is_empty() {
+            return None;
+        }
+        let ring_sign = |ring: &[[f64; 2]]| -> f64 {
+            let mut a = 0.0;
+            for i in 0..ring.len() {
+                let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
+                a += p[0] * q[1] - q[0] * p[1];
+            }
+            if a >= 0.0 { 1.0 } else { -1.0 }
+        };
+        let (mut px, mut pz) = (x, z);
+        let mut moved = false;
+        for _ in 0..3 {
+            if moved {
+                self.nearby(px, pz, margin, &mut cands);
+                if cands.is_empty() {
+                    break;
+                }
+            }
+            // First: if strictly inside a building, exit across its closest edge
+            // whose cleared point does not land inside a neighbouring building
+            // (a shared party wall).
+            if let Some(&inside_id) = cands.iter().find(|&&i| point_in_ring(px, pz, &self.rings[i as usize])) {
+                let ring = &self.rings[inside_id as usize];
+                let sign = ring_sign(ring);
+                let mut best_clear: Option<(f64, [f64; 2])> = None;
+                let mut best_any: Option<(f64, [f64; 2])> = None;
+                for k in 0..ring.len() {
+                    let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
+                    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                    let l2 = dx * dx + dz * dz;
+                    if l2 < 1e-12 {
+                        continue;
+                    }
+                    let l = l2.sqrt();
+                    let t = (((px - a[0]) * dx + (pz - a[1]) * dz) / l2).clamp(0.0, 1.0);
+                    let q = [a[0] + dx * t, a[1] + dz * t];
+                    let d = (q[0] - px).hypot(q[1] - pz);
+                    let edge_out = if sign > 0.0 { [dz / l, -dx / l] } else { [-dz / l, dx / l] };
+                    let mut out = if d > 1e-6 { [(q[0] - px) / d, (q[1] - pz) / d] } else { edge_out };
+                    let mut cand = [q[0] + out[0] * margin, q[1] + out[1] * margin];
+                    if point_in_ring(cand[0], cand[1], ring) {
+                        out = edge_out;
+                        cand = [q[0] + out[0] * margin, q[1] + out[1] * margin];
+                        if point_in_ring(cand[0], cand[1], ring) {
+                            cand = [q[0] - out[0] * margin, q[1] - out[1] * margin];
+                        }
+                    }
+                    if best_any.is_none_or(|b| d < b.0) {
+                        best_any = Some((d, cand));
+                    }
+                    if !self.contains(cand[0], cand[1]) && best_clear.is_none_or(|b| d < b.0) {
+                        best_clear = Some((d, cand));
+                    }
+                }
+                if let Some((_, cand)) = best_clear.or(best_any) {
+                    px = cand[0];
+                    pz = cand[1];
+                    moved = true;
+                    continue;
+                }
+                break;
+            }
+            // Outside all buildings: keep at least `margin` clear of the closest wall.
+            if !(margin > 0.0) {
+                break;
+            }
+            let mut closest: Option<(f64, [f64; 2], [f64; 2])> = None;
+            for &bi in &cands {
+                let ring = &self.rings[bi as usize];
+                let sign = ring_sign(ring);
+                for k in 0..ring.len() {
+                    let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
+                    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                    let l2 = dx * dx + dz * dz;
+                    if l2 < 1e-12 {
+                        continue;
+                    }
+                    let t = (((px - a[0]) * dx + (pz - a[1]) * dz) / l2).clamp(0.0, 1.0);
+                    let q = [a[0] + dx * t, a[1] + dz * t];
+                    let d = (px - q[0]).hypot(pz - q[1]);
+                    if d < margin && closest.is_none_or(|c| d < c.0) {
+                        let l = l2.sqrt();
+                        let out = if d > 1e-6 {
+                            [(px - q[0]) / d, (pz - q[1]) / d]
+                        } else if sign > 0.0 {
+                            [dz / l, -dx / l]
+                        } else {
+                            [-dz / l, dx / l]
+                        };
+                        closest = Some((d, q, out));
+                    }
+                }
+            }
+            let Some((_, q, out)) = closest else { break };
+            let cand = [q[0] + out[0] * margin, q[1] + out[1] * margin];
+            if self.contains(cand[0], cand[1]) {
+                break;
+            }
+            px = cand[0];
+            pz = cand[1];
+            moved = true;
+        }
+        moved.then_some([px, pz])
+    }
 }
 
 /// What a tile draws: the spans and nodes anchored in it.
@@ -1180,5 +1314,37 @@ impl StreetWorld {
             return walk;
         }
         self.carpet_y(x, z)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn building_index_push_outside_handles_interior_margin_and_party_wall() {
+        // Two buildings sharing a party wall at x = 10.
+        let b1 = vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]];
+        let b2 = vec![[10.0, 0.0], [20.0, 0.0], [20.0, 10.0], [10.0, 10.0]];
+        let idx = BuildingIndex::new(vec![b1, b2]);
+
+        // Clear point is untouched.
+        assert_eq!(idx.push_outside(-2.0, 5.0, 0.4), None);
+
+        // Point inside b1 near the west wall exits west to x = -0.4.
+        let p = idx.push_outside(0.3, 5.0, 0.4).expect("inside b1");
+        assert!(!idx.contains(p[0], p[1]));
+        assert!((p[0] + 0.4).abs() < 1e-6 && (p[1] - 5.0).abs() < 1e-6, "got {p:?}");
+
+        // Point inside b1 closest to the shared party wall (x=9.8, z=2.0) exits
+        // through the open south wall (z=-0.4), not into b2.
+        let q = idx.push_outside(9.8, 2.0, 0.4).expect("near party wall");
+        assert!(!idx.contains(q[0], q[1]), "exited into neighbour: {q:?}");
+        assert!(q[1] <= -0.39, "expected south exit, got {q:?}");
+
+        // Exterior point grazing a wall within margin is pushed to margin.
+        let g = idx.push_outside(-0.1, 5.0, 0.4).expect("grazing wall");
+        assert!(!idx.contains(g[0], g[1]));
+        assert!((g[0] + 0.4).abs() < 1e-6 && (g[1] - 5.0).abs() < 1e-6, "got {g:?}");
     }
 }

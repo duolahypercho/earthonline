@@ -345,6 +345,10 @@ pub fn mark_in_bore(a: &mut GpuAgent, structures: Option<&eo_structures::Structu
 /// a disc of this radius on the ground (Fruin's body ellipse, 0.61 x 0.46 m
 /// with clothing, by its mean half axis), relaxed this many times a frame.
 pub const BODY_RADIUS_M: f64 = 0.27;
+/// (`--crowd`) Minimum horizontal distance from a building wall to a walker's
+/// centre (Fruin's 0.61 m shoulder breadth half-axis plus arm-swing clearance),
+/// keeping bodies clear of facades and foundation skirts.
+pub const WALL_CLEARANCE_M: f64 = 0.40;
 const SEPARATE_ITERATIONS: usize = 4;
 /// (`--crowd`) no two people in the same body within this of each other
 /// when a walker first appears (its first `TWIN_DRAWS` keyed draws tried).
@@ -537,6 +541,16 @@ fn space_walkers(pos: &mut [[f64; 2]], party: &[u64], contacts: &CrowdContacts) 
         }
         if !any {
             break;
+        }
+    }
+}
+
+/// (`--crowd`) Push any walker inside a building footprint or closer than
+/// `clearance` to a wall out into the open (`BuildingIndex::push_outside`).
+pub fn keep_out_of_buildings(pos: &mut [[f64; 2]], buildings: &eo_street::BuildingIndex, clearance: f64) {
+    for p in pos.iter_mut() {
+        if let Some(q) = buildings.push_outside(p[0], p[1], clearance) {
+            *p = q;
         }
     }
 }
@@ -876,11 +890,22 @@ impl Feeder {
         let mut pos: Vec<_> = feet.iter().map(|p| [f64::from(p[0]), f64::from(p[2])]).collect();
         let mut anchored = vec![false; feet.len()];
         let CrowdFrame { heights, parties, vehicles } = crowd;
+        let buildings = match &self.ground {
+            Ground::Street(sw) => Some(&sw.buildings),
+            _ => None,
+        };
         let social = personal_space();
         for _ in 0..SEPARATE_ITERATIONS {
+            if let Some(b) = buildings {
+                keep_out_of_buildings(&mut pos, b, WALL_CLEARANCE_M);
+            }
             let contacts = CrowdContacts { heights, anchored: &anchored };
             if social { space_walkers(&mut pos, parties, &contacts); }
             separate_bodies(&mut pos, vehicles, &contacts, |i, candidate| self.supported_adjustment(feet[i], candidate).1);
+            if let Some(b) = buildings {
+                // Separation can press a walker back against a wall: keep clear of facades.
+                keep_out_of_buildings(&mut pos, b, WALL_CLEARANCE_M);
+            }
             let mut blocked = false;
             for (i, target) in pos.iter_mut().enumerate() {
                 let (supported, reached) = self.supported_adjustment(feet[i], *target);

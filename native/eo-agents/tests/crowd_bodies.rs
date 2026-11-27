@@ -288,3 +288,26 @@ fn a_reordered_crowd_keeps_the_body_ids_of_its_regions_and_corridor() {
         }
     }
 }
+
+/// (`--crowd`) Walkers inside a building footprint or grazing a wall (including
+/// beside a shared party wall) are pushed outside to `WALL_CLEARANCE_M`, while
+/// walkers already in the open are untouched.
+#[test]
+fn walkers_are_kept_clear_of_buildings() {
+    use eo_agents::feed::{WALL_CLEARANCE_M, keep_out_of_buildings};
+    // Two touching buildings sharing a party wall at x = 10.
+    let a = vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]];
+    let b = vec![[10.0, 0.0], [20.0, 0.0], [20.0, 10.0], [10.0, 10.0]];
+    let ix = eo_street::BuildingIndex::new(vec![a, b]);
+    let mut pos = vec![
+        [5.0, 0.2],   // inside building A near z=0 wall
+        [5.0, -0.15], // outside A, too close to z=0 wall
+        [9.8, 1.5],   // inside A closest to shared party wall x=10, must exit to z=0 outside both
+        [5.0, -2.0],  // already well clear
+    ];
+    keep_out_of_buildings(&mut pos, &ix, WALL_CLEARANCE_M);
+    assert!(!ix.contains(pos[0][0], pos[0][1]) && (pos[0][1] + WALL_CLEARANCE_M).abs() < 1e-6, "inside -> {:?}", pos[0]);
+    assert!(!ix.contains(pos[1][0], pos[1][1]) && (pos[1][1] + WALL_CLEARANCE_M).abs() < 1e-6, "grazing -> {:?}", pos[1]);
+    assert!(!ix.contains(pos[2][0], pos[2][1]) && (pos[2][1] + WALL_CLEARANCE_M).abs() < 1e-6, "party wall -> {:?}", pos[2]);
+    assert_eq!(pos[3], [5.0, -2.0], "clear walker untouched");
+}
