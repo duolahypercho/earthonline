@@ -1573,7 +1573,13 @@ pub fn load_world(args: &Args) -> Result<World> {
                     // (`--no-lidar-trees`, Docs/HILLS-PLAN.md H6c) the hill parks' trees as the USGS 3DEP lidar
                     // measured them, each the near tier's model as a card (props/lidar_trees.rs).
                     let far_species = eo_landmarks::vegetation::gg3().far_species;
-                    trees.extend(crate::props::lidar_trees::placed_in(g.0, g.1, g.2, g.3, &ground, &blocked, false).iter().map(|p| crate::props::lidar_trees::far_tree(p, far_species)));
+                    let lidar = crate::props::lidar_trees::placed_in(g.0, g.1, g.2, g.3, &ground, &blocked, false);
+                    if std::env::var("EO_TRACE_LOAD").is_ok()
+                        && let Some(lt) = crate::props::lidar_trees::installed()
+                    {
+                        eprintln!("hlod: {} of the {} lidar trees stand (the rest on a footprint, the drawn street or water, a mapped beach or a face too steep)", lidar.len(), lt.header().trees);
+                    }
+                    trees.extend(lidar.iter().map(|p| crate::props::lidar_trees::far_tree(p, far_species)));
                     if cove_detail {
                         eo_render::hlod_trees::fill_black_point(&mut trees, cover, &ground, &blocked);
                     }
