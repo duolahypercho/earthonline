@@ -79,6 +79,10 @@ impl GroundCover {
     /// Whether everything placed so far is attached: no placement yet, or
     /// its GPU state built (false while the worker runs).
     pub fn settled(&self) -> bool {
+        // (`--no-hill-outcrops`) not while the hills' pieces wait for the drawn ground
+        if eo_landmarks::rocks::scan::hills_pending() {
+            return false;
+        }
         !self.started.load(Ordering::Acquire) || self.rock.get().is_some()
     }
 
@@ -86,7 +90,8 @@ impl GroundCover {
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, look: &LookGpu, occlusion: bool) {
         if !self.started.load(Ordering::Acquire) {
             // start the build once the landmark build has placed the scans (polled: a cheap read until then)
-            if let Some(placed) = eo_landmarks::rocks::scan::placed() {
+            // (`--no-hill-outcrops`) not while the hills' pieces wait for the drawn ground (rocks/hills.rs `late_pass`)
+            if let Some(placed) = eo_landmarks::rocks::scan::placed().filter(|_| !eo_landmarks::rocks::scan::hills_pending()) {
                 self.started.store(true, Ordering::Release);
                 let setup = rock::RockSetup::new(&look.device, queue, look, self.debug_ids());
                 let slot = self.rock.clone();

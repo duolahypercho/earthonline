@@ -187,6 +187,20 @@ impl LithologyMap {
         (v > 0).then(|| RockClass::ALL[(v - 1) as usize])
     }
 
+    /// Every mapped cell's centre (surveyed plan) and class.
+    pub fn cells(&self) -> Vec<(f64, f64, RockClass)> {
+        let mut out = vec![];
+        for j in 0..self.h {
+            for i in 0..self.w {
+                let v = self.cells[j * self.w + i];
+                if v > 0 {
+                    out.push((self.x0 + (i as f64 + 0.5) * CELL_M, self.z0 + (j as f64 + 0.5) * CELL_M, RockClass::ALL[(v - 1) as usize]));
+                }
+            }
+        }
+        out
+    }
+
     /// The share of mapped cells per class (a diagnostic).
     pub fn shares(&self) -> Vec<(RockClass, f64)> {
         let mut n = [0usize; 8];

@@ -908,6 +908,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs: the open ground's colour from the aerial survey)
             "--no-city-canopy-trees" => {} // read by props/vegetation.rs (park_tree_canopy_ok: the park trees only under the aerial image's canopy)
             "--no-lidar-trees" => {} // read by props/lidar_trees.rs (the hill parks' trees from the lidar, not the greens' lattice)
+            "--no-hill-outcrops" => {} // read by eo-landmarks (rocks/hills.rs: the hills' scanned rock faces, stones and cliffs)
             "--no-deck-ground" => {} // read by eo-data (decks.rs: the roof decks the survey keeps as ground, Moscone South's, down to the streets' grade)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`: the hill builder's 2 m relief over the city's hills)
             "--no-city-planting" => {} // read by props/vegetation.rs (the hill builder's planting map)
@@ -1196,6 +1197,14 @@ pub fn load_world(args: &Args) -> Result<World> {
     let t = Instant::now();
     let elevation = ElevationGrid::load(&paths)?;
     let elevation_ms = t.elapsed().as_secs_f64() * 1e3;
+    // (`--no-hill-outcrops`) the hills' scanned rock reads the aerial image through the hill
+    // builder's planting map (props/vegetation.rs `city_planting`, read on first use).
+    if eo_landmarks::rocks::hills::switch_on() {
+        eo_landmarks::rocks::hills::install_aerial(Box::new(|x, z, side| {
+            let gs = eo_data::groundscale::scale();
+            crate::props::vegetation::city_planting()?.shares(x / gs, z / gs, side / gs).map(|n| eo_landmarks::rocks::hills::Aerial { bare: n.bare, soil: n.soil.max(n.warm), canopy: n.canopy })
+        }));
+    }
     // the bridges and the citywide shore edge, built beside the load on the drawn ground.
     let landmark_job = args.landmarks.then(|| {
         let (g, p) = (elevation.clone(), paths.clone());
@@ -1654,6 +1663,17 @@ pub fn load_world(args: &Args) -> Result<World> {
         ground_tone: if cover.is_some() { Some(&ground_tone_fn) } else { None },
         smooth_terrain: args.landmarks && args.landmarks2,
     }, terrain_cuts)?;
+    // (`--no-hill-outcrops`) the hills' scanned rock placed again on the ground the scene draws (its 2 m
+    // relief now installed: eo_data::detail_ground), beside the rest of the load; the renderer builds
+    // the scans once this is done (rocks/hills.rs `late_pass`).
+    if eo_landmarks::rocks::scan::hills_pending() {
+        let (g, root) = (elevation.clone(), paths.repo_root.clone());
+        std::thread::spawn(move || {
+            let ground = |x: f64, z: f64| eo_data::detail_ground::height(x, z).or_else(|| g.sample(x, z));
+            let mapped = |x: f64, z: f64| eo_landmarks::ground_cover::installed().is_some_and(|c| c.tone_name_at(x, z) == Some("bareRock"));
+            eo_landmarks::rocks::hills::late_pass(&root, &ground, &mapped);
+        });
+    }
     let house_vertex_base = scene.vertices.len();
     if let Some(house) = &house { house.append(&mut scene, &authored.materials, args.house_photo_lod); }
     let mut dive_sites = vec![];

@@ -282,8 +282,12 @@ fn shore_rocks(
     let t = Instant::now();
     let field = if boulders || lib.is_some() { eo_water::load(repo_root, crate::features::cache_dir().as_deref()).ok() } else { None };
     let field_ms = t.elapsed().as_secs_f64() * 1e3;
-    // the scans are placed only with both the library and the field: without either, round 2's meshes
-    let scans_on = lib.is_some() && field.is_some();
+    // the scans are placed only with both the library and the field: without either, round 2's meshes.
+    // The Golden Gate's survey features only with `EO_SURVEY_ROOT` (the library alone may come
+    // from `external/survey`, for the hills' rock: rocks/hills.rs, `--no-hill-outcrops`).
+    let gg_survey = eo_farshore::survey::Root::discover().is_some();
+    let scans_on = lib.is_some() && field.is_some() && gg_survey;
+    let hills_on = lib.is_some() && field.is_some() && rocks::hills::switch_on();
     // the armour: quarried granite.
     let t = Instant::now();
     let mut armour_stones: Vec<rocks::Stone> = vec![];
@@ -374,7 +378,7 @@ fn shore_rocks(
     let t = Instant::now();
     let mut scan_report = None;
     let mut boulder_stones = stones;
-    if let (Some(lib), Some(w), true) = (&lib, &field, scans_on) {
+    if let (Some(lib), Some(w), true) = (&lib, &field, scans_on || hills_on) {
         use rocks::{place, scan};
         let f = &w.field;
         // the drawn ground: the detail ground where one is set, else the terrain as the scene
@@ -388,24 +392,38 @@ fn shore_rocks(
         let signed = |x: f64, z: f64| f.signed_at(x, z);
         let world = place::World { ground: &ground, signed: &signed, sea, tide, plan, hs };
         let mut pieces = vec![];
-        if let Some(st) = boulder_stones.take() {
-            pieces.extend(place::from_stones(lib, &world, &st, scan::Source::Boulder, sw.geology, sw.cliff));
-        }
-        pieces.extend(place::from_stones(lib, &world, &armour_stones, scan::Source::Armour, sw.geology, false));
         let mut shifts = vec![];
-        if let Some(sv) = place::Survey::open() {
-            if sw.surf {
-                pieces.extend(place::surf_field_with(lib, &world, &sv, sw.geology, &mut shifts));
+        if scans_on {
+            if let Some(st) = boulder_stones.take() {
+                pieces.extend(place::from_stones(lib, &world, &st, scan::Source::Boulder, sw.geology, sw.cliff));
             }
-            pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
+            pieces.extend(place::from_stones(lib, &world, &armour_stones, scan::Source::Armour, sw.geology, false));
+            if let Some(sv) = place::Survey::open() {
+                if sw.surf {
+                    pieces.extend(place::surf_field_with(lib, &world, &sv, sw.geology, &mut shifts));
+                }
+                pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
+            }
+            if crate::flora2::flora2().boulders {
+                // the second flora pass: the earlier rounds' Baker stones into its boulder clusters.
+                place::cluster_shore_stones(lib, &world, &mut pieces);
+            }
+            if crate::flora::flora().serpentinite {
+                // the flora pass: Baker's and Marshall's serpentinite boulders (rocks/place.rs).
+                pieces.extend(place::serpentinite_boulders(lib, &world));
+            }
         }
-        if crate::flora2::flora2().boulders {
-            // the second flora pass: the earlier rounds' Baker stones into its boulder clusters.
-            place::cluster_shore_stones(lib, &world, &mut pieces);
-        }
-        if crate::flora::flora().serpentinite {
-            // the flora pass: Baker's and Marshall's serpentinite boulders (rocks/place.rs).
-            pieces.extend(place::serpentinite_boulders(lib, &world));
+        if hills_on {
+            // (`--no-hill-outcrops`) the city's hills' rock: faces, stones and cliffs where the bedrock
+            // map has bedrock, the image bare ground and the 1 m DEM a steep slope (rocks/hills.rs),
+            // here on the 8 m grid for their claims; eo-app places them again on the drawn ground
+            let mapped = |x: f64, z: f64| cover.as_ref().is_some_and(|c| c.tone_name_at(x, z) == Some("bareRock"));
+            if let Some(hp) = rocks::hills::place_all(lib, &world, repo_root, &mapped) {
+                if !hp.is_empty() {
+                    scan::set_hills_pending(true);
+                }
+                pieces.extend(hp);
+            }
         }
         let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
         for p in &pieces {

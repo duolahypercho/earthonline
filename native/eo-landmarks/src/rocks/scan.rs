@@ -227,7 +227,8 @@ pub fn library() -> Option<Arc<Library>> {
 
 fn load_now() -> Option<Arc<Library>> {
     let t0 = Instant::now();
-    let root = eo_farshore::survey::Root::discover()?;
+    // (`--no-hill-outcrops`) `EO_SURVEY_ROOT`, else `external/survey` for the hills' rock
+    let root = super::hills::library_root()?;
     let cache = crate::features::cache_dir();
     let kinds: Vec<Option<Kind>> = std::thread::scope(|s| {
         let hs: Vec<_> = KINDS
@@ -363,6 +364,8 @@ pub enum Source {
     Cliff,
     /// An outcrop on a steep or bare slope.
     Outcrop,
+    /// (`--no-hill-outcrops`) The city's hills' rock (rocks/hills.rs).
+    Hill,
 }
 
 /// What the landmark build placed, and where the scans stand in for the
@@ -425,6 +428,31 @@ static PLACED: RwLock<Option<Arc<Placed>>> = RwLock::new(None);
 static REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Publish the placement (the renderer picks it up by its revision).
+/// (`--no-hill-outcrops`) Whether the hills' pieces still wait for the drawn ground: the landmark
+/// build places them on the 8 m grid (their footprints claim the props' hill rock from the start),
+/// and eo-app places them again on the drawn ground once the scene has built it (rocks/hills.rs
+/// `late_pass`); the renderer builds the scans only after that.
+static HILLS_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn hills_pending() -> bool {
+    HILLS_PENDING.load(std::sync::atomic::Ordering::Acquire)
+}
+
+pub fn set_hills_pending(on: bool) {
+    HILLS_PENDING.store(on, std::sync::atomic::Ordering::Release);
+}
+
+/// The published pieces with the hills' replaced by `hills` (the claims kept), published; the
+/// hills no longer pending.
+pub fn replace_hill_pieces(hills: Vec<Piece>) {
+    if let Some(old) = placed() {
+        let mut pieces: Vec<Piece> = old.pieces.iter().copied().filter(|p| p.source != Source::Hill).collect();
+        pieces.extend(hills);
+        publish(Placed { pieces, claims: old.claims.clone() });
+    }
+    set_hills_pending(false);
+}
+
 pub fn publish(p: Placed) {
     *PLACED.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(p));
     REVISION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
