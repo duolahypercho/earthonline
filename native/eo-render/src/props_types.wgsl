@@ -248,10 +248,22 @@ fn pr_veg_grad(i: PrInstance) -> vec2<f32> {
     return unpack2x16snorm(i.pad) * 4.0;
 }
 
+// A tree's lean (the coastal trees; eo-app props/lidar_trees.rs `lean_of`): the
+// horizontal shear per metre of its height, in the slope's slot (a tree takes no slope).
+fn pr_tree_lean(i: PrInstance) -> vec2<f32> {
+    if (!pr_is_veg(i.model) || i.model >= PR_VEG_BASE + PR_VEG_TREES) {
+        return vec2<f32>(0.0);
+    }
+    return unpack2x16snorm(i.pad) * 4.0;
+}
+
 fn pr_world(i: PrInstance, p: vec3<f32>, w: f32) -> vec3<f32> {
     let r = pr_rot(i.yaw, pr_local(i, p));
     var o = i.pos + r + pr_wind(i, p, w);
     o.y = o.y + dot(pr_veg_grad(i), r.xz);
+    let lean = pr_tree_lean(i);
+    o.x = o.x + lean.x * r.y;
+    o.z = o.z + lean.y * r.y;
     return o;
 }
 

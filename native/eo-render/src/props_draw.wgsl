@@ -88,6 +88,9 @@ fn prop_vs(
     // the slope shear's inverse transpose (pr_veg_grad).
     let g = pr_veg_grad(inst);
     nw = vec3<f32>(nw.x - g.x * nw.y, nw.y, nw.z - g.y * nw.y);
+    // a tree's lean (`pr_tree_lean`): the shear's inverse transpose
+    let lean = pr_tree_lean(inst);
+    nw = vec3<f32>(nw.x, nw.y - lean.x * nw.x - lean.y * nw.z, nw.z);
     out.normal = nw;
     out.uv = uv;
     out.color = srgb_decode(color.rgb);

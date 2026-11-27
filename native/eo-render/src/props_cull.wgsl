@@ -52,7 +52,12 @@ fn pr_sphere(i: PrInstance, m: PrModel) -> PrSphere {
     var s: PrSphere;
     let v = pr_veg_scale(i);
     s.c = i.pos + pr_rot(i.yaw, m.center * i.scale * v);
-    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z) * v * (1.0 + length(pr_veg_grad(i)));
+    // a tree's lean (`pr_tree_lean`) shears its points by their height: the centre with
+    // them, and the radius by the shear's length (zero for everything else)
+    let lean = pr_tree_lean(i);
+    let cy = (m.center * i.scale * v).y;
+    s.c = s.c + vec3<f32>(lean.x * cy, 0.0, lean.y * cy);
+    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z) * v * (1.0 + length(pr_veg_grad(i)) + length(lean));
     if (pr_afloat_on(i)) {
         s.r = s.r * 1.12; // a boat's roll and pitch turn it about its waterline (`pr_afloat`)
     }
@@ -207,16 +212,18 @@ fn pr_write_cmd(slot: u32, count: u32, instances: u32, first: u32, base_vertex: 
     pr_cmds[b + 4u] = first_instance;
 }
 
-var<workgroup> pr_wg_n: array<u32, 1536>;
-var<workgroup> pr_wg_off: array<u32, 1536>;
+// (PR_MAX_MESHES a view: the library's meshes, at most 512, two a thread of the 256)
+const PR_MAX_MESHES: u32 = 512u;
+var<workgroup> pr_wg_n: array<u32, 3072>;
+var<workgroup> pr_wg_off: array<u32, 3072>;
 
 @compute @workgroup_size(256)
 fn offsets(@builtin(local_invocation_index) k: u32) {
     let meshes = pr.counts.y;
     let cap = pr.counts.z;
-    if (k < meshes) {
+    for (var m = k; m < meshes; m = m + 256u) {
         for (var v = 0u; v < PR_VIEWS; v = v + 1u) {
-            pr_wg_n[v * 256u + k] = atomicLoad(&pr_counts[v * meshes + k]);
+            pr_wg_n[v * PR_MAX_MESHES + m] = atomicLoad(&pr_counts[v * meshes + m]);
         }
     }
     workgroupBarrier();
@@ -225,8 +232,8 @@ fn offsets(@builtin(local_invocation_index) k: u32) {
         var run = 0u;
         var tris = 0u;
         for (var j = 0u; j < meshes; j = j + 1u) {
-            let n = pr_wg_n[v * 256u + j];
-            pr_wg_off[v * 256u + j] = run;
+            let n = pr_wg_n[v * PR_MAX_MESHES + j];
+            pr_wg_off[v * PR_MAX_MESHES + j] = run;
             let mesh = pr_meshes[j];
             tris = tris + n * (mesh.count + mesh.cut_count) / 3u;
             run = run + n;
@@ -235,12 +242,12 @@ fn offsets(@builtin(local_invocation_index) k: u32) {
         atomicStore(&pr_stats[v * 2u + 1u], tris);
     }
     workgroupBarrier();
-    if (k < meshes) {
+    for (var m = k; m < meshes; m = m + 256u) {
         for (var v = 0u; v < PR_VIEWS; v = v + 1u) {
             if ((pr.mode.y & (1u << v)) == 0u) {
                 continue;
             }
-            atomicStore(&pr_counts[(PR_VIEWS + v) * meshes + k], pr_wg_off[v * 256u + k]);
+            atomicStore(&pr_counts[(PR_VIEWS + v) * meshes + m], pr_wg_off[v * PR_MAX_MESHES + m]);
         }
     }
     // one compacted list per (view, part): only meshes with instances,
@@ -250,12 +257,12 @@ fn offsets(@builtin(local_invocation_index) k: u32) {
         let cut = (k & 1u) == 1u;
         var cursor = 0u;
         for (var j = 0u; j < meshes; j = j + 1u) {
-            let n = pr_wg_n[v * 256u + j];
+            let n = pr_wg_n[v * PR_MAX_MESHES + j];
             let mesh = pr_meshes[j];
             let count = select(mesh.count, mesh.cut_count, cut);
             if (n > 0u && count > 0u) {
                 let first = select(mesh.first, mesh.cut_first, cut);
-                pr_write_cmd(k * meshes + cursor, count, n, first, mesh.base_vertex, v * cap + pr_wg_off[v * 256u + j]);
+                pr_write_cmd(k * meshes + cursor, count, n, first, mesh.base_vertex, v * cap + pr_wg_off[v * PR_MAX_MESHES + j]);
                 cursor = cursor + 1u;
             }
         }

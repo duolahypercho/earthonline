@@ -367,6 +367,11 @@ impl DrawParts {
     }
 }
 
+/// The most meshes the props library may hold: props_cull.wgsl `offsets` keeps a
+/// view's per-mesh counts and offsets in workgroup memory (`PR_MAX_MESHES`, two a
+/// thread of its 256; 2 x 6 x 512 u32 = 24 KB, under the 32 KB Apple's GPUs give).
+pub const MAX_MESHES: u32 = 512;
+
 impl PropsGpu {
     /// Build on any thread (pipelines, buffers, texture mips): `init` from `Renderer::props_init`.
     pub fn new(pi: &PropsInit, lib: &PropLibrary) -> Result<Self> {
@@ -374,8 +379,12 @@ impl PropsGpu {
         let q = &pi.queue;
         let (sample_count, debug_ids, late_bgl) = (pi.sample_count, pi.debug_ids, &pi.late_bgl);
         let mesh_count = lib.meshes.len() as u32;
-        if mesh_count == 0 || mesh_count > 256 {
-            return Err(anyhow!("props library has {mesh_count} meshes (1..=256 supported)"));
+        if mesh_count == 0 || mesh_count > MAX_MESHES {
+            return Err(anyhow!("props library has {mesh_count} meshes (1..={MAX_MESHES} supported)"));
+        }
+        let wg_bytes = 2 * 6 * MAX_MESHES * 4;
+        if d.limits().max_compute_workgroup_storage_size < wg_bytes {
+            return Err(anyhow!("the props cull needs {wg_bytes} bytes of compute workgroup storage (props_cull.wgsl `offsets`); the device gives {}", d.limits().max_compute_workgroup_storage_size));
         }
         let indirect_count = d.features().contains(wgpu::Features::MULTI_DRAW_INDIRECT_COUNT);
         use wgpu::BufferUsages as U;
@@ -1204,6 +1213,15 @@ pub(crate) fn weather_wind_params(wx: &eo_sky::WeatherState) -> ([f32; 2], f32, 
 #[cfg(test)]
 mod wind_tests {
     use super::*;
+
+    #[test]
+    fn the_cull_shader_holds_max_meshes() {
+        // props_cull.wgsl's workgroup arrays are sized for MAX_MESHES meshes in each of PR_VIEWS views
+        let cull = include_str!("props_cull.wgsl");
+        assert!(cull.contains(&format!("const PR_MAX_MESHES: u32 = {MAX_MESHES}u;")));
+        assert!(include_str!("props_types.wgsl").contains("const PR_VIEWS: u32 = 6u;"));
+        assert_eq!(cull.matches(&format!("array<u32, {}>", 6 * MAX_MESHES)).count(), 2);
+    }
 
     #[test]
     fn weather_wind_scales_monotonically_from_clear_through_rain_to_storm() {
