@@ -412,6 +412,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-hill-outcrops" => {} // read by eo-landmarks (rocks/hills.rs)
             "--no-city-canopy-trees" => {} // read by props/vegetation.rs (park_tree_canopy_ok)
             "--no-lidar-trees" => {} // read by props/lidar_trees.rs
+            "--no-tree-variety" => {} // read by props/lidar_trees.rs
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`)
             "--no-city-planting" => {} // read by props/vegetation.rs
             s if s == crate::props::vegetation::CITY_LITHOLOGY_SWITCH => {} // read by props/vegetation.rs (the city's bedrock map)

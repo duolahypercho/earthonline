@@ -25,21 +25,23 @@ use super::*;
 pub const VEG_BASE: u32 = OH_SIGN_BASE + MAX_SIGN_VARIANTS;
 /// Coastal trees (`eo_props::eztree::COASTAL_TREES` order).
 pub const V_TREE: u32 = VEG_BASE;
+/// How many: the three first species and the hill parks' own (eo-props coastal.rs).
+pub const V_TREES: u32 = eo_props::eztree::COASTAL_TREES.len() as u32;
 /// Coastal shrubs (`COASTAL_SHRUBS` order).
-pub const V_SHRUB: u32 = VEG_BASE + 3;
+pub const V_SHRUB: u32 = V_TREE + V_TREES;
 /// A tall bunch of wild grass.
-pub const V_GRASS: u32 = VEG_BASE + 5;
+pub const V_GRASS: u32 = V_SHRUB + 2;
 /// A short tuft (mown or grazed grass, dune grass).
-pub const V_TUFT: u32 = VEG_BASE + 6;
+pub const V_TUFT: u32 = V_GRASS + 1;
 /// Wildflower clumps: yellow, violet.
-pub const V_FLOWER: u32 = VEG_BASE + 7;
+pub const V_FLOWER: u32 = V_TUFT + 1;
 /// Rock outcrop blocks (four shapes; 0 and 1 bedded).
-pub const V_ROCK: u32 = VEG_BASE + 9;
+pub const V_ROCK: u32 = V_FLOWER + 2;
 pub const V_ROCKS: u32 = 4;
 /// Meadow patches (`eo_landmarks::vegetation::MEADOW_SWARD` .. `MEADOW_THATCH`; the second grass pass).
-pub const V_MEADOW: u32 = VEG_BASE + 13;
+pub const V_MEADOW: u32 = V_ROCK + V_ROCKS;
 pub const V_MEADOWS: u32 = eo_landmarks::vegetation::MEADOW_TYPES as u32;
-pub const COUNT: u32 = 13 + V_MEADOWS;
+pub const COUNT: u32 = (V_MEADOW - VEG_BASE) + V_MEADOWS;
 
 /// A material flag of our own: procedural rock grain in the colour pass.
 pub const P_ROCK: u32 = 1 << 17;
@@ -50,6 +52,21 @@ pub const P_ROCK: u32 = 1 << 17;
 /// full 1/sqrt(share) turns into a long dark stroke on the bare ground tone,
 /// where a shrub grown the same way still reads as a shrub.
 pub const THIN: [(f32, f32, f32); COUNT as usize] = [
+    // the coastal trees (every species: never thinned, 360 m)
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
     (0.0, 360.0, 1.0),
     (0.0, 360.0, 1.0),
     (0.0, 360.0, 1.0),

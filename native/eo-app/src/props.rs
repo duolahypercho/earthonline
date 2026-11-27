@@ -1220,11 +1220,14 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             match p.form {
                 lidar_trees::Form::Coastal(sp) => {
                     let k = 0.85 + 0.3 * p.draw as f32;
-                    let tint = eo_landmarks::vegetation::TREE_LEAF_TINT[sp as usize].map(|c| c * k);
-                    plants.push(eo_landmarks::vegetation::Plant { kind: eo_landmarks::vegetation::Kind::Tree(sp), pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), rank: 0.0, tint, grad: [0.0; 2], tip: eo_landmarks::vegetation::TIP_NONE });
+                    let hue = if lidar_trees::variety_on() { eo_landmarks::vegetation::tree_hue(p.x, p.z) } else { [1.0; 3] };
+                    let base = eo_landmarks::vegetation::TREE_LEAF_TINT[sp as usize];
+                    let tint = [base[0] * k * hue[0], base[1] * k * hue[1], base[2] * k * hue[2]];
+                    // its lean rides in the slope's slot (a tree's: props_types.wgsl `pr_tree_lean`)
+                    plants.push(eo_landmarks::vegetation::Plant { kind: eo_landmarks::vegetation::Kind::Tree(sp), pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), rank: 0.0, tint, grad: p.lean, tip: eo_landmarks::vegetation::TIP_NONE });
                 }
                 lidar_trees::Form::Broadleaf => {
-                    let tree = eo_props::Prop { model: Model::Tree, pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), variant: variant_of(lidar_trees::BROADLEAF_SPECIES), live: Live::None };
+                    let tree = eo_props::Prop { model: Model::Tree, pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), variant: variant_of(lidar_trees::legacy::BROADLEAF_SPECIES), live: Live::None };
                     if let Some(tree) = world.clear_prop(tree) {
                         props.push(tree);
                     }

@@ -130,7 +130,10 @@ impl Site {
 /// What a plant is (the app maps it to a render model).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    /// `eo_props::eztree::COASTAL_TREES[i]`: 0 cypress, 1 pine, 2 blue gum.
+    /// `eo_props::eztree::COASTAL_TREES[i]`: 0 cypress, 1 pine, 2 blue gum, then the hill
+    /// parks' own ([`TREE_SPECIES`]: 3 blue gum of a stand, 4 wind-shorn cypress, 5 old pine,
+    /// 6 windbreak cypress, 7 coast live oak, 8 multi-stem live oak, 9 blackwood acacia,
+    /// 10 arroyo willow).
     Tree(u8),
     /// `COASTAL_SHRUBS[i]`: 0 coyote brush, 1 California sagebrush.
     Shrub(u8),
@@ -644,7 +647,55 @@ pub const GRASS_GAIN: f32 = 5.6;
 /// channel's gain is scaled by target ratio over drawn ratio (green kept), so
 /// blue gain over green gain falls from 3.3 to 1.9 for coyote brush and from 2.4
 /// to 1.1 for the sage (see the test `shrub_leaves_are_green_not_blue`).
-pub const TREE_LEAF_TINT: [[f32; 3]; 3] = [[1.19, 1.08, 3.31], [1.13, 1.04, 2.88], [1.58, 1.00, 2.96]];
+///
+/// The hill parks' species (3-10) by the same rule, each measured the same way (the
+/// cooked near tier's mean leaf vertex colour times its atlas cell's mean: pine
+/// 0.118/0.181/0.030, ash 0.102/0.204/0.045, oak 0.126/0.225/0.044, aspen
+/// 0.083/0.214/0.030), to targets: the stand gum the blue gum's; the wind-shorn
+/// and windbreak cypress the cypress's; the old pine the pine's; coast live oak
+/// 0.030/0.050/0.022 (dark, glossy, olive: INFERRED); blackwood acacia
+/// 0.032/0.052/0.030 (dark, dull: INFERRED); arroyo willow 0.055/0.085/0.040
+/// (light, grey-backed: INFERRED).
+pub const TREE_LEAF_TINT: [[f32; 3]; TREE_SPECIES] = tree_table([
+    [1.19, 1.08, 3.31],
+    [1.13, 1.04, 2.88],
+    [1.58, 1.00, 2.96],
+    [1.57, 1.00, 3.05],
+    [1.22, 1.09, 3.41],
+    [1.27, 1.16, 3.51],
+    [1.22, 1.10, 3.43],
+    [1.06, 0.82, 3.05],
+    [1.05, 0.82, 3.13],
+    [1.27, 0.89, 3.69],
+    [1.95, 0.97, 4.97],
+]);
+/// The coastal tree species (`Kind::Tree`; eo-props `COASTAL_TREES`): the eleven
+/// species, then the second builds of six of them (eo-props coastal.rs `VARIANTS`).
+pub const TREE_SPECIES: usize = 17;
+/// The eleven species before their second builds.
+pub const TREE_BASE_SPECIES: usize = 11;
+/// Each tree model's species (a second build's is the species it builds again).
+pub const TREE_BASE_OF: [u8; TREE_SPECIES] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 2, 3, 0, 1, 7, 9];
+
+/// A per-species table over every model: the species' row for its second builds too.
+pub const fn tree_table<T: Copy, const N: usize>(base: [T; N]) -> [T; TREE_SPECIES] {
+    let mut out = [base[0]; TREE_SPECIES];
+    let mut i = 0;
+    while i < TREE_SPECIES {
+        out[i] = base[TREE_BASE_OF[i] as usize];
+        i += 1;
+    }
+    out
+}
+
+/// The model a tree of species `sp` (0-10) is drawn as: a second build for half
+/// the trees of the six species that have one (`draw` its own hash).
+pub fn tree_model(sp: u8, draw: f64) -> u8 {
+    if draw < 0.5 {
+        return sp;
+    }
+    (TREE_BASE_SPECIES..TREE_SPECIES).find(|&m| TREE_BASE_OF[m] == sp).map(|m| m as u8).unwrap_or(sp)
+}
 pub const SHRUB_LEAF_TINT: [[f32; 3]; 2] = [[1.27, 0.98, 1.89], [1.30, 1.15, 1.24]];
 /// The shrubs' measured mean leaf albedo before their tint (`Kind::Shrub`
 /// order): the cooked leaf vertex colour (`eo-props --example coastal_preview`,
@@ -744,10 +795,34 @@ pub fn shore_distance(x: f64, z: f64) -> Option<f64> {
 /// crown, m; `Kind::Tree` order): eo-props eztree/coastal.rs (cypress 16 m and
 /// 10 m, pine 24 m and 7 m, blue gum 34 m and 7.5 m), so a far card is the
 /// tree the near tier draws.
-pub const FAR_TREE_SIZE: [(f32, f32); 3] = [(16.0, 10.0), (24.0, 7.0), (34.0, 7.5)];
+pub const FAR_TREE_SIZE: [(f32, f32); TREE_SPECIES] = tree_table([(16.0, 10.0), (24.0, 7.0), (34.0, 7.5), (38.0, 6.5), (11.0, 9.0), (26.0, 9.0), (20.0, 5.5), (12.0, 8.0), (10.0, 6.5), (13.0, 4.5), (7.0, 4.0)]);
 /// The species' leaf albedo targets (linear; [`TREE_LEAF_TINT`]'s notes): the
 /// far card's crown colour.
-pub const FAR_TREE_ALBEDO: [[f32; 3]; 3] = [[0.035, 0.060, 0.030], [0.040, 0.065, 0.030], [0.050, 0.075, 0.060]];
+pub const FAR_TREE_ALBEDO: [[f32; 3]; TREE_SPECIES] = tree_table([
+    [0.035, 0.060, 0.030],
+    [0.040, 0.065, 0.030],
+    [0.050, 0.075, 0.060],
+    [0.050, 0.075, 0.060],
+    [0.035, 0.060, 0.030],
+    [0.040, 0.065, 0.030],
+    [0.035, 0.060, 0.030],
+    [0.030, 0.050, 0.022],
+    [0.030, 0.050, 0.022],
+    [0.032, 0.052, 0.030],
+    [0.055, 0.085, 0.040],
+]);
+
+/// A tree species' far card form (hlod_trees.wgsl `FT_FORM_MASK`): 1 cypress,
+/// 2 pine, 3 blue gum (the shader's silhouettes), 0 the round crown (the oaks,
+/// the acacia, the willow).
+pub fn far_card_form(sp: u8) -> u32 {
+    match TREE_BASE_OF[sp as usize] {
+        0 | 4 | 6 => 1,
+        1 | 5 => 2,
+        2 | 3 => 3,
+        _ => 0,
+    }
+}
 
 /// A far card's form for a coastal tree (`--no-far-species`: not used): the
 /// species ([`coastal_tree`], the near tier's own draw), its size and crown
@@ -758,17 +833,33 @@ pub fn far_form(x: f64, z: f64, shore_m: f64, draw: f64) -> (u8, f32, f32, [u8; 
     (sp, h * s * hf, c * s, far_tint(sp, x, z))
 }
 
+/// A tree's own hue (game x, z): a gain on each leaf channel about 1, red and
+/// blue within +-6 %, so neighbours of one species differ in their green as
+/// well as in their light (INFERRED: a stand's crowns differ by age, vigour
+/// and light; the near tier and the far card take the same).
+pub fn tree_hue(x: f64, z: f64) -> [f32; 3] {
+    let (ix, iz) = ((x * 8.0) as i64, (z * 8.0) as i64);
+    [1.0 + 0.12 * (hash(ix, iz, 98) as f32 - 0.5), 1.0, 1.0 + 0.12 * (hash(ix, iz, 99) as f32 - 0.5)]
+}
+
 /// A far card's crown colour (sRGB bytes) for coastal species `sp` at (x, z):
 /// its leaf albedo target varied as the near tier's tint is (`far_form`'s).
 pub fn far_tint(sp: u8, x: f64, z: f64) -> [u8; 3] {
-    let v = 0.85 + 0.3 * hash((x * 8.0) as i64, (z * 8.0) as i64, 92) as f32;
-    let enc = |l: f32| {
-        let l = l.clamp(0.0, 1.0);
-        let e = if l <= 0.0031308 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
-        (e * 255.0).round() as u8
-    };
     let a = FAR_TREE_ALBEDO[sp as usize];
-    [enc(a[0] * v), enc(a[1] * v), enc(a[2] * v)]
+    let v = far_tint_gain(x, z);
+    [a[0] * v, a[1] * v, a[2] * v].map(srgb_byte)
+}
+
+/// A far card's light gain at (x, z): the near tier's 0.85 + 0.3 draw.
+pub fn far_tint_gain(x: f64, z: f64) -> f32 {
+    0.85 + 0.3 * hash((x * 8.0) as i64, (z * 8.0) as i64, 92) as f32
+}
+
+/// A linear value as an sRGB byte.
+pub fn srgb_byte(l: f32) -> u8 {
+    let l = l.clamp(0.0, 1.0);
+    let e = if l <= 0.0031308 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
+    (e * 255.0).round() as u8
 }
 
 /// The coarse layer over [x0, x1) x [z0, z1): coastal trees on unmapped tree

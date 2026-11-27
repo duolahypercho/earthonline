@@ -908,6 +908,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs: the open ground's colour from the aerial survey)
             "--no-city-canopy-trees" => {} // read by props/vegetation.rs (park_tree_canopy_ok: the park trees only under the aerial image's canopy)
             "--no-lidar-trees" => {} // read by props/lidar_trees.rs (the hill parks' trees from the lidar, not the greens' lattice)
+            "--no-tree-variety" => {} // read by props/lidar_trees.rs (the lidar trees' species by height and crown alone, not each park's own mix)
             "--no-hill-outcrops" => {} // read by eo-landmarks (rocks/hills.rs: the hills' scanned rock faces, stones and cliffs)
             "--no-deck-ground" => {} // read by eo-data (decks.rs: the roof decks the survey keeps as ground, Moscone South's, down to the streets' grade)
             "--no-city-relief" => {} // read by eo-render (terrain_detail.rs `cooked`: the hill builder's 2 m relief over the city's hills)
