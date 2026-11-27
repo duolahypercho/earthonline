@@ -441,6 +441,12 @@ impl RockGpu {
         });
         let draw_src = format!("{}\n{types}\n{}", crate::look::city_shader_source(), include_str!("rock_draw.wgsl"));
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rock_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
+        // the clipped scans (an open scan's frayed rim, a discard) take the props' lighter city shader
+        // (the ambient volume's plane, the cascades without the far map): with play mode's look
+        // compiled in, Apple's compiler service dies on the full one (XPC_ERROR_CONNECTION_INTERRUPTED,
+        // as it does on the props' cut-outs: look.rs `ShadowLevels`)
+        let clip_src = format!("{}\n{types}\n{}", crate::look::city_shader_source_with(crate::ambient::ShaderLevels::Plane), include_str!("rock_draw.wgsl"));
+        let clip_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rock_draw.wgsl (clipped)"), source: wgpu::ShaderSource::Wgsl(clip_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("gc-rock-draw"), bind_group_layouts: &[Some(&draw_bgl), Some(&setup.main_bgl), Some(&data_bgl)], immediate_size: 0 });
         let attrs = [
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
@@ -450,7 +456,7 @@ impl RockGpu {
         let stride = std::mem::size_of::<GcVertex>() as u64;
         let sample_count = setup.sample_count;
         // the city pass's targets: colour, and the debug ids when the renderer writes them
-        let make = |label: &str, fs_entry: &str| {
+        let make = |label: &str, fs_entry: &str, draw_mod: &wgpu::ShaderModule| {
             let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
             let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
             let targets_ids = [Some(color.clone()), Some(ids)];
@@ -468,8 +474,8 @@ impl RockGpu {
                 cache: None,
             })
         };
-        let opaque = make("gc-rock-opaque", "rock_fs");
-        let clipped = make("gc-rock-clipped", "rock_fs_clip");
+        let opaque = make("gc-rock-opaque", "rock_fs", &draw_mod);
+        let clipped = make("gc-rock-clipped", "rock_fs_clip", &clip_mod);
 
         // the sun casters (group 0: the look's cascade view at a dynamic offset)
         let view_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
