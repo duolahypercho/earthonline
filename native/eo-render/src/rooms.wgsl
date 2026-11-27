@@ -43,11 +43,14 @@ const FG_SOLAR_SCREENS: f32 = 0.35;
 const FG_SCREEN_COL: vec3<f32> = vec3<f32>(0.09, 0.09, 0.10);
 const FG_SCREEN_OPEN: f32 = 0.14;
 // a pane's tilt out of the wall's plane about each axis, and an insulating
-// unit's bow at its edges, radians (~0.46 and ~0.4 degrees at most).
-const FG_TILT: f32 = 0.008;
-const FG_BOW: f32 = 0.007;
-// float glass's own roughness, before the dirt film (weathering.wgsl `wx_glass`).
+// unit's bow at its edges, radians (~0.8 and ~0.6 degrees at most).
+const FG_TILT: f32 = 0.014;
+const FG_BOW: f32 = 0.011;
+// float glass's own roughness, before per-pane variation and the dirt film (weathering.wgsl `wx_glass`).
 const FG_ROUGH: f32 = 0.04;
+// per-pane roughness and tint variation set by `rm_pane_normal` (`--facade-glass`):
+// x = pane roughness, y = signed float-glass hue shift (-1..1).
+var<private> fg_pane_var: vec2<f32> = vec2<f32>(0.04, 0.0);
 // how much of the kit glass's colour (hue only) the room and its light take through the pane.
 const FG_GLASS_TINT: f32 = 0.25;
 // (`--facade-glass`) a lit room's lamp by its colour temperature, seen by an
@@ -890,8 +893,9 @@ fn rm_office_floor(pos: vec3<f32>, tangent: vec3<f32>, dir: vec3<f32>, local: ve
         illum = 0.28 * (1.0 - fix);
         day_face = 0.38;
     } else if (kind == 2u) {
-        // carpet tile
-        albedo = mix(vec3<f32>(0.11, 0.12, 0.14), vec3<f32>(0.16, 0.15, 0.13), rm_h(fs, 75.0)) * (0.9 + 0.2 * rm_h(floor(p.x / 0.5) + floor(p.z / 0.5) * 7.0, 76.0));
+        // carpet tile (filtered over the pixel footprint so grazing office views do not shimmer)
+        let tile_v = rm_filtered(rm_h(floor(p.x / 0.5) + floor(p.z / 0.5) * 7.0, 76.0), 0.5, fp, 0.5);
+        albedo = mix(vec3<f32>(0.11, 0.12, 0.14), vec3<f32>(0.16, 0.15, 0.13), rm_h(fs, 75.0)) * (0.9 + 0.2 * tile_v);
         illum = 1.0;
         day_face = 1.0;
     } else if (kind == 3u) {
@@ -904,7 +908,7 @@ fn rm_office_floor(pos: vec3<f32>, tangent: vec3<f32>, dir: vec3<f32>, local: ve
             let cell = floor(p.x / 1.6);
             let scr = rm_ss(panel_h - 0.35, panel_h - 0.33, p.y) * rm_pulse(p.x / 1.6 - 0.3, 0.35, fp / 1.6);
             albedo = mix(albedo, vec3<f32>(0.03), scr);
-            glow = scr * step(rm_h(cell + zs * 37.0, 78.0), 0.45) * 0.6 * on;
+            glow = scr * rm_filtered(step(rm_h(cell + zs * 37.0, 78.0), 0.45), 0.45, fp, 1.6) * 0.6 * on;
         }
         day_face = 0.7;
     } else {
@@ -1893,10 +1897,215 @@ fn rm_pane_normal(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>) -> vec3<f32> {
     let h1 = fract(sin(dot(key, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
     let h2 = fract(h1 * 31.7 + 0.13);
     let h3 = fract(h1 * 57.3 + 0.71);
+    let h4 = fract(h1 * 83.9 + 0.29);
+    let h5 = fract(h1 * 113.1 + 0.53);
+    // fade pane-to-pane tilt/bow smoothly as a pane shrinks under a pixel so grazing/far glass stays clean
+    let fp = length(pos - frame.cam_pos.xyz) * look.rooms_work.y;
+    let keep = 1.0 - rm_ss(0.25 * min(cs.x, cs.y), 0.9 * min(cs.x, cs.y), fp);
     let tilt = (vec2<f32>(h1, h2) - 0.5) * (2.0 * FG_TILT);
     let bow = (h3 - 0.5) * (2.0 * FG_BOW);
-    let d = tilt + q * bow;
+    let d = (tilt + q * bow) * keep;
+    fg_pane_var = vec2<f32>(mix(FG_ROUGH, mix(0.032, 0.072, h4 * h4), keep), (h5 * 2.0 - 1.0) * keep);
     return normalize(n + tangent * d.x + vec3<f32>(0.0, d.y, 0.0));
+}
+
+// (`--facade-glass`) architectural glazing on Blender-built buildings (kind 4):
+// breaks up opaque sky-tinted glass (`glass-sky`, `glass-shell`) into dielectric
+// double-pane architectural glazing with per-pane tilt/bow/roughness/tint
+// variation, interior room depth, varied blinds/shades/curtains, and warm lit
+// rooms at night; preserves transparent (`F_BLEND`) glass and mirror storefronts
+// (`glass-reflective`) while giving them subtle pane-to-pane reflection breakup.
+fn rm_authored_glass(s: ptr<function, Surface>, m: ptr<function, Material>, world: vec3<f32>, ng_out: vec3<f32>, v: vec3<f32>, object: u32, room: u32, fw: f32) -> vec3<f32> {
+    let nh_len = length(ng_out.xz);
+    let n_face = select(ng_out, -ng_out, dot(ng_out, v) < 0.0);
+    if (nh_len < 0.5) {
+        return n_face;
+    }
+    let nf = vec3<f32>(ng_out.x, 0.0, ng_out.z) / nh_len;
+    let tf = vec3<f32>(-nf.z, 0.0, nf.x);
+    let ob = objects[object];
+    // building storey geometry from the authored weathering record when present
+    var base_y = ob.min.y;
+    var origin = vec2<f32>(0.0);
+    var first_upper = 3.6;
+    var storey_h = 3.0;
+    if (ob.lod_group < arrayLength(&fa_weather_recs) / 13u) {
+        let rec = ob.lod_group * 13u;
+        let wflags = u32(fa_weather_recs[rec + 9u].y);
+        if ((wflags & 32u) != 0u) {
+            let v0 = fa_weather_recs[rec];
+            base_y = v0.x;
+            origin = vec2<f32>(v0.y, -v0.z);
+            let b0 = fa_weather_recs[rec + 9u].z;
+            let b1 = fa_weather_recs[rec + 9u].w;
+            if (b0 > base_y + 1.5 && b0 < base_y + 8.0) {
+                first_upper = b0 - base_y;
+            }
+            if (b1 > b0 + 2.0 && b1 < b0 + 5.5) {
+                storey_h = b1 - b0;
+            }
+        }
+    }
+    var fl = 0.0;
+    var ly = max(world.y - base_y, 0.0);
+    var sh = first_upper;
+    if (world.y >= base_y + first_upper) {
+        let dy = world.y - (base_y + first_upper);
+        fl = 1.0 + floor(dy / storey_h);
+        ly = dy - (fl - 1.0) * storey_h;
+        sh = storey_h;
+    }
+    // pane identification: facet angle separates curved bay facets cleanly at their
+    // mullions, storey and transom split vertical panes, and wide smooth-edged cells
+    // separate flat windows without putting a hard seam across a single bay facet.
+    let along = dot(world.xz - origin, tf.xz);
+    let ang_bin = floor(atan2(nf.z, nf.x) * 6.0 + 0.5);
+    let sub_v = step(sh * 0.52, ly);
+    let u_cell = floor(along / 2.6);
+    let pkey = vec3<f32>(u_cell + ang_bin * 19.0 + f32(ob.lod_group % 251u) * 0.37, fl * 3.0 + sub_v, ang_bin * 0.73 + 1.3);
+    let h1 = fract(sin(dot(pkey, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
+    let h2 = fract(h1 * 31.7 + 0.13);
+    let h3 = fract(h1 * 57.3 + 0.71);
+    let h4 = fract(h1 * 83.9 + 0.29);
+    let h5 = fract(h1 * 113.1 + 0.53);
+    // smooth bow across each pane (no sharp discontinuity if a flat lite spans u_cell)
+    let keep = 1.0 - rm_ss(0.2, 0.85, fw);
+    let qx = sin(along * 2.7 + h1 * 6.28318);
+    let qy = clamp((ly / max(sh, 1.0) - 0.5) * 2.0, -1.0, 1.0);
+    let blended = ((*m).flags & F_BLEND) != 0u;
+    let mirror = (*m).params.y >= 0.35;
+    let tilt_k = select(select(1.65, 0.85, mirror), 0.65, blended);
+    let tilt = (vec2<f32>(h1, h2) - 0.5) * (2.0 * FG_TILT * tilt_k);
+    let bow = (h3 - 0.5) * (2.0 * FG_BOW * tilt_k);
+    let d_n = (tilt + vec2<f32>(qx, qy) * bow) * keep;
+    var n_pane = normalize(nf + tf * d_n.x + vec3<f32>(0.0, d_n.y, 0.0));
+    if (dot(n_pane, v) < 0.0) {
+        n_pane = -n_pane;
+    }
+    (*s).n = n_pane;
+    if (blended) {
+        // transparent glazing with real 3D interiors behind it: keep transmission, break up reflection
+        (*s).rough = clamp((*s).rough + mix(0.0, 0.024, h4 * h4) * keep, 0.03, 1.0);
+        return n_pane;
+    }
+    // room cell: stepping 1.4 m inward along -nf maps all facets of a curved bay to one apartment
+    let inward = world.xz - origin - nf.xz * 1.4;
+    let rcell = floor(inward / 3.8 + 0.5);
+    let rseed = fract(sin(dot(vec3<f32>(rcell.x, fl, rcell.y) + f32(ob.lod_group % 127u) * 0.17, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
+    let view_w = normalize(world - frame.cam_pos.xyz);
+    let dir = vec3<f32>(dot(view_w, tf), view_w.y, max(-dot(view_w, nf), 0.04));
+    let cam_d = length(world - frame.cam_pos.xyz);
+    let fp_glass = cam_d * look.rooms_work.y / dir.z;
+    // compact parallax room box behind the pane
+    let W = 3.2;
+    let H = max(sh - 0.55, 1.3);
+    let ux = fract(along / W);
+    let uy = clamp((ly - 0.28) / H, 0.0, 1.0);
+    let loc = vec2<f32>(ux * W, uy * H);
+    let depth = mix(3.0, 5.6, rm_h(rseed, 6.0));
+    let floor_y = -0.55;
+    let ceil_y = H + 0.3;
+    let to_side = select(loc.x + 0.9, W + 0.9 - loc.x, dir.x >= 0.0) / max(abs(dir.x), 1e-3);
+    let to_hc = select(max(loc.y - floor_y, 0.01), max(ceil_y - loc.y, 0.01), dir.y >= 0.0) / max(abs(dir.y), 1e-3);
+    let to_back = depth / dir.z;
+    let t = min(min(to_side, to_hc), to_back);
+    let back = step(to_back, min(to_side, to_hc));
+    let side = step(to_side, to_hc) * (1.0 - back);
+    let horiz = (1.0 - back) * (1.0 - side);
+    let ceiling = horiz * step(0.0, dir.y);
+    let floor_face = horiz - ceiling;
+    let px = loc.x + dir.x * t;
+    let py = loc.y + dir.y * t;
+    let pz = min(dir.z * t, depth);
+    // interior surface palette (warm plaster, taupe, cool grey, wood floor, white ceiling)
+    let p_roll = rm_h(rseed, 8.0);
+    let wall_c = mix(
+        mix(vec3<f32>(0.76, 0.72, 0.64), vec3<f32>(0.64, 0.58, 0.50), step(0.35, p_roll)),
+        mix(vec3<f32>(0.54, 0.58, 0.56), vec3<f32>(0.46, 0.50, 0.56), step(0.80, p_roll)),
+        step(0.60, p_roll),
+    );
+    let ceil_c = vec3<f32>(0.84, 0.83, 0.80);
+    let floor_c = mix(vec3<f32>(0.34, 0.23, 0.14), vec3<f32>(0.24, 0.25, 0.27), step(0.55, rm_h(rseed, 9.0)));
+    var alb = wall_c * (back + side * 0.72) + ceil_c * ceiling + floor_c * floor_face;
+    // subtle interior back-wall band (furniture/frame/divider shadow) for depth cues
+    let h_floor = py - floor_y;
+    let furn = back * (1.0 - rm_ss(0.75, 1.05, h_floor)) * step(0.3, rm_h(rseed, 10.0));
+    alb = mix(alb, alb * 0.42, furn);
+    let day_fall = mix(1.0, 0.20, sqrt(clamp(pz / depth, 0.0, 1.0)));
+    let day_face = back * 0.74 + side * 0.52 + ceiling * 0.36 + floor_face * 0.92;
+    var day_room = alb * day_face * day_fall * RM_DAY_DEPTH;
+    // night lamp inside the apartment
+    let lamp_pos = vec3<f32>(W * (0.3 + 0.4 * rm_h(rseed, 7.0)), ceil_y - 0.25, depth * 0.42);
+    let to_lamp = lamp_pos - vec3<f32>(px, py, pz);
+    let illum = 1.0 / (1.0 + dot(to_lamp, to_lamp) * 0.24) * 0.9 + 0.1;
+    let disc = rm_ss(0.34, 0.12, length(vec2<f32>(px - lamp_pos.x, pz - lamp_pos.z))) * ceiling;
+    let kelvin = select(mix(2400.0, 3400.0, rm_h(rseed, 47.0)), mix(3800.0, 4600.0, rm_h(rseed, 47.0)), rm_h(rseed, 46.0) < 0.14);
+    let light_rad = fg_lamp(kelvin) * mix(0.45, 1.15, rm_h(rseed, 3.0)) * 0.30;
+    var rad = (alb * illum + vec3<f32>(disc * 1.2)) * light_rad;
+    // window treatments: venetian blinds, roller shades, drapes, or sheer (varied per apartment + slight pane drop offset)
+    let style = rm_h(rseed, 30.0);
+    let pane_drop = (h5 - 0.5) * 0.12;
+    if (style < 0.30) {
+        let drop = clamp(mix(0.20, 0.92, rm_h(rseed, 34.0)) + pane_drop, 0.08, 1.0);
+        let cov = rm_ss(1.0 - drop - 0.015, 1.0 - drop + 0.015, uy);
+        let slat = fract(ly / 0.045);
+        let gap = rm_filtered(rm_ss(0.76, 0.86, slat), 0.18, fp_glass, 0.045);
+        let bcol = mix(vec3<f32>(0.84, 0.81, 0.76), vec3<f32>(0.66, 0.65, 0.62), step(0.65, rm_h(rseed, 36.0)));
+        day_room = mix(day_room, mix(bcol * 0.76, day_room * 0.65, gap), cov);
+        rad = mix(rad, mix(bcol * 0.36 * light_rad, rad * 0.7, gap), cov);
+    } else if (style < 0.56) {
+        let drop = clamp(mix(0.16, 0.88, rm_h(rseed, 37.0)) + pane_drop, 0.08, 1.0);
+        let cov = rm_ss(1.0 - drop - 0.015, 1.0 - drop + 0.015, uy);
+        let scol = mix(vec3<f32>(0.88, 0.84, 0.76), vec3<f32>(0.48, 0.51, 0.55), step(0.78, rm_h(rseed, 38.0)));
+        day_room = mix(day_room, scol * 0.76, cov);
+        rad = mix(rad, scol * light_rad * 0.32 * max(illum, 0.6), cov);
+    } else if (style < 0.74) {
+        let cl = mix(0.12, 0.36, rm_h(rseed, 31.0));
+        let cr = mix(0.12, 0.36, rm_h(rseed, 32.0));
+        let in_c = max(1.0 - rm_ss(cl - 0.02, cl + 0.02, ux), rm_ss(1.0 - cr - 0.02, 1.0 - cr + 0.02, ux));
+        let folds = rm_filtered(sin(along * 12.0 + rseed * 31.0) * 0.09, 0.0, fp_glass, 0.28) + 0.86;
+        let ccol = mix(vec3<f32>(0.82, 0.78, 0.68), vec3<f32>(0.40, 0.46, 0.56), step(0.65, rm_h(rseed, 33.0)));
+        day_room = mix(day_room, ccol * folds * 0.68, in_c);
+        rad = mix(rad, ccol * folds * 0.42 * light_rad * max(illum, 0.5), in_c);
+    } else if (style < 0.84) {
+        day_room = day_room * 0.55 + vec3<f32>(0.22, 0.22, 0.20);
+        rad = rad * 0.45 + light_rad * 0.16;
+    }
+    // soft peak cap matching rm_room
+    let peak = max(max(max(rad.x, rad.y), rad.z), 1e-4);
+    let over = peak / 0.24;
+    rad = rad * pow(1.0 + over * over * over, -1.0 / 3.0);
+    let lit_share = select(look.rooms_env.y, look.rooms_env.z, room == 2u);
+    let lit = rm_ss(rm_h(rseed, 1.0) - 0.05, rm_h(rseed, 1.0) + 0.05, lit_share);
+    let fresnel = 0.04 + 0.96 * pow(1.0 - dir.z, 5.0);
+    let far = rm_ss(140.0, 420.0, cam_d) * 0.55;
+    let show = (1.0 - fresnel) * (1.0 - far) * 0.95;
+    var through = 1.0;
+    if (RM_PANE_TV) {
+        let tv = f32(((*m).flags >> RM_PANE_TV_SHIFT) & 15u) / 15.0;
+        through = select(1.0, min(tv * tv / (RM_PANE_TV_REFERENCE * RM_PANE_TV_REFERENCE), 1.0), tv > 0.0);
+    }
+    let hue = (*m).base.rgb / max(max((*m).base.r, max((*m).base.g, (*m).base.b)), 1e-3);
+    let lot_shift = (h5 * 2.0 - 1.0) * keep;
+    let tint = mix(vec3<f32>(1.0), hue, 0.22) * (vec3<f32>(1.0) + vec3<f32>(-0.045, 0.015, 0.045) * lot_shift);
+    let day_level = mix(0.68, 1.16, rm_h(rseed, 3.0));
+    let interior = min(day_room * day_level, vec3<f32>(1.0)) * RM_DAY_THROUGH * through * show * tint;
+    if (mirror) {
+        // reflective storefront / coated spandrel glass: preserve strong reflection while adding subtle depth & tint breakup
+        (*s).albedo = mix((*s).albedo * (1.0 + 0.08 * lot_shift), interior, 0.32);
+        (*s).rough = clamp(mix((*s).rough, mix(0.036, 0.068, h4 * h4), keep), 0.03, 1.0);
+        (*m).emissive.w = max((*m).emissive.w, 1.0);
+        rm_emit = rad * (1.0 - fresnel) * lit * look.rooms_env.x * lk_practical_gain() * tint * 0.45;
+    } else {
+        // opaque architectural glazing (`glass-sky`, `glass-shell`): dielectric two-face glass over the room
+        (*s).albedo = interior;
+        (*s).metal = 0.0;
+        (*s).rough = mix(FG_ROUGH, mix(0.032, 0.078, h4 * h4), keep);
+        (*s).alpha = 1.0;
+        (*m).emissive.w = 1.0;
+        rm_emit = rad * (1.0 - fresnel) * lit * look.rooms_env.x * lk_practical_gain() * tint;
+    }
+    return n_pane;
 }
 
 // ---- (`--canyon-glass`, `cg_on()`; facade.rs `canyon_from_args`) the street canyon in kit glass ----
@@ -2095,7 +2304,8 @@ fn cg_canyon(world: vec3<f32>, ng: vec3<f32>, r: vec3<f32>, cam_d: f32) {
     let ch = rm_h(fract(seed + cell.x * 0.0137 + cell.y * 0.1173), 67.0);
     let lit = step(ch, look.rooms_env.y * 0.8) * look.rooms_env.x;
     let lamp = fg_lamp(mix(2400.0, 3800.0, rm_h(ch, 68.0))) * mix(0.04, 0.11, rm_h(ch, 69.0));
-    let night = rm_filtered3(lamp * lit, lamp * look.rooms_env.y * 0.8 * look.rooms_env.x, f, min(bay, storey));
+    let mean_night = vec3<f32>(1.0, 0.72, 0.45) * (0.075 * look.rooms_env.y * 0.8 * look.rooms_env.x);
+    let night = rm_filtered3(lamp * lit, mean_night, f, min(bay, storey));
     // the cornice's shadow along each roofline, and grime darkening toward the street
     let under_cornice = 1.0 - 0.45 * rm_ss(top - CG_CORNICE_M - f, top - CG_CORNICE_M * 0.4, y) * (1.0 - rm_ss(top - 0.15, top, y));
     let wall = albedo / LK_PI * e_wall * under_cornice * mix(0.85, 1.0, rm_ss(0.0, 6.0, y));

@@ -438,6 +438,98 @@ fn fa_detail_sample(cell: f32, tile_m: f32, wall_m: vec2<f32>, fw: vec2<f32>) ->
     return o;
 }
 
+// (`--facade-patina`) crisp anti-aliased stucco/plaster micro-grain and subtle near-wall
+// weathering for smooth render and painted walls (Blender buildings and kit close-ups).
+// Smoothly footprint-faded so distant walls keep zero aliasing; compiled out without SF_FACADE_PATINA.
+fn fp_stucco_micro(s: ptr<function, Surface>, world: vec3<f32>, ng: vec3<f32>, base_y: f32, seed: f32, cls: u32, run: u32, dpx: vec3<f32>, dpy: vec3<f32>, authored: bool) {
+    if (!SF_FACADE_PATINA || (cls != FA_AGE_RENDER && cls != FA_AGE_PAINTED) || (*s).metal > 0.15 || (*s).rough < 0.35) {
+        return;
+    }
+    let fr = fa_frame(ng);
+    let uv = vec2<f32>(dot(world, fr.t), dot(world, fr.b));
+    let fw2 = abs(vec2<f32>(dot(dpx, fr.t), dot(dpx, fr.b))) + abs(vec2<f32>(dot(dpy, fr.t), dot(dpy, fr.b)));
+    let fwm = max(fw2.x, fw2.y);
+    // photographed fine stucco relief from facade-detail-v1 on Blender walls (cell 1 white_stucco
+    // has crisp uniform sand-float micro-grain without coarse blotches or wood knots).
+    if (authored && AGE_DETAIL && (run & FA_RUN_DETAIL) != 0u && !cc0_wall_hit) {
+        let sm = fa_detail_sample(1.0, 1.45, uv, fw2);
+        if (sm.texel.a > 0.5) {
+            let cavity = sm.texel.z - 0.5;
+            let near = 1.0 - fa_ss(2.5, 4.0, sm.lod);
+            let qx = (sm.texel.x * 2.0 - 1.0) * 0.85 * near;
+            let qy = (sm.texel.y * 2.0 - 1.0) * 0.85 * near;
+            let qz = sqrt(1.0 - min(0.96, qx * qx + qy * qy));
+            let dn = normalize(fr.t * qx + fr.b * qy + fr.n * qz);
+            (*s).n = normalize((*s).n + dn - fr.n);
+            (*s).albedo = (*s).albedo * (1.0 + cavity * 0.12 * near);
+            (*s).rough = clamp((*s).rough - cavity * 0.14 * near, 0.03, 1.0);
+            (*s).ao = clamp((*s).ao * (1.0 - max(-cavity, 0.0) * 0.15 * near), 0.0, 1.0);
+        }
+    }
+    // multi-scale sand-float stucco & trowel micro-grain, faded cleanly before Nyquist
+    let scan_k = select(1.0, 0.6, cc0_wall_hit);
+    let k_fine = (1.0 - fa_ss(0.004, 0.018, fwm)) * scan_k;
+    let k_med = (1.0 - fa_ss(0.022, 0.095, fwm)) * scan_k;
+    var gx = 0.0;
+    var gy = 0.0;
+    var cav = 0.0;
+    if (k_fine > 0.001) {
+        let qf = fp_turn(uv / 0.022 + vec2<f32>(seed * 3.17, seed * 1.91), 103.0);
+        let e = 0.35;
+        let h0 = fa_noise(qf, 103.0);
+        let hx = fa_noise(qf + vec2<f32>(e, 0.0), 103.0);
+        let hy = fa_noise(qf + vec2<f32>(0.0, e), 103.0);
+        gx = gx + (h0 - hx) * (0.24 * k_fine);
+        gy = gy + (h0 - hy) * (0.24 * k_fine);
+        cav = cav + (h0 - 0.5) * (0.055 * k_fine);
+    }
+    if (k_med > 0.001) {
+        let qm = fp_turn(uv / 0.11 + vec2<f32>(seed * 1.43, seed * 2.71), 107.0);
+        let e = 0.35;
+        let m0 = fa_noise(qm, 107.0);
+        let mx = fa_noise(qm + vec2<f32>(e, 0.0), 107.0);
+        let my = fa_noise(qm + vec2<f32>(0.0, e), 107.0);
+        gx = gx + (m0 - mx) * (0.09 * k_med);
+        gy = gy + (m0 - my) * (0.09 * k_med);
+        cav = cav + (m0 - 0.5) * (0.032 * k_med);
+    }
+    if (k_fine > 0.001 || k_med > 0.001) {
+        (*s).n = normalize((*s).n + fr.t * gx + fr.b * gy);
+        (*s).albedo = (*s).albedo * (1.0 + cav);
+        (*s).rough = clamp((*s).rough - cav * 0.75, 0.03, 1.0);
+    }
+    if (authored) {
+        // ease clinical white paint under realistic exterior reflectance and add subtle foot/soffit patina
+        let a = (*s).albedo;
+        let l = dot(a, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let ceil_l = 0.74 * (0.96 + 0.08 * fract(seed * 0.6180339));
+        let knee = 0.8 * ceil_l;
+        if (l > knee) {
+            let lo = knee + (ceil_l - knee) * (1.0 - exp(-(l - knee) / (ceil_l - knee)));
+            (*s).albedo = a * (lo / l);
+        }
+        let ly = world.y - base_y;
+        let upright = fa_ss(0.35, 0.7, length(ng.xz));
+        if (upright > 0.01 && ly > -0.05 && ly < 2.4) {
+            let along = dot(world.xz, fr.t.xz);
+            let keep_sp = 1.0 - fa_ss(0.01, 0.045, fwm);
+            let top = 0.30 * (0.75 + 0.5 * fa_noise(vec2<f32>(along / 0.85, 1.9 + seed), 81.0));
+            let sp = (1.0 - fa_ss(top * 0.45, top + max(0.025, fwm), ly)) * upright;
+            let speck = mix(fa_ss(0.42, 0.82, fa_noise(vec2<f32>(along / 0.025, ly / 0.025), 84.0)), 0.3, 1.0 - keep_sp);
+            let hand = (1.0 - fa_ss(0.25, 2.0, ly)) * upright * (0.55 + 0.45 * fa_noise(vec2<f32>(along / 1.9, ly / 0.75), 85.0));
+            let soil = clamp(sp * (0.14 + 0.20 * speck) + hand * 0.06, 0.0, 0.38);
+            (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.54, 0.52, 0.48), soil);
+            (*s).rough = clamp((*s).rough + soil * 0.12, 0.03, 1.0);
+        }
+        if (ng.y < -0.5) {
+            // underside of bay windows and soffits: subtle dust darkening and matte plaster tooth
+            let sm = 0.94 + 0.05 * fa_noise(uv / 0.9 + vec2<f32>(seed * 2.1, 4.3), 109.0);
+            (*s).albedo = (*s).albedo * sm;
+            (*s).rough = clamp((*s).rough + 0.06, 0.03, 1.0);
+        }
+    }
+}
+
 // Apply weathering / ageing to a surface. `world` and `ng` are world space;
 // `mirror` the authoring mirror (Blender buildings). Kit: `kit_age` true.
 fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f32>, object: u32, dpx: vec3<f32>, dpy: vec3<f32>) {
@@ -478,6 +570,7 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
         let wo = fa_weather(w, pa, na);
         let min_r = select(0.03, roof_min_r, bldg_roof);
         let blender_ext = ob.lod_role == 1u && (!SF_HOUSE || (ob.kind & 0xfffffe00u) == 0u);
+        let cls4 = (m.flags >> 8u) & 7u;
         if (wx_level() != 0u && dot(ng.xz, ng.xz) > 0.25) {
             // weathering (`--grime`, weathering.wgsl): the graph's darkening deepened, splash-back at the foot.
             (*s).albedo = (*s).albedo * wx_authored(wo.color, world.y - w.base_y, dot(world.xz, vec2<f32>(-ng.z, ng.x)), w.patch_seed);
@@ -529,6 +622,7 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
             (*s).albedo = mix((*s).albedo, (*s).albedo * FW_DIRT, kd_b);
             (*s).rough = clamp((*s).rough + kd_b * 0.06 - damp_b * 0.08, min_r, 1.0);
         }
+        fp_stucco_micro(s, world, ng, w.base_y, w.patch_seed + f32(ob.lod_group % 64u) * 0.73, cls4, run, dpx, dpy, true);
         return;
     }
     if (kind != 5u) {
@@ -721,6 +815,7 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
     (*s).albedo = color;
     (*s).rough = clamp(rough, 0.03, 1.0);
     (*s).ao = clamp((*s).ao * occlusion, 0.0, 1.0);
+    fp_stucco_micro(s, world, ng, d.base_y, d.seed, cls, run, dpx, dpy, false);
 }
 
 // ---- the scene probe (probe.rs; environment-ibl.js scene bake) ----------------

@@ -2167,6 +2167,8 @@ fn shade(in: VOut) -> vec4<f32> {
     let room = (m.flags >> 8u) & 7u;
     // the normal the light takes as the surface's own (a `--facade-glass` pane's: its bow and tilt).
     var n_light = n;
+    var glass_canyon = false;
+    var glass_ng = n;
     if ((m.flags & F_GLASS) != 0u && room != 0u && kit_object && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
         let ng_out = select(face, normalize(n_in), dot(n_in, n_in) > 0.25);
         if (SF_AAA_DETAIL && abs(ng_out.y) >= 0.55) {
@@ -2206,17 +2208,17 @@ fn shade(in: VOut) -> vec4<f32> {
                 // glass colour is a blended pane's look, not its transmission); each pane on its own
                 // normal (rooms.wgsl `rm_pane_normal`), so its reflection and the
                 // sun's glint break pane by pane.
-                let tint = mix(vec3<f32>(1.0), m.base.rgb / max(max(m.base.r, max(m.base.g, m.base.b)), 1e-3), FG_GLASS_TINT);
-                s.albedo = r.day.xyz * r.day.w * tint;
-                s.metal = 0.0;
-                s.rough = FG_ROUGH;
-                s.alpha = 1.0;
-                m.emissive.w = 1.0;
-                rm_emit = r.night * tint;
                 n_light = rm_pane_normal(vec4<f32>(in.color, in.aux.y), in.world, ng_out);
                 if (dot(n_light, v) < 0.0) {
                     n_light = -n_light;
                 }
+                let tint = mix(vec3<f32>(1.0), m.base.rgb / max(max(m.base.r, max(m.base.g, m.base.b)), 1e-3), FG_GLASS_TINT) * (vec3<f32>(1.0) + vec3<f32>(-0.04, 0.015, 0.045) * fg_pane_var.y);
+                s.albedo = r.day.xyz * r.day.w * tint;
+                s.metal = 0.0;
+                s.rough = fg_pane_var.x;
+                s.alpha = 1.0;
+                m.emissive.w = 1.0;
+                rm_emit = r.night * tint;
                 s.n = n_light;
             }
             if (SF_WINDOW_DEPTH && max(wd_depth.x, wd_depth.y) > 0.01) {
@@ -2227,10 +2229,8 @@ fn shade(in: VOut) -> vec4<f32> {
                 fr_sun_vis = wd.x;
                 s.albedo = s.albedo * wd.y;
             }
-            if (SF_CANYON_GLASS && cg_on()) {
-                // (`--canyon-glass`) the street canyon the pane reflects (rooms.wgsl `cg_canyon`; look_light.wgsl reads it)
-                cg_canyon(in.world, ng_out, reflect(-v, n_light), distance(frame.cam_pos.xyz, in.world));
-            }
+            glass_canyon = true;
+            glass_ng = ng_out;
             if (wx_level() != 0u || sl_level() != 0u) {
                 wx_window(&s, &m, vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room, dpx, dpy); // stage W5: dirty glass (`--grime`); stickers, scratched tags (`--street-life`)
             }
@@ -2301,9 +2301,8 @@ fn shade(in: VOut) -> vec4<f32> {
                     }
                     rm_sash_cov = 0.0;
                 }
-                if (SF_CANYON_GLASS && cg_on()) {
-                    cg_canyon(in.world, ng_out, reflect(-v, n_light), distance(frame.cam_pos.xyz, in.world));
-                }
+                glass_canyon = true;
+                glass_ng = ng_out;
             }
         } else if (SF_AAA_DETAIL) {
             // Horizontal Blender GLB roof skylight/lightwell glass: dusty matte-charcoal skylight glazing (no clearcoat starburst).
@@ -2314,6 +2313,15 @@ fn shade(in: VOut) -> vec4<f32> {
             m.emissive.w = 0.0;
             rm_emit = vec3<f32>(0.0);
         }
+    } else if (fg_on() && (m.flags & F_GLASS) != 0u && room != 0u && !kit_object && (objects[in.object].kind & 255u) == 4u && (m.flags & F_THIN_GLASS) == 0u && (!SF_HOUSE || (objects[in.object].kind & 0xfffffe00u) == 0u) && !house_finish && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
+        let ng_out = select(face, normalize(n_in), dot(n_in, n_in) > 0.25);
+        n_light = rm_authored_glass(&s, &m, in.world, ng_out, v, in.object, room, max(length(dpx), length(dpy)));
+        glass_canyon = (m.flags & F_BLEND) == 0u && m.params.y < 0.35;
+        glass_ng = ng_out;
+    }
+    if (glass_canyon && SF_CANYON_GLASS && cg_on()) {
+        // (`--canyon-glass`) the street canyon the pane reflects (rooms.wgsl `cg_canyon`; look_light.wgsl reads it)
+        cg_canyon(in.world, glass_ng, reflect(-v, n_light), distance(frame.cam_pos.xyz, in.world));
     }
     // facade clutter (`--facade-clutter`): a lit sign face carries a glow code in the normal's w
     // byte (eo-kit clutter.rs, kit.rs), a lettered one (stage S1) its code; none on any other kit
