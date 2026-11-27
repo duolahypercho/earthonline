@@ -91,11 +91,14 @@ pub struct Props2Args {
     /// (`--luminaires`, main.rs) the district lights' lamps at their GLBs' glass (a twin
     /// post's two lanterns), the glass drawn lit. Off (the default): the JS heads as before.
     pub luminaires: bool,
+    /// `--poster-hoardings`: draw the furniture walk's poster hoardings again (eo-props
+    /// `furniture::set_poster_hoardings`). Off (the default): they are planned but not drawn.
+    pub poster_hoardings: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false, poster_hoardings: false }
     }
 }
 
@@ -104,7 +107,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires, poster_hoardings: self.poster_hoardings };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -120,6 +123,8 @@ impl Props2Args {
             "--no-fade" => self.features &= !eo_render::props::F_FADE,
             "--no-wind" => self.features &= !eo_render::props::F_WIND,
             "--capture-props2" => self.capture = true,
+            "--poster-hoardings" => self.poster_hoardings = true,
+            "--no-poster-hoardings" => self.poster_hoardings = false,
             _ => return false,
         }
         true
@@ -386,6 +391,7 @@ impl PropsRuntime {
                     eo_props::basins::set_tree_basins(p2.tree_basins);
                     let world = Arc::new(PropsWorld::new(street, js, std).with_structures(structures));
                     eo_props::furniture::set_surveyed_first(p2.surveyed_furniture);
+                    eo_props::furniture::set_poster_hoardings(p2.poster_hoardings);
                     if p2.furniture || p2.eztree {
                         world.install_furniture(&city.buildings)?;
                     }

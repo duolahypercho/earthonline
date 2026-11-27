@@ -291,6 +291,10 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--no-kit" => a.kit = false,
             "--no-models" => a.models = false,
             "--no-props" => a.props = false,
+            // the furniture walk's poster hoardings (eo-props `furniture::set_poster_hoardings`).
+            "--poster-hoardings" | "--no-poster-hoardings" => {
+                a.props2.parse_flag(s);
+            }
             "--no-landmark-access" => a.landmark_access = false, // the landmark decks and lifts (a local server follows)
             "--no-agents" => a.agents = false,
             "--no-rocketbox" => a.rocketbox = false, // people
@@ -2567,5 +2571,24 @@ mod net_shots {
             g.ctx.queue.submit([enc.finish()]);
         }
         save_png(&g.ctx, &g.color, file)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    fn parsed(flags: &[&str]) -> bool {
+        let raw: Vec<String> = ["--connect", "local"].iter().chain(flags).map(|s| s.to_string()).collect();
+        parse(&raw).expect("the online arguments parse").0.props2.poster_hoardings
+    }
+
+    /// Online launches take the poster hoarding switch as `--play` does: off by default,
+    /// `--poster-hoardings` draws them, a later `--no-poster-hoardings` turns them off again.
+    #[test]
+    fn poster_hoarding_switch_online() {
+        assert!(!parsed(&[]));
+        assert!(parsed(&["--poster-hoardings"]));
+        assert!(!parsed(&["--poster-hoardings", "--no-poster-hoardings"]));
     }
 }
