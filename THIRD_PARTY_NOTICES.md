@@ -244,6 +244,13 @@ read from the folder `EO_SURVEY_ROOT` names.
 - **USGS 3DEP 1 arc-second DEM** for the far shore: public domain.
   Manifest: `native/assets/dem-manifest.json`.
 - **USDA NAIP aerial imagery** for the roof survey tool: public domain.
+- **USGS 3DEP lidar point cloud** (project CA_SanFrancisco_B23, work unit
+  CA_SanFrancisco_1_B23, the Entwine copy on the AWS Open Data bucket
+  `usgs-lidar-public`) for the hill builder's tree cook (`external/lidar`,
+  fetched by `native/tools/fetch-lidar.py`; nothing of it is shipped):
+  public domain (U.S. Government work). Credit: U.S. Geological Survey, 3D
+  Elevation Program. Each area's files, URLs, retrieval times and SHA-256
+  are listed in its `PROVENANCE.json`.
 - **The Golden Gate survey set** (`EO_SURVEY_ROOT`; read by the
   `eo_farshore::survey` readers). Manifest, with path, bytes and SHA-256 per
   file and each group's attribution: `native/assets/survey-manifest.json`

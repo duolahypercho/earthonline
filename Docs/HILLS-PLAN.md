@@ -24,7 +24,8 @@ same place, judged under [VISUAL_QUALITY_GATE.md](VISUAL_QUALITY_GATE.md).
   `plant_meadow`). Each patch lays an opaque 1.7 m disc ("mat") under its
   blades, shaded apart from the ground and darkened to 0.6 within 5-26 m.
   On a slope these read as dark plates with hard edges.
-- Trees: generic models on a 14 m lattice inside OSM greens.
+- Trees: generic models on a 14 m lattice inside OSM greens; in nine hill
+  parks, the trees the lidar measured (H6c).
 - Rock: procedural blocks, "sandstone" outside two boxes (H7: by the city's
   bedrock map where it maps bedrock).
 - Structures in the survey: the bare-earth DEM keeps some roof decks as
@@ -63,7 +64,8 @@ grass, scrub, tree and rock systems take their placements from the lists.
 | H5 | Surface map as material IDs in the terrain shader | planned |
 | H6a | The planting's NAIP rules citywide from the hill builder's class-count map; parks with cured ground are grassland, not lawn; `--no-city-planting` | done (first pass) |
 | H6b | Grass that reads as a canopy on foot: the city's open grassland as a standing annual canopy (wild oats and the other annual grasses 0.4-0.9 m with seed heads over their litter, darker down in the canopy; a floor darkened near the eye was tried and rejected: a camera-centred halo); `--no-city-grass` | first pass |
-| H6c | Trees where the photograph has them: the greens' 14 m park-tree lattice, near and far, only under the NAIP image's canopy (the hill builder's planting map, the coastal trees' rule), so the open grassland of McLaren and Bernal carries no tree the image does not show (`--no-city-canopy-trees`); next, their height and crown from lidar | first pass (canopy gate) |
+| H6c | Trees where the photograph has them: the greens' 14 m park-tree lattice, near and far, only under the NAIP image's canopy (the hill builder's planting map, the coastal trees' rule), so the open grassland of McLaren and Bernal carries no tree the image does not show (`--no-city-canopy-trees`) | first pass (canopy gate) |
+| H6c | Trees from lidar: the USGS 3DEP point cloud of nine hill parks (McLaren, Bernal Heights, Twin Peaks, Mount Davidson, Glen Canyon, Corona Heights, Bayview Hill, Lands End, Golden Gate Park west of 122.49 W; fetched to octree depth 8, about 14 points a square metre, by `native/tools/fetch-lidar.py`) cooked by `cook trees` into `<cache>/hills/trees-v1.bin`: 16,187 crowns, each with its position, height over the ground at the trunk and crown radius; inside the parks' rings they replace the lattice in the near tier and the distant cards, as blue gum, Monterey cypress or Monterey pine by the height over the crown (over 30 m a blue gum, a small broad tree a broadleaf), scaled to the measured height and crown, the near ones on the drawn relief (`--no-lidar-trees`); the blue gum model's sparse crown reads thinner near than the far cards' | first pass |
 | H7 | Rock by lithology: the hill rock and the planting read the city's bedrock map (`native/assets/sf-lithology-v1.json.gz`, the USGS geologic map units of MF-2337, OF 98-354 and MF-2342 as rock classes): chert on Twin Peaks, Mount Davidson, Bernal Heights, Corona Heights and Tank Hill, serpentinite on Potrero Hill, greenstone where mapped; Quaternary deposits and unmapped ground keep the boxes; `--no-city-lithology` | first pass |
 
 Each stage ships with two matched capture sets (before, after), the bench
