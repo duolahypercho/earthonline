@@ -270,9 +270,41 @@ fn amb_sample_ground(world: vec3<f32>, ng: vec3<f32>, n: vec3<f32>) -> vec4<f32>
     return v;
 }
 
-// The ground lobe's sky part (the street's reflection of the sky's fill), never more than the lobe.
+// Physical daylight's upward sky irradiance and downward sunlit-ground exitance
+// from look.sh (used when `--phys-sky` fades look.hemi_sky / look.hemi_ground to zero).
+fn amb_phys_sky() -> vec3<f32> {
+    return max(look.sh[0].xyz * 0.282095 + look.sh[1].xyz * 0.488603 - look.sh[6].xyz * 0.315392 - look.sh[8].xyz * 0.546274, vec3<f32>(0.0));
+}
+
+fn amb_phys_ground() -> vec3<f32> {
+    return max(look.sh[0].xyz * 0.282095 - look.sh[1].xyz * 0.488603 - look.sh[6].xyz * 0.315392 - look.sh[8].xyz * 0.546274, vec3<f32>(0.0));
+}
+
+// Effective street-level ground exitance (the rig's ground lobe plus physical
+// daylight's sunlit-ground bounce by `lk_phys()`).
+fn amb_ground_lobe() -> vec3<f32> {
+    let w = lk_phys();
+    if (w <= 0.0) {
+        return look.hemi_ground.xyz;
+    }
+    return look.hemi_ground.xyz + amb_phys_ground() * w;
+}
+
+// The rig ground lobe's sky part (the street's reflection of the sky's fill),
+// never more than look.hemi_ground.xyz (so subtracting it from look.hemi_ground
+// in `amb_irradiance` / `amb_bounce` stays non-negative under `--phys-sky`).
 fn amb_lobe_sky() -> vec3<f32> {
     return min(AMB_LOBE_SKY_ALBEDO * (look.hemi_sky.xyz + look.ambient.xyz), look.hemi_ground.xyz);
+}
+
+// The effective ground exitance's sky part (including `--phys-sky` for
+// `amb_occluder_exitance` and `amb_soffit_exitance`).
+fn amb_lobe_sky_full() -> vec3<f32> {
+    let w = lk_phys();
+    if (w <= 0.0) {
+        return amb_lobe_sky();
+    }
+    return min(AMB_LOBE_SKY_ALBEDO * (look.hemi_sky.xyz + look.ambient.xyz + amb_phys_sky() * w), amb_ground_lobe());
 }
 
 // The sky a canyon's wall sees, from the sky its street sees (eo-look
@@ -286,18 +318,24 @@ fn amb_wall_sky(vg: f32) -> f32 {
     return OL_SIDE_OPEN * (1.0 + x - sqrt(1.0 + x * x));
 }
 
-// The exitance of the shaded walls that hide the sky (eo-look
+// The exitance of the canyon walls that hide the sky (eo-look
 // `occluder::shaded_exitance`): the canyon's walls round a point whose street
 // sees `vg` of the sky see `amb_wall_sky(vg)` of it, the street's lobe below
 // them with its sky part at `vg`, the ambient term and the environment's
 // diffuse on a horizontal normal (the SH's azimuth mean) at the sky and
 // street they see, and over the rest of their upper half walls like
-// themselves (M = rho E / (1 - rho (1/2 - v_w))).
+// themselves (M = rho E / (1 - rho (1/2 - v_w))). Under `--phys-sky` (`lk_phys()`),
+// sky and sunlit-street terms come from `look.sh` (which replaced the zeroed rig
+// lobes) plus warm sunlit-canyon facade bounce proportional to the canyon's sun
+// opening (`vg`) and solar elevation.
 fn amb_occluder_exitance(vg: f32) -> vec3<f32> {
     let vw = amb_wall_sky(vg);
-    let g = look.hemi_ground.xyz - amb_lobe_sky() * (1.0 - vg);
-    let env_side = max(look.sh[0].xyz * 0.282095 + look.sh[6].xyz * 0.157696 + look.sh[8].xyz * 0.273137, vec3<f32>(0.0)) * (look.ambient.w * look.env_class.x);
-    let e = look.hemi_sky.xyz * vw + g * 0.5 + (look.ambient.xyz + env_side) * (vw + 0.5 * vg);
+    let w = lk_phys();
+    let sky_e = look.hemi_sky.xyz + amb_phys_sky() * w;
+    let g = amb_ground_lobe() - amb_lobe_sky_full() * (1.0 - vg);
+    let env_side = max(look.sh[0].xyz * 0.282095 + look.sh[6].xyz * 0.157696 + look.sh[8].xyz * 0.273137, vec3<f32>(0.0)) * (look.ambient.w * look.env_class.x * (1.0 - w));
+    let sun_canyon = look.key.xyz * (w * 0.17 * vg * clamp(look.key_dir.y * 1.5, 0.0, 1.0));
+    let e = sky_e * vw + g * 0.5 + sun_canyon + (look.ambient.xyz + env_side) * (vw + 0.5 * vg);
     return OL_WALL_ALBEDO * e / (vec3<f32>(1.0) - OL_WALL_ALBEDO * (OL_SIDE_OPEN - vw));
 }
 
@@ -318,8 +356,8 @@ fn amb_lid_share(c: vec4<f32>) -> f32 {
 // with the ground bounce, the rig's lobe's sun part without it), under it
 // covered ground lit by the street's own sky.
 fn amb_soffit_exitance(vg: f32) -> vec3<f32> {
-    let ls = amb_lobe_sky();
-    var sun = max(look.hemi_ground.xyz - ls, vec3<f32>(0.0));
+    let ls = amb_lobe_sky_full();
+    var sun = max(amb_ground_lobe() - ls, vec3<f32>(0.0));
     if (any(look.lx[0].yzw > vec3<f32>(0.0))) {
         sun = look.lx[0].yzw;
     }
@@ -347,7 +385,7 @@ fn amb_occluder_mix(c: vec4<f32>) -> vec3<f32> {
 // volume read again; only a constant set first builds).
 fn amb_ol_pre() {
     if (amb_on() && amb_ol_on()) {
-        amb_occ_m = look.hemi_ground.xyz * OL_AGENTS_OCCLUDER;
+        amb_occ_m = amb_ground_lobe() * OL_AGENTS_OCCLUDER;
     }
 }
 
@@ -365,7 +403,11 @@ fn amb_occluder_light() -> vec3<f32> {
     if (amb_ol_on()) {
         return amb_occ_m;
     }
-    return look.hemi_ground.xyz;
+    let w = lk_phys();
+    if (w <= 0.0) {
+        return look.hemi_ground.xyz;
+    }
+    return look.hemi_ground.xyz + amb_phys_ground() * (0.60 * w);
 }
 
 // look_light's indirect diffuse irradiance with the volume. The hemisphere's
@@ -396,7 +438,13 @@ fn amb_irradiance(c: vec4<f32>, n: vec3<f32>, env: vec3<f32>) -> vec3<f32> {
         let rim = look.rim.xyz * (max(dot(n, look.rim_dir.xyz), 0.0) * amb_rim_hidden(c, look.rim_dir.xyz));
         return lit + (look.ambient.xyz + env) * (vs + lower * amb_vg) - rim;
     }
-    let fill = look.hemi_sky.xyz * vs + look.hemi_ground.xyz * (1.0 - t + AMB_OCCLUDER * (t - vs));
+    let w = lk_phys();
+    if (w <= 0.0) {
+        let fill = look.hemi_sky.xyz * vs + look.hemi_ground.xyz * (1.0 - t + AMB_OCCLUDER * (t - vs));
+        return fill + look.ambient.xyz + env * (1.0 - t + vs);
+    }
+    let occ_g = look.hemi_ground.xyz + amb_phys_ground() * (0.60 * w);
+    let fill = look.hemi_sky.xyz * vs + look.hemi_ground.xyz * (1.0 - t) + occ_g * (AMB_OCCLUDER * (t - vs));
     return fill + look.ambient.xyz + env * (1.0 - t + vs);
 }
 

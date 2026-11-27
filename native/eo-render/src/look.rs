@@ -3510,44 +3510,36 @@ impl LookGpu {
         let f = self.frame_built();
         if self.options.dome_env {
             // When physical daylight (`--phys-sky`) owns `env_sh`, never overwrite its calibrated
-            // Rayleigh+Mie+ground-bounce SH with the legacy cloudless Preetham cobalt dome (which
-            // turned upward shadowed roofs electric blue under `--play`). During twilight/overcast
-            // transitions, blend `dome_env` onto the non-physical rig share only.
+            // Rayleigh+Mie+ground-bounce SH with the legacy cloudless Preetham cobalt dome.
+            // During twilight/overcast transitions, blend `dome_env` onto the non-physical rig share only.
             let phys_w = if self.sky.options().phys_sky {
-                self.state.lock().unwrap().daylight.as_ref().map_or(0.0, |(_, d)| d.weight.clamp(0.0, 1.0))
+                let st = self.state.lock().unwrap();
+                st.daylight.as_ref().map(|(_, d)| d.weight).or_else(|| st.terms.map(|t| t.daylight_weight)).unwrap_or(0.0).clamp(0.0, 1.0)
             } else {
                 0.0
             };
-            if phys_w >= 0.999 {
-                return f;
+            if phys_w < 1.0 {
+                return self.with_dome_env(f, phys_w); // (`--dome-env`)
             }
-            let mut dome = self.with_dome_env(f);
-            if phys_w > 0.0 {
-                for k in 0..9 {
-                    for c in 0..3 {
-                        dome.env_sh[k][c] = dome.env_sh[k][c] * (1.0 - phys_w) + f.env_sh[k][c] * phys_w;
-                    }
-                }
-            }
-            return dome;
         }
         f
     }
 
     /// (`--dome-env`) the frame's environment SH with the painted dome's colour
-    /// (eo-look `env_sh_with_dome_colour`), integrated once per frame built.
-    fn with_dome_env(&self, mut f: LookFrame) -> LookFrame {
+    /// (eo-look `env_sh_with_dome_colour`), integrated once per frame built,
+    /// applied only to the legacy rig's share (`1 - phys_w`) so physical
+    /// daylight's calibrated sky + sunlit-ground SH stays intact.
+    fn with_dome_env(&self, mut f: LookFrame, phys_w: f64) -> LookFrame {
         let key = (f.hour.to_bits(), f.env_sh.map(|c| c.map(f64::to_bits)));
         let mut c = self.dome_env.lock().unwrap();
-        if let Some((k, sh)) = c.as_ref() {
-            if *k == key {
-                f.env_sh = *sh;
-                return f;
-            }
-        }
-        let sh = eo_look::env_sh_with_dome_colour(&f.model, &f.env_sh);
-        *c = Some((key, sh));
-        f.env_sh = sh;
+        let dome = if let Some((_, sh)) = c.as_ref().filter(|(k, _)| *k == key) {
+            *sh
+        } else {
+            let sh = eo_look::env_sh_with_dome_colour(&f.model, &f.env_sh);
+            *c = Some((key, sh));
+            sh
+        };
+        f.env_sh = blend_dome_env_sh(&dome, &f.env_sh, phys_w);
         f
     }
 
@@ -4483,5 +4475,47 @@ impl LookGpu {
     /// Cascade far edges (view depth, metres) and texel sizes of the last update.
     pub fn cascade_summary(&self) -> Vec<(f64, f64)> {
         self.state.lock().unwrap().last_cascades.iter().map(|c| (c.split_far, c.texel_world)).collect()
+    }
+}
+
+/// Blend `--dome-env`'s legacy dome SH (`dome`) with the frame's SH (`frame`)
+/// by the physical daylight's weight `phys_w`: 0 takes `dome` verbatim, 1 keeps
+/// `frame` verbatim so `--dome-env` never clobbers physical daylight's sky and
+/// warm sunlit-ground SH.
+fn blend_dome_env_sh(dome: &[eo_look::math::Rgb; 9], frame: &[eo_look::math::Rgb; 9], phys_w: f64) -> [eo_look::math::Rgb; 9] {
+    let w = phys_w.clamp(0.0, 1.0);
+    if w <= 0.0 {
+        return *dome;
+    }
+    if w >= 1.0 {
+        return *frame;
+    }
+    std::array::from_fn(|k| [0, 1, 2].map(|ch| dome[k][ch] * (1.0 - w) + frame[k][ch] * w))
+}
+
+#[cfg(test)]
+mod dome_env_phys_tests {
+    use super::*;
+
+    #[test]
+    fn dome_env_preserves_physical_daylight_sh() {
+        let mut f = LookFrame::new(12.0);
+        let d = eo_look::phys::Daylight::new(f.model.sun.dir(), 1.0, 1.0);
+        eo_look::phys::apply(&mut f, &d);
+        let dome = eo_look::env_sh_with_dome_colour(&f.model, &f.env_sh);
+        assert_eq!(blend_dome_env_sh(&dome, &f.env_sh, 1.0), f.env_sh);
+        assert_eq!(blend_dome_env_sh(&dome, &f.env_sh, 0.0), dome);
+        let mid = blend_dome_env_sh(&dome, &f.env_sh, 0.5);
+        for k in 0..9 {
+            for ch in 0..3 {
+                assert!((mid[k][ch] - 0.5 * (dome[k][ch] + f.env_sh[k][ch])).abs() < 1e-12);
+            }
+        }
+        // Under physical daylight at noon, the preserved SH keeps the warm sunlit-ground
+        // lower hemisphere instead of the dome-colour replacement.
+        let down_phys = eo_look::sh_eval(&f.env_sh, [0.0, -1.0, 0.0]);
+        let down_dome = eo_look::sh_eval(&dome, [0.0, -1.0, 0.0]);
+        assert!(down_phys[0] > down_phys[2], "physical ground bounce is warm: {down_phys:?}");
+        assert!(down_phys[0] > down_dome[0], "physical ground bounce outshines legacy dome ground: {down_phys:?} vs {down_dome:?}");
     }
 }

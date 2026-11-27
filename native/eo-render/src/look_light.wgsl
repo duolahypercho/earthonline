@@ -121,15 +121,22 @@ fn lk_sh(n: vec3<f32>) -> vec3<f32> {
 // asks (the probe pass sees round the camera; the blend's next cascade).
 fn lk_cascade(c: i32, world: vec3<f32>, ng: vec3<f32>, bounded: bool) -> f32 {
     let b = look.cascade_bias[c];
-    let p = world + ng * b.x;
+    // On walls grazing the sun (past recommend_bias's 75 deg protection),
+    // shadow texels stretch steeply and a perpendicular return face (drawn with
+    // cull_mode: None) can step into the 3x3 tent. Scale the normal offset,
+    // depth pull-back and tent half-width smoothly across the grazing band
+    // while leaving normal-incidence faces untouched.
+    let graz = 1.0 - lk_smooth(0.02, 0.42, dot(ng, look.key_dir.xyz));
+    let nb = b.x + b.z * (1.65 * graz);
+    let p = world + ng * nb;
     let clip = look.cascade_vp[c] * vec4<f32>(p, 1.0);
     let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
-    let z = clip.z + b.y;
+    let z = clip.z + b.y * (1.0 + 1.8 * graz);
     if (bounded && (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || z < 0.0 || z > 1.0)) {
         return -1.0;
     }
     let texel = 1.0 / f32(textureDimensions(lk_shadow_map).x);
-    let h = 0.5 * texel;
+    let h = (0.5 + 0.35 * graz) * texel;
     return 0.25 * (textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(-h, -h), c, z)
         + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(h, -h), c, z)
         + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(-h, h), c, z)
@@ -154,13 +161,12 @@ fn lk_cascade(c: i32, world: vec3<f32>, ng: vec3<f32>, bounded: bool) -> f32 {
 // (cos, sin): one rotation a pixel, not a sine and a cosine a tap.
 fn lk_cascade_soft(c: i32, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>, rot: vec2<f32>) -> f32 {
     let nl = dot(ng, look.key_dir.xyz);
-    // On grazing faces the clamped receiver-plane slope cannot extrapolate accurately
-    // across a wide PCF disc and causes diagonal shadow-map texel diamonds; fall back
-    // to the tight 3x3 hardware tent where direct sun is already grazing out.
-    if (nl <= 0.14) {
+    // On extreme grazing faces where direct sun is nearly parallel to the surface,
+    // fall back to the grazing-protected hardware tent.
+    if (nl <= 0.10) {
         return -1.0;
     }
-    let g_fade = smoothstep(0.14, 0.48, nl);
+    let g_fade = smoothstep(0.10, 0.42, nl);
     let grazing_pad = (1.0 - clamp(nl, 0.0, 1.0)) * 0.75 * b.y;
     let dims = vec2<f32>(textureDimensions(lk_shadow_map).xy);
     let texel = 1.0 / dims.x;
@@ -178,19 +184,22 @@ fn lk_cascade_soft(c: i32, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>, r
     }
     let gmax = PS_MAX_PLANE_SLOPE * b.z / (b.w * texel);
     g = clamp(g, vec2<f32>(-gmax), vec2<f32>(gmax));
-    // Coherent blocker search capped to a dense texel footprint so adjacent pixels
-    // agree smoothly on caster distance instead of producing salt-and-pepper shadow dots.
+    // Match search radius cap to the filter cap (6 texels) so the 12 Vogel search taps
+    // cover the actual filter footprint densely, and keep a grazing floor so grazing faces
+    // stay smoothly filtered instead of collapsing back to the narrow tent.
     let base = uv * dims;
-    let rs = clamp(PS_MAX_SPREAD_M / b.z, 1.0, min(PS_MAX_RADIUS_TEXELS, 9.0)) * g_fade;
+    let rs_base = clamp(PS_MAX_SPREAD_M / b.z, 1.0, min(PS_MAX_RADIUS_TEXELS, 6.0));
+    let rs = min(rs_base, max(rs_base * g_fade, 3.0));
     if (rs <= PS_TENT_TEXELS) {
         return -1.0;
     }
+    let ms = mat2x2<f32>(rot.x, rot.y, -rot.y, rot.x) * rs;
     var nb = 0.0;
     var dz_min = 1e9;
     var dz_sum = 0.0;
     var dz_cnt = 0.0;
     for (var i = 0u; i < PS_SEARCH_TAPS; i = i + 1u) {
-        let t = clamp(floor(base + PS_SEARCH_DISC[i] * rs), vec2<f32>(0.0), dims - 1.0);
+        let t = clamp(floor(base + ms * PS_SEARCH_DISC[i]), vec2<f32>(0.0), dims - 1.0);
         let d = textureLoad(lk_shadow_map, vec2<i32>(t), c, 0);
         let zp = z + grazing_pad + dot(g, (t + 0.5 - base) * texel);
         if (d < zp) {
@@ -203,23 +212,36 @@ fn lk_cascade_soft(c: i32, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>, r
             }
         }
     }
-    // no caster within the widest penumbra: lit; casters all round: the umbra.
-    if (nb < 0.5) {
-        return 1.0;
-    }
-    if (nb > f32(PS_SEARCH_TAPS) - 0.5) {
-        return 0.0;
-    }
-    if (dz_cnt < 0.5) {
-        return -1.0;
+    let graz = 1.0 - lk_smooth(0.10, 0.45, nl);
+    let rf_max = min(rs, 6.0);
+    let rf_floor = min(mix(1.75, 2.35, graz), rf_max);
+    // Verify sparse-disc early-outs against a gapless 4-tap bilinear box covering
+    // [-1.95, +1.95]^2 texels around uv (with receiver-plane slope) so thin 1-texel
+    // shadow edges or sunlit slits never snap along texel-grid boundaries.
+    if (nb < 0.5 || nb > f32(PS_SEARCH_TAPS) - 0.5) {
+        let hc = min(0.5 * rf_floor, 0.95) * texel;
+        let zb = z + grazing_pad;
+        var chk = 0.0;
+        for (var j = 0u; j < 4u; j = j + 1u) {
+            let ox = select(-hc, hc, (j & 1u) != 0u);
+            let oy = select(-hc, hc, (j & 2u) != 0u);
+            let o = vec2<f32>(ox, oy);
+            chk = chk + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + o, c, zb + dot(g, o));
+        }
+        if (nb < 0.5 && chk > 3.996) {
+            return 1.0;
+        }
+        if (nb > f32(PS_SEARCH_TAPS) - 0.5 && chk < 0.004) {
+            return 0.0;
+        }
     }
     // Blend nearest caster with mean caster distance for spatial stability, and keep the
     // filter radius within the dense coverage of 16 overlapping 2x2 bilinear hardware PCF taps
-    // so the penumbra reads as a continuous soft shadow rather than isolated stipple dots.
-    let dz = mix(dz_min, dz_sum / dz_cnt, 0.35);
-    let rf = min(0.5 * dz * PS_TAN_DIAMETER / b.z, min(rs, 6.0)) * g_fade;
-    if (rf <= PS_TENT_TEXELS) {
-        return -1.0;
+    // so the penumbra reads as a continuous soft shadow rather than discrete texel blocks.
+    var rf = rf_floor;
+    if (dz_cnt >= 0.5) {
+        let dz = mix(dz_min, dz_sum / dz_cnt, 0.35);
+        rf = clamp(0.5 * dz * PS_TAN_DIAMETER / b.z, rf_floor, rf_max);
     }
     let mf = mat2x2<f32>(rot.x, rot.y, -rot.y, rot.x) * (rf * texel);
     var s = 0.0;
@@ -236,18 +258,18 @@ fn lk_cascade_soft(c: i32, uv: vec2<f32>, z: f32, b: vec4<f32>, ng: vec3<f32>, r
 
 // (`--soft-shadows`) the cascades' visibility through the sun's disc while the
 // penumbra runs (look.cascade_bias[c].w the cascade's depth range; never in
-// the probe pass). Uses a tiny spatially-ordered 2x2 phase rotation instead of
-// per-pixel random noise and blends cascade splits smoothly rather than
-// stochastically dithering them, eliminating crawling dot patterns in live play.
+// the probe pass). Uses static Interleaved Gradient Noise for a full 360 deg
+// spatially-ordered phase turn (no temporal crawl, no horizontal Bayer bands)
+// and blends cascade splits smoothly.
 fn lk_cascades_soft(c0: i32, world: vec3<f32>, ng: vec3<f32>, vd: f32) -> f32 {
     let cp = frame.view_proj * vec4<f32>(world, 1.0);
-    let sp = (cp.xy / max(cp.w, 1e-6) * vec2<f32>(0.5, -0.5) + 0.5) * vec2<f32>(textureDimensions(lk_ao)) * 2.0;
-    let q2 = vec2<u32>(abs(floor(sp))) & vec2<u32>(1u);
-    let bayer = f32((q2.x ^ (q2.y << 1u)) + (q2.y << 1u)) * 0.25;
-    // Small coherent sub-tap turn (~0..22 deg) keeps overlapping bilinear PCF smooth on every frame.
-    let a = bayer * 0.3926991;
+    let sp = floor((cp.xy / max(cp.w, 1e-6) * vec2<f32>(0.5, -0.5) + 0.5) * vec2<f32>(textureDimensions(lk_ao)) * 2.0);
+    let ign = fract(52.9829189 * fract(dot(sp, vec2<f32>(0.06711056, 0.00583715))));
+    let a = ign * 6.2831853;
     let b = look.cascade_bias[c0];
-    let clip = look.cascade_vp[c0] * vec4<f32>(world + ng * b.x, 1.0);
+    let graz = 1.0 - lk_smooth(0.02, 0.42, dot(ng, look.key_dir.xyz));
+    let nb = b.x + b.z * (1.65 * graz);
+    let clip = look.cascade_vp[c0] * vec4<f32>(world + ng * nb, 1.0);
     let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
     let z = clip.z + b.y;
     var vis = lk_cascade_soft(c0, uv, z, b, ng, vec2<f32>(cos(a), sin(a)));
@@ -667,14 +689,21 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // Key light with its shadow.
     let l = look.key_dir.xyz;
     let nl = max(dot(n, l), 0.0);
+    let ngl = dot(ng, l);
     var key = vec3<f32>(0.0);
-    if (nl > -lk_vis_wrap && dot(ng, l) > -0.05 - lk_vis_wrap) {
+    if (nl > -lk_vis_wrap && ngl > -0.05 - lk_vis_wrap) {
         var sun_vis = lk_sun_pre;
         if (!LK_SUN_PRE) {
             sun_vis = lk_shadow(world, ng);
         }
         let kv = vec3<f32>(sun_vis, sky_cloud_transmittance(world), sky_contact_shadow(world, ng));
-        key = look.key.xyz * max(nl, 0.0) * kv.x * kv.y * kv.z * lm_key_vis * (1.0 - lm_unlit); // cloud and contact shadows (and a bridge deck's, a landmark's relief: landmarks_surface.wgsl)
+        // Smooth geometric horizon terminator: prevents normal-mapped back-faces
+        // and near-parallel grazing faces from flashing stretched shadow texels.
+        var g_term = 1.0;
+        if (lk_vis_wrap <= 0.0) {
+            g_term = lk_smooth(0.0, 0.10, ngl);
+        }
+        key = look.key.xyz * max(nl, 0.0) * g_term * kv.x * kv.y * kv.z * lm_key_vis * (1.0 - lm_unlit); // cloud and contact shadows (and a bridge deck's, a landmark's relief: landmarks_surface.wgsl)
         lk_key_vis = kv.x * kv.y * kv.z; // (`--people-shading`)
 // sf:CROWN+
         key = key * lk_leaf_sun; // (`--crown-light`)
