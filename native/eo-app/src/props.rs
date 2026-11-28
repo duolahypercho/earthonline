@@ -396,6 +396,8 @@ struct Loaded {
     facts: LibFacts,
     wire_look: eo_render::props::WireLook,
     boats: Vec<GpuPropInstance>,
+    /// The measured rear-yard fences (`--yard-detail`, yards.rs; none without it).
+    fences: Vec<GpuPropInstance>,
 }
 
 pub struct PropsRuntime {
@@ -455,6 +457,8 @@ pub struct PropsRuntime {
     /// Mounted lights in tiles without an ordinary street. A tunnel uses its
     /// plan distance. A sea crossing uses the height of its deck and lamps.
     structure_light_heights: HashMap<Key, [f32; 2]>,
+    /// The measured rear-yard fences' block of the arena (`--yard-detail`, yards.rs).
+    yards: crate::yards::FenceBlock,
 }
 
 impl PropsRuntime {
@@ -506,6 +510,7 @@ impl PropsRuntime {
             boats_pending: vec![],
             boat_block: (0, 0),
             boat_motion: None,
+            yards: Default::default(),
         };
         if let (Some(f), Some(w)) = (&world.fleet, &world.water) {
             if args.props2.boats && args.props2.features & eo_render::props::F_AFLOAT != 0 {
@@ -601,11 +606,14 @@ impl PropsRuntime {
                         .signal_poles
                         .then(|| eo_props::signal_poles::load(&paths.repo_root).map_err(|e| eprintln!("props: signal pole models not drawn ({e:#}); poles and arms built in code")).ok())
                         .flatten();
+                    // `--tree-crowns` (main's `roofs_flags`): the trees' window and far forms take a crown core.
+                    let tree_crowns = eo_props::eztree::tree_crowns_enabled();
                     let extras = lib2::LibExtras {
                         ez: ez.as_deref(),
                         signs: signs.as_ref(),
                         overhead: overhead_js.as_ref(),
                         stand_ins: p2.stand_ins,
+                        tree_crowns,
                         boats: bodies.as_deref(),
                         luminaires: p2.luminaires,
                         sign_models: sign_models.as_ref(),
@@ -715,7 +723,8 @@ impl PropsRuntime {
                         eprintln!("props2: {} boats moored", boats.len());
                     }
                     eprintln!("props2: library ready in {library_ms:.0} ms ({} meshes, {} tree species, {} sign variants)", lib.meshes.len(), facts.species, facts.sign_variants);
-                    Ok(Loaded { world, lib, source, facts, wire_look, boats })
+                    let fences = crate::yards::fence_instances(&world); // `--yard-detail`
+                    Ok(Loaded { world, lib, source, facts, wire_look, boats, fences })
                 })();
                 let _ = tx.send(r.map_err(|e| format!("{e:#}")));
             })
@@ -833,8 +842,9 @@ impl PropsRuntime {
                         // built on a thread of its own, never on this one.
                         let init = renderer.props_init(ctx);
                         let (tx, rx) = std::sync::mpsc::channel();
-                        let Loaded { world, lib, source, facts, wire_look, boats } = l;
+                        let Loaded { world, lib, source, facts, wire_look, boats, fences } = l;
                         self.boats_pending = boats;
+                        self.yards.pending = fences;
                         let features = self.p2.features;
                         // (`--no-pull-boxes` off) the pull box's lid takes the sidewalk's grade
                         let grade = if facts.pull_boxes && facts.signal_poles.is_some() {
@@ -920,6 +930,20 @@ impl PropsRuntime {
                     self.boat_block = (at, n);
                 }
                 None => self.errors.push("props: instance arena full (boats)".into()),
+            }
+        }
+        // The measured rear-yard fences (`--yard-detail`): one block too, drawn past the tiles' reach.
+        if !self.yards.pending.is_empty() {
+            let fences = std::mem::take(&mut self.yards.pending);
+            let n = fences.len() as u32;
+            match self.alloc.alloc(n) {
+                Some(at) => {
+                    let job = Job::new(TAG_PROPS | TAG_BOATS, vec![Write { target: Target::PropInstances, offset: at as u64 * 48, data: Data::Bytes(bytemuck::cast_slice(&fences).to_vec()) }], vec![]);
+                    self.stats.bytes_queued += job.bytes();
+                    uploads.push(job);
+                    self.yards.block = (at, n);
+                }
+                None => self.errors.push("props: instance arena full (yard fences)".into()),
             }
         }
         if self.boat_block.1 > 0 {
@@ -1761,6 +1785,56 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                     }
                 }
             }
+        }
+    }
+    // `--yard-lidar-trees`: residential trees measured from the USGS lidar (eo-props
+    // lidar_trees.rs) where nothing else stands: off the footprints and the
+    // drawn street, clear of the trees planted above, outside the hill parks'
+    // lidar areas and the parks' tree classes; nothing without the switch.
+    if eo_props::lidar_trees::enabled() {
+        let t = eo_street::STREET_TILE_M;
+        let (x0, z0) = (key.0 as f64 * t, key.1 as f64 * t);
+        let sw = &world.street;
+        let sea = eo_water::SEA_LEVEL_Y;
+        let species = eo_props::eztree::street_tree_species().ok();
+        let cover = eo_landmarks::ground_cover::installed();
+        let planted: Vec<[f64; 2]> = props.iter().filter(|p| p.model == Model::Tree).map(|p| [p.pos[0], p.pos[2]]).collect();
+        let clear2 = eo_props::lidar_trees::CLEAR_OF_PLANTED_M * eo_props::lidar_trees::CLEAR_OF_PLANTED_M;
+        let trace = std::env::var_os("EO_LIDAR_TREES_TRACE").is_some();
+        let mut why = [0usize; 6]; // building, paved, water, park class, near planted, placed
+        for lt in eo_props::lidar_trees::in_box(x0, z0, x0 + t, z0 + t) {
+            let (x, z) = (lt.x, lt.z);
+            if eo_props::yards::in_yard(x, z) || lidar_trees::covers(x, z) {
+                continue; // `--yard-detail` with the canopy map: the yards draw it (eo-app yards.rs); hill parks use props/lidar_trees.rs
+            }
+            let reason = if sw.buildings.contains(x, z) {
+                Some(0)
+            } else if sw.paved_at(x, z).is_some() {
+                Some(1)
+            } else if world.ground(x, z) < sea + 0.3 {
+                Some(2)
+            } else if cover.as_ref().is_some_and(|c| c.tree_class_at(x, z) != 0) {
+                Some(3)
+            } else if planted.iter().any(|p| (p[0] - x).powi(2) + (p[1] - z).powi(2) < clear2) {
+                Some(4)
+            } else {
+                None
+            };
+            if let Some(r) = reason {
+                why[r] += 1;
+                continue;
+            }
+            why[5] += 1;
+            let Some((id, sx, sy)) = eo_props::lidar_trees::model_for(lt) else { continue };
+            let variant = species.and_then(|s| s.iter().position(|v| v == id)).unwrap_or(0) as u16;
+            let yaw = ((x * 12.9898 + z * 78.233).sin() * 43758.5453).fract().abs() * std::f64::consts::TAU;
+            let tree = eo_props::Prop { model: Model::Tree, pos: [x, world.ground(x, z) - 0.08, z], yaw, scale: [sx as f32, sy as f32, sx as f32], variant, live: Live::None };
+            if let Some(tree) = world.clear_prop(tree) {
+                props.push(tree);
+            }
+        }
+        if trace && why.iter().any(|&n| n > 0) {
+            eprintln!("yard lidar trees tile {key:?}: {} on a building, {} on the street, {} in water, {} in a park class, {} beside a planted tree, {} placed", why[0], why[1], why[2], why[3], why[4], why[5]);
         }
     }
     // the coarse vegetation layer: coastal stands, scrub, hill rock.

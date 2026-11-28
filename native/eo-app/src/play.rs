@@ -435,7 +435,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--low-camera" | "--default-camera" => {}
             s if crate::ROAD_REVIEW_SWITCHES.contains(&s) => {}
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
-            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
+            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--yard-lidar-trees" | "--no-yard-lidar-trees" | "--yard-detail" | "--no-yard-detail" | "--no-yard-plants" | "--no-yard-objects" | "--no-yard-stairs" | "--no-yard-wood" | "--tree-crowns" | "--no-tree-crowns" => {} // main's `roofs_flags`
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
             s if eo_landmarks::vegetation::GRASS2_SWITCHES.contains(&s) || eo_landmarks::vegetation::GRASS3_SWITCHES.contains(&s) => {} // read by its crate (the grass passes)
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs)

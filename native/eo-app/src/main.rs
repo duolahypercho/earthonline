@@ -20,6 +20,7 @@ mod agents_bench;
 mod people_capture; // people
 mod bench;
 mod boats; // the moored boats' poses each frame (on the drawn sea, the physics near the player)
+mod yards; // the measured rear-yard fences' block of the props arena (`--yard-detail`)
 mod dive_sites;
 mod environment;
 mod ocean_habitat;
@@ -930,7 +931,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--low-camera" | "--default-camera" => {}
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
-            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--no-ground-beach-fit" => {} // `roofs_flags`
+            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--no-ground-beach-fit" | "--yard-lidar-trees" | "--no-yard-lidar-trees" | "--yard-detail" | "--no-yard-detail" | "--no-yard-plants" | "--no-yard-objects" | "--no-yard-stairs" | "--no-yard-wood" | "--tree-crowns" | "--no-tree-crowns" => {} // `roofs_flags`
             "--no-external" => {} // read by `external_flag` (main): the optional sets only from their variables
             "--no-far-facade" => {} // `roofs_flags`: the far boxes as before (eo-render far_box.rs)
             "--no-period-paint" => {} // `roofs_flags`: the timber rows' period paint at its finish's luminance (eo-kit wall_paint.rs)
@@ -1655,6 +1656,20 @@ fn load_world_with_footways(args: &Args, keep_footways: bool) -> Result<World> {
                         eo_render::hlod_trees::fill_black_point(&mut trees, cover, &ground, &blocked);
                     }
                 }
+                // `--yard-lidar-trees`: residential measured trees past the near props too, by
+                // props.rs `cook`'s rules (off the footprints, the drawn street, hill-park lidar areas and parks' tree classes).
+                let sea = eo_water::SEA_LEVEL_Y;
+                for (i, lt) in eo_props::lidar_trees::all().iter().enumerate() {
+                    let (x, z) = (lt.x, lt.z);
+                    // (`--yard-detail` with the canopy map: the yards draw a yard's trees, eo-app yards.rs.)
+                    if eo_props::yards::in_yard(x, z) || crate::props::lidar_trees::covers(x, z) || sw.buildings.contains(x, z) || sw.paved_at(x, z).is_some() || sw.ground(x, z) < sea + 0.3 || cover.as_ref().is_some_and(|c| c.tree_class_at(x, z) != 0) {
+                        continue;
+                    }
+                    let seed = (i as u32).wrapping_mul(0x9e37_79b9) ^ 0x1d4a_7c15;
+                    let g = 90 + (seed % 30);
+                    let tint = (52 + (seed >> 8) % 16) | (g << 8) | ((40 + (seed >> 16) % 14) << 16) | (255 << 24);
+                    trees.push(eo_render::hlod_trees::FarTree { pos: [x as f32, sw.ground(x, z) as f32, z as f32], height: lt.height_m as f32, crown: lt.crown_r_m as f32, tint, seed, species: 0 });
+                }
                 if std::env::var("EO_TRACE_LOAD").is_ok() {
                     eprintln!("hlod: {} distant trees ({} street, {} park) in {:.0} ms (load thread)", trees.len(), street_n, trees.len() - street_n, t.elapsed().as_secs_f64() * 1e3);
                 }
@@ -1989,11 +2004,43 @@ fn roofs_flags() {
         ("--no-grove", "EO_GROVE"),
         // the landmark buildings', skyline towers' and groves' fourth pass (eo_landmarks::towers4_on).
         ("--no-towers4", "EO_TOWERS4"),
+        ("--no-yard-lidar-trees", "EO_YARD_LIDAR_TREES"),
+        ("--no-yard-detail", "EO_YARD_DETAIL"),
+        // the yards' plants and photo-toned ground under `--yard-detail` (eo-props yards.rs `plants_enabled`).
+        ("--no-yard-plants", "EO_YARD_PLANTS"),
+        // the yards' objects under the plants (eo-props yards.rs `items_enabled`).
+        ("--no-yard-objects", "EO_YARD_OBJECTS"),
+        // the houses' backs round the yards (eo-props yards.rs `backs_enabled`): back stairs, doors, downspouts.
+        ("--no-yard-stairs", "EO_YARD_STAIRS"),
+        // the yards' wood: grain and worn paint on the objects and stairs (eo-props yards.rs `wood_enabled`).
+        ("--no-yard-wood", "EO_YARD_WOOD"),
+        ("--no-tree-crowns", "EO_TREE_CROWNS"),
     ] {
         if a.iter().any(|x| x == flag) {
             // SAFETY: first thing in main, before any other thread exists.
             unsafe { std::env::set_var(var, "off") };
         }
+    }
+    // `--yard-lidar-trees` (off by default): residential trees measured from the USGS lidar
+    // in `$EO_LIDAR_DIR` (eo-props lidar_trees.rs); `--no-yard-lidar-trees` wins.
+    // Distinct from the hill parks' default-on `--no-lidar-trees` (props/lidar_trees.rs).
+    if a.iter().any(|x| x == "--yard-lidar-trees") && !a.iter().any(|x| x == "--no-yard-lidar-trees") {
+        // SAFETY: as above.
+        unsafe { std::env::set_var("EO_YARD_LIDAR_TREES", "on") };
+    }
+    // `--yard-detail` (off by default): the rear-yard fences and ground the yard
+    // survey measured into `$EO_PARCELS_DIR` (eo-props yards.rs); `--no-yard-detail` wins.
+    if a.iter().any(|x| x == "--yard-detail") && !a.iter().any(|x| x == "--no-yard-detail") {
+        // SAFETY: as above.
+        unsafe { std::env::set_var("EO_YARD_DETAIL", "on") };
+    }
+    // `--tree-crowns` (off by default): the trees past 70 m read as full crowns,
+    // a crown core in the street trees' window and far forms (eo-props
+    // `eztree::crown_core`) and the distant tree cards facing the eye from the
+    // props' own 3D hand-over distance (eo-render hlod_trees.rs); `--no-tree-crowns` wins.
+    if a.iter().any(|x| x == "--tree-crowns") && !a.iter().any(|x| x == "--no-tree-crowns") {
+        // SAFETY: as above.
+        unsafe { std::env::set_var("EO_TREE_CROWNS", "on") };
     }
 }
 

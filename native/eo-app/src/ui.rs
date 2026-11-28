@@ -190,7 +190,7 @@ impl Flags {
                 }
                 "--low-camera" | "--default-camera" => {}
                 "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
-                "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
+                "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--yard-lidar-trees" | "--no-yard-lidar-trees" | "--yard-detail" | "--no-yard-detail" | "--no-yard-plants" | "--no-yard-objects" | "--no-yard-stairs" | "--no-yard-wood" | "--tree-crowns" | "--no-tree-crowns" => {} // main's `roofs_flags`
                 s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
                 "--no-external" => {} // main's `external_flag`
                 other => anyhow::bail!("unknown argument {other} with --ui (see native/eo-app/src/ui.rs)"),
