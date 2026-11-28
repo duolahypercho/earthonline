@@ -452,9 +452,10 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     var n = vec3<f32>(0.0, 1.0, 0.0);
     var cy = 0.0;
     var r = 0.0;
-<<<<<<< HEAD
     var aaa_open = 0.5;
     let baked = in.view.x >= 0.0;
+    // `--tree-crowns`: the crown card facing the eye (`ft_crown_card`), uv the crown's unit disc.
+    let card = in.view.x < -1.5;
     let toward_h = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
     let aaa_palm = ft_is_aaa_palm(in.tint, sp, baked);
     var aaa_ph: FtAaaPalm;
@@ -465,7 +466,7 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         n = aaa_ph.n;
         aaa_open = aaa_ph.open;
     } else if (sp == 0u) {
-        if (SF_AAA_DETAIL) {
+        if (SF_AAA_DETAIL && !card) {
             let ac = ft_aaa_crown(in.uv, in.seed);
             crown = ac.w >= 0.0;
             aaa_open = max(ac.w, 0.0);
@@ -485,33 +486,18 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
             trunk = main_bole || limb_l || limb_r;
         } else {
             // The crown: an ellipse over the upper 70 % of the card, a lobed edge.
-            cy = (in.uv.y - 0.62) / 0.38;
+            cy = select((in.uv.y - 0.62) / 0.38, in.uv.y, card);
             r = length(vec2<f32>(in.uv.x, cy));
             let ang = atan2(cy, in.uv.x);
             let lobes = 0.08 * sin(ang * 5.0 + in.seed) + 0.05 * sin(ang * 11.0 + in.seed * 1.7);
             crown = r < 0.92 + lobes;
             // The trunk: the lower part, a narrow column.
             trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
-=======
-    // `--tree-crowns`: the crown card facing the eye (`ft_crown_card`), uv the crown's unit disc.
-    let card = in.view.x < -1.5;
-    if (sp == 0u) {
-        // The crown: an ellipse over the upper 70 % of the card, a lobed edge.
-        cy = (in.uv.y - 0.62) / 0.38;
-        if (card) {
-            cy = in.uv.y;
-        }
-        r = length(vec2<f32>(in.uv.x, cy));
-        let ang = atan2(cy, in.uv.x);
-        let lobes = 0.08 * sin(ang * 5.0 + in.seed) + 0.05 * sin(ang * 11.0 + in.seed * 1.7);
-        crown = r < 0.92 + lobes;
-        // The trunk: the lower part, a narrow column.
-        trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
-        if (card) {
-            // seen from well above (the eye more than 37 degrees up) the crown and
-            // the ground cover beneath it hide the trunk: none, no lollipops.
-            trunk = in.uv.y < 0.0 && abs(in.uv.x) < 0.07 && in.view.y > FT_CROWN_TRUNK_RISE;
->>>>>>> 131ab04d (feat(render): crown cores, garden shrubs, yard ground, fences, objects and house backs)
+            if (card) {
+                // seen from well above (the eye more than 37 degrees up) the crown and
+                // the ground cover beneath it hide the trunk: none, no lollipops.
+                trunk = in.uv.y < 0.0 && abs(in.uv.x) < 0.07 && in.view.y > FT_CROWN_TRUNK_RISE;
+            }
         }
     } else {
         let p = vec2<f32>(in.uv.x * in.dims.x, in.uv.y * in.dims.y);
@@ -569,7 +555,7 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     } else if (aaa_palm) {
         albedo = aaa_ph.albedo;
     } else if (crown) {
-        if (sp == 0u && !SF_AAA_DETAIL) {
+        if (sp == 0u && (!SF_AAA_DETAIL || card)) {
             let z = sqrt(max(0.0, 1.0 - min(r * r, 1.0)));
             if (card) {
                 // the card's own axes: across, up it (toward the sky as far as it tilts), toward the eye.
@@ -603,18 +589,14 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     s.albedo = albedo;
     s.rough = 0.92;
     s.metal = 0.0;
-<<<<<<< HEAD
     s.ao = select(
         select(1.0, aaa_ph.ao, aaa_palm),
         select(0.7 + 0.3 * in.uv.y, select(mix(0.72, 1.0, clamp(0.42 * in.uv.y + 0.58 * aaa_open, 0.0, 1.0)), aaa_ph.ao, aaa_palm), SF_AAA_DETAIL && !baked),
         crown
     );
-=======
-    s.ao = select(1.0, 0.7 + 0.3 * in.uv.y, crown);
     if (card && crown) {
         s.ao = 0.7 + 0.3 * clamp(0.5 + 0.5 * n.y, 0.0, 1.0);
     }
->>>>>>> 131ab04d (feat(render): crown cores, garden shrubs, yard ground, fences, objects and house backs)
     s.n = n;
     s.alpha = 1.0;
     s.env = -1;
@@ -636,11 +618,7 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     // key light is left out of look_light (a geometric normal facing from the sun
     // turns it off there) and added below with that one shadow.
     let l = look.key_dir.xyz;
-<<<<<<< HEAD
-    let vol_light = light3 && crown && !baked && !aaa_palm;
-=======
-    let vol_light = light3 && crown && !baked && !card; // (a crown card's uv is the crown's disc, not the card's place)
->>>>>>> 131ab04d (feat(render): crown cores, garden shrubs, yard ground, fences, objects and house backs)
+    let vol_light = light3 && crown && !baked && !aaa_palm && !card; // (a crown card's uv is the crown's disc, not the card's place)
     let ng = select(fn_, -l, vol_light);
     var lit = look_light(s, m, v, in.world, ng, 0u);
     if (vol_light) {
