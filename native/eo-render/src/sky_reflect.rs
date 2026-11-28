@@ -241,15 +241,42 @@ const SECTIONS_MARK: &str = "// ---- (`--wet-surfaces`, the reflect track;";
 /// limit, and every function in the module costs it compile time, called or not.
 pub(crate) fn sky_light_source(reflect: bool) -> std::borrow::Cow<'static, str> {
     const SRC: &str = include_str!("sky_light.wgsl");
-    if reflect {
-        return SRC.into();
+    let src: std::borrow::Cow<'static, str> = if reflect {
+        SRC.into()
+    } else {
+        let at = SRC.find(SECTIONS_MARK).expect("sky_light.wgsl: the reflect track's sections");
+        format!("{}{}", &SRC[..at], include_str!("sky_reflect_stub.wgsl")).into()
+    };
+    if headlamp_stray() {
+        return src;
     }
-    let at = SRC.find(SECTIONS_MARK).expect("sky_light.wgsl: the reflect track's sections");
-    format!("{}{}", &SRC[..at], include_str!("sky_reflect_stub.wgsl")).into()
+    src.replace(HEADLAMP_STRAY_ON, "const SKY_HEAD_STRAY_ON: bool = false;").into()
+}
+
+/// The low beams' stray light high over their cut-off (sky_light.wgsl
+/// `sky_head_glare`, FMVSS 108's 125 cd at most from 10 deg up); off
+/// (`--no-headlamp-stray`), the glare zone's 620 cd at every height, as before.
+static HEADLAMP_STRAY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+const HEADLAMP_STRAY_ON: &str = "const SKY_HEAD_STRAY_ON: bool = true;";
+
+/// Set before the first pipeline is built (`--no-headlamp-stray`).
+pub fn set_headlamp_stray(on: bool) {
+    HEADLAMP_STRAY.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn headlamp_stray() -> bool {
+    HEADLAMP_STRAY.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_headlamp_stray_switch_finds_its_constant() {
+        // `--no-headlamp-stray` has one line to turn: the file keeps it, once.
+        assert_eq!(include_str!("sky_light.wgsl").matches(super::HEADLAMP_STRAY_ON).count(), 1);
+        assert!(super::headlamp_stray(), "on unless asked off");
+    }
+
     #[test]
     fn the_agents_variant_takes_the_stand_ins_and_every_other_the_whole_file() {
         let whole = super::sky_light_source(true);

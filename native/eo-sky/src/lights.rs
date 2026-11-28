@@ -325,9 +325,9 @@ pub fn rear_lamp_reach_m(candela: f64) -> f64 {
 //
 // | Lens (300 mm LED) | Intensity on its axis | Colour | Source |
 // | --- | --- | --- | --- |
-// | Red | 365 cd | x 0.69 y 0.30 | ITE VTCSH Part 2 (LED circular signal supplement), minimum maintained intensity at H-V, 12-inch; ITE / CIE signal red |
-// | Yellow | 910 cd | x 0.57 y 0.42 | the same table; ITE yellow |
-// | Green | 475 cd | x 0.17 y 0.70 | the same table; ITE green (the blue-green of the LED lenses) |
+// | Red | 365 cd | x 0.6997 y 0.3002 (625 nm) | ITE VTCSH Part 2 (LED circular signal supplement), minimum maintained intensity at H-V, 12-inch; the colour inside the ITE red box (standards table `signal-lens-chromaticity`) |
+// | Yellow | 910 cd | x 0.5752 y 0.4242 (590 nm) | the same table; inside the ITE yellow box |
+// | Green | 475 cd | x 0.0039 y 0.6548 (505 nm) | the same table; inside the ITE green box (the blue-green of the LED lenses) |
 // | Beam | `SIGNAL_LOBE` (a cone to `SIGNAL_OUTER_DEG` where a shader takes a cone) | the VTCSH distribution's points (the lobes' table below) | |
 // | Lens | 300 mm, its luminance its intensity toward the eye over its area | ITE VTCSH (12-inch) | |
 // | Reach | where it gives `SIGNAL_REACH_LUX` | INFERRED: a quarter of a lux |
@@ -335,8 +335,16 @@ pub fn rear_lamp_reach_m(candela: f64) -> f64 {
 
 /// A lit lens's intensity on its axis (cd): red, yellow, green (ITE VTCSH, 12-inch LED).
 pub const SIGNAL_CD: [f64; 3] = [365.0, 910.0, 475.0];
-/// The lenses' chromaticities (x, y): red, yellow, green.
-pub const SIGNAL_XY: [[f64; 2]; 3] = [[0.69, 0.30], [0.57, 0.42], [0.17, 0.70]];
+/// The lenses' chromaticities (x, y): red, yellow, green: the CIE 1931 spectral locus at the
+/// LED dies' dominant wavelengths (AlInGaP red 625 nm, AlInGaP amber 590 nm, InGaN green
+/// 505 nm), each inside its ITE box (the standards table's `signal-lens-chromaticity`; the
+/// colour, `signal_color`, keeps only the hue, the gamut taking the rest).
+pub const SIGNAL_XY: [[f64; 2]; 3] = [[0.6997, 0.3002], [0.5752, 0.4242], [0.0039, 0.6548]];
+/// The chromaticities before (eo-render `--no-signal-chroma` keeps them): the green a yellow-
+/// green outside its ITE box (y over 0.730 - x), the red and yellow just outside theirs.
+pub const SIGNAL_XY_BEFORE: [[f64; 2]; 3] = [[0.69, 0.30], [0.57, 0.42], [0.17, 0.70]];
+/// The standards table's id for the lenses' chromaticity boxes.
+pub const SIGNAL_CHROMATICITY_ID: &str = "signal-lens-chromaticity";
 /// The beam as a cone where a shader takes one (the wet street's streaks): full on
 /// the axis (`SIGNAL_INNER_DEG`), nothing past `SIGNAL_OUTER_DEG`; the surfaces, the
 /// haze and the lens take `SIGNAL_LOBE`.
@@ -352,6 +360,24 @@ pub const SIGNAL_REACH_LUX: f64 = 0.25;
 /// placement's, not the head's, and takes none. INFERRED (the distance).
 pub const SIGNAL_CLEAR_M: f64 = 6.0;
 
+// ---- (`--signal-light`) a pedestrian signal's lit symbol ----
+//
+// | Symbol (16 x 18 in LED module) | Luminance | Colour | Source |
+// | --- | --- | --- | --- |
+// | Upraised hand | 1400 cd/m2 | Portland orange, x 0.61 y 0.38 | ITE PTCSI Part 2 (LED pedestrian signal modules, 2010): the minimum luminance an ITE-compliant countdown module states (Dialight 430-6479-001X data sheet, WisDOT QPL 658.0635, trust.dot.state.wi.us/ftp/dtsd/bto/qpl/electrical/6580635-ledmodules-pedcountdown-16inch-dialight.pdf); the chromaticity INFERRED inside ITE's Portland orange |
+// | Walking person | 2200 cd/m2 | lunar white, x 0.33 y 0.35 | the same sheet; the chromaticity INFERRED inside ITE's lunar white |
+
+/// A lit pedestrian symbol's luminance (cd/m2): the hand, the walking person.
+pub const PED_SIGNAL_NIT: [f64; 2] = [1400.0, 2200.0];
+/// The pedestrian symbols' chromaticities (x, y): Portland orange, lunar white.
+pub const PED_SIGNAL_XY: [[f64; 2]; 2] = [[0.61, 0.38], [0.33, 0.35]];
+
+/// A lit pedestrian symbol's colour at unit luminance (0 the hand, 1 the walking person).
+pub fn ped_signal_color(symbol: usize) -> [f64; 3] {
+    let [x, y] = PED_SIGNAL_XY[symbol.min(1)];
+    xy_unit_color(x, y)
+}
+
 /// The sRGB white point (D65) in CIE xy.
 pub const D65_XY: [f64; 2] = [0.3127, 0.3290];
 
@@ -365,7 +391,7 @@ fn xy_linear(x: f64, y: f64) -> [f64; 3] {
 /// A chromaticity (x, y) in linear sRGB at unit luminance. One outside the
 /// sRGB gamut (the signals' and rear lamps' saturated LEDs) is brought in along
 /// its line to the white point (D65), which keeps its dominant wavelength,
-/// i.e. its hue: the ITE signal green (x 0.17 y 0.70, ~505 nm) is the
+/// i.e. its hue: the ITE signal green (x 0.0039 y 0.6548, 505 nm) is the
 /// blue-green its LEDs are, where clipping the negative red would turn it to
 /// the display's own yellow-green primary (~550 nm) and read as neon.
 pub fn xy_unit_color(x: f64, y: f64) -> [f64; 3] {
@@ -395,6 +421,12 @@ pub fn xy_unit_color(x: f64, y: f64) -> [f64; 3] {
 /// A lit lens's colour (aspect 0 red, 1 yellow, 2 green).
 pub fn signal_color(aspect: usize) -> [f64; 3] {
     let [x, y] = SIGNAL_XY[aspect.min(2)];
+    xy_unit_color(x, y)
+}
+
+/// A lit lens's colour as before (`SIGNAL_XY_BEFORE`; eo-render `--no-signal-chroma`).
+pub fn signal_color_before(aspect: usize) -> [f64; 3] {
+    let [x, y] = SIGNAL_XY_BEFORE[aspect.min(2)];
     xy_unit_color(x, y)
 }
 
@@ -579,8 +611,20 @@ mod tests {
     }
 
     #[test]
+    fn pedestrian_symbols_are_their_colours() {
+        let (hand, person) = (ped_signal_color(0), ped_signal_color(1));
+        assert!(hand[0] > hand[1] && hand[1] > hand[2], "Portland orange {hand:?}");
+        assert!(person.iter().all(|&v| (v - 1.0).abs() < 0.25), "lunar white {person:?}");
+        for c in [hand, person] {
+            assert!((eo_look::math::luminance(c) - 1.0).abs() < 1e-9);
+        }
+        // the person is the brighter symbol (ITE PTCSI Part 2)
+        assert!(PED_SIGNAL_NIT[1] > PED_SIGNAL_NIT[0]);
+    }
+
+    #[test]
     fn out_of_gamut_colours_keep_their_hue() {
-        for [x, y] in SIGNAL_XY.into_iter().chain([[0.69, 0.30]]) {
+        for [x, y] in SIGNAL_XY.into_iter().chain(SIGNAL_XY_BEFORE) {
             let c = xy_unit_color(x, y);
             assert!(c.iter().all(|&v| v >= 0.0));
             // the colour's chromaticity on the line from D65 to (x, y), between them

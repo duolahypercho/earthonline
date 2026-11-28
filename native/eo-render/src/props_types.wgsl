@@ -82,6 +82,10 @@ const PR_F_WEATHER_WIND: u32 = 32u;
 // in bits 0..15, pitch in bits 16..30, both signed (eo-props `boats::afloat_word`;
 // the pose is the physics', eo-player `harbour`). Its heave is in its height.
 const PR_F_AFLOAT: u32 = 64u;
+// (eo-app `--no-retro-viewer`) an arm name sign's face takes no glow of its own at night
+const PR_F_RETRO_VIEWER: u32 = 128u;
+// (eo-app `--no-sign-back-aged`) an arm name sign's back is dull weathered aluminium
+const PR_F_SIGN_BACK_AGED: u32 = 256u;
 const PR_AFLOAT_BIT: u32 = 0x80000000u;
 // a visible word: instance index (17 bits) | fade (8 bits) << 17.
 const PR_INDEX_MASK: u32 = 0x1ffffu;
@@ -242,6 +246,10 @@ fn pr_wind(i: PrInstance, p: vec3<f32>, w_in: f32) -> vec3<f32> {
 // trees (a trunk stands plumb): grass, scrub and rock follow the slope they
 // stand on by a shear (y += gradient . horizontal offset).
 fn pr_veg_grad(i: PrInstance) -> vec2<f32> {
+    // (eo-app `--no-pull-boxes` off) the pull box's lid lies on the sidewalk the same way (its model in `extra.z`)
+    if (i.model == pr.extra.z) {
+        return unpack2x16snorm(i.pad) * 4.0;
+    }
     if (!pr_is_veg(i.model) || i.model < PR_VEG_BASE + PR_VEG_TREES) {
         return vec2<f32>(0.0);
     }

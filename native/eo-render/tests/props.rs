@@ -212,7 +212,7 @@ fn setup2_with(ctx: &GpuContext, stand_ins: bool) -> (Renderer, eo_render::props
     let fonts = eo_props::sign_atlas::Fonts::system().unwrap();
     let (signs, _) = eo_props::sign_atlas::load_or_cook(&cache, &js, &fonts, &[], eo_props::sign_atlas::SIGN_FALLBACK_STREETS).unwrap();
     let oh = eo_props::overhead::OverheadJs::load().unwrap();
-    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins, boats: None, luminaires: false };
+    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins, boats: None, luminaires: false, sign_models: None, signal_poles: None, name_signs: None, pole_lamps: false, rising_arm_far: false };
     let lib = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &x, lib2::dome_standards(&ca).unwrap()).unwrap();
     r.attach_props(ctx, &lib).unwrap();
     (r, lib)
@@ -426,7 +426,7 @@ fn props2_boats_cook_only_with_their_bodies() {
     let lib_on = PropLibrary::cook_full(&paths.repo_root, &js, lens, &on, dome).unwrap();
     assert!(lib_on.missing.iter().all(|m| !m.starts_with("boat ")), "every boat file read: {:?}", lib_on.missing);
     assert_eq!(lib_on.meshes.len(), lib_off.meshes.len() + 3 * eo_props::boats::BODIES.len(), "three levels per body");
-    assert!(lib_on.meshes.len() <= 256, "the cull pass takes 256 meshes");
+    assert!(lib_on.meshes.len() as u32 <= eo_render::props::PROP_MESH_MAX, "the cull pass takes PROP_MESH_MAX meshes");
     for (i, b) in bodies.iter().enumerate() {
         let id = lib2::BOAT_BASE as usize + i;
         assert!(lib_off.models[id].meshes[0] == eo_render::props_lib::NONE, "off: no {} model", b.name);
@@ -436,6 +436,46 @@ fn props2_boats_cook_only_with_their_bodies() {
         assert_eq!(m.lod, lib2::BOAT_LOD);
         // The bounding sphere holds the hull (half its length) and reaches the masthead.
         assert!(m.radius >= b.loa as f32 / 2.0 - 0.05 && m.radius < (b.loa + b.height + b.draft) as f32, "{}: radius {}", b.name, m.radius);
+    }
+}
+
+/// The SFMTA sign plates' Blender models (eo-props `sign_models`, eo-app `--no-sign-models`):
+/// cooked only when given, one model of three levels per modelled inventory face, in the
+/// code-built plate's frame (the plate frame a unit square about the origin, the post axis
+/// behind it), the library within the cull pass's mesh limit with the boats as well.
+#[test]
+fn props2_sign_models_cook_only_when_given() {
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let js = eo_props::JsProps::load().unwrap();
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let lens = ca.metric_key("signal-lens-size", "circularNewFaces").unwrap();
+    let dome = lib2::dome_standards(&ca).unwrap();
+    let signs = eo_props::sign_models::load(&paths.repo_root, &js.signs.faces).unwrap();
+    let bodies = eo_props::boats::load_bodies(&paths.repo_root).unwrap();
+    let off = LibExtras { boats: Some(&bodies), ..Default::default() };
+    let on = LibExtras { sign_models: Some(&signs), ..off };
+    assert!(LibExtras::default().sign_models.is_none(), "off by default");
+    assert_ne!(PropLibrary::key_with(&js, &off, dome), PropLibrary::key_with(&js, &on, dome), "on and off cook different libraries");
+    let lib_off = PropLibrary::cook_full(&paths.repo_root, &js, lens, &off, dome).unwrap();
+    let lib_on = PropLibrary::cook_full(&paths.repo_root, &js, lens, &on, dome).unwrap();
+    assert!(lib_on.missing.iter().all(|m| !m.starts_with("sign model ")), "every sign model file read: {:?}", lib_on.missing);
+    // per face: two levels per wear variant and the far level they share.
+    let per_face = |f: &eo_props::sign_models::SignModel| 2 * f.variants.len() + 1;
+    assert_eq!(lib_on.meshes.len(), lib_off.meshes.len() + signs.faces.iter().map(per_face).sum::<usize>(), "two levels per variant and one far level per face");
+    assert!(lib_on.meshes.len() as u32 <= eo_render::props::PROP_MESH_MAX, "within the cull pass's mesh limit: {}", lib_on.meshes.len());
+    assert!(signs.faces.iter().any(|f| f.face == "stop"), "the STOP plate has a model");
+    for f in &signs.faces {
+        for wear in 0..f.variants.len() as u32 {
+            let id = lib2::sign_model_id(f.face_index as u32, wear) as usize;
+            assert!(lib_off.models[id].meshes[0] == eo_render::props_lib::NONE, "off: no {} model", f.face);
+            let m = lib_on.models[id];
+            assert!(m.meshes.iter().take(3).all(|&k| k != eo_render::props_lib::NONE), "{} {wear}: three levels", f.face);
+            assert!(lib_on.triangles(m.meshes[0]) > lib_on.triangles(m.meshes[2]), "{} {wear}: the far level is the lighter", f.face);
+            assert_eq!(m.meshes[2], lib_on.models[lib2::sign_model_id(f.face_index as u32, 0) as usize].meshes[2], "{} {wear}: the far level shared", f.face);
+            assert_eq!(m.lod, lib2::SIGN_MODEL_LOD);
+            // the plate frame is a unit square: the sphere holds it, and no more than the plate and its bracket.
+            assert!(m.radius > 0.45 && m.radius < 1.0, "{} {wear}: radius {}", f.face, m.radius);
+        }
     }
 }
 

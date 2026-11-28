@@ -1853,6 +1853,7 @@ pub fn camera_wgsl_at(group: u32, lut: u32, sampler: u32) -> String {
 /// stub that gathers nothing, compiled out with `SF_SUN_BOUNCE`.
 pub fn ao_shader_source() -> String {
     let mut s = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
+    s.push_str(&crate::props::signal_light_ao_wgsl()); // (`--signal-light`) the marked pixels' bound
     if shader_features().sun_bounce {
         use eo_look::sun_bounce as sb;
         let f = |v: f64| format!("{v:.8}");

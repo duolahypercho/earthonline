@@ -212,6 +212,9 @@ impl Builder {
     }
 }
 
+/// (signal models) The far head's backplate border: the build's `border_yellow` (linear 0.62, 0.42, 0.02), sRGB.
+const SIGNAL_BORDER_YELLOW: [u8; 3] = [206, 173, 39];
+
 pub(crate) fn srgb_hex(h: &str) -> [u8; 3] {
     let v = u32::from_str_radix(h.trim_start_matches('#'), 16).unwrap_or(0xffffff);
     [(v >> 16) as u8, (v >> 8) as u8, v as u8]
@@ -231,6 +234,16 @@ pub(crate) struct Glb {
     /// whose material emits (a luminaire's `lamp_glass`): the glass its lamp
     /// lights. The loader draws them with the rest unless the cook splits them out.
     pub(crate) glow: Vec<(u32, u32)>,
+    /// Each primitive's material name and its vertices' range (first, count): the signal
+    /// models' lenses and pedestrian face are drawn with their own materials.
+    pub(crate) parts: Vec<(String, u32, u32)>,
+}
+
+impl Glb {
+    /// The vertex range (first, count) of the primitive whose material is `name`.
+    pub(crate) fn part(&self, name: &str) -> Option<(u32, u32)> {
+        self.parts.iter().find(|p| p.0 == name).map(|p| (p.1, p.2))
+    }
 }
 
 /// (`--luminaires`) A luminaire's lit glass as separate parts (a twin post's
@@ -335,7 +348,7 @@ pub(crate) fn read_glb(repo: &Path, prop: &eo_props::data::StreetProp) -> Result
     let bytes = eo_assets::glb::read_verified(&path, &asset)?;
     let gltf = gltf::Gltf::from_slice(&bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref().ok_or_else(|| anyhow!("GLB without a binary chunk"))?;
-    let mut g = Glb { positions: vec![], normals: vec![], uvs: vec![], indices: vec![], maps: [None, None, None], glow: vec![] };
+    let mut g = Glb { positions: vec![], normals: vec![], uvs: vec![], indices: vec![], maps: [None, None, None], glow: vec![], parts: vec![] };
     let scene = gltf.default_scene().or_else(|| gltf.scenes().next()).ok_or_else(|| anyhow!("no scene"))?;
     let mut stack: Vec<(gltf::Node, glam::Mat4)> = scene.nodes().map(|n| (n, glam::Mat4::IDENTITY)).collect();
     // A v2 file's blended primitives (the shelter's glazing) are left out: this loader draws
@@ -369,6 +382,7 @@ pub(crate) fn read_glb(repo: &Path, prop: &eo_props::data::StreetProp) -> Result
                     Some(ix) => g.indices.extend(ix.into_u32().map(|i| base + i)),
                     None => g.indices.extend(base..base + n as u32),
                 }
+                g.parts.push((prim.material().name().unwrap_or_default().to_string(), base, n as u32));
             }
         }
         for c in node.children() {
@@ -429,6 +443,23 @@ pub(crate) fn push_mat(v: &mut Vec<PropMaterial>, base: [u8; 3], rough: f32, met
     let b = base.map(|c| srgb_to_linear(c as f32 / 255.0));
     v.push(PropMaterial { base: [b[0], b[1], b[2], 1.0], emissive: [0.0; 4], params: [rough, metal, 1.0, 0.0], layer, flags, rough_flatten: 0.0, thin_absorption: 0.0 });
     v.len() as u32 - 1
+}
+
+/// (signal models) The share of the lens and face images each lens or face is inset by in its
+/// cell (props_draw.wgsl `PR_SIGNAL_INSET`): the provenance's `cellInset` must be it.
+pub const SIGNAL_CELL_INSET: f64 = 0.02;
+
+/// (signal models) A lens or face image, hash-verified, as an albedo layer.
+fn signal_image(repo: &Path, img: &eo_props::signal_models::SignalImage) -> Result<Vec<u8>> {
+    if (img.cell_inset - SIGNAL_CELL_INSET).abs() > 1e-9 {
+        bail!("{}: cellInset {} (the shader's PR_SIGNAL_INSET is {SIGNAL_CELL_INSET})", img.file.path, img.cell_inset);
+    }
+    let asset = eo_assets::manifest::AssetRef { url: format!("/{}", img.file.path.trim_start_matches("public/")), sha256: img.file.sha256.clone(), bytes: img.file.bytes, storey: None };
+    let bytes = eo_assets::glb::read_verified(&repo.join(&img.file.path), &asset)?;
+    // a PNG: lossless (the lit patterns and masks are packed in its channels, which a JPEG's
+    // chroma subsampling would bleed into each other)
+    let (w, h, rgba) = decode_png(&bytes).with_context(|| img.file.path.clone())?;
+    Ok(if w == ALBEDO_RES as usize && h == ALBEDO_RES as usize { rgba } else { resample(w, h, &rgba, 4, ALBEDO_RES) })
 }
 
 pub(crate) fn glb_mat(v: &mut Vec<PropMaterial>, layer: i32) -> u32 {
@@ -548,6 +579,11 @@ impl PropLibrary {
         for p in js.street_props.values() {
             h.update(p.sha256.as_bytes());
         }
+        // (signal models) the lens and face images the signal models' heads are lit through.
+        if let Some(s) = js.street_prop("signalHead").ok().and_then(|p| eo_props::signal_models::active().filter(|s| s.is_mine(p))) {
+            h.update(s.lenses.file.sha256.as_bytes());
+            h.update(s.ped_faces.file.sha256.as_bytes());
+        }
         h.update(bytemuck::cast_slice(&dome));
         if let Some(ez) = x.ez {
             for ((sp, form), m) in &ez.street {
@@ -594,6 +630,50 @@ impl PropLibrary {
                 h.update(l.sha256.as_bytes());
             }
         }
+        // The sign plates' models only when given (`--no-sign-models`: the key as before).
+        if let Some(signs) = x.sign_models {
+            h.update(b"sign-models");
+            h.update(signs.post_radius_m.to_le_bytes());
+            for f in &signs.faces {
+                h.update(f.face_index.to_le_bytes());
+                h.update(bytemuck::cast_slice(&f.frame_m));
+                for v in &f.variants {
+                    h.update(v.name.as_bytes());
+                    for l in &v.lods {
+                        h.update(l.sha256.as_bytes());
+                    }
+                }
+            }
+        }
+        // The arm name signs only when given (`--no-arm-name-signs`: the key as before).
+        if let Some(n) = x.name_signs {
+            h.update(b"arm-name-signs");
+            for l in &n.legends {
+                h.update(l.as_bytes());
+            }
+            h.update(&n.rgba);
+            h.update(bytemuck::cast_slice(&n.tiles));
+            // (`--no-name-sign-matte` off) the faces' sheeting roughness rides their colours' alpha
+            if n.colours.iter().any(|c| c[3] != 1.0) {
+                h.update(b"arm-name-signs-matte");
+                h.update(bytemuck::cast_slice(&n.colours));
+            }
+        }
+        // The signal poles' models only when given (`--no-signal-poles`: the key as before).
+        if let Some(sp) = x.signal_poles {
+            h.update(b"signal-poles");
+            for l in sp.parts.iter().flatten() {
+                h.update(l.sha256.as_bytes());
+            }
+            // the street lights on the mast poles only when on (`--no-signal-luminaires`: the key as before)
+            if x.pole_lamps {
+                h.update(b"signal-pole-lamps");
+            }
+            // the rising arms drawn as far as the poles only when on (`--no-arm-far`: the key as before)
+            if x.rising_arm_far {
+                h.update(b"signal-rising-arm-far");
+            }
+        }
         h.finalize().iter().take(12).map(|b| format!("{b:02x}")).collect()
     }
 
@@ -606,7 +686,9 @@ impl PropLibrary {
     pub fn load_full(repo: &Path, js: &JsProps, lens_dia_m: f64, x: &crate::props_lib2::LibExtras, dome: [f32; 4], cache_dir: Option<&Path>) -> Result<Self> {
         // A checkout without some prop files cooks (and caches) a library of its own.
         let boat_files = x.boats.unwrap_or_default().iter().flat_map(|b| b.lods.iter());
-        let absent: String = js.street_props.values().chain(boat_files).map(|p| if repo.join(&p.path).is_file() { '1' } else { '0' }).collect();
+        let sign_files = x.sign_models.iter().flat_map(|s| s.faces.iter().flat_map(|f| f.variants.iter().flat_map(|v| v.lods.iter())));
+        let pole_files = x.signal_poles.iter().flat_map(|s| s.parts.iter().flatten());
+        let absent: String = js.street_props.values().chain(boat_files).chain(sign_files).chain(pole_files).map(|p| if repo.join(&p.path).is_file() { '1' } else { '0' }).collect();
         let tag = if absent.contains('0') { format!("-{absent}") } else { String::new() };
         let path = cache_dir.map(|d| d.join("props").join(format!("{}{tag}.eopl", Self::key_with(js, x, dome))));
         if let Some(p) = &path {
@@ -701,6 +783,13 @@ impl PropLibrary {
             Some(s) => {
                 let mut f = if s.faces.width == BIG_RES && s.faces.height == BIG_RES { s.faces.rgba.clone() } else { resample(s.faces.width as usize, s.faces.height as usize, &s.faces.rgba, 4, BIG_RES) };
                 dilate_colour(&mut f, BIG_RES as usize, 8);
+                // (the arm name signs) their cells in the face atlas's free rows
+                if let Some(n) = extras.name_signs.filter(|_| s.faces.width == BIG_RES && s.faces.height == BIG_RES) {
+                    let row = (BIG_RES * 4) as usize;
+                    let start = n.y0 as usize * row;
+                    f[start..start + n.rgba.len()].copy_from_slice(&n.rgba);
+                    sources.push(format!("arm name signs: {} D3-1 faces in the sign face atlas from row {}", n.legends.len(), n.y0));
+                }
                 big_layers.push(f);
                 let mut p = flat_layer([255; 4], BIG_RES);
                 let (pw, ph) = (s.printed.width.min(BIG_RES) as usize, s.printed.height.min(BIG_RES) as usize);
@@ -719,6 +808,30 @@ impl PropLibrary {
         let head = glb_layer("signalHead", &mut layers, &mut sources, &mut missing);
         let palm = glb_layer("palm", &mut layers, &mut sources, &mut missing);
         let palm_far = glb_layer("palmFar", &mut layers, &mut sources, &mut missing);
+        // (eo_props::signal_models, `--no-signal-models`) the modelled heads: their lens and
+        // face images as two layers; the lenses and the pedestrian face are lit through them.
+        let sig = js.street_prop("signalHead").ok().and_then(|p| eo_props::signal_models::active().filter(|s| s.is_mine(p)));
+        let mut sig_layers = None;
+        if let Some(s) = sig.filter(|_| head.is_some()) {
+            match (signal_image(repo, &s.lenses), signal_image(repo, &s.ped_faces)) {
+                (Ok(l), Ok(f)) => {
+                    layers.push([l, flat_n.clone(), flat_orm.clone()]);
+                    layers.push([f, flat_n.clone(), flat_orm.clone()]);
+                    sources.push(format!("signal lenses and pedestrian faces: {}, {}", s.lenses.file.path, s.ped_faces.file.path));
+                    sig_layers = Some((layers.len() as i32 - 2, layers.len() as i32 - 1));
+                }
+                (a, b) => missing.push(format!("signal images ({:#}): the lenses and faces draw flat", a.err().or(b.err()).unwrap_or_else(|| anyhow!("?")))),
+            }
+        }
+        let ped = sig_layers.and_then(|_| glb_layer("pedHead", &mut layers, &mut sources, &mut missing));
+        if let Some((lens_layer, _)) = sig_layers {
+            for &k in &m_lens {
+                materials[k as usize].flags |= P_TEX;
+                materials[k as usize].layer = lens_layer;
+            }
+        }
+        let m_ped_face = sig_layers.map(|(_, face_layer)| push_mat(&mut materials, [20, 20, 20], 0.3, 0.0, P_PED_HAND | P_PED_WALK | P_TEX, face_layer));
+        let sig_row = |k: &str, f: &str| sig.and_then(|s| s.rows.get(k)).and_then(|r| r[f].as_f64()).map(|v| v as f32);
 
         let mut b = Builder::default();
         let mut meshes: Vec<GpuPropMesh> = vec![];
@@ -772,18 +885,22 @@ impl PropLibrary {
         }
         let n = meshes.len() as u32;
         set(&mut models, Model::MastArm, [n - 2, n - 1, n - 1], [40.0, 160.0, 400.0, 400.0], [0.5, 0.0, 0.0], 0.6, 2);
-        // Vehicle head: the JS GLB body (or a box), three lenses on its face.
-        let lens_r = (lens_dia_m / 2.0) as f32;
+        // Vehicle head: the JS GLB body (or a box), three lenses on its face. A modelled head
+        // (eo_props::signal_models) draws its own lenses (its `lens_*` primitives) near; far, the
+        // box on its backplate with the yellow border, the lens discs on it.
+        let sig_head = sig_layers.is_some();
+        let lens_r = if sig_head { sig_row("signalHead", "lensRadiusM").unwrap_or((lens_dia_m / 2.0) as f32) } else { (lens_dia_m / 2.0) as f32 };
         // A v2 head (eo_props::props_v2) gives its lens face: its visors reach past the lenses.
         let v2_face = js.street_prop("signalHead").ok().and_then(|p| eo_props::props_v2::active().filter(|v| v.is_v2(p)).and_then(|v| v.lens_face_z()));
+        let given_face = if sig_head { sig_row("signalHead", "lensFaceZ").map(f64::from) } else { v2_face };
         let (face_z, mid_y) = match &head {
-            Some((g, _)) if v2_face.is_some() => {
+            Some((g, _)) if given_face.is_some() => {
                 let (mut y0, mut y1) = (f32::MAX, f32::MIN);
                 for p in &g.positions {
                     y0 = y0.min(p[1]);
                     y1 = y1.max(p[1]);
                 }
-                (v2_face.unwrap_or_default() as f32 + 0.004, (y0 + y1) / 2.0)
+                (given_face.unwrap_or_default() as f32 + 0.004, (y0 + y1) / 2.0)
             }
             Some((g, _)) => {
                 let (mut zmax, mut y0, mut y1) = (f32::MIN, f32::MAX, f32::MIN);
@@ -796,27 +913,54 @@ impl PropLibrary {
             }
             None => (0.158, 0.0),
         };
+        const LENS_PARTS: [&str; 3] = ["lens_red", "lens_amber", "lens_green"];
         for lod in 0..2 {
             match (&head, lod) {
                 (Some((g, layer)), 0) => {
                     let m = glb_mat(&mut materials, *layer);
+                    let lens_of = |i: u32| if sig_head { LENS_PARTS.iter().position(|n| g.part(n).is_some_and(|(f, c)| i >= f && i < f + c)) } else { None };
                     let base = b.v.len() as u32;
                     for i in 0..g.positions.len() {
-                        b.vert(g.positions[i], g.normals[i], g.uvs[i], white, m);
+                        let mi = lens_of(i as u32).map_or(m, |k| m_lens[k]);
+                        b.vert(g.positions[i], g.normals[i], g.uvs[i], white, mi);
                     }
                     for t in g.indices.chunks_exact(3) {
                         b.tri(false, base + t[0], base + t[1], base + t[2]);
                     }
                 }
-                _ => b.cuboid([-0.21, -0.56, -0.14], [0.21, 0.56, face_z - 0.004], dark, m_paint),
+                _ => {
+                    b.cuboid([-0.21, -0.56, -0.14], [0.21, 0.56, face_z - 0.004], dark, m_paint);
+                    if let (true, Some((g, _))) = (sig_head, &head) {
+                        // the backplate (the head's widest and tallest extent) and its border, in front of it
+                        let (mut bw, mut bh) = (0.0f32, 0.0f32);
+                        for p in &g.positions {
+                            bw = bw.max(p[0].abs());
+                            bh = bh.max(p[1].abs());
+                        }
+                        let (z0, z1) = (sig_row("signalHead", "backplateBackZM").unwrap_or(-0.066), sig_row("signalHead", "backplateFrontZM").unwrap_or(-0.06));
+                        let bd = sig_row("signalHead", "backplateBorderIn").unwrap_or(2.0) * 0.0254;
+                        b.cuboid([-bw, mid_y - bh, z0], [bw, mid_y + bh, z1], dark, m_paint);
+                        let y = SIGNAL_BORDER_YELLOW;
+                        let zb = [z1, z1 + 0.0015];
+                        b.cuboid([-bw, mid_y + bh - bd, zb[0]], [bw, mid_y + bh, zb[1]], y, m_paint);
+                        b.cuboid([-bw, mid_y - bh, zb[0]], [bw, mid_y - bh + bd, zb[1]], y, m_paint);
+                        b.cuboid([-bw, mid_y - bh + bd, zb[0]], [-bw + bd, mid_y + bh - bd, zb[1]], y, m_paint);
+                        b.cuboid([bw - bd, mid_y - bh + bd, zb[0]], [bw, mid_y + bh - bd, zb[1]], y, m_paint);
+                    }
+                }
+            }
+            if sig_head && lod == 0 {
+                finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+                continue;
             }
             for (k, dy) in [0.35f32, 0.0, -0.35].into_iter().enumerate() {
                 let sides = if lod == 0 { 16 } else { 8 };
+                // mapped 0..1 across the lens (v down, glTF's), as a modelled head's lenses
                 let c = b.vert([0.0, mid_y + dy, face_z], [0.0, 0.0, 1.0], [0.5, 0.5], white, m_lens[k]);
                 let ring = b.v.len() as u32;
                 for i in 0..=sides {
                     let a = i as f32 / sides as f32 * std::f32::consts::TAU;
-                    b.vert([a.cos() * lens_r, mid_y + dy + a.sin() * lens_r, face_z], [0.0, 0.0, 1.0], [0.5, 0.5], white, m_lens[k]);
+                    b.vert([a.cos() * lens_r, mid_y + dy + a.sin() * lens_r, face_z], [0.0, 0.0, 1.0], [0.5 + 0.5 * a.cos(), 0.5 - 0.5 * a.sin()], white, m_lens[k]);
                 }
                 for i in 0..sides {
                     b.tri(false, c, ring + i, ring + i + 1);
@@ -826,16 +970,44 @@ impl PropLibrary {
         }
         let n = meshes.len() as u32;
         set(&mut models, Model::SignalHead, [n - 2, n - 1, n - 1], [45.0, 220.0, 400.0, 400.0], [0.0, 0.0, 0.0], 0.8, 1);
-        // Pedestrian head: housing + hand and person faces side by side (JS PED_HEAD size).
-        {
-            let (w, h, d) = (num("pedHead", "widthM"), num("pedHead", "heightM"), num("pedHead", "depthM"));
-            b.cuboid([-w / 2.0, -h / 2.0, -d], [w / 2.0, h / 2.0, 0.0], dark, m_paint);
-            b.quad_z([-w / 4.0, 0.0, 0.003], w / 2.0 - 0.04, h - 0.06, [0.0, 0.0, 1.0, 1.0], white, m_hand, false);
-            b.quad_z([w / 4.0, 0.0, 0.003], w / 2.0 - 0.04, h - 0.06, [0.0, 0.0, 1.0, 1.0], white, m_walk, false);
-            finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+        // Pedestrian head: housing + hand and person faces side by side (JS PED_HEAD size). A
+        // modelled head (eo_props::signal_models): its housing and its face near, lit through
+        // the face image; far, the box with that face.
+        let (w, h, d) = (num("pedHead", "widthM"), num("pedHead", "heightM"), num("pedHead", "depthM"));
+        match (&ped, m_ped_face) {
+            (Some((g, layer)), Some(mf)) => {
+                let m = glb_mat(&mut materials, *layer);
+                let face = g.part("ped_face");
+                let on_face = |i: u32| face.is_some_and(|(f, c)| i >= f && i < f + c);
+                let (mut fw, mut fh) = (0.0f32, 0.0f32);
+                let base = b.v.len() as u32;
+                for i in 0..g.positions.len() {
+                    let f = on_face(i as u32);
+                    if f {
+                        fw = fw.max(g.positions[i][0].abs() * 2.0);
+                        fh = fh.max(g.positions[i][1].abs() * 2.0);
+                    }
+                    b.vert(g.positions[i], g.normals[i], g.uvs[i], white, if f { mf } else { m });
+                }
+                for t in g.indices.chunks_exact(3) {
+                    b.tri(false, base + t[0], base + t[1], base + t[2]);
+                }
+                finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+                b.cuboid([-w / 2.0, -h / 2.0, -d], [w / 2.0, h / 2.0, 0.0], dark, m_paint);
+                b.quad_z([0.0, 0.0, 0.003], fw.min(w), fh.min(h), [0.0, 1.0, 1.0, 0.0], white, mf, false);
+                finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+                let n = meshes.len() as u32;
+                set(&mut models, Model::PedHead, [n - 2, n - 1, n - 1], [45.0, 120.0, 220.0, 220.0], [0.0, 0.0, -0.1], 0.4, 1);
+            }
+            _ => {
+                b.cuboid([-w / 2.0, -h / 2.0, -d], [w / 2.0, h / 2.0, 0.0], dark, m_paint);
+                b.quad_z([-w / 4.0, 0.0, 0.003], w / 2.0 - 0.04, h - 0.06, [0.0, 0.0, 1.0, 1.0], white, m_hand, false);
+                b.quad_z([w / 4.0, 0.0, 0.003], w / 2.0 - 0.04, h - 0.06, [0.0, 0.0, 1.0, 1.0], white, m_walk, false);
+                finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+                let n = meshes.len() as u32;
+                set(&mut models, Model::PedHead, [n - 1, n - 1, n - 1], [45.0, 120.0, 220.0, 220.0], [0.0, 0.0, -0.1], 0.4, 1);
+            }
         }
-        let n = meshes.len() as u32;
-        set(&mut models, Model::PedHead, [n - 1, n - 1, n - 1], [45.0, 120.0, 220.0, 220.0], [0.0, 0.0, -0.1], 0.4, 1);
         // Sign post: the JS pipe (manifest shaft radius), unit height.
         let pipe = js.consts["signPostRadiusM"].as_f64().unwrap_or(0.03) as f32;
         for sides in [10u32, 5] {
@@ -1017,13 +1189,22 @@ impl PropLibrary {
                 [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0]
             })
             .collect();
+        // (the arm name signs) their faces after the inventory's, when drawn into the atlas
+        let names = extras.name_signs.filter(|_| extras.signs.is_some_and(|s| s.faces.width == BIG_RES && s.faces.height == BIG_RES));
+        if let Some(n) = names {
+            faces.extend(n.colours.iter().copied());
+        }
         let back = js.consts["plateBack"].as_u64().unwrap_or(0x9a9d9f) as u32;
         faces.push([((back >> 16) & 255) as f32 / 255.0, ((back >> 8) & 255) as f32 / 255.0, (back & 255) as f32 / 255.0, 1.0]);
         // then each face's atlas tile ([u0, v0 up, du, dv]; zero where there is no atlas).
-        let face_count = js.signs.faces.len() as u32;
+        let mut face_count = js.signs.faces.len() as u32;
         for i in 0..face_count as usize {
             let t = extras.signs.and_then(|s| s.faces.tiles.get(i).copied()).unwrap_or([0.0; 4]);
             faces.push(t);
+        }
+        if let Some(n) = names {
+            faces.extend(n.tiles.iter().copied());
+            face_count += n.legends.len() as u32;
         }
         let tone = &js.consts["lensTone"];
         let mut lens = [[0.0f32; 4]; 6];

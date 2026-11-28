@@ -30,6 +30,8 @@ use bytemuck::{Pod, Zeroable};
 use eo_sky::lights::{LampKind, LampLight};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+/// (`--no-headlamp-stray`) the low beams' stray light over their cut-off (sky_light.wgsl `sky_head_glare`).
+pub use crate::sky_reflect::{headlamp_stray, set_headlamp_stray};
 
 /// Timestamp slots (after the renderer's 22).
 /// (after the water slice's 18-21)
@@ -216,7 +218,7 @@ pub fn lamp_units_wgsl_with(on: bool) -> String {
         night_kinds_wgsl(),
         eo_sky::lights::lobe_wgsl(),
         v3(eo_sky::lights::SIGNAL_CD)
-    ) + &format!("const NT_SIGNAL_RGB = array<vec3<f32>, 3>({}, {}, {});\n", v3(eo_sky::lights::signal_color(0)), v3(eo_sky::lights::signal_color(1)), v3(eo_sky::lights::signal_color(2)))
+    ) + &format!("const NT_SIGNAL_RGB = array<vec3<f32>, 3>({}, {}, {});\n", v3(crate::props::signal_color(0)), v3(crate::props::signal_color(1)), v3(crate::props::signal_color(2)))
 }
 /// (`--lamp-units`) `lamp_units_wgsl_with` for the light gather (the
 /// features of this process), and the luminaires' compile flag there.
@@ -1859,7 +1861,7 @@ impl SkyGpu {
                 GpuLight {
                     pos: *p,
                     intensity: cd as f32,
-                    color: eo_sky::lights::signal_color(k).map(|v| v as f32),
+                    color: crate::props::signal_color(k).map(|v| v as f32),
                     range: (cd / eo_sky::lights::SIGNAL_REACH_LUX).sqrt() as f32,
                     dir: *d,
                     cos_outer: co,

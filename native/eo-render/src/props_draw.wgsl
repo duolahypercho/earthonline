@@ -29,6 +29,21 @@ const PR_MEADOW_MAT: u32 = 1048576u;
 const PR_BLADE_PBR: u32 = 2097152u;
 const PR_MEADOW_THICK: u32 = 4194304u;
 const PR_MEADOW_SOIL: u32 = 8388608u;
+// (signal models) the lens and face images: a 2 x 2 grid, each lens or face inset by
+// PR_SIGNAL_INSET of the image in its cell (the provenance's `cellInset`, props_lib
+// SIGNAL_CELL_INSET); a cell spans PR_SIGNAL_CELL of the image.
+const PR_SIGNAL_INSET: f32 = 0.02;
+const PR_SIGNAL_CELL: f32 = 0.46; // 0.5 - 2 x PR_SIGNAL_INSET
+// the unlit lens and face images' share as the glass's albedo (the glass's own gloss reflects the sky)
+const PR_SIGNAL_OFF_ALBEDO: f32 = 0.6;
+// a lit symbol's mask is its LEDs (their discs cover the provenance's `maskCoverOfSymbol`, 0.575,
+// of the symbol): raised to the radiance the whole symbol had before (1 / that cover)
+const PR_SIGNAL_MASK_GAIN: f32 = 1.74;
+
+/// A lens or face's 0..1 coordinates into its cell (origin: the cell's top left in the image).
+fn pr_signal_cell(uv: vec2<f32>, origin: vec2<f32>) -> vec2<f32> {
+    return origin + vec2<f32>(PR_SIGNAL_INSET) + clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)) * PR_SIGNAL_CELL;
+}
 
 @group(2) @binding(0) var<uniform> pr: PrParams;
 @group(2) @binding(1) var<storage, read> pr_instances: array<PrInstance>;
@@ -64,6 +79,14 @@ struct PrOut {
     // (`--crown-light`) the wind weight: a tree vertex's height in its crown (props_lib2.rs `tree_mesh`).
     @location(9) sway: f32,
 // sf:end
+// sl:on+
+    // (`--signal-light`) a lens's or pedestrian face's glass (`pr_sl_glass_vertex`): its sky
+    // reflection, and the sky's irradiance its unlit module returns (w; x its albedo); on the
+    // vehicle head's body, the lit lens's light on its visor (`pr_sl_visor_light`; x its albedo).
+    @location(10) glass: vec4<f32>,
+    // (`--signal-light`) the share of the sun the glass sees through its visor or hood (`pr_sl_exit`)
+    @location(11) sun_vis: f32,
+// sl:end
 };
 
 @vertex
@@ -98,10 +121,32 @@ fn prop_vs(
         // (`--luminaires`) a district light's lit glass: its radiance (`pr_lamp_glass`) in the colour
         out.color = pr_lamp_glass(color, inst, pos, normalize(look.cam_pos.xyz - world));
     }
+// sl:on+
+    // (`--signal-light`; props.rs `signal_light_select` keeps this block or the next)
+    out.glass = vec4<f32>(0.0);
+    out.sun_vis = 1.0;
+    if (PR_SIGNAL_LIGHT && (inst.model == PR_SIGNAL_HEAD || inst.model == PR_PED_HEAD) && (pr_materials[material].flags & (PR_LENS | PR_PED_HAND | PR_PED_WALK)) != 0u) {
+        // a lens's radiance, a pedestrian face's units x lobe (`pr_sl_vertex`) in the colour; the
+        // glass's sky (`pr_sl_glass_vertex`) and the sun's share through its visor or hood
+        let ve = normalize(look.cam_pos.xyz - world);
+        let lens = (pr_materials[material].flags & PR_LENS) != 0u;
+        out.color = pr_sl_vertex(pr_materials[material].flags, inst, ve);
+        out.glass = pr_sl_glass_vertex(inst, uv, normalize(nw), ve, lens, (pr_materials[material].flags & PR_TEX) != 0u);
+        out.sun_vis = pr_sl_exit(inst, uv, look.key_dir.xyz, lens);
+    } else if (PR_SIGNAL_LIGHT && inst.model == PR_SIGNAL_HEAD) {
+        // the lit lens's light on its visor's inside (`pr_sl_visor_light`)
+        // and on a visor's inside, how much of it sees out (`pr_sl_wall_vis`: its occlusion)
+        // (the signal models' body, its baked maps; the drawn head's as before)
+        let wall = select(1.0, pr_sl_wall_vis(pos, normal.xyz), (pr_materials[material].flags & PR_GLB_MAPS) != 0u);
+        out.glass = vec4<f32>(pr_sl_visor_light(inst, pos, normal.xyz, pr_rot(-inst.yaw, normalize(look.cam_pos.xyz - world))), wall);
+    }
+// sl:end
+// sl:off+
     if (SF_SIGNAL_SPILL && inst.model == PR_SIGNAL_HEAD && (materials[material].flags & PR_LENS) != 0u) {
         // (`--signal-spill`) a signal lens's radiance (`pr_signal_lens`) in the colour (a lens's albedo is 0)
         out.color = pr_signal_lens(materials[material].flags, inst, normalize(look.cam_pos.xyz - world));
     }
+// sl:end
     out.material = material;
     out.inst = idx;
     out.local = pos;
@@ -1056,6 +1101,294 @@ fn pr_signal_lens(flags: u32, inst: PrInstance, v: vec3<f32>) -> vec3<f32> {
     let i = NT_SIGNAL_CD[k] * nt_lobe(v, pr_rot(inst.yaw, vec3<f32>(0.0, 0.0, 1.0)), NT_SIGNAL_V, NT_SIGNAL_H);
     return NT_SIGNAL_RGB[k] * i / NT_SIGNAL_LENS_M2 * skyu.bloom_w2.z;
 }
+// sl:on+
+
+// ---- (`--signal-light`) the lenses and the pedestrian faces as lights (props.rs `signal_light_wgsl`) ----
+
+/// Radiance units per cd/m2 this frame: the daylight's by day (eo-look phys), the lamps'
+/// (`lamp_units_per_lux`, the night rig's) at night, between them on a log scale as the
+/// lamps come on (the scene's own light falls by ~3 decades over the dusk).
+fn pr_sl_units() -> f32 {
+    let w = clamp(max(skyu.night.x, skyu.night.z), 0.0, 1.0);
+    return PR_SL_DAY_UNITS * pow(max(skyu.bloom_w2.z / PR_SL_DAY_UNITS, 1.0), w);
+}
+
+/// In the vertex stage (the lit fragment stands at Apple's compiler's limit): a vehicle lens's
+/// radiance toward the eye `v` (its luminance, eo-sky `SIGNAL_CD` over the 300 mm lens, by the
+/// module's lobe about the head's axis, `SIGNAL_LOBE`, never under the lens's wide scatter),
+/// black for a dark aspect; for a pedestrian face, x the units x its lobe (wider: its diffusing
+/// face; the symbols' own luminance is the fragment's).
+fn pr_sl_vertex(flags: u32, inst: PrInstance, v: vec3<f32>) -> vec3<f32> {
+    let axis = pr_rot(inst.yaw, vec3<f32>(0.0, 0.0, 1.0));
+    let lens = (flags & PR_LENS) != 0u;
+    let u = max(nt_lobe(v, axis, NT_SIGNAL_V, NT_SIGNAL_H), select(PR_SL_PED_WIDE_SHARE, PR_SL_WIDE_SHARE, lens) * max(dot(v, axis), 0.0)) * pr_sl_units();
+    if (!lens) {
+        return vec3<f32>(u, 0.0, 0.0);
+    }
+    let k = (flags >> 24u) & 3u;
+    if (pr_lamps[inst.lamp] != k || k > 2u) {
+        return vec3<f32>(0.0);
+    }
+    return NT_SIGNAL_RGB[k] * (NT_SIGNAL_CD[k] / NT_SIGNAL_LENS_M2 * u);
+}
+
+/// The share of a ray from the glass at uv (a vehicle lens's 0..1 across it, `lens`, or the
+/// pedestrian face's) along world direction `dw` that leaves its visor (the head's frame, +z out
+/// of the face). A vehicle head's tunnel visor (`PR_SL_VISOR`: its inside radius, its mouth's and
+/// its door's distance from the lens, in lens radii, and the chord its cut-away underside
+/// reaches at the mouth, a share of its radius; signalHead-v1 provenance): the ray leaves through
+/// the mouth, or through the cut-away underneath where it meets the visor's wall below the cut's
+/// edge (a plane from the visor's bottom at the door to the chord at the mouth); else it meets the
+/// visor's dark inside. The pedestrian head's hood (`PR_SL_HOOD`): its mouth, the face's half sizes.
+fn pr_sl_exit(inst: PrInstance, uv: vec2<f32>, dw: vec3<f32>, lens: bool) -> f32 {
+    let q = (uv - vec2<f32>(0.5)) * vec2<f32>(2.0, -2.0);
+    let d = pr_rot(-inst.yaw, dw);
+    if (d.z <= 1e-3) {
+        return 0.0;
+    }
+    let e = d.xy / d.z;
+    if (!lens) {
+        let m = q + e * PR_SL_HOOD;
+        return 1.0 - smoothstep(0.9, 1.1, max(abs(m.x), abs(m.y)));
+    }
+    let rv = PR_SL_VISOR.x;
+    let a = max(dot(e, e), 1e-8);
+    let b = dot(q, e);
+    let sw = max((-b + sqrt(max(b * b - a * (dot(q, q) - rv * rv), 0.0))) / a, 0.0);
+    let h = q + e * sw;
+    let edge = -rv + rv * (1.0 - PR_SL_VISOR.w) * clamp((sw - PR_SL_VISOR.z) / (PR_SL_VISOR.y - PR_SL_VISOR.z), 0.0, 1.0);
+    return max(smoothstep(0.95, 1.05, sw / PR_SL_VISOR.y), 1.0 - smoothstep(-0.06, 0.06, h.y - edge));
+}
+
+/// A lit module's emission over its mean (props.rs `SL_LEDS_ACROSS`, `SL_LED_DOT`, `SL_LED_FILL`):
+/// its LEDs, a hex array of hot dots over the lenslets' dim fill (faded to their mean where a
+/// pixel spans a pitch: `duv` the uv's footprint), the module brighter at its centre.
+fn pr_sl_leds(uv: vec2<f32>, duv: vec2<f32>) -> f32 {
+    let q = (uv - vec2<f32>(0.5)) * PR_SL_LEDS.x;
+    let a = q - vec2<f32>(round(q.x), round(q.y / 1.7320508) * 1.7320508);
+    let b0 = q - vec2<f32>(0.5, 0.8660254);
+    let b = b0 - vec2<f32>(round(b0.x), round(b0.y / 1.7320508) * 1.7320508);
+    let s2 = PR_SL_LEDS.y * PR_SL_LEDS.y;
+    let leds = PR_SL_LEDS.z + (1.0 - PR_SL_LEDS.z) * exp(-min(dot(a, a), dot(b, b)) / s2);
+    let mean = PR_SL_LEDS.z + (1.0 - PR_SL_LEDS.z) * 3.6276 * s2; // pi s^2 over the cell's sqrt(3) / 2
+    let r2 = dot(uv - vec2<f32>(0.5), uv - vec2<f32>(0.5)) * 4.0;
+    return mix(leds / mean, 1.0, smoothstep(0.35, 0.8, max(duv.x, duv.y) * PR_SL_LEDS.x)) * (1.3 - 0.6 * r2);
+}
+
+/// A lit source as a camera renders one far over its white (`PR_SL_HOT`; under the camera
+/// model's look, which renders it so itself, as it is): its least channels
+/// lifted toward `x` x `f` of its brightest (the sensor's crosstalk; `f` the module's local
+/// brightness over its mean, at most 4: its centre and, near, its LEDs clip pale first) as it goes from
+/// the white to `y` stops over it, its luminance kept; its brightest channel rolled off to `z` stops over the
+/// white (look.key.w the exposure), its hue kept, so a red lens at night reads a pink-red disc
+/// with a paler core and coloured rim, not white paint, and the frame's resolve (YCoCg clip)
+/// no longer fringes a red hundreds of times the white in green.
+fn pr_sl_hot(c: vec3<f32>, f: f32) -> vec3<f32> {
+    if (SF_CAMERA) {
+        // the camera model (`--cine-camera`, compiled in with it: sky.rs `camera_on`): its response
+        // whitens what it clips and its threshold-free bloom spreads it; it takes the light whole
+        // (not the display's camera look, look.tone2.z, which the default chain has too)
+        return c;
+    }
+    let lw = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let white = 0.6 / max(look.key.w, 1e-6);
+    let mx = max(c.r, max(c.g, c.b)) / white;
+    var o = max(c, vec3<f32>(mx * white * PR_SL_HOT.x * clamp(f, 0.0, 4.0) * smoothstep(0.0, PR_SL_HOT.y, log2(max(mx, 1e-8)))));
+    o = o * (dot(c, lw) / max(dot(o, lw), 1e-12));
+    let top = exp2(PR_SL_HOT.z);
+    let knee = 0.5 * top;
+    let p = max(o.r, max(o.g, o.b)) / white;
+    return o * select(1.0, (knee + (top - knee) * (1.0 - exp((knee - p) / (top - knee)))) / max(p, 1e-8), p > knee);
+}
+
+/// (`--signal-chroma`, props.rs `SL_VISOR_HOLD`) The lit lens's light on its visor's inside as the
+/// camera renders it (`k` the lit aspect), for a narrow-band colour (its second channel under
+/// `PR_SL_VISOR_HOLD.z` of its first: the red): under the default chain held as its lens is
+/// (`pr_sl_hot`); under the camera model's look held under its colour's top (`PR_SL_VISOR_TOP`, stops
+/// over middle grey at the hour's exposure), rolled off over its last `.y`; there every colour is held
+/// (`--signal-hold-all`, `PR_SL_HOLD_ALL`), the amber and the green at their own tops.
+fn pr_sl_visor_hold(c: vec3<f32>, k: u32) -> vec3<f32> {
+    if (!PR_SL_CHROMA) {
+        return c;
+    }
+    let mx = max(c.r, max(c.g, c.b));
+    let mid = c.r + c.g + c.b - mx - min(c.r, min(c.g, c.b));
+    let narrow = 1.0 - smoothstep(PR_SL_VISOR_HOLD.z, 2.0 * PR_SL_VISOR_HOLD.z, mid / max(mx, 1e-12));
+    if (!SF_CAMERA) {
+        return mix(c, pr_sl_hot(c, 1.0), narrow);
+    }
+    let top = 0.18 * exp2(PR_SL_VISOR_TOP[min(k, 2u)]) / max(look.key.w, 1e-6);
+    let knee = top * exp2(-PR_SL_VISOR_HOLD.y);
+    let held = select(mx, knee + (top - knee) * (1.0 - exp((knee - mx) / (top - knee))), mx > knee);
+    return c * mix(1.0, held / max(mx, 1e-12), select(narrow, 1.0, PR_SL_HOLD_ALL));
+}
+
+/// The lit lens's light on the inside of its visor, in the vertex stage (a vehicle head's body
+/// vertex at `local`, model metres, its normal `n_in` and the eye's direction `v` in the head's
+/// frame; the visor's wall has vertices only at the lens and at the mouth): the module's wide
+/// light (`PR_SL_WIDE_SHARE` of its axis luminance) over the view factor of the lens from the
+/// visor's wall at its height (a coaxial disc from the wall of a tube of its radius; the wall
+/// behind the lens's plane takes the plane's), x the wall's albedo in the fragment.
+fn pr_sl_visor_light(inst: PrInstance, local: vec3<f32>, n_in: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
+    let k = pr_lamps[inst.lamp];
+    let nl = select(-n_in, n_in, dot(n_in, v) >= 0.0);
+    let d = local.xy - vec2<f32>(0.0, PR_SL_LENS.x * (1.0 - f32(k)));
+    let rho = length(d);
+    let h = max((local.z - PR_SL_LENS.y) / PR_SL_LENS.z, 0.0);
+    if (k > 2u || rho > PR_SL_LENS.z * 1.2 || local.z < PR_SL_LENS.y - 0.08 || h > PR_SL_VISOR.y * 1.1 || dot(nl.xy, d) > -0.3 * rho) {
+        return vec3<f32>(0.0);
+    }
+    let f = (h * h + 2.0) / (2.0 * sqrt(h * h + 4.0)) - 0.5 * h;
+    return NT_SIGNAL_RGB[min(k, 2u)] * (NT_SIGNAL_CD[min(k, 2u)] / NT_SIGNAL_LENS_M2 * PR_SL_WIDE_SHARE * f * pr_sl_units());
+}
+
+/// The share of a ray from `q` (lens radii about a lens's axis, inside its tunnel visor) at `h0`
+/// lens radii in front of the lens's plane along `d` (the head's frame, +z out of the face) that
+/// leaves the visor: through its mouth, or through the cut-away underneath where it meets the
+/// wall below the cut's edge (as `pr_sl_exit`, from any height); none back toward the door.
+fn pr_sl_tube(q: vec2<f32>, h0: f32, d: vec3<f32>) -> f32 {
+    if (d.z <= 1e-3) {
+        return 0.0;
+    }
+    let e = d.xy / d.z;
+    let rv = PR_SL_VISOR.x;
+    let a = max(dot(e, e), 1e-8);
+    let b = dot(q, e);
+    let s = max((-b + sqrt(max(b * b - a * (dot(q, q) - rv * rv), 0.0))) / a, 0.0);
+    let z = h0 + s;
+    let h = q + e * s;
+    let edge = -rv + rv * (1.0 - PR_SL_VISOR.w) * clamp((z - PR_SL_VISOR.z) / (PR_SL_VISOR.y - PR_SL_VISOR.z), 0.0, 1.0);
+    return max(smoothstep(0.95, 1.05, z / PR_SL_VISOR.y), 1.0 - smoothstep(-0.06, 0.06, h.y - edge));
+}
+
+/// On the vehicle head's body, in the vertex stage (`local` model metres, `n_in` its normal, the
+/// head's frame): on a visor's inside wall, the share of its view (cosine-weighted over
+/// PR_SL_VF_N directions about its normal) that leaves the visor (`pr_sl_tube`); 1 elsewhere.
+/// The fragment takes it as the wall's occlusion: its ambient light and its reflections (at
+/// grazing angles the inside of a tube reflects its own dark wall, not the sky) through the
+/// mouth and the cut-away only.
+fn pr_sl_wall_vis(local: vec3<f32>, n_in: vec3<f32>) -> f32 {
+    let k = clamp(round(1.0 - local.y / PR_SL_LENS.x), 0.0, 2.0);
+    let rl = PR_SL_LENS.z / PR_SL_VISOR.x;
+    let q0 = (local.xy - vec2<f32>(0.0, PR_SL_LENS.x * (1.0 - k))) / rl;
+    let h0 = (local.z - PR_SL_LENS.y) / rl;
+    let rq = length(q0);
+    if (rq < 0.92 * PR_SL_VISOR.x || rq > 1.1 * PR_SL_VISOR.x || h0 < PR_SL_VISOR.z || h0 > PR_SL_VISOR.y || dot(n_in.xy, q0) > -0.3 * rq * length(n_in)) {
+        return 1.0;
+    }
+    let q = q0 * (0.98 * PR_SL_VISOR.x / rq);
+    let n = normalize(n_in);
+    let t = normalize(cross(select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(n.y) > 0.9), n));
+    let bt = cross(n, t);
+    // Keep the trip count uniform-dependent (`pr.counts.w` is never `0xffffffffu`) so Apple's
+    // Metal LLVM backend executes the 16-sample loop instead of 16x full-unrolling `pr_sl_tube`.
+    let n_vf = select(PR_SL_VF_N, 0u, pr.counts.w == 0xffffffffu);
+    var vis = 0.0;
+    for (var i = 0u; i < n_vf; i = i + 1u) {
+        let u = (f32(i) + 0.5) / f32(PR_SL_VF_N);
+        let a = f32(i) * 2.3999632;
+        vis = vis + pr_sl_tube(q, h0, (t * cos(a) + bt * sin(a)) * sqrt(u) + n * sqrt(1.0 - u));
+    }
+    return vis / f32(PR_SL_VF_N);
+}
+
+/// The street round a signal head as the glass sees it (the signal models; `y` a direction's
+/// height, its sine): under the horizon the rig's own light (the ground's), low in the sky the
+/// facades (PR_SL_STREET.z of the rig's: their albedo), over PR_SL_STREET.y the sky, `sky` x the
+/// rig's (the analytic sky has neither the ground nor the street's fronts: the open horizon it
+/// put in a lens's view and reflection lit far lenses and faces as if no street stood round them).
+fn pr_sl_street(y: f32, sky: f32) -> f32 {
+    return mix(mix(1.0, PR_SL_STREET.z, smoothstep(-0.1, 0.0, y)), sky, smoothstep(PR_SL_STREET.x, PR_SL_STREET.y, y));
+}
+
+/// The sky's and the ground's light on the glass at uv through its visor or hood (look_light's
+/// irradiance about each of PR_SL_VF_N directions, cosine-distributed about the glass's normal
+/// `n`, where it leaves: `pr_sl_exit`; the street's fronts in place of the open horizon:
+/// `pr_sl_street`), its mean: the light the module gets, so a lens's lower half under a cut-away
+/// visor takes the street's light and its top, under the hood, little.
+fn pr_sl_view_irradiance(inst: PrInstance, uv: vec2<f32>, n: vec3<f32>, lens: bool, env: f32) -> vec3<f32> {
+    let t = normalize(cross(select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(n.y) > 0.9), n));
+    let b = cross(n, t);
+    // Rotate the tangent basis into head-local space once outside the loop and keep the loop
+    // bound uniform-dependent so Metal LLVM does not 16x full-unroll `pr_sl_exit` + `lk_sh`.
+    let q = (uv - vec2<f32>(0.5)) * vec2<f32>(2.0, -2.0);
+    let tl = pr_rot(-inst.yaw, t);
+    let bl = pr_rot(-inst.yaw, b);
+    let nl = pr_rot(-inst.yaw, n);
+    let n_vf = select(PR_SL_VF_N, 0u, pr.counts.w == 0xffffffffu);
+    var e = vec3<f32>(0.0);
+    for (var i = 0u; i < n_vf; i = i + 1u) {
+        // a Fibonacci spiral over the disc, lifted to the hemisphere: cosine-distributed
+        let u = (f32(i) + 0.5) / f32(PR_SL_VF_N);
+        let a = f32(i) * 2.3999632;
+        let su = sqrt(u);
+        let c1 = sqrt(1.0 - u);
+        let ca = cos(a) * su;
+        let sa = sin(a) * su;
+        let d = t * ca + b * sa + n * c1;
+        let dl = tl * ca + bl * sa + nl * c1;
+        var w = 0.0;
+        if (dl.z > 1e-3) {
+            if (!lens) {
+                let m = q + (dl.xy / dl.z) * PR_SL_HOOD;
+                w = 1.0 - smoothstep(0.9, 1.1, max(abs(m.x), abs(m.y)));
+            } else {
+                w = pr_sl_tube(q, 0.0, dl);
+            }
+        }
+        e = e + (w * pr_sl_street(d.y, 1.0)) * (mix(look.hemi_ground.xyz, look.hemi_sky.xyz, d.y * 0.5 + 0.5) + look.ambient.xyz + lk_sh(d) * env);
+    }
+    return e / f32(PR_SL_VF_N);
+}
+
+/// The glass over a lens or a face (weathered polycarbonate), in the vertex stage (the lit
+/// fragment stands at Apple's compiler's limit; a lens's dome has ~350 vertices): the sky
+/// along its reflection (`lk_sky_sample`, bounded; its Fresnel: strong at grazing angles) where the ray
+/// leaves its visor or hood (`pr_sl_exit`; the lens's and the face's normals face out of the
+/// head), and in w the sky's and the ground's irradiance its unlit module returns through the
+/// visor's mouth and cut-away (`pr_sl_view_irradiance`; the signal models', `models`), over pi
+/// (the fragment takes it x its albedo).
+fn pr_sl_glass_vertex(inst: PrInstance, uv: vec2<f32>, n: vec3<f32>, v: vec3<f32>, lens: bool, models: bool) -> vec4<f32> {
+    let r = reflect(-v, n);
+    let mouth = pr_sl_exit(inst, uv, r, lens);
+    let dfg = lk_dfg(max(dot(n, v), 1e-3), PR_SL_GLASS_ROUGH);
+    let env = sky_w2_env(mix(look.ambient.w, 1.0, lk_phys()));
+    // what the glass reflects: look_light's irradiance about r over pi (the sky and the ground
+    // about the ray, cosine-weighted) in its colour, at the luminance of the sky along r as
+    // look_light's glossy reflection takes it at night and as its rig by day (`lk_sky_sample`;
+    // the physical sky's table is the fragment stage's), held to PR_SL_SKY_BOUND x its own (the
+    // analytic sky is uncalibrated against the physical one, and low in the street the glass
+    // sees facades, not a clear sky's saturated blue)
+    let rig = (mix(look.hemi_ground.xyz, look.hemi_sky.xyz, r.y * 0.5 + 0.5) + look.ambient.xyz + lk_sh(r) * env) / LK_PI;
+    // (low in the sky, the street's facades: the analytic sky has neither them nor the ground, and
+    // its bright horizon in a lens's or a face's reflection made lenses milky and faces grey at
+    // street distance; under PR_SL_STREET.x the rig's light at the facades' albedo, the sky's
+    // luminance over PR_SL_STREET.y; the drawn heads, `--no-signal-models`, the sky's as before)
+    let sky_k = min(PR_SL_SKY_BOUND, lk_luma(lk_sky_sample(r) * env) / max(lk_luma(rig), 1e-8));
+    let sky_r = rig * select(sky_k, pr_sl_street(r.y, sky_k), models);
+    // (the drawn heads, `--no-signal-models`: the mouth's mean view factor, as before)
+    var w = lk_luma(mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5) + look.ambient.xyz + lk_sh(n) * env) * PR_SL_VISOR_DIFFUSE;
+    if (models) {
+        w = lk_luma(pr_sl_view_irradiance(inst, uv, n, lens, env));
+    }
+    return vec4<f32>(sky_r * ((0.04 * dfg.x + dfg.y) * mouth), w / LK_PI);
+}
+
+/// The glass's fragment part, returned as emission (`glass`: `pr_sl_glass_vertex`): look_light's
+/// own sky terms cut (`ao` 0: its screen-space AO reads the glass at the bottom of its visor as
+/// buried and took the reflection off with the diffuse); the sun's light and glint stay
+/// look_light's, by the share of it the glass sees (`sun_vis`, `lm_unlit` on its key).
+fn pr_sl_glass(s: ptr<function, Surface>, glass: vec4<f32>, sun_vis: f32) -> vec3<f32> {
+    (*s).rough = PR_SL_GLASS_ROUGH;
+    (*s).ao = 0.0;
+    lm_unlit = 1.0 - sun_vis;
+    let sky = glass.rgb + (*s).albedo * glass.w;
+    // look_light's lights on the module (the sun through the visor; at night the street lamps,
+    // which it lights with no visor over the glass) at the visor's view factor but for the sun's own
+    (*s).albedo = (*s).albedo * mix(PR_SL_VISOR_DIFFUSE, 1.0, sun_vis * lk_phys());
+    return sky;
+}
+// sl:end
 
 fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
 // sf:PROP_FAR+
@@ -1128,7 +1461,8 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
                 let du = dlx.xy * tile.zw;
                 let dv = dly.xy * tile.zw;
                 s.albedo = textureSampleGrad(pr_big, kit_sampler, uv, 1, vec2<f32>(du.x, -du.y), vec2<f32>(dv.x, -dv.y)).rgb;
-                s.rough = 0.45;
+                // a face's own sheeting roughness rides its colour's alpha (arm name signs; 1: none)
+                s.rough = select(0.45, pr_faces[k].a, pr_faces[k].a < 1.0);
             }
         } else {
             s.albedo = srgb_decode(pr_faces[f].rgb);
@@ -1163,7 +1497,45 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         pr_basin(&s, inst, in.local, dlx, dly);
     }
     m.emissive = vec4<f32>(0.0);
+// sl:on+
+    // (`--signal-light`) a lens's, a face's or a lit visor's pixel, marked for the bounce (`PR_SL_AO_MARK`).
+    // Collapse the mutually-exclusive lens / ped-face / visor paths into a single `pr_sl_hot` and
+    // single `pr_sl_glass` call site so `pr_shade` stays well under Apple's Metal IR limit.
+    var sl_mark = false;
+    var sl_hot_c = vec3<f32>(0.0);
+    var sl_hot_f = 1.0;
+    var sl_hot_mix = 0.0;
+    var sl_do_emit = false;
+    var sl_do_glass = false;
+// sl:end
     if ((m.flags & PR_LENS) != 0u) {
+// sl:on+
+        // (`--signal-light`) a lit lens its radiance (`pr_sl_vertex`, in the colour), through the
+        // LED module's pattern (signal models: its mean over the lit area 0.5, the mean kept);
+        // a dark one its tinted glass over the dark module (the unlit cell), under the glass.
+        let k = (m.flags >> 24u) & 3u;
+        // the unlit module: tinted polycarbonate over the LED array (`PR_SL_UNLIT`), the sun and
+        // the sky coming back through the tint
+        s.albedo = PR_SL_UNLIT[k] * select(PR_SL_UNLIT_LOOK, 1.0, SF_CAMERA);
+        sl_mark = true;
+        var hot = 1.0;
+        if ((m.flags & PR_TEX) != 0u) {
+            let cell = select(select(vec2<f32>(0.0, 0.5), vec2<f32>(0.5, 0.0), k == 1u), vec2<f32>(0.0, 0.0), k == 0u);
+            let pat = textureSampleGrad(kit_albedo, kit_sampler, pr_signal_cell(in.uv, vec2<f32>(0.5, 0.5)), m.layer, duvx * PR_SIGNAL_CELL, duvy * PR_SIGNAL_CELL);
+            let leds = pr_sl_leds(in.uv, abs(duvx) + abs(duvy));
+            hot = 2.0 * pat[k] * leds;
+            // its lenslets and rings (the unlit cell's luminance over its mean) and its LED packages,
+            // brighter than the board between them (photographs: ~1.6 x; `pr_sl_leds`, its mean kept)
+            let unlit = textureSampleGrad(kit_albedo, kit_sampler, pr_signal_cell(in.uv, cell), m.layer, duvx * PR_SIGNAL_CELL, duvy * PR_SIGNAL_CELL).rgb;
+            s.albedo = PR_SL_UNLIT[k] * select(PR_SL_UNLIT_LOOK, 1.0, SF_CAMERA) * (dot(unlit, vec3<f32>(0.2126, 0.7152, 0.0722)) / PR_SL_UNLIT_LUM[k] * (0.7 + 0.3 * leds));
+        }
+        sl_hot_c = in.color * hot;
+        sl_hot_f = hot;
+        sl_hot_mix = 1.0;
+        sl_do_glass = true;
+// sl:end
+// sl:off+
+        {
         // Lens radiance solved in the tone mapper's units (SIGNAL_LENS_TONE_INPUT):
         // v x ACES scale / exposure, lit or dark glass.
         let k = (m.flags >> 24u) & 3u;
@@ -1176,8 +1548,50 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
             m.emissive = vec4<f32>(mix(m.emissive.rgb, in.color, skyu.night.z), 0.0);
         }
         s.albedo = vec3<f32>(0.0);
+        if ((m.flags & PR_TEX) != 0u) {
+            // (signal models, eo_props::signal_models) the LED module: its radiance through the lit
+            // modules' pattern (its mean over the lit area 0.5: the mean radiance kept), and unlit,
+            // its own tinted glass over the dark module (the cell's image) under the scene's light.
+            // the unlit cells: red top left, amber top right, green bottom left
+            let cell = select(select(vec2<f32>(0.0, 0.5), vec2<f32>(0.5, 0.0), k == 1u), vec2<f32>(0.0, 0.0), k == 0u);
+            let pat = textureSampleGrad(kit_albedo, kit_sampler, pr_signal_cell(in.uv, vec2<f32>(0.5, 0.5)), m.layer, duvx * PR_SIGNAL_CELL, duvy * PR_SIGNAL_CELL);
+            m.emissive = vec4<f32>(m.emissive.rgb * 2.0 * pat[k], 0.0);
+            if (!lit) {
+                let off = textureSampleGrad(kit_albedo, kit_sampler, pr_signal_cell(in.uv, cell), m.layer, duvx * PR_SIGNAL_CELL, duvy * PR_SIGNAL_CELL);
+                s.albedo = off.rgb * PR_SIGNAL_OFF_ALBEDO;
+            }
+        }
+        }
+// sl:end
     }
-    if ((m.flags & (PR_PED_HAND | PR_PED_WALK)) != 0u) {
+    if ((m.flags & (PR_PED_HAND | PR_PED_WALK)) == (PR_PED_HAND | PR_PED_WALK) && (m.flags & PR_TEX) != 0u) {
+        // (signal models) the countdown face: its own (the unlit image) under the scene's light,
+        // the hand and the person lit through their LED masks (R, G).
+        let state = pr_lamps[inst.lamp];
+        let face = textureSampleGrad(kit_albedo, kit_sampler, pr_signal_cell(in.uv, vec2<f32>(0.0, 0.0)), m.layer, duvx * PR_SIGNAL_CELL, duvy * PR_SIGNAL_CELL);
+        let mask = textureSampleGrad(kit_albedo, kit_sampler, pr_signal_cell(in.uv, vec2<f32>(0.5, 0.0)), m.layer, duvx * PR_SIGNAL_CELL, duvy * PR_SIGNAL_CELL);
+// sl:on+
+        {
+            s.albedo = face.rgb * PR_SIGNAL_OFF_ALBEDO;
+            // (`--signal-light`) a lit symbol its luminance (eo-sky `PED_SIGNAL_NIT`) through its
+            // LEDs, x the units and the lobe (`pr_sl_vertex`), under the face's glass and hood.
+            let lum = vec2<f32>(select(0.0, PR_SL_PED_NIT.x, (state & 1u) != 0u), select(0.0, PR_SL_PED_NIT.y, (state & 2u) != 0u)) * mask.rg;
+            sl_hot_c = (PR_SL_PED_RGB[0] * lum.x + PR_SL_PED_RGB[1] * lum.y) * (PR_SIGNAL_MASK_GAIN * in.color.x);
+            sl_hot_f = 1.0;
+            sl_hot_mix = 1.0;
+            sl_do_glass = true;
+            sl_mark = true;
+        }
+// sl:end
+// sl:off+
+        let hand_hue = pr_lens[1].rgb * 0.6;
+        let walk_hue = vec3<f32>(0.85, 0.85, 0.8);
+        let hand = select(hand_hue * 0.04, hand_hue, (state & 1u) != 0u) * mask.r;
+        let walk = select(walk_hue * 0.04, walk_hue, (state & 2u) != 0u) * mask.g;
+        m.emissive = vec4<f32>((hand + walk) * PR_SIGNAL_MASK_GAIN * pr.lens.x, 0.0);
+        s.albedo = face.rgb * PR_SIGNAL_OFF_ALBEDO;
+// sl:end
+    } else if ((m.flags & (PR_PED_HAND | PR_PED_WALK)) != 0u) {
         let state = pr_lamps[inst.lamp];
         let hand = (m.flags & PR_PED_HAND) != 0u;
         let lit = select((state & 2u) != 0u, (state & 1u) != 0u, hand);
@@ -1186,7 +1600,33 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         m.emissive = vec4<f32>(select(hue * 0.04, hue, lit) * pr.lens.x, 0.0);
         s.albedo = vec3<f32>(0.02);
     }
-    if (SF_LUMINAIRES && (m.flags & PR_LAMP_GLOW) != 0u) {
+// sl:on+
+    if (PR_SIGNAL_LIGHT && inst.model == PR_SIGNAL_HEAD && (m.flags & PR_LENS) == 0u) {
+        // (`--signal-light`) the lit lens's light on its visor's inside (`pr_sl_visor_light`, per
+        // vertex), and the inside's occlusion (`pr_sl_wall_vis`)
+        let vc = s.albedo * in.glass.rgb;
+        s.ao = s.ao * in.glass.w;
+        sl_mark = in.glass.r + in.glass.g + in.glass.b > 0.0;
+        if (PR_SL_CHROMA && !SF_CAMERA) {
+            let mx = max(vc.r, max(vc.g, vc.b));
+            let mid = vc.r + vc.g + vc.b - mx - min(vc.r, min(vc.g, vc.b));
+            sl_hot_c = vc;
+            sl_hot_f = 1.0;
+            sl_hot_mix = 1.0 - smoothstep(PR_SL_VISOR_HOLD.z, 2.0 * PR_SL_VISOR_HOLD.z, mid / max(mx, 1e-12));
+            sl_do_emit = true;
+        } else {
+            m.emissive = vec4<f32>(m.emissive.rgb + pr_sl_visor_hold(vc, pr_lamps[inst.lamp]), m.emissive.w);
+        }
+    }
+    if (PR_SIGNAL_LIGHT && (sl_do_glass || sl_do_emit)) {
+        var sl_out = select(sl_hot_c, mix(sl_hot_c, pr_sl_hot(sl_hot_c, sl_hot_f), sl_hot_mix), sl_hot_mix > 0.0);
+        if (sl_do_glass) {
+            sl_out = sl_out + pr_sl_glass(&s, in.glass, in.sun_vis);
+        }
+        m.emissive = vec4<f32>(m.emissive.rgb + sl_out, m.emissive.w);
+    }
+// sl:end
+    if (SF_LUMINAIRES && (m.flags & PR_LAMP_GLOW) != 0u && (m.flags & PR_MEADOW) == 0u) {
         // (`--luminaires`) a district light's glass lit by its own lamp (`pr_lamp_glass`, in the
         // vertex stage: its radiance rides the colour), over the glass's small diffuse return.
         m.emissive = vec4<f32>(in.color, 0.0); // (the division below takes look_light's gain back off)
@@ -1514,6 +1954,160 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         }
     }
 // sf:end
+// sf:AAA_DETAIL+
+    if (SF_AAA_DETAIL) {
+        // Keep wild coastal scrub mounds/shrubs off the Embarcadero Plaza cobblestone pavers.
+        let is_wild_shrub = (inst.model >= PR_VEG_BASE + 3u && inst.model < PR_VEG_BASE + PR_VEG_GRASS)
+            || (inst.model >= PR_VEG_BASE + PR_VEG_MOUND && inst.model < PR_VEG_BASE + PR_VEG_MOUND_END)
+            || (inst.model >= PR_VEG_BASE + PR_VEG_SPECIES && inst.model < PR_VEG_BASE + PR_VEG_SPECIES_END);
+        if (is_wild_shrub && inst.pos.x > 2692.0 && inst.pos.x < 2878.0 && inst.pos.z > -2486.0 && inst.pos.z < -2238.0) {
+            discard;
+        }
+        if (inst.model == PR_TACTILE_PAD) {
+            // Tone down overly loud canary-yellow ADA tactile curb pads with realistic SF
+            // street dust, subtle tire/foot wear, and matte polymer roughness (`05b`).
+            let pad_dust = st_noise(in.world.xz * 2.6 + vec2<f32>(3.1, 7.4)) * 0.65
+                + st_noise(in.world.xz * 10.5 + vec2<f32>(1.7, 5.3)) * 0.35;
+            let dust_w = clamp(0.18 + 0.26 * pad_dust, 0.0, 0.52);
+            let muted_ochre = vec3<f32>(0.36, 0.26, 0.055);
+            let street_dust = vec3<f32>(0.18, 0.175, 0.165);
+            s.albedo = mix(mix(s.albedo, muted_ochre, 0.58), street_dust, dust_w);
+            s.rough = max(s.rough, 0.78);
+        }
+        if ((m.flags & PR_LEAF) != 0u) {
+            // Coastal California botanical palette for near/mid street & park trees:
+            // natural deep olive/cypress/eucalyptus/plane tones that stay rich and grounded
+            // inside shaded skyscraper canyons (`04`) and hillside streets (`05a`, `05b`).
+            let h0 = st_hash(floor(inst.pos.xz * 0.5) + vec2<f32>(3.7, 9.1));
+            let h1 = st_hash(floor(inst.pos.xz * 0.5) + vec2<f32>(11.3, 2.9));
+            let h2 = st_hash(floor(inst.pos.xz * 0.5) + vec2<f32>(5.9, 17.3));
+            var sp_c: vec3<f32>;
+            if (h0 < 0.22) {
+                sp_c = vec3<f32>(0.066, 0.082, 0.048); // Mediterranean olive / holm oak
+            } else if (h0 < 0.44) {
+                sp_c = vec3<f32>(0.042, 0.058, 0.036); // Monterey cypress / coast live oak
+            } else if (h0 < 0.62) {
+                sp_c = vec3<f32>(0.060, 0.078, 0.064); // silvery blue-gum eucalyptus
+            } else if (h0 < 0.80) {
+                sp_c = vec3<f32>(0.072, 0.088, 0.046); // London plane / street sycamore
+            } else if (h0 < 0.90) {
+                sp_c = vec3<f32>(0.048, 0.064, 0.038); // Monterey pine / coastal conifer
+            } else {
+                sp_c = vec3<f32>(0.086, 0.082, 0.042); // late-summer warm olive accent
+            }
+            let sp_lum = max(dot(sp_c, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4);
+            let sp_chroma = sp_c / sp_lum;
+            let alb_lum = dot(s.albedo, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let green_w = smoothstep(1.02, 1.24, s.albedo.g / max(s.albedo.r, 1e-4));
+            let target_lum = clamp(mix(alb_lum, sp_lum * (0.90 + 0.24 * h1), 0.60), 0.042, 0.098);
+            let cal_c = sp_chroma * target_lum * mix(vec3<f32>(0.95, 0.99, 1.04), vec3<f32>(1.06, 1.00, 0.90), h2);
+            let cluster = st_noise(in.world.xz * 1.15 + vec2<f32>(in.world.y * 0.85, 0.0));
+            let crown_h = smoothstep(2.0, 7.5, in.local.y);
+            let crown_r = smoothstep(0.3, 2.8, length(in.local.xz));
+            let outer = clamp(0.55 * crown_h + 0.45 * crown_r, 0.0, 1.0);
+            let depth_tint = mix(vec3<f32>(0.84, 0.90, 0.96), vec3<f32>(1.06, 1.02, 0.90), outer);
+            s.albedo = mix(s.albedo, cal_c * (0.84 + 0.30 * cluster) * depth_tint, green_w * 0.84);
+            // Bounded interior canopy self-shadowing so shaded canyon/hill trees stay deep natural olive.
+            s.ao = s.ao * mix(0.60, 1.0, clamp(0.65 * outer + 0.35 * cluster, 0.0, 1.0));
+            let dry_leaf = 1.0 - select(0.0, skyu.wet.x, sky_on(skyu.flags.x, SKY_WET));
+            s.rough = max(s.rough, 0.84 * dry_leaf);
+        } else if (is_wild_shrub) {
+            // Diversify & soften coastal scrub mounds toward California coyote-brush, sagebrush & chaparral.
+            let g_exc = smoothstep(1.12, 1.50, s.albedo.g / max(s.albedo.r, 1e-4));
+            let sl = dot(s.albedo, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let hs = st_hash(floor(inst.pos.xz * 0.7) + vec2<f32>(4.1, 8.3));
+            let hs2 = st_hash(floor(inst.pos.xz * 0.7) + vec2<f32>(13.7, 2.9));
+            let scrub_c = mix(
+                mix(vec3<f32>(0.072, 0.090, 0.056), vec3<f32>(0.088, 0.098, 0.082), hs),
+                vec3<f32>(0.104, 0.096, 0.058),
+                smoothstep(0.65, 1.0, hs2) * 0.65
+            );
+            let sc_l = max(dot(scrub_c, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4);
+            s.albedo = mix(s.albedo, scrub_c / sc_l * clamp(sl, 0.052, 0.108), g_exc * 0.75);
+        } else if (inst.model == 7u && !SF_PALM) {
+            // Street palm fallback detail when `--palm-detail` is off (`Quality::High`):
+            // weathered diamond leaf-scar bark grain on the trunk and natural olive-green fronds.
+            let pseed = st_hash(inst.pos.xz * 0.37 + vec2<f32>(3.1, 7.7));
+            if (in.uv.x < 0.5) {
+                let a = in.uv.x * 20.0;
+                let b = in.local.y / 0.17;
+                let pf = fract(vec2<f32>(a + b, a - b)) - vec2<f32>(0.5);
+                let dm = 2.0 * max(abs(pf.x), abs(pf.y));
+                let groove = smoothstep(0.62, 0.96, dm);
+                let fw = max(length(dpx), length(dpy));
+                let k = 1.0 - smoothstep(0.03, 0.12, fw);
+                let grain = 0.85 + 0.30 * st_noise(vec2<f32>(a * 4.0, in.local.y * 2.2 + pseed * 7.0));
+                let bark = mix(vec3<f32>(0.155, 0.135, 0.112), vec3<f32>(0.068, 0.054, 0.040), groove * k) * grain;
+                s.albedo = mix(s.albedo, bark, 0.82);
+                s.rough = 0.93;
+                s.ao = s.ao * mix(1.0, mix(1.0, 0.62, groove), k);
+            } else {
+                let lum = dot(s.albedo, vec3<f32>(0.2126, 0.7152, 0.0722));
+                let frond_g = smoothstep(1.02, 1.30, s.albedo.g / max(s.albedo.r, 1e-4));
+                let target_f = vec3<f32>(0.062, 0.092, 0.044) * mix(vec3<f32>(0.90, 0.98, 1.06), vec3<f32>(1.10, 1.02, 0.84), pseed);
+                let fl = max(dot(target_f, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4);
+                s.albedo = mix(s.albedo, target_f / fl * clamp(lum, 0.045, 0.115), frond_g * 0.75);
+                s.rough = max(s.rough, 0.62);
+            }
+        } else if (!pr_is_veg(inst.model)
+            && inst.model != PR_TREE
+            && inst.model != PR_PALM
+            && inst.model != PR_TREE_BASIN
+            && inst.model != PR_TACTILE_PAD
+            && (m.flags & (PR_LENS | PR_PED_HAND | PR_PED_WALK | PR_LAMP_GLOW)) == 0u) {
+            // Street furniture & hardware micro-PBR: satin painted enamel, brushed galvanized
+            // steel, cast-iron micro-grain, retroreflective sign faces, and curb-splash grime,
+            // protected by Tokuyoshi-Kaplanyan specular AA (`pr_dn`) so thin poles never sparkle.
+            let grain = st_noise(in.world.xz * 14.0 + vec2<f32>(in.world.y * 9.5, 1.3));
+            let weather = st_noise(in.world.xz * 2.8 + vec2<f32>(in.world.y * 2.1 + 7.1, 4.7));
+            let base_grime = (1.0 - smoothstep(0.0, 0.55, max(in.local.y * inst.scale.y, 0.0))) * 0.22;
+            let mid = inst.model;
+            if ((m.flags & PR_PLATE) != 0u || mid == PR_SIGN_PLATE) {
+                let sign_front = dot(pr_rot(inst.yaw, vec3<f32>(0.0, 0.0, 1.0)), v) > 0.0;
+                if (sign_front) {
+                    let fa = pr_faces[min(inst.variant, max(u32(pr.lens.w), 1u) - 1u)].a;
+                    let sr = select(0.34 + 0.08 * weather, fa + 0.08 * (weather - 0.5), fa < 1.0);
+                    s.rough = sqrt(min(sr * sr + min(0.45 * pr_dn, 0.18), 0.92));
+                    s.metal = 0.04;
+                    // (`--no-retro-viewer` off) an arm name sign (its own roughness, fa < 1) returns
+                    // light only to a lamp at the viewer, and the camera carries none: no glow of its own
+                    let retro_viewer = fa < 1.0 && (pr.mode.z & PR_F_RETRO_VIEWER) != 0u;
+                    if (skyu.night.x > 0.05 && !retro_viewer) {
+                        let retro = pow(max(dot(s.n, v), 0.0), 5.0) * smoothstep(55.0, 6.0, distance(in.world, frame.cam_pos.xyz));
+                        m.emissive = vec4<f32>(m.emissive.rgb + s.albedo * (retro * 0.24 * skyu.night.x / max(lk_practical_gain(), 1e-4)), m.emissive.w);
+                    }
+                } else {
+                    // Mill-finish brushed aluminum sign back; (`--no-sign-back-aged` off) an arm
+                    // name sign's weathered dull, rough and grey (the plates' own: as before)
+                    let fb = pr_faces[min(inst.variant, max(u32(pr.lens.w), 1u) - 1u)].a;
+                    let aged = fb < 1.0 && (pr.mode.z & PR_F_SIGN_BACK_AGED) != 0u;
+                    let ar = select(0.34, 0.62, aged) + 0.10 * grain;
+                    s.metal = max(s.metal, select(0.76, 0.55, aged));
+                    s.rough = sqrt(min(ar * ar + min(0.50 * pr_dn, 0.20), 0.92));
+                    s.albedo = s.albedo * (0.92 + 0.14 * grain);
+                }
+            } else {
+                // Bitmask dispatch for poles/cabinets (`0,1,4,12,20,33,34`), enamel lamps/hoods
+                // (`2,3,18,19`), hydrants (`9,25`), and sidewalk hardware (`10,11,13..17,22..24,29`).
+                let mbit = select(0u, 1u << mid, mid < 32u);
+                let is_pole = (mbit & 0x00101013u) != 0u || mid == 33u || mid == 34u;
+                let is_enamel = (mbit & 0x000c000cu) != 0u;
+                let is_hydrant = (mbit & 0x02000200u) != 0u;
+                let is_hw = (mbit & 0x21c3ec00u) != 0u;
+                if (is_pole || is_enamel || is_hydrant || is_hw) {
+                    let steel_hw = (mbit & 0x0080e400u) != 0u;
+                    let r_base = select(select(select(select(0.35, 0.31, steel_hw), 0.27, is_hydrant), 0.30, is_enamel), select(0.32, 0.38, mid == 34u), is_pole);
+                    let m_base = select(select(select(select(0.36, 0.58, steel_hw), 0.20, is_hydrant), 0.44, is_enamel), select(0.74, 0.56, mid == 34u), is_pole);
+                    let r_var = select(0.10 * weather, 0.10 * grain + 0.05 * weather, is_enamel || is_hydrant);
+                    let rr = r_base + r_var + base_grime * 0.72;
+                    s.metal = max(s.metal, m_base * (1.0 - base_grime));
+                    s.rough = sqrt(min(rr * rr + min(0.52 * pr_dn, 0.22), 0.94));
+                    s.albedo = s.albedo * mix(0.90 + 0.16 * grain, 0.67, base_grime);
+                }
+            }
+        }
+    }
+// sf:end
     s.rough = clamp(s.rough, 0.03, 1.0);
 // sf:CROWN+
     if ((m.flags & PR_LEAF) != 0u) {
@@ -1643,6 +2237,14 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let trans = look.key.xyz * blade_t * (through + lobe * 0.8) * sh / LK_PI;
         c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
     }
+// sl:on+
+    if (PR_SIGNAL_LIGHT && sl_mark) {
+        // (`--signal-light`) the screen-space bounce (surfaces_ao.wgsl) takes this pixel's light no
+        // brighter than the display's white: gathered from a few samples, a lit lens or visor many
+        // times the white speckled the walls round it (its light on them is the spill's, `--signal-spill`)
+        c = vec4<f32>(c.rgb, PR_SL_AO_MARK);
+    }
+// sl:end
     return c;
 }
 
