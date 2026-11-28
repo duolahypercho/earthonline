@@ -270,30 +270,30 @@ fn ftv_trunk_top(height: f32, sp: u32, seed: f32) -> f32 {
 // cypress's flat layers wider but as thin; INFERRED).
 const FT_CLUMP_R: f32 = 0.4;
 
-// Coastal California foliage calibration (`SF_AAA_DETAIL`): physically measured
-// LOPEX93-range daylight reflectances (linear lum 0.068..0.115, muted coastal
-// G/R 1.14..1.34) so trees read as natural olive/cypress/eucalyptus/plane in
-// bright sun AND keep layered green volume inside building shadows (`08` park).
+// Coastal California foliage calibration (`SF_AAA_DETAIL`): respects each tree's
+// surveyed `tint` luminance (so dark coastal cypress/pine on Crissy bluff & Presidio
+// stay dark and grounded in shadow) while adding subtle muted olive/cypress/eucalyptus
+// chromatic variety across individual trees.
 fn ft_ca_palette(seed: f32, tint: vec3<f32>, world_xz: vec2<f32>) -> vec3<f32> {
     let h0 = fract(sin(seed * 12.9898 + dot(floor(world_xz * 0.08), vec2<f32>(78.233, 37.719))) * 43758.5453);
     let h1 = fract(seed * 0.6180339 + 0.19);
     let h2 = fract(seed * 1.3247179 + 0.41);
-    var col: vec3<f32>;
-    if (h0 < 0.22) {
-        col = vec3<f32>(0.088, 0.106, 0.066); // Mediterranean olive / holm oak
-    } else if (h0 < 0.44) {
-        col = vec3<f32>(0.066, 0.088, 0.056); // Monterey cypress / coast live oak
-    } else if (h0 < 0.62) {
-        col = vec3<f32>(0.084, 0.106, 0.090); // silvery blue-gum eucalyptus
-    } else if (h0 < 0.80) {
-        col = vec3<f32>(0.098, 0.118, 0.064); // London plane / street sycamore
-    } else if (h0 < 0.90) {
-        col = vec3<f32>(0.074, 0.094, 0.060); // Monterey pine / coastal conifer
+    let luma_w = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let tint_l = max(dot(tint, luma_w), 1e-4);
+    var ref_c: vec3<f32>;
+    if (h0 < 0.28) {
+        ref_c = vec3<f32>(0.068, 0.084, 0.054); // Mediterranean olive / holm oak
+    } else if (h0 < 0.56) {
+        ref_c = vec3<f32>(0.052, 0.072, 0.048); // Monterey cypress / coast live oak
+    } else if (h0 < 0.76) {
+        ref_c = vec3<f32>(0.068, 0.084, 0.074); // silvery blue-gum eucalyptus
     } else {
-        col = vec3<f32>(0.114, 0.110, 0.062); // late-summer sun-warmed olive accent
+        ref_c = vec3<f32>(0.062, 0.080, 0.052); // Monterey pine / coastal conifer
     }
-    let warm = mix(vec3<f32>(0.94, 0.99, 1.05), vec3<f32>(1.07, 1.00, 0.90), h2);
-    return col * warm * (0.88 + 0.26 * h1);
+    let ref_l = max(dot(ref_c, luma_w), 1e-4);
+    let chroma = mix(tint / tint_l, ref_c / ref_l, 0.45);
+    let warm = mix(vec3<f32>(0.95, 0.99, 1.04), vec3<f32>(1.05, 1.00, 0.92), h2);
+    return chroma * warm * clamp(tint_l, 0.025, 0.095) * (0.88 + 0.24 * h1);
 }
 
 // Identify far palm cards (`hlod_trees.rs:94` sets `rgb(78, 96, 52)` exclusively on palms)
@@ -650,27 +650,12 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         let key = look.key.xyz * s.albedo * max(nl, 0.0) * sh / LK_PI;
         lit = vec4<f32>(lit.rgb + key * (1.0 - fog) + (trans + vol) * (1.0 - fog), lit.a);
     } else if (SF_AAA_DETAIL && crown && !baked && look.sun.y > 0.0) {
-        // Warm olive-yellow subsurface sun translucency along the outer sunlit/backlit crown rim.
+        // Subtle sunlit/backlit crown rim translucency, strictly shadow-masked so shaded bluffs stay dark.
         let rim = clamp(aaa_open * 0.72 + 0.28 * (1.0 - max(dot(n, v), 0.0)), 0.0, 1.0);
         let through = max(dot(-n, l), 0.0) * 0.45 + pow(max(dot(-v, l), 0.0), 3.0) * 0.55;
         let sh = lk_shadow(in.world + l * 0.5, l) * sky_cloud_transmittance(in.world);
-        let sss = look.key.xyz * (s.albedo * vec3<f32>(0.86, 0.96, 0.38)) * (through * rim * 0.46 * sh / LK_PI);
+        let sss = look.key.xyz * (s.albedo * vec3<f32>(0.76, 0.86, 0.42)) * (through * rim * 0.26 * sh / LK_PI);
         lit = vec4<f32>(lit.rgb + sss * (1.0 - lk_fog_out), lit.a);
-    }
-    if (SF_AAA_DETAIL && crown && !baked) {
-        // Porous-canopy hemispheric sky-dome + sunlit-urban-plaza bounce fill (`look.sun.y` so
-        // night stays dark): lifts building-shadowed & backlit park crowns (`08` Sue Bierman Park,
-        // `01`/`07`) from crushed black (`12/255`) to natural layered coastal green (`42..75/255`)
-        // while preserving internal sub-bough depth modulation via `aaa_open`.
-        let day_f = smoothstep(-0.04, 0.08, look.sun.y);
-        if (day_f > 0.001) {
-            let env_f = mix(look.ambient.w * look.env_class.x, 1.0, clamp(look.hemi_sky.w, 0.0, 1.0));
-            let sky_dome = lk_sh(vec3<f32>(0.0, 1.0, 0.0)) * env_f + look.hemi_sky.xyz * 0.35 + look.ambient.xyz;
-            let ghi_f = look.key.xyz * max(look.sun.y, 0.06);
-            let urban_ind = sky_dome * 1.8 + ghi_f * 0.55;
-            let sky_wrap = urban_ind * (s.albedo * vec3<f32>(0.90, 1.06, 0.74)) * (mix(0.45, 1.05, aaa_open) / LK_PI) * day_f;
-            lit = vec4<f32>(lit.rgb + sky_wrap * (1.0 - lk_fog_out), lit.a);
-        }
     }
 // sf:FOLIAGE+
     if ((crown || baked) && !vol_light) {
@@ -1051,11 +1036,12 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
             // a leaf medium's albedo (omega / 2) through the leaves above, its sun
             // added after `look_light` (which lays none on it: `lk_leaf_sun`).
             vol = true;
-            let rho = select(ft_leaf_r(in.tint, in.seed), ft_ca_palette(in.seed, in.tint, in.world.xz) * 1.15, SF_AAA_DETAIL);
+            let base_rho = ft_leaf_r(in.tint, in.seed);
+            let rho = select(base_rho, mix(base_rho, ft_ca_palette(in.seed, in.tint, in.world.xz), 0.35), SF_AAA_DETAIL);
             let cv = ft_crown(in.uv, in.size.xy, in.right, v, rho);
             let om = rho * (vec3<f32>(1.0) + FT_LEAF_T_OVER_R);
             albedo = 0.5 * om * (vec3<f32>(1.0) + 0.5 * om / (vec3<f32>(1.0) - om)); // omega / 2, and its multiple scattering
-            ao = select(cv.w, cv.w * mix(0.75, 1.08, max(aaa_c.w, 0.0)), SF_AAA_DETAIL);
+            ao = select(cv.w, cv.w * mix(0.60, 1.0, max(aaa_c.w, 0.0)), SF_AAA_DETAIL);
             sun = cv.xyz;
             lk_leaf_sun = 0.0;
             lk_vis_wrap = 2.0;
@@ -1084,18 +1070,6 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
     rm_emit = vec3<f32>(0.0);
     let face = normalize(cross(dpx, dpy));
     var lit = look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
-    if (SF_AAA_DETAIL && crown && !baked) {
-        let day_f = smoothstep(-0.04, 0.08, look.sun.y);
-        if (day_f > 0.001) {
-            let open2 = select(max(aaa_c.w, 0.0), aaa_ph2.open, aaa_palm2);
-            let env_f = mix(look.ambient.w * look.env_class.x, 1.0, clamp(look.hemi_sky.w, 0.0, 1.0));
-            let sky_dome = lk_sh(vec3<f32>(0.0, 1.0, 0.0)) * env_f + look.hemi_sky.xyz * 0.35 + look.ambient.xyz;
-            let ghi_f = look.key.xyz * max(look.sun.y, 0.06);
-            let urban_ind = sky_dome * 1.8 + ghi_f * 0.55;
-            let sky_wrap = urban_ind * (s.albedo * vec3<f32>(0.90, 1.06, 0.74)) * (mix(0.45, 1.05, open2) / LK_PI) * day_f;
-            lit = vec4<f32>(lit.rgb + sky_wrap * (1.0 - lk_fog_out), lit.a);
-        }
-    }
 // sf:end
 // sf:CROWN+
     if (vol) {
