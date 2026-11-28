@@ -26,6 +26,13 @@ pub mod mesh;
 pub mod options;
 pub mod paint;
 pub mod plan;
+pub mod road_openings;
+mod arterial_corner;
+mod pavement_overlap;
+mod paving;
+mod driveway;
+mod roadbed;
+mod continuous;
 
 pub use city::StreetCity;
 pub use mesh::TileMesh;
@@ -34,7 +41,7 @@ pub use plan::Plan;
 
 use eo_data::ElevationGrid;
 use mesh::EntryGeom;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 pub const STREET_PORT_VERSION: &str = "eo-street-port-v1";
@@ -227,66 +234,49 @@ impl SurfaceTile {
         Self { tris, layers, origin, cell, n, grid }
     }
 
-    /// the layer of the highest walkable triangle over (x, z), if any.
-    pub fn top_layer(&self, x: f64, z: f64) -> Option<Layer> {
-        let i = ((x - self.origin[0]) / self.cell).floor();
-        let j = ((z - self.origin[1]) / self.cell).floor();
-        if i < 0.0 || j < 0.0 || i >= self.n as f64 || j >= self.n as f64 {
-            return None;
-        }
-        let mut best: Option<(f64, Layer)> = None;
-        for &t in &self.grid[j as usize * self.n + i as usize] {
-            let p = &self.tris[t as usize];
+    /// Walkable triangles at a point, in mesh order. An upper road and a
+    /// pedestrian surface below it can both cover the same plan coordinates.
+    fn hits_at(&self, x: f64, z: f64) -> impl Iterator<Item = (Layer, f64)> + '_ {
+        let i = ((x - self.origin[0]) / self.cell).floor() as isize;
+        let j = ((z - self.origin[1]) / self.cell).floor() as isize;
+        let cells = 0..self.n as isize;
+        let ids: &[u32] = if cells.contains(&i) && cells.contains(&j) {
+            &self.grid[j as usize * self.n + i as usize]
+        } else {
+            &[]
+        };
+        ids.iter().filter_map(move |&id| {
+            let p = &self.tris[id as usize];
             let (ax, az, bx, bz, cx, cz) = (p[0] as f64, p[2] as f64, p[3] as f64, p[5] as f64, p[6] as f64, p[8] as f64);
             let det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
-            if det.abs() < 1e-12 {
-                continue;
-            }
+            if det.abs() < 1e-12 { return None; }
             let wa = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / det;
             let wb = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / det;
             let wc = 1.0 - wa - wb;
-            if wa < -1e-6 || wb < -1e-6 || wc < -1e-6 {
-                continue;
-            }
-            let y = wa * p[1] as f64 + wb * p[4] as f64 + wc * p[7] as f64;
-            if best.is_none_or(|b| y > b.0) {
-                best = Some((y, self.layers[t as usize]));
-            }
-        }
-        best.map(|b| b.1)
+            (wa >= -1e-6 && wb >= -1e-6 && wc >= -1e-6)
+                .then(|| (self.layers[id as usize], wa * p[1] as f64 + wb * p[4] as f64 + wc * p[7] as f64))
+        })
+    }
+
+    /// The layer of the highest walkable triangle, with the first face winning a shared edge.
+    pub fn top_layer(&self, x: f64, z: f64) -> Option<Layer> {
+        self.hits_at(x, z).reduce(|a, b| if b.1 > a.1 { b } else { a }).map(|(layer, _)| layer)
     }
 
     /// The highest walkable triangle over (x, z), if any.
     pub fn height(&self, x: f64, z: f64) -> Option<f64> {
-        self.heights(x, z).into_iter().reduce(f64::max)
+        self.hits_at(x, z).map(|(_, y)| y).reduce(f64::max)
     }
 
     /// Every walkable triangle's height over (x, z).
     pub fn heights(&self, x: f64, z: f64) -> Vec<f64> {
-        let mut out = vec![];
-        let i = ((x - self.origin[0]) / self.cell).floor();
-        let j = ((z - self.origin[1]) / self.cell).floor();
-        if i < 0.0 || j < 0.0 || i >= self.n as f64 || j >= self.n as f64 {
-            return out;
-        }
-        for &t in &self.grid[j as usize * self.n + i as usize] {
-            let p = &self.tris[t as usize];
-            let (ax, az, bx, bz, cx, cz) = (p[0] as f64, p[2] as f64, p[3] as f64, p[5] as f64, p[6] as f64, p[8] as f64);
-            let det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
-            if det.abs() < 1e-12 {
-                continue;
-            }
-            let wa = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / det;
-            let wb = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / det;
-            let wc = 1.0 - wa - wb;
-            let eps = -1e-6;
-            if wa < eps || wb < eps || wc < eps {
-                continue;
-            }
-            out.push(wa * p[1] as f64 + wb * p[4] as f64 + wc * p[7] as f64);
-        }
-        out
+        self.heights_on(x, z, None)
     }
+
+    fn heights_on(&self, x: f64, z: f64, layer: Option<Layer>) -> Vec<f64> {
+        self.hits_at(x, z).filter_map(|(kind, y)| layer.is_none_or(|l| l == kind).then_some(y)).collect()
+    }
+
 }
 
 pub struct StreetWorld {
@@ -302,12 +292,22 @@ pub struct StreetWorld {
     road_cells: HashMap<(i32, i32), Vec<u32>>,
     road_pieces: Vec<(u32, [f64; 2], [f64; 2], f64)>,
     node_cells: HashMap<(i32, i32), Vec<u32>>,
+    corner_bounds: Vec<[[f64; 2]; 2]>,
     /// `ramp-running-slope-max` (drawnSurfaceAt's walking slope).
     pub ramp_running_slope_max: f64,
     pub bank_step_m: f64,
     pub bank_reach_m: f64,
     surface_cache: Mutex<HashMap<(i32, i32), Arc<SurfaceTile>>>,
     mesh_cache: Mutex<HashMap<(i32, i32), Arc<TileMesh>>>,
+    road_openings: Arc<road_openings::RoadOpenings>,
+    driveway_openings: HashMap<usize, road_openings::RoadOpenings>,
+    divided_carriageways: HashMap<String, road_openings::RoadOpenings>,
+    pavement_overlap: pavement_overlap::PavementOverlap,
+    apron: mesh::Apron,
+    surveyed_junction: Option<mesh::surveyed_junction::Surface>,
+    roadbed_caps: HashMap<(i32,i32),f32>,
+    paving_cache: Mutex<HashMap<(i32,i32),Arc<paving::PavingTile>>>,
+    paving_owners: HashMap<(i32,i32),Vec<(i32,i32)>>,
     pub build_ms: f64,
     /// Only with `StreetOptions::structures`: whether each structure end's
     /// rise and cut (`joins::StructureEnd::rise`, `cut`) are drawn: the ramp
@@ -329,25 +329,94 @@ fn seg_index(e: &plan::Entry, a: [f64; 2]) -> usize {
 }
 
 impl StreetWorld {
+    pub fn traffic_plan(&self) -> eo_data::sim_source::TrafficPlan {
+        use eo_data::sim_source::{TrafficJunction, TrafficPlan};
+        let sections = plan::traffic_sections_with_lines(&self.city, &self.plan, &self.o, &self.lines, |ei, start, end| {
+            self.traffic_surface(ei, start, end)
+        });
+        let junctions = self.plan.nodes.iter().filter_map(|node| {
+            let mut ways: Vec<_> = node.approaches.iter().filter_map(|approach| {
+                let entry = &self.plan.entries[approach.entry];
+                let piece = if approach.at_start { entry.pieces.first()? } else { entry.pieces.last()? };
+                self.city.segments[*piece].street_id.as_deref()?.strip_prefix("sf-street-").map(str::to_owned)
+            }).collect();
+            ways.sort_unstable();
+            ways.dedup();
+            if ways.is_empty() {
+                return None;
+            }
+            let (center, rim, triangles) = self.traffic_junction_pad(node);
+            (rim.len() >= 3).then_some(TrafficJunction { ways, center, rim, triangles })
+        }).collect();
+        let surveyed_routes = self.o.surveyed_junction.as_ref().and_then(|s| s.traffic_routes.clone()).and_then(|mut routes| {
+            for line in routes.approaches.iter_mut().map(|a| &mut a.line).chain(routes.circulation.iter_mut()) {
+                let sampled: Option<Vec<_>> = line.points.iter().map(|&[x, z]| {
+                    self.carriageway_near(x, z, self.ground(x, z) + self.o.road_lift)
+                }).collect();
+                let Some(heights) = sampled else {
+                    eprintln!("surveyed traffic routes: a lane leaves the drawn carriageway");
+                    return None;
+                };
+                line.heights = heights;
+            }
+            Some(routes)
+        });
+        TrafficPlan { sections, junctions, surveyed_routes }
+    }
+
+    fn traffic_surface(&self, ei: usize, start: f64, end: f64) -> (Vec<[f64; 3]>, Vec<[usize; 2]>) {
+        let entry = &self.plan.entries[ei];
+        let geom = &self.geoms[ei];
+        let stations = &geom.stations;
+        if stations.len() < 2 || end <= start {
+            return Default::default();
+        }
+        let first = stations.partition_point(|st| st.s <= start);
+        let last = stations.partition_point(|st| st.s < end);
+        let samples: Vec<_> = std::iter::once(start)
+            .chain(stations[first..last].iter().map(|st| st.s))
+            .chain(std::iter::once(end))
+            .filter_map(|s| {
+                let f = entry.frame(s, false);
+                // At a trimmed mouth use the datum of this road's own mouth.
+                let y = self.datum_at_station(geom, s.clamp(stations[0].s, stations[stations.len() - 1].s))?;
+                Some((s, [f.x, self.o.cross_section_y(y, 0.0, entry.half), f.z]))
+            })
+            .collect();
+        let mut spans: Vec<[usize; 2]> = Vec::new();
+        for (i, pair) in samples.windows(2).enumerate() {
+            let middle = pair[0].0.midpoint(pair[1].0);
+            let next = stations.partition_point(|st| st.s <= middle);
+            if next == 0 || !geom.keep.get(next - 1).copied().unwrap_or(false) {
+                continue;
+            }
+            if let Some(last) = spans.last_mut().filter(|span| span[1] == i) {
+                last[1] = i + 1;
+            } else {
+                spans.push([i, i + 1]);
+            }
+        }
+        (samples.into_iter().map(|(_, point)| point).collect(), spans)
+    }
+
     pub fn build(o: StreetOptions, city: StreetCity, terrain: Terrain, buildings: BuildingIndex) -> Self {
         let plan = plan::build_plan(&city, &o);
         Self::from_plan(o, city, plan, terrain, buildings)
     }
 
     /// The street world over a plan already built (the plan needs no terrain or buildings).
-    pub fn from_plan(o: StreetOptions, city: StreetCity, plan: Plan, terrain: Terrain, buildings: BuildingIndex) -> Self {
+    pub fn from_plan(o: StreetOptions, city: StreetCity, mut plan: Plan, terrain: Terrain, buildings: BuildingIndex) -> Self {
+        plan::connect_landings(&mut plan.entries, &o, &terrain);
+        if o.pavement_repairs {
+            mesh::Apron::fit_curb(&mut plan, &city);
+        }
         let t0 = std::time::Instant::now();
         if std::env::var("EO_STREET_TRACE").is_ok() {
             eprintln!("  street plan done: {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
         }
-        let multi: HashSet<u64> = o.multi_lane_two_way.iter().copied().collect();
         // (a structure leg, `plan::Entry::structure_leg`, is not drawn: no
         // paint, no carriageway for the corridor queries, no stations.)
-        let lines: Vec<Vec<paint::Line>> = plan
-            .entries
-            .iter()
-            .map(|e| if e.structure_leg.is_some() { vec![] } else { paint::segment_markings(&city.segments[e.road], &e.highway, e.half * 2.0, e.lanes, &o, &multi) })
-            .collect();
+        let lines = paint::plan_markings(&city, &plan, &o);
         let mut road_cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
         let mut road_pieces = vec![];
         for (ei, e) in plan.entries.iter().enumerate() {
@@ -380,6 +449,16 @@ impl StreetWorld {
                 }
             }
         }
+        let corner_bounds = plan.nodes.iter().map(|n| {
+            let (mut lo, mut hi) = (n.position, n.position);
+            for st in n.paths.iter().flat_map(|path| &path.stations) {
+                let side = st.walk.max(o.curb_top_width) * st.scale;
+                for p in [[st.x, st.z], [st.x + st.out[0]*side, st.z + st.out[1]*side]] {
+                    for k in 0..2 { lo[k]=lo[k].min(p[k]); hi[k]=hi[k].max(p[k]); }
+                }
+            }
+            [lo,hi]
+        }).collect();
         let (ramp_running_slope_max, bank_step_m, bank_reach_m) = (o.ramp_running_slope_max, o.bank_step_m, o.bank_reach_m);
         let mut w = StreetWorld {
             o,
@@ -393,17 +472,28 @@ impl StreetWorld {
             road_cells,
             road_pieces,
             node_cells,
+            corner_bounds,
             ramp_running_slope_max,
             bank_step_m,
             bank_reach_m,
             surface_cache: Mutex::new(HashMap::new()),
             mesh_cache: Mutex::new(HashMap::new()),
+            road_openings: Arc::default(),
+            driveway_openings: HashMap::new(),
+            divided_carriageways: HashMap::new(),
+            pavement_overlap: Default::default(),
+            apron: Default::default(),
+            surveyed_junction: None,
+            roadbed_caps: Default::default(),
+            paving_cache: Default::default(),
+            paving_owners: Default::default(),
             build_ms: 0.0,
             rises_ok: vec![],
             shore_press: std::sync::OnceLock::new(), // sea
         };
         w.rises_ok = w.check_rises();
         w.geoms = (0..w.plan.entries.len()).map(|ei| w.entry_geom(ei)).collect();
+        if w.o.pavement_repairs { continuous::join(&w.plan, &w.city, &mut w.geoms); }
         let mut tiles: HashMap<(i32, i32), TileRefs> = HashMap::new();
         for (ei, g) in w.geoms.iter().enumerate() {
             for i in 0..g.stations.len().saturating_sub(1) {
@@ -418,8 +508,59 @@ impl StreetWorld {
             tiles.entry(tile_key(n.position[0], n.position[1])).or_default().nodes.push(ni as u32);
         }
         w.tiles = tiles;
+        if w.o.pavement_repairs {
+            w.divided_carriageways = w.index_divided_carriageways();
+            w.fit_driveways();
+            w.pavement_overlap = pavement_overlap::PavementOverlap::build(&w);
+            w.apron = mesh::Apron::fit(&w);
+            w.paving_owners = w.index_paving_owners();
+        }
+        if let Some(survey) = &w.o.surveyed_junction {
+            let surface = mesh::surveyed_junction::Surface::build(&w, survey);
+            w.tiles.entry(surface.owner).or_default();
+            w.surveyed_junction = Some(surface);
+            w.mesh_cache.get_mut().unwrap().clear();
+            w.surface_cache.get_mut().unwrap().clear();
+            w.paving_cache.get_mut().unwrap().clear();
+        }
+        if w.o.pavement_repairs || w.surveyed_junction.is_some() {
+            w.roadbed_caps = roadbed::fit(&w);
+        }
         w.build_ms = t0.elapsed().as_secs_f64() * 1e3;
         w
+    }
+
+    /// Regrade an existing join plan. Heights do not change its horizontal
+    /// stations, yield spans, crossings, paint layout or tile ownership.
+    pub fn update_structure_landings(&mut self, landings: &[(plan::P2, joins::Rise)]) {
+        if self.o.landings == landings { return; }
+        self.o.landings = landings.to_vec();
+        let prior: Vec<_> = self.plan.entries.iter_mut().map(|e| std::mem::take(&mut e.landings)).collect();
+        plan::connect_landings(&mut self.plan.entries, &self.o, &self.terrain);
+        for (i, old) in prior.into_iter().enumerate() {
+            if old != self.plan.entries[i].landings {
+                self.geoms[i] = self.entry_geom(i);
+            }
+        }
+        self.refresh_graded_pavement();
+    }
+
+    /// Refit surfaces that depend on the road datums after the joined
+    /// structures and their street approach have been graded together.
+    pub fn refresh_graded_pavement(&mut self) {
+        if self.o.pavement_repairs {
+            continuous::join(&self.plan, &self.city, &mut self.geoms);
+            self.divided_carriageways = self.index_divided_carriageways();
+            self.fit_driveways();
+            self.pavement_overlap = pavement_overlap::PavementOverlap::build(self);
+            self.apron = mesh::Apron::fit(self);
+            self.paving_cache.get_mut().unwrap().clear();
+        }
+        if self.o.pavement_repairs || self.surveyed_junction.is_some() {
+            self.roadbed_caps = roadbed::fit(self);
+        }
+        self.surface_cache.get_mut().unwrap().clear();
+        self.mesh_cache.get_mut().unwrap().clear();
     }
 
     pub fn ground(&self, x: f64, z: f64) -> f64 {
@@ -429,6 +570,14 @@ impl StreetWorld {
     /// eo-render/scene.rs computes it, in f32): the terrain lifted by
     /// `openGroundLiftM`, held under any street there (`terrain_cap`).
     pub fn carpet_vertex(&self, wx: f32, wz: f32) -> f32 {
+        let ground=self.base_carpet_vertex(wx,wz);
+        if self.roadbed_caps.is_empty() { return ground; }
+        let m=&self.terrain.grid.meta;
+        let index=|v:f32, origin:f64| ((v-origin as f32)/m.cell_size as f32-0.5).round() as i32;
+        self.roadbed_caps.get(&(index(wx,m.origin_x),index(wz,m.origin_z))).map_or(ground,|&cap| ground.min(cap))
+    }
+
+    fn base_carpet_vertex(&self, wx:f32, wz:f32)->f32 {
         let y = self.terrain.grid.ground(wx as f64, wz as f64) as f32 + self.terrain.carpet_lift as f32;
         let y = match self.terrain_cap(wx as f64, wz as f64) {
             Some(c) => y.min(c as f32),
@@ -445,6 +594,7 @@ impl StreetWorld {
     /// Tiles cooked before it are dropped so every tile reads the same ground.
     pub fn set_shore_press(&self, press: ShorePress) {
         if self.shore_press.set(press).is_ok() {
+            self.paving_cache.lock().unwrap().clear();
             self.surface_cache.lock().unwrap().clear();
             self.mesh_cache.lock().unwrap().clear();
         }
@@ -528,7 +678,8 @@ impl StreetWorld {
                 if ((x - px).powi(2) + (z - pz).powi(2)).sqrt() > reach + TERRAIN_CAP_MARGIN_M * eo_data::groundscale::scale() {
                     continue;
                 }
-                let mut y = self.ground(px, pz) + self.o.road_lift + lift;
+                let terrain = self.ground(px, pz) + self.o.road_lift;
+                let mut y = self.surveyed_datum(e, [px, pz], terrain).unwrap_or(terrain).min(terrain) + lift;
                 // a stub lowered into a tunnel's approach cut (`joins`): the
                 // carpet held under the street as drawn there.
                 if e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty() {
@@ -583,7 +734,8 @@ impl StreetWorld {
             if ((x - px).powi(2) + (z - pz).powi(2)).sqrt() > half + walk {
                 continue;
             }
-            let y = self.ground(px, pz) + self.o.footway_lift;
+            let datum = self.neighbour_datum(ei as usize, a, t * len2.sqrt(), [px, pz]);
+            let y = datum + (self.o.footway_lift - self.o.road_lift);
             best = Some(best.map_or(y, |c: f64| c.max(y)));
         }
         best
@@ -620,7 +772,7 @@ impl StreetWorld {
                     let walk = if left { e.walks[0] } else { e.walks[1] };
                     let walk = if walk >= self.o.min_sidewalk_width { walk } else { 0.0 };
                     let d = ((x - px).powi(2) + (z - pz).powi(2)).sqrt();
-                    let g = self.ground(px, pz);
+                    let g = self.neighbour_datum(ei as usize, a, t * len2.sqrt(), [px, pz]) - self.o.road_lift;
                     let low = |a: Option<f64>, y: f64| Some(a.map_or(y, |c: f64| c.min(y)));
                     if d <= half {
                         paved = low(paved, g + self.o.road_lift - self.o.gutter_depth);
@@ -639,7 +791,44 @@ impl StreetWorld {
         paved.or(front)
     }
 
-    /// Stations, datums, kept spans and kerb depressions of one run (`emitSegment`'s set-up).
+    /// Datum of the neighbouring paving an earth bank meets. A grade-separated
+    /// road may raise a stub or cut a street below the bare-earth grid.
+    fn neighbour_datum(&self, ei: usize, piece_start: [f64; 2], along: f64, at: [f64; 2]) -> f64 {
+        let terrain = self.ground(at[0], at[1]) + self.o.road_lift;
+        let e = &self.plan.entries[ei];
+        if e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty() {
+            let station = e.cum[seg_index(e, piece_start)] + along;
+            if let Some(d) = self.geoms.get(ei).and_then(|g| self.datum_at_station(g, station)) {
+                return d;
+            }
+        }
+        self.surveyed_datum(e, at, terrain).unwrap_or(terrain)
+    }
+
+    /// Datum of a measured bridge approach or a connected landing that rises
+    /// above the existing street. Junction arms carry it at their trimmed mouths.
+    pub fn surveyed_datum(&self, e: &plan::Entry, at: [f64; 2], terrain: f64) -> Option<f64> {
+        let way = self.city.segments[e.road].street_id.as_deref();
+        if self.o.pavement_repairs {
+            // The surveyed entrance and street are below the freeway. A rise
+            // requested by an overhead deck cannot set this junction's datum.
+            if let Some(y) = way.and_then(|id| eo_data::bridge_survey::mariposa_grade(id, at, terrain)) {
+                return Some(y);
+            }
+        }
+        let driveway = way.filter(|_| self.o.pavement_repairs)
+            .and_then(|way| eo_data::bridge_survey::driveway_grade(way, at, terrain));
+        if self.o.structures.is_none() { return driveway; }
+        let measured = driveway.or_else(|| way.and_then(|way| eo_data::bridge_survey::approach(way, at, terrain)));
+        if e.landings.is_empty() { return measured; }
+        let (s, _) = plan::nearest_station(e, at);
+        let s = s.clamp(e.s0(), e.s1());
+        let base = measured.unwrap_or(terrain);
+        let y = e.landings.iter().fold(base, |y, (from, rise)| joins::ramp_datum(y, rise, (s - from).abs()));
+        if y > base { Some(y) } else { measured }
+    }
+
+    /// Stations, datums, kept spans and kerb depressions of one run.
     fn entry_geom(&self, ei: usize) -> EntryGeom {
         let o = &self.o;
         let e = &self.plan.entries[ei];
@@ -668,7 +857,18 @@ impl StreetWorld {
         }
         if !extra.is_empty() {
             let mut merged: Vec<plan::Frame> = stations.clone();
-            merged.extend(extra.iter().map(|&v| e.frame(v, false)));
+            merged.extend(extra.iter().map(|&s| {
+                if o.pavement_repairs {
+                    // A ramp or yield boundary can sit millimetres from a
+                    // surveyed bend. Keep its kerbs on the mitered edges so
+                    // the new cross-section cannot fold back over the road.
+                    let i = stations.partition_point(|f| f.s < s);
+                    if i > 0 && i < stations.len() {
+                        return stations[i - 1].split(stations[i], s);
+                    }
+                }
+                e.frame(s, false)
+            }));
             merged.sort_by(|a, b| a.s.partial_cmp(&b.s).unwrap());
             stations.clear();
             for st in merged {
@@ -680,7 +880,10 @@ impl StreetWorld {
                 stations.push(st);
             }
         }
-        let mut datums: Vec<f64> = stations.iter().map(|st| self.ground(st.x, st.z) + o.road_lift).collect();
+        let mut datums: Vec<f64> = stations.iter().map(|st| {
+            let terrain = self.ground(st.x, st.z) + o.road_lift;
+            self.surveyed_datum(e, [st.x, st.z], terrain).unwrap_or(terrain)
+        }).collect();
         // an approach embankment (`joins::StructureEnd::rise`, only with
         // `StreetOptions::structures`): a stub's datum climbs to the height
         // its structure asks at its end, where the ramp is back at the datum
@@ -688,10 +891,11 @@ impl StreetWorld {
         if e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty() {
             self.raise_stub(e, &stations, &mut datums);
         }
+        driveway::insert_curb_stations(&e.driveway_cuts, &mut stations, &mut datums);
         let keep: Vec<bool> = (0..stations.len().saturating_sub(1)).map(|i| !e.in_yield_span((stations[i].s + stations[i + 1].s) / 2.0)).collect();
         let drawn = plan::segment_kerb_ramps(e, o);
         let dep = [0, 1].map(|k| stations.iter().map(|st| mesh::dep_at(&drawn[k], st.s)).collect::<Vec<f64>>());
-        EntryGeom { stations, datums, keep, dep }
+        EntryGeom { stations, datums, keep, dep, driveways: None, shared_ends: [false; 2] }
     }
 
     /// Which structure ends' rises are drawn: a ramp from the end at its
@@ -793,15 +997,47 @@ impl StreetWorld {
         k
     }
 
+    /// Install the final tunnel approach geometry after the joined road profiles settle.
+    pub fn set_road_openings(&mut self, openings: Arc<road_openings::RoadOpenings>) {
+        self.road_openings = openings;
+        self.paving_cache.get_mut().unwrap().clear();
+        self.surface_cache.get_mut().unwrap().clear();
+        self.mesh_cache.get_mut().unwrap().clear();
+    }
+
     /// The near (full) street surface of one tile.
     pub fn tile_mesh(&self, key: (i32, i32)) -> TileMesh {
+        let mut m = self.draw_tile(key, true);
+        if self.o.pavement_repairs {
+            self.finish_paving(key, &mut m);
+        }
+        m
+    }
+
+    fn draw_tile(&self, key: (i32, i32), with_edges: bool) -> TileMesh {
+        let mut m = self.street_tile(key, with_edges);
+        self.apron.draw(key, &mut m, with_edges);
+        self.apply_surface_overlays(key, &mut m);
+        m
+    }
+
+    fn apply_surface_overlays(&self, key: (i32, i32), mesh: &mut TileMesh) {
+        if let Some(surface) = &self.surveyed_junction {
+            surface.draw(key, mesh, self.o.junction_paint_lift);
+        }
+        mesh.open_roadways(&self.road_openings);
+    }
+
+    fn street_tile(&self, key: (i32, i32), with_edges: bool) -> TileMesh {
         let mut m = TileMesh::default();
         if let Some(refs) = self.tiles.get(&key) {
             for &(ei, i) in &refs.spans {
-                self.emit_span(&mut m, ei as usize, i as usize);
+                let first = m.layers.len();
+                self.emit_span(&mut m, ei as usize, i as usize, with_edges);
+                self.pavement_overlap.finish_span(&mut m, ei as usize, i as usize, first);
             }
             for &ni in &refs.nodes {
-                self.emit_node(&mut m, ni as usize);
+                self.emit_node(&mut m, ni as usize, with_edges);
             }
         }
         m
@@ -811,13 +1047,17 @@ impl StreetWorld {
     pub fn far_tile_mesh(&self, key: (i32, i32)) -> TileMesh {
         let mut m = TileMesh::default();
         if let Some(refs) = self.tiles.get(&key) {
-            for (ei, i0, i1) in Self::span_runs(&refs.spans, 2) {
+            for (ei, i0, i1) in self.span_runs(&refs.spans, 2) {
+                let first = m.layers.len();
                 self.emit_far_span(&mut m, ei, i0, i1);
+                self.pavement_overlap.finish_span(&mut m, ei, i0, first);
             }
             for &ni in &refs.nodes {
                 self.emit_far_node(&mut m, ni as usize);
             }
         }
+        self.apron.draw(key, &mut m, false);
+        self.apply_surface_overlays(key, &mut m);
         m
     }
 
@@ -825,14 +1065,23 @@ impl StreetWorld {
     pub fn coarse_tile_mesh(&self, key: (i32, i32)) -> TileMesh {
         let mut m = TileMesh::default();
         let Some(refs) = self.tiles.get(&key) else { return m };
-        for (ei, i0, i1) in Self::span_runs(&refs.spans, 4) {
+        for (ei, i0, i1) in self.span_runs(&refs.spans, 4) {
+            let first = m.layers.len();
             self.emit_coarse_span(&mut m, ei, i0, i1);
+            self.pavement_overlap.finish_span(&mut m, ei, i0, first);
         }
+        // Runs end at their trimmed mouths at every distance. Keep the same
+        // junction pad across the two static levels so the asphalt meets there.
+        if self.o.pavement_repairs {
+            for &ni in &refs.nodes { self.emit_far_node(&mut m, ni as usize); }
+        }
+        self.apron.draw(key, &mut m, false);
+        self.apply_surface_overlays(key, &mut m);
         m
     }
 
     /// Consecutive kept spans of one run joined up to n at a time: (entry, first station, last station).
-    fn span_runs(spans: &[(u32, u32)], n: usize) -> Vec<(usize, usize, usize)> {
+    fn span_runs(&self, spans: &[(u32, u32)], n: usize) -> Vec<(usize, usize, usize)> {
         let mut by_entry: Vec<(u32, u32)> = spans.to_vec();
         by_entry.sort();
         let mut out = vec![];
@@ -840,7 +1089,10 @@ impl StreetWorld {
         while k < by_entry.len() {
             let (ei, i0) = by_entry[k];
             let mut j = k;
-            while j + 1 < by_entry.len() && by_entry[j + 1].0 == ei && by_entry[j + 1].1 == by_entry[j].1 + 1 && j + 1 - k < n {
+            while j + 1 < by_entry.len() && by_entry[j + 1].0 == ei && by_entry[j + 1].1 == by_entry[j].1 + 1 && j + 1 - k < n
+                && !self.geoms[ei as usize].crosses_apron(i0 as usize, by_entry[j+1].1 as usize + 1)
+                && !self.pavement_overlap.needs_detail(ei as usize, by_entry[j].1 as usize)
+                && !self.pavement_overlap.needs_detail(ei as usize, by_entry[j+1].1 as usize) {
                 j += 1;
             }
             out.push((ei as usize, i0 as usize, by_entry[j].1 as usize + 1));
@@ -886,6 +1138,21 @@ impl StreetWorld {
     /// what the paving at (x, z) is (carriageway, kerb top, sidewalk, ramp, verge), or None off the street.
     pub fn paved_layer_at(&self, x: f64, z: f64) -> Option<Layer> {
         self.surface_tile(tile_key(x, z)).top_layer(x, z)
+    }
+
+    /// True only where every drawn floor at this point belongs to the road.
+    /// A lower sidewalk underneath a road deck still has its own ramp fittings.
+    pub fn only_carriageway_at(&self, x: f64, z: f64) -> bool {
+        let tile = self.surface_tile(tile_key(x, z));
+        let mut hits = tile.hits_at(x, z);
+        hits.next().is_some_and(|(kind, _)| kind == Layer::Carriageway)
+            && hits.all(|(kind, _)| kind == Layer::Carriageway)
+    }
+
+    /// The carriageway at this level when a junction also carries an upper street.
+    pub fn carriageway_near(&self, x: f64, z: f64, y: f64) -> Option<f64> {
+        self.surface_tile(tile_key(x, z)).heights_on(x, z, Some(Layer::Carriageway))
+            .into_iter().min_by(|a,b| (a-y).abs().total_cmp(&(b-y).abs()))
     }
 
     /// Every street surface drawn over (x, z) (walkable layers).

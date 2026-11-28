@@ -16,8 +16,8 @@
 //!   frontage     paving level with the walk to a facade within reach, or to
 //!                the surveyed property line (a simplified `frontageDepth`)
 //!   verge bank   from the back of the paving to the ground carpet
-//!   junction pad a fan from the node over the approaches' mouth sections and
-//!                the corner kerb lines; corner returns carry the kerb, ramps
+//!   junction pad triangulates the approaches' mouth sections and the corner
+//!                kerb lines; corner returns carry the kerb, ramps
 //!                and footway round the fillet or the chord
 //!   paint        lane lines (dashed per CA MUTCD broken-line pattern), centre
 //!                lines, edge lines, cycle lanes, continental crosswalk bars,
@@ -27,6 +27,12 @@
 //! midpoint, a node's position), so tiles never draw the same triangle twice
 //! and need no clipping. Colours are placeholder tones for this slice (the
 //! JS tints a scanned texture; no texture is drawn here), not a look.
+
+mod marking;
+mod apron;
+pub(crate) mod junction;
+pub(crate) mod surveyed_junction;
+pub(crate) use apron::Apron;
 
 use crate::plan::{self, Approach, CurbStation, Entry, Frame, Node, RampWin};
 use crate::{Layer, StreetWorld};
@@ -141,6 +147,55 @@ pub struct TileMesh {
 }
 
 impl TileMesh {
+    pub(crate) fn open_roadways(&mut self, openings: &crate::road_openings::RoadOpenings) {
+        if self.indices.is_empty() || openings.is_empty() { return; }
+        let (lo, hi) = self.bounds();
+        if !openings.intersects_bounds(lo, hi) { return; }
+        self.clip_faces(0, openings, |layer| !matches!(layer, Layer::Marking | Layer::Carriageway));
+    }
+
+    pub(crate) fn clip_faces(&mut self, first: usize, openings: &crate::road_openings::RoadOpenings, include: impl Fn(Layer) -> bool) {
+        self.clip_faces_with(first, |_, layer, triangle| {
+            if include(layer) { openings.clip(triangle) } else { None }
+        });
+    }
+
+    pub(crate) fn clip_faces_with(&mut self, first: usize, mut clip: impl FnMut(usize, Layer, [[f32; 3]; 3]) -> Option<Vec<[crate::road_openings::Vertex; 3]>>) {
+        let old = self.indices.split_off(first * 3);
+        let layers = self.layers.split_off(first);
+        for (t, (face, layer)) in old.chunks_exact(3).zip(layers).enumerate() {
+            let ids = [face[0], face[1], face[2]].map(|i| i as usize);
+            let source = ids.map(|i| self.positions[i]);
+            let Some(pieces) = clip(first+t, layer, source) else {
+                self.indices.extend_from_slice(face);
+                self.layers.push(layer);
+                continue;
+            };
+            for triangle in pieces {
+                let positions = triangle.map(|v| v.mesh_position(source));
+                let [a,b,c] = positions.map(|p| p.map(f64::from));
+                if tri_area(&a,&b,&c) <= 1e-9 { continue; }
+                if layer == Layer::Verge {
+                    // A top face narrower than one position unit at this
+                    // location collapses onto the pavement edge on the GPU.
+                    let area2 = ((b[0]-a[0])*(c[2]-a[2])-(b[2]-a[2])*(c[0]-a[0])).abs();
+                    let edge = [(&a,&b),(&b,&c),(&c,&a)].iter().map(|(u,v)| (u[0]-v[0]).hypot(u[2]-v[2])).fold(0.0,f64::max);
+                    let ulp = positions.iter().flat_map(|p| [p[0],p[2]]).map(|q| f64::from(q.abs().next_up()-q.abs())).fold(0.0,f64::max);
+                    if area2 <= edge * ulp { continue; }
+                }
+                let k = self.positions.len() as u32;
+                for (v,p) in triangle.into_iter().zip(positions) {
+                    self.positions.push(p);
+                    self.normals.push(v.interpolate(ids.map(|i| self.normals[i])));
+                    self.colors.push(v.color(ids.map(|i| self.colors[i])));
+                    self.kerb.push(v.interpolate(ids.map(|i| [self.kerb[i]]))[0]);
+                }
+                self.indices.extend_from_slice(&[k, k+1, k+2]);
+                self.layers.push(layer);
+            }
+        }
+    }
+
     pub fn triangles(&self) -> usize {
         self.indices.len() / 3
     }
@@ -229,7 +284,7 @@ fn norm(v: [f64; 3]) -> [f64; 3] {
     let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
     if l < 1e-12 { [0.0, 1.0, 0.0] } else { [v[0] / l, v[1] / l, v[2] / l] }
 }
-fn tri_area(a: &[f64; 3], b: &[f64; 3], c: &[f64; 3]) -> f64 {
+pub(crate) fn tri_area(a: &[f64; 3], b: &[f64; 3], c: &[f64; 3]) -> f64 {
     let n = cross(sub(*b, *a), sub(*c, *a));
     0.5 * (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
 }
@@ -270,11 +325,31 @@ fn p3(xz: [f64; 2], y: f64) -> [f64; 3] {
 /// Per-entry construction resolved once: stations, datums, kept spans, ramps.
 #[derive(Clone, Debug, Default)]
 pub struct EntryGeom {
+    pub(crate) shared_ends: [bool; 2],
+    pub(crate) driveways: Option<Box<crate::driveway::Driveways>>,
     pub stations: Vec<Frame>,
     pub datums: Vec<f64>,
     pub keep: Vec<bool>,
     /// Kerb depression (0 full kerb .. 1 ramp lip) per station, [left, right].
     pub dep: [Vec<f64>; 2],
+}
+
+impl EntryGeom {
+    /// Clipping a neighbouring strip can insert vertices along the shared
+    /// edge. At city-scale f32 coordinates those vertices may round to
+    /// opposite sides of the edge. Overlap the two paved sections by one
+    /// position unit on each side before converting their triangles to f32.
+    fn paving_frame(&self, i: usize) -> Frame {
+        let mut f = self.stations[i];
+        let sign = if i == 0 && self.shared_ends[0] { -1.0 }
+            else if i + 1 == self.stations.len() && self.shared_ends[1] { 1.0 }
+            else { return f };
+        let magnitude = f.x.abs().max(f.z.abs()) as f32;
+        let shift = sign * f64::from(magnitude.next_up() - magnitude);
+        f.x += shift * f.tx;
+        f.z += shift * f.tz;
+        f
+    }
 }
 
 /// `depAt` of `emitSegment` / the ring: depression across a window list at parameter `v`.
@@ -489,18 +564,18 @@ impl StreetWorld {
     // ribbons
     // -----------------------------------------------------------------------
 
-    pub(crate) fn emit_span(&self, m: &mut TileMesh, ei: usize, i: usize) {
+    pub(crate) fn emit_span(&self, m: &mut TileMesh, ei: usize, i: usize, with_edges: bool) {
         let o = &self.o;
         let e: &Entry = &self.plan.entries[ei];
         let g = &self.geoms[ei];
-        let (a, b) = (g.stations[i], g.stations[i + 1]);
+        let (a, b) = (g.paving_frame(i), g.paving_frame(i + 1));
         let (da, db) = (g.datums[i], g.datums[i + 1]);
         let half = e.half;
         // The JS palette's tint for this run's highway class (the per-block
         // tone the JS varies in its shader's macro field, not per run).
         let (asphalt, walk_tint) = self.run_tints(ei);
         // Carriageway and gutter pans.
-        let offs = o.section_offsets(half);
+        let offs = g.section_offsets(o, half);
         let gutter_start = (half - o.gutter_width).max(0.0);
         let gutter = GUTTER();
         let col = |u: f64| if u.abs() <= gutter_start + 1e-9 { asphalt } else { gutter };
@@ -511,26 +586,36 @@ impl StreetWorld {
             m.quad_kerb(
                 Layer::Carriageway,
                 [
-                    p3(a.at(u0), o.cross_section_y(da, u0, half)),
-                    p3(b.at(u0), o.cross_section_y(db, u0, half)),
-                    p3(b.at(u1), o.cross_section_y(db, u1, half)),
-                    p3(a.at(u1), o.cross_section_y(da, u1, half)),
+                    p3(a.at(u0), g.pavement_y(o, i, u0, half)),
+                    p3(b.at(u0), g.pavement_y(o, i + 1, u0, half)),
+                    p3(b.at(u1), g.pavement_y(o, i + 1, u1, half)),
+                    p3(a.at(u1), g.pavement_y(o, i, u1, half)),
                 ],
                 [col(u0), col(u0), col(u1), col(u1)],
                 [k0, k0, k1, k1],
             );
         }
+        let first_footway = (m.layers.len(), m.positions.len());
         // Kerb, footway, frontage and bank per side.
         let mid_s = (a.s + b.s) / 2.0;
         // a stub raised on an approach embankment (`joins::StructureEnd::rise`):
         // a side with no footway gets its bank from the carriageway's edge.
-        let raised = (e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty()) && (self.datum_raise(ei, i) > RAISED_M || self.datum_raise(ei, i + 1) > RAISED_M);
+        let raised = self.o.structures.is_some() && (self.datum_raise(ei, i) > RAISED_M || self.datum_raise(ei, i + 1) > RAISED_M);
+        let retained = raised && self.surveyed_datum(e, [a.x, a.z], da).is_some();
         for (k, side) in [(0usize, 1.0f64), (1, -1.0)] {
             let walk = e.walks[k];
             if !(walk >= o.min_sidewalk_width) {
-                if raised {
+                if raised && with_edges {
                     let (out_a, out_b) = ([side * a.nx, side * a.nz], [side * b.nx, side * b.nz]);
-                    self.bank(m, Some(ei), a.at(side * half), da - o.gutter_depth, out_a, b.at(side * half), db - o.gutter_depth, out_b);
+                    // Retain the narrow approach at its road edge. A sloping
+                    // earth bank here can project across the adjacent ramp.
+                    let (left, right) = (a.at(side * half), b.at(side * half));
+                    let (ya, yb) = (da - o.gutter_depth, db - o.gutter_depth);
+                    if retained {
+                        self.ring_edge(m, left, ya, out_a, right, yb, out_b, true);
+                    } else {
+                        self.bank(m, Some(ei), left, ya, out_a, right, yb, out_b);
+                    }
                 }
                 continue;
             }
@@ -539,7 +624,16 @@ impl StreetWorld {
             }
             let (pa, pb) = (g.dep[k][i], g.dep[k][i + 1]);
             let (ia, ib) = (da - o.gutter_depth, db - o.gutter_depth);
-            let (ka, kb) = (self.kerb_y(da, pa), self.kerb_y(db, pb));
+            let section = |s, datum, dep| {
+                let driveway = dep_at(&e.driveway_cuts[k], s);
+                let full = o.curb_top_y(datum);
+                let lip = datum - o.gutter_depth + o.driveway.lip;
+                let height = self.kerb_y(datum, dep).min(full + (lip - full) * driveway);
+                let apron = o.curb_top_width + driveway * (o.driveway.depth.min(walk) - o.curb_top_width);
+                (height, self.ramp_reach(dep).max(apron), dep.max(driveway))
+            };
+            let (ka, ra, pa) = section(a.s, da, pa);
+            let (kb, rb, pb) = section(b.s, db, pb);
             let face = [side * a.nx * -1.0, side * a.nz * -1.0];
             // each vertex's height above the gutter flow line (the renderer's kerb-face grime).
             m.quad_kerb_face(
@@ -549,7 +643,6 @@ impl StreetWorld {
                 Some(face),
                 [0.0, 0.0, (kb - ib).max(0.0) as f32, (ka - ia).max(0.0) as f32],
             );
-            let (ra, rb) = (self.ramp_reach(pa), self.ramp_reach(pb));
             let (wya, wyb) = (o.sidewalk_surface_y(da, half + ra, half), o.sidewalk_surface_y(db, half + rb, half));
             let (ramp_c, top_c) = (RAMP(), CURB_TOP());
             let top_col = |d: f64| if d > 0.0 { ramp_c } else { top_c };
@@ -592,18 +685,25 @@ impl StreetWorld {
                 oy_a = ya;
                 oy_b = yb;
             }
+            if !with_edges { continue; }
             // Verge bank from the outer edge down (or up) to the carpet.
             let out_a = [side * a.nx, side * a.nz];
             let out_b = [side * b.nx, side * b.nz];
-            if self.by_leg_junction(e, mid_s) {
+            if retained || self.by_leg_junction(e, mid_s) {
                 // (by a junction with a structure's leg: a face, as its corners.)
                 self.ring_edge(m, a.at(side * ox_a), oy_a, out_a, b.at(side * ox_b), oy_b, out_b, true);
             } else {
                 self.bank(m, Some(ei), a.at(side * ox_a), oy_a, out_a, b.at(side * ox_b), oy_b, out_b);
             }
         }
+        // Up to the fitted seam the service drive owns the floor. Retaining
+        // walls and the old sidewalk slab end at the sides of the entrance.
+        if let Some(openings) = self.driveway_openings.get(&ei) {
+            m.clip_faces(first_footway.0, openings, |_| true);
+        }
+        self.trim_arterial_footway(m, ei, first_footway.0, first_footway.1);
         // Lane paint along this span.
-        self.emit_span_paint(m, ei, i);
+        if with_edges { self.emit_span_paint(m, ei, i); }
         // a stub's end at a structure (`joins`): its open section capped.
         if e.structure_ends[0].is_some() && i == 0 && e.approach_start.is_none() {
             self.emit_stub_cap(m, ei, 0);
@@ -646,6 +746,26 @@ impl StreetWorld {
         }
         let (i, j) = if end == 0 { (0, 1) } else { (n - 1, n - 2) };
         let (f0, f1) = (g.stations[i], g.stations[j]);
+        // An angled deck and a square-ended street leave a wedge outside
+        // the bend. Its sides are the actual end frames of the two ribbons.
+        if let Some(q) = se.line.get(1) {
+            let (dx, dz) = (q[0] - se.at[0], q[1] - se.at[1]);
+            let len = dx.hypot(dz);
+            let direction = if end == 0 { 1.0 } else { -1.0 };
+            let turn = (f0.tx * dz - f0.tz * dx) * direction;
+            if len > 0.0 && turn.abs() > len * 1e-6 {
+                let a = f0.at(-turn.signum() * direction * e.half);
+                let b = [se.at[0] - turn.signum() * dz * se.half / len,
+                         se.at[1] + turn.signum() * dx * se.half / len];
+                let datum = g.datums[i];
+                let color = self.run_tints(ei).0;
+                m.tri(Layer::Carriageway, [
+                    p3([f0.x, f0.z], o.cross_section_y(datum, 0.0, e.half)),
+                    p3(a, o.cross_section_y(datum, e.half, e.half)),
+                    p3(b, o.cross_section_y(datum, se.half, se.half)),
+                ], [color; 3]);
+            }
+        }
         let step = (f1.s - f0.s).abs().max(1e-6);
         let t = (CAP_SET_BACK_M / step).min(0.5);
         let lerp = |p: f64, q: f64| p + (q - p) * t;
@@ -683,7 +803,9 @@ impl StreetWorld {
             let drop = outer.1 - (self.carpet_y(edge[0], edge[1]) - o.verge_undercut);
             let reach = o.graded_bank_reach(drop);
             let foot = f.at(side * (outer.0 + reach));
-            prof.push((outer.0 + reach, self.bank_foot_y(foot, outer.1, Some(ei))));
+            if !raised || self.surveyed_datum(e, [f.x, f.z], d).is_none() {
+                prof.push((outer.0 + reach, self.bank_foot_y(foot, outer.1, Some(ei))));
+            }
             // clipped to what the structure's own end face leaves open.
             let lo = se.closed.max(0.0);
             let mut pts: Vec<(f64, f64)> = vec![];
@@ -720,7 +842,7 @@ impl StreetWorld {
         if lines.is_empty() {
             return;
         }
-        let (a, b) = (g.stations[i], g.stations[i + 1]);
+        let (a, b) = (g.paving_frame(i), g.paving_frame(i + 1));
         let lo = a.s.max(e.marking_trim_start).max(e.s0());
         let hi = b.s.min(e.length - e.marking_trim_end).min(e.s1());
         if !(hi - lo > 0.05) {
@@ -772,7 +894,11 @@ impl StreetWorld {
                     continue;
                 }
                 // each vertex's across-the-line coordinate, 0..1 (the renderer's worn-paint mask follows the line).
-                m.quad_kerb(Layer::Marking, [at(s0, u0), at(s1, u0), at(s1, u1), at(s0, u1)], [c; 4], [0.0, 0.0, 1.0, 1.0]);
+                if o.pavement_repairs {
+                    marking::paint(m, g, o, e.half, [s0,s1], [u0,u1], marking::StripeWidth::AcrossRoad, c, o.marking_lift);
+                } else {
+                    m.quad_kerb(Layer::Marking, [at(s0, u0), at(s1, u0), at(s1, u1), at(s0, u1)], [c; 4], [0.0, 0.0, 1.0, 1.0]);
+                }
             }
         }
     }
@@ -784,24 +910,19 @@ impl StreetWorld {
     /// The datum of approach `app`'s trimmed end frame (`junctionDatums`).
     fn approach_datum(&self, app: &Approach) -> (Frame, f64) {
         let f = crate::plan::approach_end_frame(&self.plan.entries, app);
-        (f, self.ground(f.x, f.z) + self.o.road_lift)
+        let terrain = self.ground(f.x, f.z) + self.o.road_lift;
+        (f, self.surveyed_datum(&self.plan.entries[app.entry], [f.x, f.z], terrain).unwrap_or(terrain))
     }
 
-    pub(crate) fn emit_node(&self, m: &mut TileMesh, ni: usize) {
+    fn junction_pad(&self, node: &Node, ends: &[(Frame, f64)]) -> ([f64; 3], Vec<[f64; 3]>, Vec<[usize; 3]>) {
         let o = &self.o;
-        let node: &Node = &self.plan.nodes[ni];
         let n = node.approaches.len();
-        if n == 0 {
-            return;
-        }
-        let ends: Vec<(Frame, f64)> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
-        // --- the pad: one ring round the node, fanned from its centre. -------
-        let mut ring: Vec<([f64; 2], f64)> = vec![];
+        let mut rim = Vec::new();
         for (i, app) in node.approaches.iter().enumerate() {
             let (f, d) = ends[i];
             let s = if app.at_start { 1.0 } else { -1.0 };
             for lat in o.section_offsets(app.half) {
-                ring.push((f.at(s * lat), o.cross_section_y(d, lat, app.half)));
+                rim.push(p3(f.at(s * lat), o.cross_section_y(d, lat, app.half)));
             }
             // The corner path from this approach to the next (interior stations: the kerb line).
             let path = &node.paths[i];
@@ -811,29 +932,62 @@ impl StreetWorld {
                 if k == 0 || k == last {
                     continue;
                 }
-                ring.push(([st.x, st.z], datums[k] - o.gutter_depth));
+                rim.push(p3([st.x, st.z], datums[k] - o.gutter_depth));
             }
         }
         let mean_d = ends.iter().map(|e| e.1).sum::<f64>() / n as f64;
         let mean_half = node.approaches.iter().map(|a| a.half).sum::<f64>() / n as f64;
-        let apex = p3(node.position, mean_d + o.cross_slope * mean_half);
+        let center = p3(node.position, mean_d + o.cross_slope * mean_half);
+        let triangles = junction::surface(center, &mut rim, || {
+            let mut mouths = Vec::new();
+            for (app, (frame, _)) in node.approaches.iter().zip(ends) {
+                mouths.push(frame.at(0.0));
+                let source = &self.city.segments[self.plan.entries[app.entry].road];
+                for lane in source.lane_layout.iter().flatten().filter(|lane| lane.motor) {
+                    mouths.push(frame.at(-lane.lateral));
+                }
+            }
+            mouths
+        });
+        (center, rim, triangles)
+    }
+
+    pub(crate) fn traffic_junction_pad(&self, node: &Node) -> ([f32; 3], Vec<[f32; 3]>, Vec<[usize; 3]>) {
+        let ends: Vec<_> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
+        let (center, rim, triangles) = self.junction_pad(node, &ends);
+        // Match the near street mesh's stored vertex positions.
+        let vertex = |p: [f64; 3]| p.map(|v| v as f32);
+        (vertex(center), rim.into_iter().map(vertex).collect(), triangles)
+    }
+
+    pub(crate) fn emit_node(&self, m: &mut TileMesh, ni: usize, with_edges: bool) {
+        let o = &self.o;
+        let node: &Node = &self.plan.nodes[ni];
+        if node.approaches.is_empty() {
+            return;
+        }
+        let ends: Vec<_> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
         let pad = PAD();
-        for k in 0..ring.len() {
-            let (p, py) = ring[k];
-            let (q, qy) = ring[(k + 1) % ring.len()];
-            if (p[0] - q[0]).abs() < 1e-9 && (p[1] - q[1]).abs() < 1e-9 {
+        let (apex, rim, triangles) = self.junction_pad(node, &ends);
+        let vertex = |i| if i == 0 { apex } else { rim[i - 1] };
+        for [a, b, c] in junction::faces(rim.len(), &triangles) {
+            let [a, b, c] = [vertex(a), vertex(b), vertex(c)];
+            if (b[0] - c[0]).abs() < 1e-9 && (b[2] - c[2]).abs() < 1e-9 {
                 continue;
             }
-            m.tri(Layer::Carriageway, [apex, p3(q, qy), p3(p, py)], [pad, pad, pad]);
+            m.tri(Layer::Carriageway, [a, c, b], [pad; 3]);
         }
         // --- corner returns: kerb, ramps, footway, bank. ----------------------
+        let first_corner_face = m.layers.len();
+        let first_corner_vertex = m.positions.len();
+        let retained = node.approaches.iter().zip(&ends).any(|(a, (f, datum))| {
+            self.plan.entries[a.entry].structure_leg.is_some()
+                || (datum - (self.ground(f.x, f.z) + o.road_lift)).abs() > RAISED_M
+        });
         for path in &node.paths {
             let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1);
             let st = &path.stations;
             let reach_full = o.curb_top_width + o.ramp_run;
-            // (a junction with a structure's leg, `joins`: no bank on its
-            // corners: the structure's walls and fill stand round it.)
-            let leg = node.approaches.iter().any(|a| self.plan.entries[a.entry].structure_leg.is_some());
             let deps: Vec<f64> = st
                 .iter()
                 .map(|s| match s.ang {
@@ -846,12 +1000,13 @@ impl StreetWorld {
                 if (sa.x - sb.x).abs() < 1e-7 && (sa.z - sb.z).abs() < 1e-7 {
                     continue;
                 }
-                self.ring_span(m, sa, sb, datums[k], datums[k + 1], deps[k], deps[k + 1], leg);
+                self.ring_span(m, sa, sb, datums[k], datums[k + 1], deps[k], deps[k + 1], retained, with_edges);
             }
         }
+        self.trim_arterial_corner(m, node, first_corner_face, first_corner_vertex);
         // --- junction paint: crosswalk bars and limit lines. ------------------
         // (none on a structure's leg: its mouth is the structure's own deck.)
-        if node.earns_paint {
+        if with_edges && node.earns_paint {
             for (i, app) in node.approaches.iter().enumerate() {
                 if self.plan.entries[app.entry].structure_leg.is_some() {
                     continue;
@@ -872,7 +1027,7 @@ impl StreetWorld {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn ring_span(&self, m: &mut TileMesh, sa: &CurbStation, sb: &CurbStation, da: f64, db: f64, pa: f64, pb: f64, leg: bool) {
+    fn ring_span(&self, m: &mut TileMesh, sa: &CurbStation, sb: &CurbStation, da: f64, db: f64, pa: f64, pb: f64, leg: bool, with_edges: bool) {
         let o = &self.o;
         let off = |s: &CurbStation, d: f64| [s.x + s.out[0] * d * s.scale, s.z + s.out[1] * d * s.scale];
         let (ia, ib) = (da - o.gutter_depth, db - o.gutter_depth);
@@ -883,7 +1038,7 @@ impl StreetWorld {
         let (wa, wb) = (sa.walk, sb.walk);
         if !(wa > 0.0 || wb > 0.0) {
             // A side with no footway: the bank starts at the kerb top.
-            self.ring_edge(m, [sa.x, sa.z], ka, sa.out, [sb.x, sb.z], kb, sb.out, leg);
+            if with_edges { self.ring_edge(m, [sa.x, sa.z], ka, sa.out, [sb.x, sb.z], kb, sb.out, leg); }
             return;
         }
         let (ra, rb) = (self.ramp_reach(pa).min(wa.max(o.curb_top_width)), self.ramp_reach(pb).min(wb.max(o.curb_top_width)));
@@ -906,7 +1061,7 @@ impl StreetWorld {
             );
         }
         let (wa2, wb2) = (wa.max(ra), wb.max(rb));
-        self.ring_edge(m, off(sa, wa2), walk_y(da, wa2), sa.out, off(sb, wb2), walk_y(db, wb2), sb.out, leg);
+        if with_edges { self.ring_edge(m, off(sa, wa2), walk_y(da, wa2), sa.out, off(sb, wb2), walk_y(db, wb2), sb.out, leg); }
     }
 
     /// The outer edge of a corner return: its verge bank; or, at a junction
@@ -922,6 +1077,17 @@ impl StreetWorld {
         let foot = |p: [f64; 2], y: f64| (self.carpet_y(p[0], p[1]) - self.o.verge_undercut).min(y) - RETAINING_TUCK_M;
         let face = [a_out[0] + b_out[0], a_out[1] + b_out[1]];
         m.quad(Layer::CurbFace, [p3(a, ay), p3(b, by), p3(b, foot(b, by)), p3(a, foot(a, ay))], [CURB_FACE(); 4], Some(face));
+    }
+
+    /// Distances from the junction along this approach to the edges of its
+    /// drawn crosswalk. Short arms can have a surveyed crossing and too
+    /// little road between their two junctions to paint the band.
+    pub fn painted_crossing_band(&self, node: &Node, app: &Approach) -> Option<[f64; 2]> {
+        let e = &self.plan.entries[app.entry];
+        let available = app.run_length - if app.at_start { e.trim_end } else { e.trim_start };
+        let start = app.trim + self.o.crosswalk_clearance;
+        let end = start + node.band_depth;
+        (node.earns_paint && app.crossing_painted && end + 0.4 <= available).then_some([start, end])
     }
 
     fn emit_approach_paint(&self, m: &mut TileMesh, node: &Node, app: &Approach, _d_end: f64) {
@@ -943,9 +1109,15 @@ impl StreetWorld {
             let xz = f.at(sgn * lat);
             [xz[0], o.cross_section_y(datum, lat, app.half) + lift, xz[1]]
         };
-        if app.crossing_painted && band1 + 0.4 <= available {
+        if let Some([band0, band1]) = self.painted_crossing_band(node, app) {
             let stripes = crate::paint::crossing_stripes(app.half, o);
             for v in &stripes.stripes {
+                if o.pavement_repairs {
+                    let station = |d| if app.at_start { d } else { e.length - d };
+                    marking::paint(m, g, o, e.half, [station(band0), station(band1)], [sgn*v[0], sgn*v[1]],
+                        marking::StripeWidth::AcrossRoad, CROSSWALK(), lift);
+                    continue;
+                }
                 let dm = (band0 + band1) / 2.0;
                 for [d0, d1] in [[band0, dm], [dm, band1]] {
                     m.quad_kerb(Layer::Marking, [at(d0, v[0]), at(d1, v[0]), at(d1, v[1]), at(d0, v[1])], [CROSSWALK(); 4], [0.0, 0.0, 1.0, 1.0]);
@@ -970,7 +1142,13 @@ impl StreetWorld {
                 (-app.half + inset, boundary.min(app.half - inset))
             };
             if hi - lo > 0.5 {
-                m.quad_kerb(Layer::Marking, [at(d0, lo), at(d1, lo), at(d1, hi), at(d0, hi)], [WHITE(); 4], [0.0, 1.0, 1.0, 0.0]);
+                if o.pavement_repairs {
+                    let station = |d| if app.at_start { d } else { e.length - d };
+                    marking::paint(m, g, o, e.half, [station(d0), station(d1)], [sgn*lo, sgn*hi],
+                        marking::StripeWidth::AlongRoad, WHITE(), lift);
+                } else {
+                    m.quad_kerb(Layer::Marking, [at(d0, lo), at(d1, lo), at(d1, hi), at(d0, hi)], [WHITE(); 4], [0.0, 1.0, 1.0, 0.0]);
+                }
             }
         }
     }
@@ -997,7 +1175,11 @@ impl StreetWorld {
         let o = &self.o;
         let e = &self.plan.entries[ei];
         let g = &self.geoms[ei];
-        let (a, b) = (g.stations[i], g.stations[j]);
+        if g.crosses_apron(i,j) {
+            for span in i..j { self.emit_span(m, ei, span, false); }
+            return;
+        }
+        let (a, b) = (g.paving_frame(i), g.paving_frame(j));
         let (da, db) = (g.datums[i], g.datums[j]);
         let h = e.half;
         m.quad(
@@ -1006,6 +1188,7 @@ impl StreetWorld {
             [self.run_tints(ei).0; 4],
             None,
         );
+        let first_footway = (m.layers.len(), m.positions.len());
         for (k, side) in [(0usize, 1.0f64), (1, -1.0)] {
             let w = e.walks[k];
             if !(w >= o.min_sidewalk_width) {
@@ -1019,6 +1202,7 @@ impl StreetWorld {
                 None,
             );
         }
+        self.trim_arterial_footway(m, ei, first_footway.0, first_footway.1);
     }
 
     /// The coarse level of a run's spans `i..j` (every 4th station): the
@@ -1026,7 +1210,11 @@ impl StreetWorld {
     pub(crate) fn emit_coarse_span(&self, m: &mut TileMesh, ei: usize, i: usize, j: usize) {
         let e = &self.plan.entries[ei];
         let g = &self.geoms[ei];
-        let (a, b) = (g.stations[i], g.stations[j]);
+        if g.crosses_apron(i,j) {
+            for span in i..j { self.emit_span(m, ei, span, false); }
+            return;
+        }
+        let (a, b) = (g.paving_frame(i), g.paving_frame(j));
         let (da, db) = (g.datums[i], g.datums[j]);
         let wl = if e.walks[0] >= self.o.min_sidewalk_width { e.walks[0] } else { 0.0 };
         let wr = if e.walks[1] >= self.o.min_sidewalk_width { e.walks[1] } else { 0.0 };

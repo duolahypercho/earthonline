@@ -34,6 +34,22 @@ fn pad(w: &PropsWorld, kerb_a: [f64; 2], kerb_b: [f64; 2], out: [f64; 2], out_pr
     let out = [out[0] / ol, out[1] / ol];
     let mid = [(kerb_a[0] + kerb_b[0]) / 2.0, (kerb_a[1] + kerb_b[1]) / 2.0];
     let c = [mid[0] + out[0] * depth / 2.0, mid[1] + out[1] * depth / 2.0];
+    // A divided road can cut an obsolete return out of the planned footway.
+    // Its panel cannot stand in the travel lane. Keep a panel spanning the
+    // edge of a surviving ramp, including a footway below an upper road.
+    if w.street.o.pavement_repairs && w.street.only_carriageway_at(c[0], c[1]) {
+        let across = [out[1] * width / 2.0, -out[0] * width / 2.0];
+        let along = [out[0] * depth / 2.0, out[1] * depth / 2.0];
+        let corner_on_road = |side: f64, end: f64| {
+            w.street.only_carriageway_at(
+                c[0] + side * across[0] + end * along[0],
+                c[1] + side * across[1] + end * along[1],
+            )
+        };
+        if [-1.0, 1.0].into_iter().all(|side| [-1.0, 1.0].into_iter().all(|end| corner_on_road(side, end))) {
+            return;
+        }
+    }
     // Running slope of the drawn ramp across the panel's depth.
     let near = w.ground(mid[0] + out[0] * 0.05, mid[1] + out[1] * 0.05);
     let far = w.ground(mid[0] + out[0] * (depth - 0.05), mid[1] + out[1] * (depth - 0.05));
@@ -104,6 +120,42 @@ pub fn node_pads(w: &PropsWorld, ni: usize, out: &mut Vec<Prop>) {
             let (a, b) = (st[lo], st[hi]);
             let outv = [(a.out[0] + b.out[0]) / 2.0, (a.out[1] + b.out[1]) / 2.0];
             pad(w, [a.x, a.z], [b.x, b.z], outv, out);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lake_merced_crossing_keeps_its_ramp_panels_out_of_the_travel_lane() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let w = crate::load_world(&paths).unwrap();
+        let at = |x, z| eo_data::groundscale::plan([x, z]);
+        let [x, z] = at(-5926.18919601, 5346.51141757);
+        let key = eo_street::tile_key(x, z);
+        let mut panels = Vec::new();
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                if let Some(tile) = w.street.tiles.get(&(key.0 + dx, key.1 + dz)) {
+                    for &node in &tile.nodes {
+                        node_pads(&w, node as usize, &mut panels);
+                    }
+                }
+            }
+        }
+        let entries = w.street.plan.entries.iter().filter(|e| e.id == "sf-seg-1420" || e.id == "sf-seg-536");
+        for e in entries {
+            entry_pads(&w, e, &mut panels);
+        }
+        let has_panel = |p: [f64; 2]| panels.iter().any(|q| (q.pos[0] - p[0]).hypot(q.pos[2] - p[1]) < 0.02);
+        // Two surveyed carriageways and their adjoining corner at Middlefield Drive.
+        for p in [at(-5924.4392, 5347.7216), at(-5925.8072, 5345.5152), at(-5922.3536, 5348.008)] {
+            assert!(w.street.only_carriageway_at(p[0], p[1]) && !has_panel(p), "panel over asphalt at {p:?}");
+        }
+        for p in [at(-5921.9224, 5333.760), at(-5931.096, 5359.296)] {
+            assert!(has_panel(p) && w.street.paved_layer_at(p[0], p[1]) == Some(eo_street::Layer::Ramp), "missing ramp panel at {p:?}");
         }
     }
 }

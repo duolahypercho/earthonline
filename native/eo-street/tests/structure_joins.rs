@@ -280,3 +280,26 @@ fn without_joins_the_plan_and_every_mesh_are_as_before() {
     let d = world(pass_through(), Some(StructureJoins { ends: vec![leg_end()] }));
     assert_eq!(digest(&c), digest(&d), "joins build the same street twice");
 }
+
+#[test]
+fn a_junction_keeps_paving_between_its_trimmed_mouths_at_all_three_distances() {
+    let joined = world(pass_through(), Some(StructureJoins { ends: vec![leg_end()] }));
+    let node = &joined.plan.nodes[0];
+    let key = eo_street::tile_key(node.position[0], node.position[1]);
+    let covers = |mesh: &TileMesh, p: [f64; 2]| {
+        mesh.indices.chunks_exact(3).zip(&mesh.layers).any(|(ids, layer)| {
+            if *layer != Layer::Carriageway { return false; }
+            let [a,b,c] = [ids[0],ids[1],ids[2]].map(|i| mesh.positions[i as usize].map(f64::from));
+            let side = |u:[f64;3],v:[f64;3]| (v[0]-u[0])*(p[1]-u[2])-(v[2]-u[2])*(p[0]-u[0]);
+            let area = (b[0]-a[0])*(c[2]-a[2])-(b[2]-a[2])*(c[0]-a[0]);
+            area.abs()>1e-9 && [side(a,b),side(b,c),side(c,a)].iter().all(|v|v*area.signum()>=-1e-7)
+        })
+    };
+    for mesh in [joined.tile_mesh(key), joined.far_tile_mesh(key), joined.coarse_tile_mesh(key)] {
+        for a in &node.approaches {
+            let f=eo_street::plan::approach_end_frame(&joined.plan.entries,a);
+            let halfway=[(f.x+node.position[0])*0.5,(f.z+node.position[1])*0.5];
+            assert!(covers(&mesh,node.position) && covers(&mesh,halfway),"open junction on {}",a.entry);
+        }
+    }
+}

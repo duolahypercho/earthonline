@@ -70,6 +70,7 @@ pub mod class {
     pub const RAMP: u8 = 6;
     pub const PAINT: u8 = 7;
     pub const VERGE: u8 = 8;
+    pub const EAST_SPAN_ROAD: u8 = 9;
 }
 
 impl StreetPalette {

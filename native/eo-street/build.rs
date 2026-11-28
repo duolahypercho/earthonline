@@ -21,6 +21,9 @@ fn main() {
     walk(&root.join("src"), &mut files);
     files.push(root.join("data/street-city.json.gz"));
     files.push(root.join("data/street-options.json"));
+    files.push(root.join("../eo-data/src/bridge_readings.rs"));
+    files.push(root.join("../eo-data/src/bridge_survey.rs"));
+    files.push(root.join("../../scripts/world-data/sources/california-street-standards.json"));
     files.sort();
     let mut h = std::collections::hash_map::DefaultHasher::new();
     for f in &files {

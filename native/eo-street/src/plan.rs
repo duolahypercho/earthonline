@@ -137,6 +137,32 @@ impl Frame {
     pub fn at(&self, u: f64) -> P2 {
         [self.x + self.nx * u * self.miter, self.z + self.nz * u * self.miter]
     }
+
+    /// Split the drawn ribbon. Each lateral point of the new section lies
+    /// on the edge joining the corresponding points of the original pair.
+    pub(crate) fn split(self, next: Self, s: f64) -> Self {
+        let distance = next.s - self.s;
+        let t = (s - self.s) / distance;
+        let mix = |a: f64, b: f64| a + t * (b - a);
+        let nx = mix(self.nx * self.miter, next.nx * next.miter);
+        let nz = mix(self.nz * self.miter, next.nz * next.miter);
+        let miter = nx.hypot(nz);
+        let (nx, nz) = if miter > f64::EPSILON {
+            (nx / miter, nz / miter)
+        } else {
+            (self.nx, self.nz)
+        };
+        Self {
+            s,
+            x: mix(self.x, next.x),
+            z: mix(self.z, next.z),
+            nx,
+            nz,
+            miter,
+            tx: (next.x - self.x) / distance,
+            tz: (next.z - self.z) / distance,
+        }
+    }
 }
 
 /// `frameAt`.
@@ -239,6 +265,9 @@ pub struct Entry {
     pub kerb_ramps: [Vec<RampWin>; 2],
     /// Arc spans this ribbon gives up to a busier street it crosses without a node.
     pub yield_spans: Vec<[f64; 2]>,
+    /// Receiving street at a terminal driveway crossing, at the start or end.
+    pub(crate) driveway_owners: [Option<usize>; 2],
+    pub(crate) driveway_cuts: [Vec<RampWin>; 2],
     /// Footway spans lying on somebody else's road, [left, right].
     pub walk_yield_spans: [Vec<[f64; 2]>; 2],
     /// Only with `StreetOptions::structures` (`crate::joins`): this run is a
@@ -255,7 +284,100 @@ pub struct Entry {
     /// with no junction between): (the `StructureEnd` index, this run's end
     /// toward it: true for its start, the street's distance from that end to
     /// the structure's end).
+    /// A connected bridge embankment reaching this run at its given station.
+    pub(crate) landings: Vec<(f64, crate::joins::Rise)>,
     pub structure_ramps: Vec<(usize, bool, f64)>,
+}
+
+/// Publish the geometry used by the painted motor lanes. Each piece keeps its
+/// OSM way identity, including pieces merged into a longer paved run.
+pub fn traffic_sections(city: &StreetCity, plan: &Plan, options: &StreetOptions) -> Vec<eo_data::sim_source::TrafficSection> {
+    traffic_sections_with_lines(city, plan, options, &crate::paint::plan_markings(city, plan, options), |_, _, _| Default::default())
+}
+
+pub(crate) fn traffic_sections_with_lines(
+    city: &StreetCity,
+    plan: &Plan,
+    options: &StreetOptions,
+    markings: &[Vec<crate::paint::Line>],
+    surface: impl Fn(usize, f64, f64) -> (Vec<[f64; 3]>, Vec<[usize; 2]>),
+) -> Vec<eo_data::sim_source::TrafficSection> {
+    use crate::paint::Paint;
+    use eo_data::sim_source::{TrafficLane, TrafficPaint, TrafficSection};
+
+    let mut sections = Vec::new();
+    for (ei, (entry, lines)) in plan.entries.iter().zip(markings).enumerate() {
+        if entry.structure_leg.is_some() {
+            continue;
+        }
+        let layout = city.segments[entry.road].lane_layout.as_deref().unwrap_or_default();
+        let shared_bidirectional = matches!(layout, [lane] if lane.role == "shared-bidirectional");
+        let lanes: Vec<_> = layout
+            .iter()
+            .filter(|lane| lane.motor && lane.role == "through" && matches!(lane.dir, -1 | 1))
+            .map(|lane| TrafficLane { direction: lane.dir, lateral: lane.lateral, width: lane.width })
+            .collect();
+        let (mark, gap) = crate::paint::broken_line_pattern(&city.segments[entry.road], &entry.highway, options);
+        let mut start = 0;
+        for &index in &entry.pieces {
+            let source = &city.segments[index];
+            // The merge keeps the first point at each seam and appends the
+            // remaining prepared points of the next piece.
+            let end = start + dedupe_points(&source.points).len() - 1;
+            if let Some(way) = source.street_id.as_deref().and_then(|id| id.strip_prefix("sf-street-")) {
+                if !source.separated {
+                    let (begin, finish) = (entry.cum[start], entry.cum[end]);
+                    let lo = begin.max(entry.marking_trim_start).max(entry.s0());
+                    let hi = finish.min(entry.length - entry.marking_trim_end).min(entry.s1());
+                    let mut paint = Vec::new();
+                    if hi > lo {
+                        let stations = std::iter::once(lo)
+                            .chain(entry.cum[start..=end].iter().copied().filter(|s| *s > lo && *s < hi))
+                            .chain(std::iter::once(hi));
+                        for l in lines.iter().filter(|l| matches!(l.paint, Paint::White | Paint::Yellow) && l.width > 0.0) {
+                            let (mark, gap) = if l.role == "centre-turn-boundary" {
+                                (options.twltl_dash_mark, options.twltl_dash_gap)
+                            } else {
+                                (mark, gap)
+                            };
+                            paint.push(TrafficPaint {
+                                lateral: -l.u,
+                                width: l.width,
+                                broken: l.dashed,
+                                yellow: l.paint == Paint::Yellow,
+                                divider: if l.paint == Paint::White && l.dashed && l.role == "divider" { l.direction } else { 0 },
+                                points: stations.clone().map(|s| entry.frame(s, true).at(l.u)).collect(),
+                                dash: l.dashed.then_some([mark, gap, (lo - entry.marking_trim_start).rem_euclid(mark + gap)]),
+                            });
+                        }
+                    }
+                    let (surface, carriageway_spans) = surface(ei, begin, finish);
+                    sections.push(TrafficSection {
+                        way: way.into(),
+                        points: entry.points[start..=end].to_vec(),
+                        half: entry.half,
+                        walks: entry.walks,
+                        walk_gaps: std::array::from_fn(|side| {
+                            entry.yield_spans.iter().chain(&entry.walk_yield_spans[side]).filter_map(|&[a, b]| {
+                                let a = a.max(begin);
+                                let b = b.min(finish);
+                                (a < b).then_some([a - begin, b - begin])
+                            }).collect()
+                        }),
+                        lanes: lanes.clone(),
+                        shared_bidirectional,
+                        paint_span: (hi > lo).then_some([lo - entry.cum[start], hi - entry.cum[start]]),
+                        paint,
+                        crosses_road: entry.yield_spans.iter().any(|[a, b]| *a < entry.cum[end] && *b > entry.cum[start]),
+                        surface,
+                        carriageway_spans,
+                    });
+                }
+            }
+            start = end;
+        }
+    }
+    sections
 }
 
 impl Entry {
@@ -395,7 +517,11 @@ fn prepare(city: &StreetCity, o: &StreetOptions) -> Vec<Entry> {
         if o.exclude_highways.contains(&seg.highway) {
             continue;
         }
-        if !o.pave_grade_separated && seg.separated {
+        // This surveyed city street crosses the tracks. Keep its driven
+        // floor when the separate structures pass is disabled.
+        let measured_span = o.pavement_repairs && o.structures.is_none()
+            && seg.street_id.as_deref() == Some("sf-street-544431983");
+        if !o.pave_grade_separated && seg.separated && !measured_span {
             continue;
         }
         let Some((points, half, walks, lanes)) = contract(seg) else { continue };
@@ -428,9 +554,12 @@ fn prepare(city: &StreetCity, o: &StreetOptions) -> Vec<Entry> {
             mouth_end_m: None,
             kerb_ramps: [vec![], vec![]],
             yield_spans: vec![],
+            driveway_owners: [None; 2],
+            driveway_cuts: Default::default(),
             walk_yield_spans: [vec![], vec![]],
             structure_leg: None,
             structure_ends: [None, None],
+            landings: vec![],
             structure_ramps: vec![],
         });
     }
@@ -531,9 +660,12 @@ fn add_structure_legs(entries: &mut Vec<Entry>, city: &StreetCity, o: &StreetOpt
             mouth_end_m: None,
             kerb_ramps: [vec![], vec![]],
             yield_spans: vec![],
+            driveway_owners: [None; 2],
+            driveway_cuts: Default::default(),
             walk_yield_spans: [vec![], vec![]],
             structure_leg: Some(k),
             structure_ends: [None, None],
+            landings: vec![],
             structure_ramps: vec![],
         });
     }
@@ -709,6 +841,89 @@ struct EndItem {
     at_start: bool,
     x: f64,
     z: f64,
+}
+
+/// Project a point to the nearest station of the run. Mapped roads can curve
+/// back toward a landing, so the ramp follows distance travelled on the road.
+pub(crate) fn nearest_station(e: &Entry, at: P2) -> (f64, f64) {
+    let mut best = (0.0, f64::INFINITY);
+    for (i, w) in e.points.windows(2).enumerate() {
+        let (dx, dz) = (w[1][0] - w[0][0], w[1][1] - w[0][1]);
+        let len = e.cum[i + 1] - e.cum[i];
+        if len <= 0.0 {
+            continue;
+        }
+        let t = (((at[0] - w[0][0]) * dx + (at[1] - w[0][1]) * dz) / (len * len)).clamp(0.0, 1.0);
+        let dist = (at[0] - w[0][0] - t * dx).hypot(at[1] - w[0][1] - t * dz);
+        if dist < best.1 {
+            best = (e.cum[i] + t * len, dist);
+        }
+    }
+    best
+}
+
+/// Carry an approach over connected paved runs, including every arm of a
+/// junction. A street merely passing underneath has no shared endpoint.
+pub(crate) fn connect_landings(entries: &mut [Entry], o: &StreetOptions, terrain: &crate::Terrain) {
+    if o.landings.is_empty() {
+        return;
+    }
+    let ix = build_endpoint_index(entries, o);
+    for &(at, rise) in &o.landings {
+        let mut queue = std::collections::VecDeque::new();
+        let mut best = HashMap::new();
+        let ends = query_endpoints(&ix, at[0], at[1], o.node_snap);
+        for k in &ends {
+            let end = ix.list[*k];
+            queue.push_back((end.entry, if end.at_start { 0.0 } else { entries[end.entry].length }, 0.0));
+        }
+        if ends.is_empty() {
+            for (ei, e) in entries.iter().enumerate() {
+                let (s, d) = nearest_station(e, at);
+                if d <= o.node_snap {
+                    queue.push_back((ei, s, 0.0));
+                }
+            }
+        }
+        while let Some((ei, s, travelled)) = queue.pop_front() {
+            let key = (ei, s.to_bits());
+            if best.get(&key).is_some_and(|d| *d <= travelled) {
+                continue;
+            }
+            best.insert(key, travelled);
+            let e = &mut entries[ei];
+            // A junction pad meets all of its arms at their trimmed mouths.
+            // The longitudinal taper starts outside the pad on each arm.
+            let s = if s == 0.0 && e.approach_start.is_some() {
+                e.s0()
+            } else if s == e.length && e.approach_end.is_some() {
+                e.s1()
+            } else {
+                s
+            };
+            let to = rise.to - rise.grade * travelled;
+            e.landings.push((s, crate::joins::Rise { to, grade: rise.grade }));
+            if e.structure_leg.is_some() {
+                continue;
+            }
+            for (end_s, q) in [(0.0, e.points[0]), (e.length, *e.points.last().unwrap())] {
+                let distance = (end_s - s).abs();
+                if distance == 0.0 {
+                    continue;
+                }
+                let y = to - rise.grade * distance;
+                if y <= terrain.ground(q[0], q[1]) + o.road_lift {
+                    continue;
+                }
+                for k in query_endpoints(&ix, q[0], q[1], o.node_snap) {
+                    let end = ix.list[k];
+                    if end.entry != ei {
+                        queue.push_back((end.entry, if end.at_start { 0.0 } else { *entries[end.entry].cum.last().unwrap() }, travelled + distance));
+                    }
+                }
+            }
+        }
+    }
 }
 
 struct EndpointIndex {
@@ -1334,6 +1549,19 @@ impl CorridorIndex {
     }
 }
 
+pub(crate) fn carriageway_order(entries: &[Entry], city: &StreetCity) -> Vec<usize> {
+    // (structure legs are not drawn: they neither yield nor cover.)
+    let mut order: Vec<usize> = (0..entries.len()).filter(|&e| entries[e].structure_leg.is_none()).collect();
+    order.sort_by(|&a, &b| {
+        let (ea, eb) = (&entries[a], &entries[b]);
+        eb.class_rank
+            .cmp(&ea.class_rank)
+            .then(eb.half.partial_cmp(&ea.half).unwrap())
+            .then(city.segments[ea.pieces[0]].seed().cmp(city.segments[eb.pieces[0]].seed()))
+    });
+    order
+}
+
 fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptions, city: &StreetCity) {
     let mut neighbours: Vec<HashSet<usize>> = vec![HashSet::new(); entries.len()];
     for n in nodes {
@@ -1345,15 +1573,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             }
         }
     }
-    // (structure legs are not drawn: they neither yield nor cover.)
-    let mut order: Vec<usize> = (0..entries.len()).filter(|&e| entries[e].structure_leg.is_none()).collect();
-    order.sort_by(|&a, &b| {
-        let (ea, eb) = (&entries[a], &entries[b]);
-        eb.class_rank
-            .cmp(&ea.class_rank)
-            .then(eb.half.partial_cmp(&ea.half).unwrap())
-            .then(city.segments[ea.pieces[0]].seed().cmp(city.segments[eb.pieces[0]].seed()))
-    });
+    let order = carriageway_order(entries, city);
     // Priority position of every entry (0 = busiest). The JS indexes each run's
     // corridors after probing it, in this order, so a run is probed against the
     // runs before it: the same answer as one full index read through `rank < mine`,
@@ -1411,9 +1631,9 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
     let chunk = entries.len().div_ceil(threads).max(1);
     let ids: Vec<usize> = (0..entries.len()).collect();
     // Pass 1: the ribbon spans each run gives up.
-    let spans1: Vec<Vec<[f64; 2]>> = {
+    let spans1: Vec<Vec<(f64, f64, usize)>> = {
         let entries_r: &[Entry] = entries;
-        let run = |ei: usize| -> Vec<[f64; 2]> {
+        let run = |ei: usize| -> Vec<(f64, f64, usize)> {
             let e = &entries_r[ei];
             if e.structure_leg.is_some() {
                 return vec![];
@@ -1466,7 +1686,12 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                         a = mid;
                     }
                 }
-                (a + b) / 2.0
+                if o.structures.is_none() { return (a + b) / 2.0; }
+                // Triangles store f32 world positions. Keep the drawn road up
+                // to the inside of the owning ribbon despite vertex rounding.
+                let f = at(b);
+                let rounding = 2.0 * f32::EPSILON as f64 * f.x.abs().max(f.z.abs());
+                if want { (b + rounding).min(length) } else { (a - rounding).max(0.0) }
             };
             for sp in spans.iter_mut() {
                 if sp.0 > 0.0 {
@@ -1497,7 +1722,6 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                     }
                     entries_r[id].half > half + o.presentation_duplicate_half_slack
                 })
-                .map(|(a, b, _)| [a, b])
                 .collect()
         };
         std::thread::scope(|sc| {
@@ -1505,8 +1729,16 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
         })
     };
-    for (e, s) in entries.iter_mut().zip(spans1) {
-        e.yield_spans = s;
+    for (e, spans) in entries.iter_mut().zip(spans1) {
+        e.yield_spans.clear();
+        e.driveway_owners = [None; 2];
+        for (a, b, owner) in spans {
+            e.yield_spans.push([a, b]);
+            if e.highway == "service" && e.walks.iter().all(|w| *w < o.min_sidewalk_width) {
+                if a == 0.0 && e.approach_start.is_none() { e.driveway_owners[0] = Some(owner); }
+                if b == e.length && e.approach_end.is_none() { e.driveway_owners[1] = Some(owner); }
+            }
+        }
     }
     // Pass 2: footway strips lying on somebody else's drawn road.
     let crossover_cos = (20.0f64).to_radians().cos();
@@ -2008,6 +2240,7 @@ pub fn build_plan(city: &StreetCity, o: &StreetOptions) -> Plan {
     }
     lap("paint");
     plan_carriageway_yield(&mut entries, &nodes, o, city);
+    if o.pavement_repairs { crate::driveway::plan_curb_cuts(&mut entries, city, o); }
     lap("yield");
     let drawn: Vec<[Vec<RampWin>; 2]> = entries.iter().map(|e| segment_kerb_ramps(e, o)).collect();
     for (ni, n) in nodes.iter_mut().enumerate() {

@@ -18,8 +18,18 @@ use std::path::Path;
 
 pub const OPTIONS_JSON: &str = include_str!("../data/street-options.json");
 
+static PAVEMENT_REPAIRS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Select the street geometry before building the world (matched native captures).
+pub fn set_pavement_repairs(enabled: bool) {
+    PAVEMENT_REPAIRS.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[derive(Clone, Debug)]
 pub struct StreetOptions {
+    pub pavement_repairs: bool,
+    pub(crate) surveyed_junction: Option<std::sync::Arc<crate::mesh::surveyed_junction::Survey>>,
+    pub(crate) driveway: crate::driveway::Dimensions,
     // vertical construction
     pub road_lift: f64,
     pub cross_slope: f64,
@@ -121,6 +131,8 @@ pub struct StreetOptions {
     /// Joins with the grade-separated roads (`crate::joins`), handed in by a
     /// host that builds them (eo-app with `--structures`). None, the default
     /// and what `parse` reads: the street is drawn exactly as without them.
+    /// Landing elevations requested by the connected bridge profiles, in the game frame.
+    pub landings: Vec<([f64; 2], crate::joins::Rise)>,
     pub structures: Option<std::sync::Arc<crate::joins::StructureJoins>>,
 }
 
@@ -141,7 +153,14 @@ fn set(v: &Value, key: &str) -> Result<HashSet<String>> {
 
 impl StreetOptions {
     pub fn load() -> Result<Self> {
-        Self::parse(OPTIONS_JSON)
+        let mut options = Self::parse(OPTIONS_JSON)?;
+        if !std::env::args_os().any(|arg| arg == "--no-surveyed-junction") {
+            if let Some(path) = std::env::var_os("EO_SURVEYED_JUNCTION") {
+                let survey = crate::mesh::surveyed_junction::Survey::read(Path::new(&path))?;
+                options.surveyed_junction = Some(std::sync::Arc::new(survey));
+            }
+        }
+        Ok(options)
     }
 
     pub fn load_file(path: &Path) -> Result<Self> {
@@ -157,6 +176,9 @@ impl StreetOptions {
         let w = root.get("centreLineWarrant").ok_or_else(|| anyhow!("street-options.json: no centreLineWarrant"))?;
         let lwl = d.get("lineWidthLocalM").and_then(|x| x.as_array()).ok_or_else(|| anyhow!("no lineWidthLocalM"))?;
         Ok(Self {
+            driveway: crate::driveway::Dimensions::load(&CaStandards::bundled()?)?,
+            pavement_repairs: PAVEMENT_REPAIRS.load(std::sync::atomic::Ordering::Relaxed),
+            surveyed_junction: None,
             road_lift: num(o, "roadLift")?,
             cross_slope: num(o, "crossSlope")?,
             gutter_width: num(o, "gutterWidth")?,
@@ -257,6 +279,7 @@ impl StreetOptions {
             archetype_foundation_skirt_m: num(d, "archetypeFoundationSkirtM")?,
             foundation_embed_m: num(d, "foundationEmbedM")?,
             structures: None,
+            landings: vec![],
         })
     }
 
@@ -267,13 +290,24 @@ impl StreetOptions {
         self
     }
 
-    /// A tag for cache keys that depend on the drawn street surface: empty
-    /// without joins (so such keys are unchanged), else the joins' digest.
+    /// Cache tag for overlays that change the drawn street surface.
+    /// The tag is empty when both overlays are absent.
     pub fn structures_tag(&self) -> String {
-        match &self.structures {
-            Some(j) => format!("street-structure-joins-v1:{:016x}", j.digest()),
+        let mut tag = match &self.structures {
+            Some(j) => {
+                use std::hash::{Hash, Hasher};
+                let mut digest = std::collections::hash_map::DefaultHasher::new();
+                for (at, rise) in &self.landings {
+                    [at[0], at[1], rise.to, rise.grade].map(f64::to_bits).hash(&mut digest);
+                }
+                format!("street-structure-joins-v1:{:016x}:surface-v2:{:016x}", j.digest(), digest.finish())
+            },
             None => String::new(),
+        };
+        if let Some(survey) = &self.surveyed_junction {
+            tag.push_str(&format!(":surveyed-junction-v1:{:016x}", survey.digest));
         }
+        tag
     }
 
     /// `curbTopY` (street-surface-v2.js): kerb top above the gutter invert.

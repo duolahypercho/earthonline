@@ -218,6 +218,21 @@ impl StreetCity {
     /// The exported whole-city contract shipped beside this crate.
     pub fn load() -> Result<Self> {
         let mut c = Self::load_gz(&eo_data::native_dir().join("eo-street/data/street-city.json.gz"))?;
+        // A leaf shares the fixed approach's cross-section and lane layout.
+        // Its own way and centreline preserve the actual hinge-to-hinge run.
+        for span in eo_data::movable_spans::spans() {
+            let way = span.road.id.key();
+            let sid = format!("sf-street-{way}");
+            if c.segments.iter().any(|r| r.street_id.as_deref() == Some(&sid)) { continue; }
+            let reference = format!("sf-street-{}", span.approach);
+            let Some(source) = c.segments.iter().find(|r| r.street_id.as_deref() == Some(&reference)) else { continue };
+            let mut leaf = source.clone();
+            leaf.id = format!("movable-span-{way}");
+            leaf.key = Some(format!("span-{way}:0"));
+            leaf.street_id = Some(sid);
+            leaf.points = span.road.points.chunks_exact(2).map(|p| [p[0], p[1]]).collect();
+            c.segments.push(leaf);
+        }
         c.apply_ground_scale();
         Ok(c)
     }

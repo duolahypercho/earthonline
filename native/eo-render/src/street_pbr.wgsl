@@ -571,7 +571,7 @@ fn sp_slabs(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, kd: f32
     let dj = min(min(pl.x, pitch - pl.x), min(pl.y, pitch - pl.y));
     if (SF_WALK_RELIEF) {
         // (`--walk-relief`) the joints in relief: the slabs' lips, the groove, the noses
-        wr_joints(s, world, r.along, r.k, kd, tan, nrm, dpx, dpy);
+        wr_joints(s, world, n_geom, r.along, r.k, kd, tan, nrm, dpx, dpy);
     } else {
         // the joints: tooled grooves holding dirt, their floor in shadow
         let jk = wx_band(dj, pitch * 0.007, fw) * (0.6 + 0.4 * keep);
@@ -1915,12 +1915,18 @@ fn wr_joint(x: f32, t: f32, hn: f32, hf: f32, fx: f32, dir: vec2<f32>) -> vec4<f
 // The walk's joints in relief (sp_slabs under `--walk-relief`): `al` the along
 // coordinate and `k` its whole periods (wx_run), `kd` the across one, `tan`/`nrm`
 // their world directions, `dpx`/`dpy` the world position's screen derivatives.
-fn wr_joints(s: ptr<function, Surface>, world: vec3<f32>, al: f32, k: f32, kd: f32, tan: vec2<f32>, nrm: vec2<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+fn wr_joints(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>, al: f32, k: f32, kd: f32, tan: vec2<f32>, nrm: vec2<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
     let pitch = CC0_SCORING_M;
     let v = normalize(frame.cam_pos.xyz - world);
-    if (v.y <= 0.002) {
+    // Gate on `SF_AAA_BUILDINGS` (stays live in split `CITY_STREET` while `medium` keeps `false`):
+    // measure elevation against the sloped sidewalk normal `n_geom` so uphill grades never drive
+    // `v.y -> 0` and stretch 5 mm expansion joints into 30 cm black horizontal bars.
+    let v_up = select(v.y, dot(v, n_geom), SF_AAA_BUILDINGS);
+    if (v_up <= 0.002) {
         return;
     }
+    let t_min = select(0.0, 0.38, SF_AAA_BUILDINGS);
+    let h_scale = select(1.0, 0.30, SF_AAA_BUILDINGS);
     var alb = 1.0;
     var occ = 1.0;
     var lean = vec2<f32>(0.0);
@@ -1929,12 +1935,12 @@ fn wr_joints(s: ptr<function, Surface>, world: vec3<f32>, al: f32, k: f32, kd: f
         let j = round(al / pitch);
         let sg = select(-1.0, 1.0, dot(-v.xz, tan) >= 0.0);
         let x = (al - j * pitch) * sg;
-        let t = min(v.y / max(abs(dot(v.xz, tan)), 1e-4), WR_T_MAX);
+        let t = clamp(v_up / max(abs(dot(v.xz, tan)), 1e-4), t_min, WR_T_MAX);
         let fx = abs(dot(dpx.xz, tan)) + abs(dot(dpy.xz, tan));
         {
             let cy = floor(kd / pitch);
-            let hl = wr_slab_h(vec2<f32>(j - 1.0 + k, cy));
-            let hr = wr_slab_h(vec2<f32>(j + k, cy));
+            let hl = wr_slab_h(vec2<f32>(j - 1.0 + k, cy)) * h_scale;
+            let hr = wr_slab_h(vec2<f32>(j + k, cy)) * h_scale;
             let r = wr_joint(x, t, select(hr, hl, sg > 0.0), select(hl, hr, sg > 0.0), fx, tan * sg);
             alb = alb * r.x;
             occ = occ * r.y;
@@ -1946,16 +1952,26 @@ fn wr_joints(s: ptr<function, Surface>, world: vec3<f32>, al: f32, k: f32, kd: f
         let j = round(kd / pitch);
         let sg = select(-1.0, 1.0, dot(-v.xz, nrm) >= 0.0);
         let x = (kd - j * pitch) * sg;
-        let t = min(v.y / max(abs(dot(v.xz, nrm)), 1e-4), WR_T_MAX);
+        let t = clamp(v_up / max(abs(dot(v.xz, nrm)), 1e-4), t_min, WR_T_MAX);
         let fx = abs(dot(dpx.xz, nrm)) + abs(dot(dpy.xz, nrm));
         if (j >= 1.0) {
             let cx = floor(al / pitch) + k;
-            let hl = wr_slab_h(vec2<f32>(cx, j - 1.0));
-            let hr = wr_slab_h(vec2<f32>(cx, j));
+            let hl = wr_slab_h(vec2<f32>(cx, j - 1.0)) * h_scale;
+            let hr = wr_slab_h(vec2<f32>(cx, j)) * h_scale;
             let r = wr_joint(x, t, select(hr, hl, sg > 0.0), select(hl, hr, sg > 0.0), fx, nrm * sg);
             alb = alb * r.x;
             occ = occ * r.y;
             lean = lean + r.zw;
+        }
+    }
+    if (SF_AAA_BUILDINGS) {
+        // Keep heaved uphill sidewalk joints as crisp dark-grey tooled grooves rather than
+        // self-shadowed pitch-black horizontal bars.
+        alb = max(alb, 0.50);
+        occ = max(occ, 0.56);
+        let ll = length(lean);
+        if (ll > 0.50) {
+            lean = lean * (0.50 / ll);
         }
     }
     (*s).albedo = (*s).albedo * alb;

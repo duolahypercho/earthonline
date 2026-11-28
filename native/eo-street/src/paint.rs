@@ -31,6 +31,18 @@ pub struct Line {
     pub side: i8,
 }
 
+/// The longitudinal road paint for a complete street plan.
+pub(crate) fn plan_markings(city: &crate::StreetCity, plan: &crate::plan::Plan, o: &StreetOptions) -> Vec<Vec<Line>> {
+    let multi: HashSet<u64> = o.multi_lane_two_way.iter().copied().collect();
+    plan.entries.iter().map(|e| {
+        if e.structure_leg.is_some() {
+            vec![]
+        } else {
+            segment_markings(&city.segments[e.road], &e.highway, e.half * 2.0, e.lanes, o, &multi)
+        }
+    }).collect()
+}
+
 fn line(role: &'static str, u: f64, width: f64, dashed: bool, paint: Paint) -> Line {
     Line { role, u, width, dashed, paint, direction: 0, side: 0 }
 }
