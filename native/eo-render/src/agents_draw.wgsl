@@ -720,11 +720,12 @@ fn pb_ground(foot: vec3<f32>) -> vec4<f32> {
         if (z <= 0.0 || abs(zr - z) > PB_DEPTH_TOL.x + PB_DEPTH_TOL.y * zr) {
             continue;
         }
-        // Soft-compress specular HDR spikes from wet-pavement lamp reflections so
-        // only diffuse ground bounce lights a pedestrian's chin and undersides.
+        // Soft-compress specular HDR spikes from wet-pavement reflections relative to
+        // camera exposure so only diffuse ground bounce lights a pedestrian's undersides.
         let tap = max(textureSampleLevel(sky_prev, lk_ao_samp, uv, 0.0).rgb, vec3<f32>(0.0));
         let tl = dot(tap, vec3<f32>(0.2126, 0.7152, 0.0722));
-        let soft = tl / (1.0 + tl / 1.4);
+        let cap = min(1.4, 0.65 / max(look.key.w, 0.25)) * mix(1.0, 0.72, clamp(skyu.wet.x, 0.0, 1.0));
+        let soft = tl / (1.0 + tl / max(cap, 0.05));
         sum = sum + tap * (soft / max(tl, 1e-4));
         found = found + 1.0;
     }

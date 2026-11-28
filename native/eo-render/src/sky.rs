@@ -2526,12 +2526,26 @@ impl SkyGpu {
         let tiles_any = s.tiles.iter().any(|w| *w != 0);
         // stage A8 (`--tunnels`): the bores' lamps' pool at the nadir (0 without bores or lights).
         let tunnel_pool = bore_units / crate::structures::TUNNEL_POOL_OVERLAP;
+        // Vehicle headlamps turn on in daytime drizzle/rain/fog (`terms.vehicle_lamps > 0`),
+        // when one rig irradiance unit is ~12,000 lux (`photometry::lux_per_unit()`), not
+        // night's ~1.6 lux calibration (`lamp_k`). Ramp smoothly on a log (EV) scale from
+        // daytime physical units/lux to night's `lamp_k` as `terms.lamps_on` rises at dusk
+        // so wet-weather daytime headlamps shade physically instead of blasting ~400x too bright.
+        let day_k = (1.0 / eo_sky::photometry::lux_per_unit()).min(lamp_k);
+        let night_t = terms.lamps_on.clamp(0.0, 1.0);
+        let veh_k = if night_t >= 1.0 {
+            lamp_k
+        } else if night_t <= 0.0 {
+            day_k
+        } else {
+            day_k.powf(1.0 - night_t) * lamp_k.powf(night_t)
+        };
         let p = LtParams {
             counts: [self.lamp_count.load(Ordering::Relaxed) + self.signal_count.load(Ordering::Relaxed), agents, FRAME_LIGHT_CAP, (s.agents_bg.is_some()) as u32],
             // (z: `--lamp-streaks`, the cars' rear lamps' units per candela, with the street
             // lamps' clock: by day a rear lamp's few hundred cd/m2 are lost in the daylit
             // film, which the lamps' constant night scale would not show; 0 off)
-            scale: [(lamp_k * lamps_on) as f32, (lamp_k * eo_sky::photometry::LOW_BEAM_PEAK_CD * veh) as f32, if o.lamp_streaks { (lamp_k * veh * lamps_on) as f32 } else { 0.0 }, 45.0],
+            scale: [(lamp_k * lamps_on) as f32, (veh_k * eo_sky::photometry::LOW_BEAM_PEAK_CD * veh) as f32, if o.lamp_streaks { (lamp_k * veh * lamps_on) as f32 } else { 0.0 }, 45.0],
             props: [(props_k * lamps_on) as f32, if tiles_any { 1.0 } else { 0.0 }, (eo_sky::photometry::LAMP_POOL_PEAK_LUX * lamp_k * lamps_on) as f32, tunnel_pool as f32],
             // (`--look cinematic`, stage L2) w the lamp palette's cell (0: none or the look off),
             // the waterside's z, w its columns and rows (both unread by the gather without the look).
