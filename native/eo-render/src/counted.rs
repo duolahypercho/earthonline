@@ -75,10 +75,16 @@ pub const FULL_FRAMES: u64 = 8;
 /// (motion-aware bounds) The largest rotation a frame may make (radians, 2
 /// degrees) and still draw its late lists to their own reserve.
 pub const STEADY_TURN_MAX: f32 = 0.035;
-/// (motion-aware bounds) The eye's largest step (metres) in such a frame: a
-/// moving eye changes levels of detail and occluders, which no rotation
-/// read back predicts.
+/// (motion-aware bounds) The eye's largest step (metres) in a still frame: a
+/// moving eye changes levels of detail and occluders, so moving frames only
+/// tighten when the window itself observed comparable motion.
 pub const STEADY_STEP_M: f32 = 1e-3;
+/// (motion-aware bounds) Largest per-frame eye step (metres) that can still
+/// tighten late lists when the read-back window observed at least that step
+/// (below the 30 m cut threshold so smooth fast orbits/flights tighten too).
+pub const STEADY_MOVE_MAX_M: f32 = 25.0;
+/// (motion-aware bounds) Rounding allowed over the window's largest eye step.
+pub const STEP_SLACK_M: f32 = 0.05;
 /// (motion-aware bounds) Rounding allowed over the window's largest rotation.
 pub const TURN_SLACK: f32 = 1e-4;
 /// (motion-aware bounds) A read-back older than this many encoded frames is
@@ -167,8 +173,32 @@ pub struct ViewStep {
     /// same lens, nothing streamed or written to the objects, their groups or
     /// the far layer's residency, the visibility flags kept.
     pub quiet: bool,
+    /// When `quiet` is false only due to incremental object/group streaming writes,
+    /// an upper bound on newly added objects so steady late lists can add exact
+    /// headroom instead of falling back to the full early floor. `None` forces
+    /// full fallback when `!quiet`.
+    pub stream_added: Option<u32>,
     /// The two-phase occlusion runs in this frame.
     pub occlusion: bool,
+}
+
+/// Per-entry registration options (`Counts::register_with`).
+#[derive(Clone, Copy, Debug)]
+pub struct EntryOptions {
+    /// Commands added past the reserve (`MARGIN` by default).
+    pub margin: u32,
+    /// Clear each list's command buffer up to its bound before culls run
+    /// (true by default; false when the cull pass itself zeroes unused tail slots).
+    pub zero_cmds: bool,
+    /// Run a synchronous conservative recovery cull on cold start / cuts
+    /// (true by default; false for small fixed-cap lists like props).
+    pub recover_sync: bool,
+}
+
+impl Default for EntryOptions {
+    fn default() -> Self {
+        Self { margin: MARGIN, zero_cmds: true, recover_sync: true }
+    }
 }
 
 /// One draw list counted in a registered count buffer.
@@ -225,10 +255,11 @@ struct Readback {
     stage: Arc<AtomicU8>,
     /// The bounds of the frame whose counts this copy holds.
     bounds: Vec<u32>,
-    /// That frame's number (`State::seq`) and its rotation (`ViewStep::turn`,
-    /// negative without one).
+    /// That frame's number (`State::seq`), rotation (`ViewStep::turn`, negative
+    /// without one), and eye step (`ViewStep::step`, negative without one).
     seq: u64,
     turn: f32,
+    step: f32,
 }
 
 /// One encoded frame, for the early lists' exact bound.
@@ -244,12 +275,18 @@ struct Entry {
     /// Bytes copied from the count buffer (up to the last list's word).
     copy_bytes: u64,
     lists: Vec<List>,
+    margin: u32,
+    zero_cmds: bool,
+    recover_sync: bool,
     readbacks: Vec<Readback>,
     /// Per frame read back, the count of every list (newest last).
     history: VecDeque<Vec<u32>>,
     /// Per frame read back, its rotation (negative: none known, the
     /// recovery's counts).
     turns: VecDeque<f32>,
+    /// Per frame read back, its eye step (negative: none known, the
+    /// recovery's counts).
+    steps: VecDeque<f32>,
     /// The newest frame read back: its number and counts.
     newest: Option<(u64, Vec<u32>)>,
     /// The last encoded frames (oldest first).
@@ -293,8 +330,8 @@ impl Entry {
     /// The motion-aware bounds on this frame's `bounds` (`motion_bounds`).
     fn tighten(&mut self, bounds: &mut [u32], step: ViewStep, seq: u64) {
         let lists: Vec<(Option<usize>, u32)> = self.lists.iter().map(|l| (l.floor, l.max)).collect();
-        let seen = Seen { history: &self.history, turns: &self.turns, newest: self.newest.as_ref(), log: &self.log };
-        (self.steady, self.chained) = motion_bounds(&lists, &seen, bounds, step, seq);
+        let seen = Seen { history: &self.history, turns: &self.turns, steps: &self.steps, newest: self.newest.as_ref(), log: &self.log };
+        (self.steady, self.chained) = motion_bounds(&lists, &seen, bounds, step, seq, self.margin);
         self.tightened = self.steady || self.chained;
     }
 }
@@ -303,6 +340,7 @@ impl Entry {
 struct Seen<'a> {
     history: &'a VecDeque<Vec<u32>>,
     turns: &'a VecDeque<f32>,
+    steps: &'a VecDeque<f32>,
     newest: Option<&'a (u64, Vec<u32>)>,
     log: &'a VecDeque<Frame>,
 }
@@ -312,7 +350,7 @@ struct Seen<'a> {
 /// each late list's own reserve in a steady frame, each early list's exact
 /// bound where it is smaller. Returns whether a late list and an early list
 /// took them.
-fn motion_bounds(lists: &[(Option<usize>, u32)], seen: &Seen<'_>, bounds: &mut [u32], step: ViewStep, seq: u64) -> (bool, bool) {
+fn motion_bounds(lists: &[(Option<usize>, u32)], seen: &Seen<'_>, bounds: &mut [u32], step: ViewStep, seq: u64, margin: u32) -> (bool, bool) {
     let (mut steady_any, mut chained_any) = (false, false);
     let Some((k, last)) = seen.newest else { return (false, false) };
     let k = *k;
@@ -325,12 +363,20 @@ fn motion_bounds(lists: &[(Option<usize>, u32)], seen: &Seen<'_>, bounds: &mut [
         && since.clone().count() as u64 == seq - k
         && since.clone().all(|f| f.occlusion && (f.seq == k || f.quiet));
     let window_turn = seen.turns.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let window_step = seen.steps.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let moving = step.step > STEADY_STEP_M;
+    let step_ok = !moving
+        || (step.step <= STEADY_MOVE_MAX_M
+            && step.step <= window_step + STEP_SLACK_M
+            && seen.steps.iter().all(|s| *s >= 0.0));
+    let stream_ok = step.quiet || step.stream_added.is_some();
+    let extra_added = if step.quiet { 0 } else { step.stream_added.unwrap_or(0) };
     let steady = step.occlusion
-        && step.quiet
+        && stream_ok
         && seen.log.back().is_some_and(|f| f.seq + 1 == seq && f.occlusion)
         && seq > k
         && seq - k <= STALE_FRAMES
-        && step.step <= STEADY_STEP_M
+        && step_ok
         && step.turn <= STEADY_TURN_MAX
         && step.turn <= window_turn + TURN_SLACK
         && seen.turns.iter().all(|t| *t >= 0.0);
@@ -338,8 +384,15 @@ fn motion_bounds(lists: &[(Option<usize>, u32)], seen: &Seen<'_>, bounds: &mut [
         let Some(f) = floor else { continue };
         if steady {
             // its own reserve, without the early list's bound as a floor.
+            // A translating eye keeps 2x peak + margin headroom against newly uncovered occluders,
+            // plus exact headroom for any small incremental streaming write this frame.
             let peak = seen.history.iter().map(|h| h[i]).max().unwrap_or(0);
-            let own = draw_reserve(peak, max);
+            let base_own = if moving {
+                peak.saturating_mul(2).saturating_add(margin)
+            } else {
+                draw_reserve_with(peak, max, margin)
+            };
+            let own = base_own.saturating_add(extra_added).min(max);
             if own < bounds[i] {
                 bounds[i] = own;
                 steady_any = true;
@@ -347,7 +400,7 @@ fn motion_bounds(lists: &[(Option<usize>, u32)], seen: &Seen<'_>, bounds: &mut [
         }
         if chain {
             let pending = seen.log.iter().filter(|fr| fr.seq > k).fold(0u32, |a, fr| a.saturating_add(fr.bounds[i]));
-            let exact = last[f].saturating_add(last[i]).saturating_add(pending).saturating_add(MARGIN).min(lists[f].1);
+            let exact = last[f].saturating_add(last[i]).saturating_add(pending).saturating_add(margin).min(lists[f].1);
             if exact < bounds[f] {
                 bounds[f] = exact;
                 chained_any = true;
@@ -370,14 +423,24 @@ pub struct CountedLists {
     id: usize,
 }
 
-fn draw_reserve(visible: u32, capacity: u32) -> u32 {
-    visible.saturating_add(visible / 2).saturating_add(MARGIN).min(capacity)
+fn draw_reserve_with(visible: u32, capacity: u32, margin: u32) -> u32 {
+    visible.saturating_add(visible / 2).saturating_add(margin).min(capacity)
 }
 
-fn early_reserve(early: u32, late: u32, capacity: u32) -> u32 {
+#[cfg(test)]
+fn draw_reserve(visible: u32, capacity: u32) -> u32 {
+    draw_reserve_with(visible, capacity, MARGIN)
+}
+
+fn early_reserve_with(early: u32, late: u32, capacity: u32, margin: u32) -> u32 {
     // The passes partition the same opaque set. Every object the late pass
     // discovered can already be in the early pass by the next read-back.
-    draw_reserve(early.saturating_add(late), capacity)
+    draw_reserve_with(early.saturating_add(late), capacity, margin)
+}
+
+#[cfg(test)]
+fn early_reserve(early: u32, late: u32, capacity: u32) -> u32 {
+    early_reserve_with(early, late, capacity, MARGIN)
 }
 
 impl Counts {
@@ -387,6 +450,11 @@ impl Counts {
 
     /// Register a count buffer (it needs `COPY_SRC`) and the lists it counts.
     pub fn register(self: &Arc<Self>, label: &'static str, counts: &wgpu::Buffer, lists: Vec<List>) -> CountedLists {
+        self.register_with(label, counts, lists, EntryOptions::default())
+    }
+
+    /// Register a count buffer with custom reserve margin, clear, and recovery policy.
+    pub fn register_with(self: &Arc<Self>, label: &'static str, counts: &wgpu::Buffer, lists: Vec<List>, opts: EntryOptions) -> CountedLists {
         let copy_bytes = (lists.iter().map(|l| l.word).max().unwrap_or(0) as u64 + 1) * 4;
         let readbacks = (0..RING)
             .map(|k| Readback {
@@ -400,6 +468,7 @@ impl Counts {
                 bounds: vec![],
                 seq: 0,
                 turn: -1.0,
+                step: -1.0,
             })
             .collect();
         let n = lists.len();
@@ -409,9 +478,13 @@ impl Counts {
             counts: counts.clone(),
             copy_bytes,
             lists,
+            margin: opts.margin,
+            zero_cmds: opts.zero_cmds,
+            recover_sync: opts.recover_sync,
             readbacks,
             history: VecDeque::new(),
             turns: VecDeque::new(),
+            steps: VecDeque::new(),
             newest: None,
             log: VecDeque::new(),
             fallback: full.clone(),
@@ -469,7 +542,7 @@ impl Counts {
                             *p = (*p).max(*c);
                         }
                         e.stats.readbacks += 1;
-                        let (at, turn) = (e.readbacks[k].seq, e.readbacks[k].turn);
+                        let (at, turn, step) = (e.readbacks[k].seq, e.readbacks[k].turn, e.readbacks[k].step);
                         if e.newest.as_ref().is_none_or(|(s, _)| at > *s) {
                             e.newest = Some((at, counts.clone()));
                         }
@@ -480,18 +553,22 @@ impl Counts {
                             // the first read-back since the cut: the window starts with it.
                             e.history.clear();
                             e.turns.clear();
+                            e.steps.clear();
                         }
                         e.history.push_back(counts);
                         e.turns.push_back(turn);
+                        e.steps.push_back(step);
                         if e.history.len() > WINDOW {
                             e.history.pop_front();
                             e.turns.pop_front();
+                            e.steps.pop_front();
                         }
                     }
                     _ => {}
                 }
             }
             let full = e.history.is_empty() || e.full_left > 0;
+            let margin = e.margin;
             let mut bounds: Vec<u32> = e
                 .lists
                 .iter()
@@ -501,14 +578,14 @@ impl Counts {
                         l.max
                     } else {
                         let peak = e.history.iter().map(|h| h[i]).max().unwrap_or(0);
-                        draw_reserve(peak, l.max)
+                        draw_reserve_with(peak, l.max, margin)
                     }
                 })
                 .collect();
             for (i, l) in e.lists.iter().enumerate() {
                 if let Some(f) = l.floor {
                     if let Some(last) = e.history.back() {
-                        bounds[f] = bounds[f].max(early_reserve(last[f], last[i], e.lists[f].max));
+                        bounds[f] = bounds[f].max(early_reserve_with(last[f], last[i], e.lists[f].max, margin));
                     }
                     bounds[i] = bounds[i].max(bounds[f]).min(l.max);
                 }
@@ -549,19 +626,19 @@ impl Counts {
         // unlocked throughout the submission, mapping and wait.
         let sources: Vec<_> = {
             let state = self.state.lock().unwrap();
-            if !state.entries.iter().any(|e| e.history.is_empty() || e.full_left != 0) {
+            if !state.entries.iter().any(|e| e.recover_sync && (e.history.is_empty() || e.full_left != 0)) {
                 return;
             }
-            state.entries.iter().map(|e| (e.counts.clone(), e.copy_bytes)).collect()
+            state.entries.iter().enumerate().filter(|(_, e)| e.recover_sync).map(|(id, e)| (id, e.counts.clone(), e.copy_bytes)).collect()
         };
-        let size: u64 = sources.iter().map(|(_, bytes)| bytes).sum();
+        let size: u64 = sources.iter().map(|(_, _, bytes)| bytes).sum();
         let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("count recovery"), size, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false,
         });
         let mut enc = self.device.create_command_encoder(&Default::default());
         cull(&mut enc);
         let mut offset = 0;
-        for (source, bytes) in &sources {
+        for (_, source, bytes) in &sources {
             enc.copy_buffer_to_buffer(source, 0, &buf, offset, *bytes);
             offset += bytes;
         }
@@ -576,19 +653,22 @@ impl Counts {
             let words: &[u32] = bytemuck::cast_slice(&bytes);
             let mut start = 0;
             let mut state = self.state.lock().unwrap();
-            for (e, (_, bytes)) in state.entries.iter_mut().zip(&sources) {
+            for &(id, _, bytes) in &sources {
+                let e = &mut state.entries[id];
                 if e.history.is_empty() || e.full_left > 0 {
                     let counts: Vec<u32> = e.lists.iter().map(|l| words[start + l.word as usize].min(l.max)).collect();
+                    let margin = e.margin;
                     for (i, l) in e.lists.iter().enumerate() {
                         let upper = l.floor.map_or(counts[i], |early| counts[early].max(counts[i]));
-                        e.stats.bounds[i] = draw_reserve(upper, l.max);
+                        e.stats.bounds[i] = draw_reserve_with(upper, l.max, margin);
                     }
                     if e.history.is_empty() {
                         e.history.push_back(counts);
                         e.turns.push_back(-1.0); // no frame's rotation: no motion-aware bound while it is in the window
+                        e.steps.push_back(-1.0);
                     }
                 }
-                start += *bytes as usize / 4;
+                start += bytes as usize / 4;
             }
         }
         buf.unmap();
@@ -611,6 +691,9 @@ impl Counts {
             }
         }
         for e in &st.entries {
+            if !e.zero_cmds {
+                continue;
+            }
             for (l, &b) in e.lists.iter().zip(&e.stats.bounds) {
                 if b > 0 {
                     enc.clear_buffer(&l.draws, l.offset, Some(b as u64 * l.stride));
@@ -651,6 +734,7 @@ impl Counts {
                 rb.bounds = bounds;
                 rb.seq = seq;
                 rb.turn = step.map_or(-1.0, |s| s.turn);
+                rb.step = step.map_or(-1.0, |s| s.step);
                 rb.stage.store(COPIED, Ordering::Release);
             }
         }
@@ -764,13 +848,24 @@ mod tests {
     struct Case {
         history: VecDeque<Vec<u32>>,
         turns: VecDeque<f32>,
+        steps: VecDeque<f32>,
         newest: (u64, Vec<u32>),
         log: VecDeque<Frame>,
     }
 
-    fn case(early: u32, late: u32, turn: f32, late_bound: u32) -> Case {
+    fn case_with_step(early: u32, late: u32, turn: f32, step: f32, late_bound: u32) -> Case {
         let log = (20..23).map(|seq| Frame { seq, bounds: vec![9_000, late_bound], occlusion: true, quiet: true }).collect();
-        Case { history: (0..WINDOW).map(|_| vec![early, late]).collect(), turns: (0..WINDOW).map(|_| turn).collect(), newest: (20, vec![early, late]), log }
+        Case {
+            history: (0..WINDOW).map(|_| vec![early, late]).collect(),
+            turns: (0..WINDOW).map(|_| turn).collect(),
+            steps: (0..WINDOW).map(|_| step).collect(),
+            newest: (20, vec![early, late]),
+            log,
+        }
+    }
+
+    fn case(early: u32, late: u32, turn: f32, late_bound: u32) -> Case {
+        case_with_step(early, late, turn, 0.0, late_bound)
     }
 
     /// The bounds before the motion-aware ones (`begin_frame`): the reserves, the early floor.
@@ -781,12 +876,12 @@ mod tests {
 
     fn run(c: &Case, step: ViewStep, seq: u64) -> (Vec<u32>, (bool, bool)) {
         let mut b = today(c.newest.1[0], c.newest.1[1]);
-        let seen = Seen { history: &c.history, turns: &c.turns, newest: Some(&c.newest), log: &c.log };
-        let took = motion_bounds(&LISTS, &seen, &mut b, step, seq);
+        let seen = Seen { history: &c.history, turns: &c.turns, steps: &c.steps, newest: Some(&c.newest), log: &c.log };
+        let took = motion_bounds(&LISTS, &seen, &mut b, step, seq, MARGIN);
         (b, took)
     }
 
-    const STILL: ViewStep = ViewStep { turn: 0.008, step: 0.0, quiet: true, occlusion: true };
+    const STILL: ViewStep = ViewStep { turn: 0.008, step: 0.0, quiet: true, stream_added: None, occlusion: true };
 
     #[test]
     fn a_steady_turn_draws_the_late_list_to_its_own_reserve() {
@@ -874,9 +969,10 @@ mod tests {
                 let newest = (k, counts[k as usize].to_vec());
                 let history: VecDeque<Vec<u32>> = vec![newest.1.clone()].into();
                 let turns: VecDeque<f32> = vec![0.0].into();
-                let seen = Seen { history: &history, turns: &turns, newest: Some(&newest), log: &log };
+                let steps: VecDeque<f32> = vec![0.0].into();
+                let seen = Seen { history: &history, turns: &turns, steps: &steps, newest: Some(&newest), log: &log };
                 let mut b = vec![CAP, CAP];
-                motion_bounds(&LISTS, &seen, &mut b, ViewStep { turn: 0.0, ..STILL }, frame);
+                motion_bounds(&LISTS, &seen, &mut b, ViewStep { turn: 0.0, ..STILL }, frame, MARGIN);
                 assert!(early <= b[0], "frame {frame}: early {early} past its exact bound {}", b[0]);
                 assert!(b[0] < CAP);
             }
@@ -887,5 +983,42 @@ mod tests {
             }
             flags = visible;
         }
+    }
+
+    #[test]
+    fn a_steady_move_tightens_late_list_and_sudden_step_falls_back() {
+        let c = case_with_step(6_000, 20, 0.008, 3.5, 296);
+        let (b, took) = run(&c, ViewStep { step: 3.5, ..STILL }, 23);
+        assert_eq!(took, (true, true));
+        assert_eq!(b[1], 2 * 20 + MARGIN, "moving steady frame keeps 2x peak + margin");
+        assert!(b[1] < today(6_000, 20)[1]);
+        // Accelerating past window_step + STEP_SLACK_M keeps the early floor.
+        let (b_fast, took_fast) = run(&c, ViewStep { step: 4.0, ..STILL }, 23);
+        assert_eq!(b_fast[1], today(6_000, 20)[1]);
+        assert!(!took_fast.0);
+        // Step past STEADY_MOVE_MAX_M keeps the early floor even if seen in window.
+        let c_far = case_with_step(6_000, 20, 0.008, STEADY_MOVE_MAX_M + 1.0, 296);
+        let (b_far, took_far) = run(&c_far, ViewStep { step: STEADY_MOVE_MAX_M + 1.0, ..STILL }, 23);
+        assert_eq!(b_far[1], today(6_000, 20)[1]);
+        assert!(!took_far.0);
+    }
+
+    #[test]
+    fn an_incremental_stream_write_keeps_steady_with_headroom() {
+        let c = case_with_step(6_000, 20, 0.008, 18.0, 296);
+        // Incremental streaming delta keeps late tightening with exact added headroom,
+        // while keeping the early list conservative (not chained).
+        let (b, took) = run(&c, ViewStep { step: 18.0, quiet: false, stream_added: Some(48), ..STILL }, 23);
+        assert_eq!(took, (true, false));
+        assert_eq!(b[1], 2 * 20 + MARGIN + 48);
+        assert_eq!(b[0], today(6_000, 20)[0]);
+        // Larger tile-sized incremental streaming delta still tightens when own < early floor.
+        let (b_mid, took_mid) = run(&c, ViewStep { step: 18.0, quiet: false, stream_added: Some(MARGIN + 100), ..STILL }, 23);
+        assert_eq!(took_mid, (true, false));
+        assert_eq!(b_mid[1], 2 * 20 + MARGIN + MARGIN + 100);
+        assert_eq!(b_mid[0], today(6_000, 20)[0]);
+        // Huge streaming delta past the early floor falls back to today's bound.
+        let (b_big, took_big) = run(&c, ViewStep { step: 18.0, quiet: false, stream_added: Some(today(6_000, 20)[1]), ..STILL }, 23);
+        assert_eq!((b_big, took_big), (today(6_000, 20), (false, false)));
     }
 }

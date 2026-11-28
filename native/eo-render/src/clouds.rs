@@ -424,9 +424,13 @@ impl CloudGpu {
         if vol_clouds && !self.vol_baked.swap(true, Ordering::Relaxed) {
             self.vol_noise.encode(&mut pass);
         }
+        // Dispatches at half-res (SHADOW_RES / 2): fills all 2x2 texels on cuts, wrap-seam
+        // bands, and the ClSky LUT row, and refreshes 1/4 texels per steady frame (full 32 km
+        // world-anchored shadow map refresh every 4 frames).
+        let half = SHADOW_RES / 2;
         pass.set_pipeline(&self.shadow_pipe);
         pass.set_bind_group(0, &self.shadow_bg, &[]);
-        pass.dispatch_workgroups(SHADOW_RES.div_ceil(8), SHADOW_RES.div_ceil(8), 1);
+        pass.dispatch_workgroups(half.div_ceil(8), half.div_ceil(8), 1);
     }
 
     /// Hemispherical off-screen cloud reflection dome (`--volumetric-clouds`, run inside

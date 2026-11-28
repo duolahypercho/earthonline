@@ -442,9 +442,9 @@ pub struct FarTrees {
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
     cull_bg: wgpu::BindGroup,
-    /// Without multi-draw-indirect-count: the cull that lists the kept trees,
-    /// and the one draw (6 vertices, the kept trees) it fills (`draw`).
-    list: Option<(wgpu::ComputePipeline, wgpu::Buffer)>,
+    /// Without multi-draw-indirect-count: the plain and HZB culls that list
+    /// the kept trees, and the one draw (6 vertices, the kept trees) they fill (`draw`).
+    list: Option<(wgpu::ComputePipeline, wgpu::ComputePipeline, wgpu::Buffer)>,
     /// Trees and blocks drawn (set once the whole list is on the GPU).
     count: std::sync::atomic::AtomicU32,
     blocks: std::sync::atomic::AtomicU32,
@@ -469,6 +469,8 @@ pub struct FarTreesInit<'a> {
     pub debug_ids: bool,
     /// No multi-draw-indirect-count: one draw over a list the cull writes.
     pub fallback: bool,
+    /// Place card alpha discards after lighting (for the non-compact fallback / cove-only paths).
+    pub late_discard: bool,
 }
 
 impl FarTrees {
@@ -547,11 +549,13 @@ impl FarTrees {
             cull_bind.extend([wgpu::BindGroupEntry { binding: 4, resource: l.as_entire_binding() }, wgpu::BindGroupEntry { binding: 5, resource: dr.as_entire_binding() }]);
         }
         let cull_bg = d.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("hlod-far-tree-cull-bg"), layout: &cull_bgl, entries: &cull_bind });
-        let plain_src = format!("{CULL_WGSL}\nfn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n");
-        let hzb_src = format!(
-            "{CULL_WGSL}\nstruct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, tc.view_proj, hzb_info.screen.xy); }}\n",
+        let plain_tail = "fn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool { return false; }\n";
+        let hzb_tail = format!(
+            "struct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, tc.view_proj, hzb_info.screen.xy); }}\n",
             crate::occlusion::OCCLUSION_WGSL
         );
+        let plain_src = format!("{CULL_WGSL}\n{plain_tail}");
+        let hzb_src = format!("{CULL_WGSL}\n{hzb_tail}");
         let cmod = |label: &str, src: String| d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(label), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let (pm, hm) = (cmod("hlod_trees_cull.wgsl", plain_src), cmod("hlod_trees_cull.wgsl (hzb)", hzb_src));
         let lay_p = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-far-tree-cull-layout"), bind_group_layouts: &[Some(&cull_bgl)], immediate_size: 0 });
@@ -562,11 +566,13 @@ impl FarTrees {
         let cull_plain = compute(&pm, &lay_p, "hlod_tree_cull");
         let cull_hzb = compute(&hm, &lay_h, "hlod_tree_cull (hzb)");
         let list = draw_buf.map(|dr| {
-            let lm = cmod("hlod_trees_list.wgsl", format!("{CULL_WGSL}\n{LIST_WGSL}\nfn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n"));
+            let lm = cmod("hlod_trees_list.wgsl", format!("{CULL_WGSL}\n{LIST_WGSL}\n{plain_tail}"));
+            let lhm = cmod("hlod_trees_list.wgsl (hzb)", format!("{CULL_WGSL}\n{LIST_WGSL}\n{hzb_tail}"));
             let p = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("hlod_tree_cull (list)"), layout: Some(&lay_p), module: &lm, entry_point: Some("tree_cull_list"), compilation_options: Default::default(), cache: None });
-            (p, dr)
+            let ph = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("hlod_tree_cull (list hzb)"), layout: Some(&lay_h), module: &lhm, entry_point: Some("tree_cull_list"), compilation_options: Default::default(), cache: None });
+            (p, ph, dr)
         });
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_shader_source(i.fallback, i.fallback || cove_only).into()) });
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_shader_source(i.fallback, i.late_discard || cove_only).into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-far-trees-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&bgl)], immediate_size: 0 });
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: crate::IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
@@ -736,10 +742,15 @@ impl FarTrees {
         &self.count_buf
     }
 
+    /// Whether this renderer draws all visible trees in one indirect draw via the cull list.
+    pub fn uses_list(&self) -> bool {
+        self.list.is_some()
+    }
+
     /// `bound`: the bounded list's commands, emptied before the cull appends (bounds.rs).
     pub fn clear(&self, enc: &mut wgpu::CommandEncoder, bound: Option<u32>) {
         enc.clear_buffer(&self.count_buf, 0, None);
-        if let Some((_, dr)) = &self.list {
+        if let Some((_, _, dr)) = &self.list {
             enc.clear_buffer(dr, 4, Some(4)); // the kept trees; the vertex count stays 6
         }
         if let Some(b) = bound.filter(|_| self.list.is_none() && !self.cove_only) {
@@ -760,9 +771,13 @@ impl FarTrees {
             return;
         }
         match (hzb, &self.list) {
-            // without the count there is no occlusion pass either (lib.rs)
-            (_, Some((p, _))) => {
-                pass.set_pipeline(p);
+            (Some(h), Some((_, p_hzb, _))) => {
+                pass.set_pipeline(p_hzb);
+                pass.set_bind_group(0, &self.cull_bg, &[]);
+                pass.set_bind_group(1, h, &[]);
+            }
+            (None, Some((p_plain, _, _))) => {
+                pass.set_pipeline(p_plain);
                 pass.set_bind_group(0, &self.cull_bg, &[]);
             }
             (Some(h), None) => {
@@ -798,7 +813,7 @@ impl FarTrees {
         }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(2, &self.bg, &[]);
-        if let Some((_, dr)) = &self.list {
+        if let Some((_, _, dr)) = &self.list {
             pass.draw_indirect(dr, 0); // the kept trees as one draw
             return;
         }
@@ -818,7 +833,7 @@ mod tests {
     #[test]
     fn the_draw_shader_validates_on_both_paths() {
         use wgpu::naga;
-        for (fallback, late) in [(false, false), (true, true), (false, true)] {
+        for (fallback, late) in [(false, false), (true, false), (true, true), (false, true)] {
             let src = draw_shader_source(fallback, late);
             let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("fallback {fallback}, late {late}: {}", e.emit_to_string(&src)));
             naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())

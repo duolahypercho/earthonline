@@ -76,36 +76,38 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     let uv = at_view_uv(d, skyu.atmo.xyz);
     let gs = vol_atmo_scale();
     let ph = clamp(vol_phys(), 0.0, 1.0);
+    var c = at_spectral(textureSampleLevel(vol_at_view, vol_lin, uv, 0.0).rgb * gs, ph);
     // the gain that holds the tables' zenith to the look's (`vol_atmo_gain`) scaled the
     // whole low-sun sky, its aureole too: with the look's zenith brighter than the tables' at a
     // low sun, the aureole clipped over 10-20 deg and veiled what stood before the sun. From
     // 1.5 to 30 deg round a sun under 15 deg the tables keep their own zenith's scale (the model
     // zenith anchor), so the glare falls off steeply round a small clipped core; the zenith
     // and the sky away from the sun keep the look's anchor (its blue).
-    let g_look = vol_atmo_gain();
-    let z = textureSampleLevel(vol_at_view, vol_lin, at_view_uv(vec3<f32>(0.0, 1.0, 0.0), skyu.atmo.xyz), 0.0).rgb;
-    let g_model = clamp(dot(look.dome_zenith.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) / max(dot(z, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
-    let ang = acos(clamp(dot(d, skyu.atmo.xyz), -1.0, 1.0)) * 57.29578;
-    let near_sun = smoothstep(0.5, 1.5, ang) * (1.0 - smoothstep(18.0, 30.0, ang)) * (1.0 - smoothstep(10.0, 15.0, asin(clamp(skyu.atmo.y, -1.0, 1.0)) * 57.29578));
-    var c = at_spectral(textureSampleLevel(vol_at_view, vol_lin, uv, 0.0).rgb * gs, ph);
     // Only the excess over the sky 40 deg round in azimuth at the same elevation is scaled (a
     // straight gain switch drew a dark ring round the sun): the glare never falls below the
     // sky beside it.
     // (the physical daylight's sky is at the sun's own scale: no anchor to undo)
-    if (near_sun > 0.0 && ph < 1.0) {
-        let sh = normalize(skyu.atmo.xz + vec2<f32>(1e-5, 0.0));
-        let ca = 0.766;
-        let sa = 0.643;
-        let r2 = vec2<f32>(ca * sh.x - sa * sh.y, sa * sh.x + ca * sh.y);
-        let hd = sqrt(max(1.0 - d.y * d.y, 0.0));
-        let dref = vec3<f32>(r2.x * hd, d.y, r2.y * hd);
-        let lref = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(dref, skyu.atmo.xyz), 0.0).rgb * g_look, vec3<f32>(0.2126, 0.7152, 0.0722));
-        let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
-        if (l > lref) {
-            // (stage L4, the cinematic look) VOL_CINE_AUREOLE_KEEP of the cut: the low sun's glow
-            let ns = select(near_sun, near_sun * VOL_CINE_AUREOLE_KEEP, vol_cine_on());
-            let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), ns * (1.0 - ph));
-            c = c * ((lref + (l - lref) * k) / l);
+    if (ph < 1.0) {
+        let ang = acos(clamp(dot(d, skyu.atmo.xyz), -1.0, 1.0)) * 57.29578;
+        let near_sun = smoothstep(0.5, 1.5, ang) * (1.0 - smoothstep(18.0, 30.0, ang)) * (1.0 - smoothstep(10.0, 15.0, asin(clamp(skyu.atmo.y, -1.0, 1.0)) * 57.29578));
+        if (near_sun > 0.0) {
+            let g_look = vol_atmo_gain();
+            let z = textureSampleLevel(vol_at_view, vol_lin, at_view_uv(vec3<f32>(0.0, 1.0, 0.0), skyu.atmo.xyz), 0.0).rgb;
+            let g_model = clamp(dot(look.dome_zenith.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) / max(dot(z, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
+            let sh = normalize(skyu.atmo.xz + vec2<f32>(1e-5, 0.0));
+            let ca = 0.766;
+            let sa = 0.643;
+            let r2 = vec2<f32>(ca * sh.x - sa * sh.y, sa * sh.x + ca * sh.y);
+            let hd = sqrt(max(1.0 - d.y * d.y, 0.0));
+            let dref = vec3<f32>(r2.x * hd, d.y, r2.y * hd);
+            let lref = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(dref, skyu.atmo.xyz), 0.0).rgb * g_look, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+            if (l > lref) {
+                // (stage L4, the cinematic look) VOL_CINE_AUREOLE_KEEP of the cut: the low sun's glow
+                let ns = select(near_sun, near_sun * VOL_CINE_AUREOLE_KEEP, vol_cine_on());
+                let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), ns * (1.0 - ph));
+                c = c * ((lref + (l - lref) * k) / l);
+            }
         }
     }
     // the three-channel tables lead with green in the low sky at golden hour
@@ -278,41 +280,71 @@ fn vol_ap(dir: vec3<f32>, dist: f32) -> VolAp {
 
 fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     let dh = dir.y * dist;
-    var dens = sky_path_density(dh);
-    // (stage L4) the golden haze: its own height law and the low sun's marine air.
-    var aer = skyu.atmo3.y;
     let cine = vol_cine_on();
-    if (cine) {
-        dens = vol_cine_density(eye_y, eye_y + dh);
-        aer = vol_cine_aerosol();
-    }
-    let ray = AT_RAY * 0.001 * exp(-max(eye_y + 0.5 * dh, 0.0) / 8000.0);
     // the weather's own extinction lives under its deck or marine layer: none for an
     // eye 200 m over the low deck's top (the fog sea seen from above went hazy blue)
     // 1 (the eye's height no longer switches it off): the in-layer share of the path
     // (`inside`, r11) already keeps the veil to the layer, and with the veil off for an eye
     // 200 m over the fog top the houses under it ghosted through the fog sea seen from above.
     let wk = 1.0;
-    let above_top = smoothstep(skyu.cloud0.y, skyu.cloud0.y + 100.0, eye_y);
+    let has_veil = skyu.atmo3.x > 0.0;
+    var wv = 0.0;
+    if (has_veil) {
+        // fog, drizzle, rain, storm: the weather's own veil keeps the look's range-fog
+        // law over its visibility (near .. far), on top of the clear air
+        // Koschmieder over the path inside the layer (95 % at the weather's
+        // `far`), with no height thinning below its top: advection fog and a rain veil are
+        // about uniform up to the deck (the 400 m path density let a bridge tower 200 m up
+        // take less fog than the trees at its foot, and the range-fog law kept the first
+        // `near` metres clear). A point above the top takes the share of its path below it.
+        let ptop = skyu.cloud0.y;
+        let y1 = eye_y + dh;
+        let lo_y = min(eye_y, y1);
+        let hi_y = max(eye_y, y1);
+        let inside = select(clamp((ptop - lo_y) / max(hi_y - lo_y, 1e-3), 0.0, 1.0), 1.0, hi_y <= ptop);
+        wv = skyu.atmo3.x * wk * (1.0 - exp(-3.0 * dist * inside / max(skyu.atmo3.w, 1.0)));
+    }
+    // (`--look cinematic` keeps its own golden haze below: stage L4's in-scatter and the
+    // volume's would both add the sun's phase)
+    if (SF_AP_LUT && skyu.atmo_m.w > 0.5 && skyu.atmo2.x > 0.5 && !cine) {
+        // the aerial-perspective volume: the medium's own in-scatter (the sun's phase, the
+        // planet's shadow, the multiple scattering) at the sky's scale, its transmittance, in
+        // place of the fade toward the horizon's colour; the weather's veil as below.
+        let ap = vol_ap(dir, dist);
+        let ta = dot(ap.tr, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let base_ins = at_spectral(ap.ins * vol_atmo_scale(), clamp(vol_phys(), 0.0, 1.0));
+        if (!has_veil) {
+            return vec4<f32>(base_ins, ta);
+        }
+        let dh_dir = normalize(vec3<f32>(dir.x, max(abs(dir.y), 0.03), dir.z));
+        let above_top = smoothstep(skyu.cloud0.y, skyu.cloud0.y + 100.0, eye_y);
+        let cw0 = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.5) * 0.9;
+        let cl = dot(lk_sky_dome(dh_dir), vec3<f32>(0.2126, 0.7152, 0.0722));
+        var colw = mix(cw0, vec3<f32>(cl) * vec3<f32>(0.98, 1.0, 1.02), 0.7) * 0.6;
+        if (above_top > 0.0) {
+            let cs = vol_atmo_sky(dh_dir);
+            colw = mix(colw, mix(vec3<f32>(cl), cs, skyu.atmo2.y), above_top);
+        }
+        let ins = mix(base_ins, colw * (1.0 - ta), skyu.atmo3.x * wk);
+        return vec4<f32>(ins * (1.0 - wv) + colw * wv, ta * (1.0 - wv));
+    }
+    var dens = sky_path_density(dh);
+    // (stage L4) the golden haze: its own height law and the low sun's marine air.
+    var aer = skyu.atmo3.y;
+    if (cine) {
+        dens = vol_cine_density(eye_y, eye_y + dh);
+        aer = vol_cine_aerosol();
+    }
+    let ray = AT_RAY * 0.001 * exp(-max(eye_y + 0.5 * dh, 0.0) / 8000.0);
     let tau = (ray + vec3<f32>(aer * dens)) * dist;
-    // fog, drizzle, rain, storm: the weather's own veil keeps the look's range-fog
-    // law over its visibility (near .. far), on top of the clear air
-    // Koschmieder over the path inside the layer (95 % at the weather's
-    // `far`), with no height thinning below its top: advection fog and a rain veil are
-    // about uniform up to the deck (the 400 m path density let a bridge tower 200 m up
-    // take less fog than the trees at its foot, and the range-fog law kept the first
-    // `near` metres clear). A point above the top takes the share of its path below it.
-    let ptop = skyu.cloud0.y;
-    let y1 = eye_y + dh;
-    let lo_y = min(eye_y, y1);
-    let hi_y = max(eye_y, y1);
-    let inside = select(clamp((ptop - lo_y) / max(hi_y - lo_y, 1e-3), 0.0, 1.0), 1.0, hi_y <= ptop);
-    let wv = skyu.atmo3.x * wk * (1.0 - exp(-3.0 * dist * inside / max(skyu.atmo3.w, 1.0)));
     let t = exp(-tau);
     let dh_dir = normalize(vec3<f32>(dir.x, max(abs(dir.y), 0.03), dir.z));
-    var col = lk_sky_dome(dh_dir);
+    let dome = lk_sky_dome(dh_dir);
+    var col = dome;
+    var atmo_col = dome;
     if (skyu.atmo2.x > 0.5) {
-        col = mix(col, vol_atmo_sky(dh_dir), skyu.atmo2.y);
+        atmo_col = vol_atmo_sky(dh_dir);
+        col = mix(col, atmo_col, skyu.atmo2.y);
     }
     if (cine) {
         // (stage L4) the aerosol's share of the in-scatter, lit by the key through its phase.
@@ -327,6 +359,9 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
         col = mix(col, direct + col * VOL_CINE_SKY_SHARE, VOL_CINE_DIRECT_SHARE * share * vol_cine_day() * tv);
     }
     let tl = dot(t, vec3<f32>(0.2126, 0.7152, 0.0722));
+    if (!has_veil) {
+        return vec4<f32>(col * (1.0 - tl), tl);
+    }
     // the weather's veil takes the light under its deck (the light the
     // rain shafts and the fog bank are drawn with), not the clear-sky table's
     // horizon: the fogged far hills went pale blue against a grey fog bank.
@@ -334,8 +369,9 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     // neutral: the light under the deck alone came out lighter and bluer than the fog
     // bank, so the fogged far hills stood out pale blue and the sea ended at them in a
     // hard line.
+    let above_top = smoothstep(skyu.cloud0.y, skyu.cloud0.y + 100.0, eye_y);
     let cw0 = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.5) * 0.9;
-    let cl = dot(lk_sky_dome(dh_dir), vec3<f32>(0.2126, 0.7152, 0.0722));
+    let cl = dot(dome, vec3<f32>(0.2126, 0.7152, 0.0722));
     // x 0.7: measured against the fog bank drawn over the strait (golden-gate-fog), the
     // dome's low sky is ~1.4 x as bright as the bank the volume draws there.
     // x 0.6: at 0.7 fogged far land read ~1.4 x (linear) the fog sky drawn just above it, at 0.5
@@ -344,8 +380,7 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     // seen from above, the fog is its sunlit top: the dome's low-sky brightness, neutral
     if (skyu.atmo2.x > 0.5) {
         // the sky's own horizon colour (its blue-white), so the fog sea meets the sky with no hue step
-        let cs = vol_atmo_sky(dh_dir);
-        colw = mix(colw, mix(vec3<f32>(cl), cs, skyu.atmo2.y), above_top);
+        colw = mix(colw, mix(vec3<f32>(cl), atmo_col, skyu.atmo2.y), above_top);
     } else {
         colw = mix(colw, vec3<f32>(cl) * vec3<f32>(0.99, 1.0, 1.01), above_top);
     }
@@ -353,17 +388,6 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     // too (grey, not the clear sky's blue: the part of a far object the veil left showed
     // bluer and lighter than the fog round it).
     let colc = mix(col, colw, skyu.atmo3.x * wk);
-    // (`--look cinematic` keeps its own golden haze above: stage L4's in-scatter and the
-    // volume's would both add the sun's phase)
-    if (SF_AP_LUT && skyu.atmo_m.w > 0.5 && skyu.atmo2.x > 0.5 && !cine) {
-        // the aerial-perspective volume: the medium's own in-scatter (the sun's phase, the
-        // planet's shadow, the multiple scattering) at the sky's scale, its transmittance, in
-        // place of the fade toward the horizon's colour; the weather's veil as above.
-        let ap = vol_ap(dir, dist);
-        let ta = dot(ap.tr, vec3<f32>(0.2126, 0.7152, 0.0722));
-        let ins = mix(at_spectral(ap.ins * vol_atmo_scale(), clamp(vol_phys(), 0.0, 1.0)), colw * (1.0 - ta), skyu.atmo3.x * wk);
-        return vec4<f32>(ins * (1.0 - wv) + colw * wv, ta * (1.0 - wv));
-    }
     return vec4<f32>(colc * (1.0 - tl) * (1.0 - wv) + colw * wv, tl * (1.0 - wv));
 }
 
@@ -893,7 +917,10 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             t1 = 1e9;
         }
         t1 = min(min(t1, dist), t0 + 9000.0);
-        if (t1 > t0) {
+        // On clear days (`cloud3.x <= 0`), the offshore bank only exists west of x = -13000 m;
+        // skip the entire march (and per-step samples) whenever no point on [t0, t1] reaches it.
+        let marine_reach = skyu.cloud3.x > 0.0 || min(eye.x + dir.x * t0, eye.x + dir.x * t1) < -13000.0;
+        if (t1 > t0 && marine_reach) {
             let n = 10;
             // Denser samples near the start of the segment.
             let span = t1 - t0;
@@ -905,8 +932,6 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let dt = tn - tprev;
                 tprev = tn;
                 let p = eye + dir * t;
-                let s = textureSampleLevel(vol_sheet, vol_rep, (p.xz + skyu.cloud4.xy) / SKY_MARINE_TILE, clamp(log2(max(vol_footprint(t), 1.0) / 37.5), 0.0, 6.0));
-                var top = skyu.cloud3.y + skyu.cloud3.z * (s.b * 2.0 - 1.0);
                 // offshore, the bank stands over the open Pacific from ~1.2 km west of
                 // Ocean Beach (waterline x ~ -10,300 m), dense from ~3.2 km out: a fog bank
                 // lurking on the horizon. It began at x -6,800 before, which put the whole
@@ -916,13 +941,18 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 // the inland bank's: a low grey band on the sea horizon that the
                 // setting sun touches, where it stood ~5 deg high and hid it.
                 let off = smoothstep(-13000.0, -16000.0, p.x);
-                if (skyu.cloud3.x <= 0.0) {
-                    top = top * 0.55;
-                }
                 // the clear-day offshore bank is a third as dense: a grey haze band on
                 // the sea horizon, not a 25-30 px wall with a blown top and a dark shelf
                 // that hid the setting sun.
                 let sig0 = max(skyu.cloud3.x, 0.35 * skyu.cloud3.w * off);
+                if (sig0 <= 0.0) {
+                    continue;
+                }
+                let s = textureSampleLevel(vol_sheet, vol_rep, (p.xz + skyu.cloud4.xy) / SKY_MARINE_TILE, clamp(log2(max(vol_footprint(t), 1.0) / 37.5), 0.0, 6.0));
+                var top = skyu.cloud3.y + skyu.cloud3.z * (s.b * 2.0 - 1.0);
+                if (skyu.cloud3.x <= 0.0) {
+                    top = top * 0.55;
+                }
                 // banks and thinner gaps drifting through the fog (a 3D field at ~600 m).
                 let fq = textureSampleLevel(vol_noise, vol_rep, (p + vec3<f32>(skyu.cloud4.x, 0.0, skyu.cloud4.y)) / 600.0, 1.0);
                 let sig = sig0 * smoothstep(top, top - mix(70.0, 180.0, off), p.y) * (0.55 + 0.9 * s.a) * (0.35 + 1.3 * fq.r);
@@ -1301,13 +1331,15 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let bot_l = dot(a_bot_eff, vec3<f32>(0.2126, 0.7152, 0.0722));
 
             let day_hi = smoothstep(0.22, 0.58, cl_l.y) * (1.0 - strat * 0.82);
-            let sun_cloud_bounce = cl_sun(0.5 * (base + top)) * ((mix(0.011, 0.022, day_hi) * max(cl_l.y, 0.0) + 0.008 * low_sun) * vc_beam * (1.0 - strat * 0.85) * mix(0.62, 1.15, back_w));
-            let sun_ground_bounce = cl_sun(base) * ((mix(0.014, 0.032, day_hi) * max(cl_l.y, 0.0) + 0.007 * low_sun) * vc_beam * (1.0 - strat * 0.82));
+            let sun_base = cl_sun(base);
+            let sun_mid = cl_sun(0.5 * (base + top));
+            let sun_cloud_bounce = sun_mid * ((mix(0.011, 0.022, day_hi) * max(cl_l.y, 0.0) + 0.008 * low_sun) * vc_beam * (1.0 - strat * 0.85) * mix(0.62, 1.15, back_w));
+            let sun_ground_bounce = sun_base * ((mix(0.014, 0.032, day_hi) * max(cl_l.y, 0.0) + 0.007 * low_sun) * vc_beam * (1.0 - strat * 0.82));
             // Selective molten amber-gold sunset ridge under-bounce (drives high-contrast fiery rims
             // on exposed protruding ridges while deep recessed shadow bellies stay dark steel-indigo).
-            let sun_under = cl_sun(base) * (0.092 * low_sun * vc_beam * (1.0 - strat * 0.85) * (0.24 + 0.76 * max(cl_cs, 0.0)) * vec3<f32>(1.30, 0.94, 0.36));
+            let sun_under = sun_base * (0.092 * low_sun * vc_beam * (1.0 - strat * 0.85) * (0.24 + 0.76 * max(cl_cs, 0.0)) * vec3<f32>(1.30, 0.94, 0.36));
             // Warm honey-gold lateral cloud-to-cloud bounce from adjacent sunlit towers onto exposed shaded cheeks.
-            let c2c_bounce = cl_sun(0.5 * (base + top)) * ((mix(0.020, 0.034, day_hi) * max(cl_l.y, 0.12) + 0.018 * low_sun) * vc_beam * (1.0 - strat * 0.85)) * mix(vec3<f32>(1.02, 0.99, 0.95), vec3<f32>(1.18, 0.96, 0.56), low_sun);
+            let c2c_bounce = sun_mid * ((mix(0.020, 0.034, day_hi) * max(cl_l.y, 0.12) + 0.018 * low_sun) * vc_beam * (1.0 - strat * 0.85)) * mix(vec3<f32>(1.02, 0.99, 0.95), vec3<f32>(1.18, 0.96, 0.56), low_sun);
 
             let desat_w = mix(0.18, 0.04, low_sun) * day_or_gold;
             let top_gain = mix(mix(1.0, 0.92, night_w), mix(mix(1.02, 1.18, day_hi), 1.08, back_w), day_or_gold);
@@ -1364,6 +1396,8 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let fp = vol_footprint(t);
                 let lod = clamp(log2(max(fp, 1.0) / 20.0), 0.0, 3.0);
                 let fine_n = select(4, 3, t > 15000.0 || strat > 0.45 || night_w > 0.5);
+                var pre_shape = vec4<f32>(0.0);
+                var has_shape = false;
                 if (fine == 0) {
                     // Two-tier conservative empty-space skip; backsteps strictly within the just-skipped
                     // gap (never behind `t_done`, preventing double-integration or ping-pong terraces).
@@ -1373,7 +1407,8 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                         continue;
                     }
                     let cm = select(2.4, 3.0, t > 20000.0);
-                    if (vc_shape(pc, fp, lod).x > 0.001) {
+                    let sh = vc_shape(pc, fp, lod);
+                    if (sh.x > 0.001) {
                         if (prev_skip > 0.0) {
                             fine = fine_n + 3;
                             t = max(t - prev_skip + 0.5 * dt_base, t_done);
@@ -1381,6 +1416,8 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                             continue;
                         }
                         fine = fine_n;
+                        pre_shape = sh;
+                        has_shape = true;
                     } else {
                         prev_skip = cm * dt_base;
                         t = t + prev_skip;
@@ -1390,16 +1427,15 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 prev_skip = 0.0;
                 let want_f = Tc > 0.25 && strat < 0.45 && (is_day_lit || t < 11000.0);
                 let allow_m = (is_day_lit || low_sun > 0.05) && night_w < 0.45 && strat < 0.45 && Tc > 0.42;
-                let s = vc_density(pc, t, fp, lod, want_f, allow_m);
+                var s: vec4<f32>;
+                if (has_shape) {
+                    s = vc_density_from_shape(pre_shape, pc, t, fp, want_f, allow_m);
+                } else {
+                    s = vc_density(pc, t, fp, lod, want_f, allow_m);
+                }
                 if (s.x > 0.0012) {
                     fine = fine_n;
                     let sig = sig_max * s.x;
-                    // Altitude-stepped golden-hour sunset solar gradient (fiery burnished tangerine-amber on
-                    // lower bellies climbing to luminous champagne-gold crowns) + lunar silver-blue at night.
-                    let alt_grad = mix(vec3<f32>(1.26, 0.90, 0.38), vec3<f32>(1.12, 1.05, 0.80), smoothstep(0.12, 0.78, s.y));
-                    let sun_alt_tint = mix(vec3<f32>(1.0), alt_grad, low_sun * (1.0 - strat * 0.85));
-                    let moon_tint = mix(vec3<f32>(1.0), vec3<f32>(1.95, 2.15, 2.65), moon_key_w);
-                    let e_sun = cl_sun(pc.y) * vc_beam * sun_alt_tint * moon_tint;
                     var sun = vec3<f32>(0.0);
                     var sun_slope = 0.24;
                     var ao_res = ao_held;
@@ -1410,26 +1446,34 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     let reuse_sun = (Tc < 0.26 || (Tc < 0.55 && (hit_n & 1) == 1)) && sun_held.x >= 0.0;
                     if (reuse_sun) {
                         sun = sun_held;
-                    } else if (any(e_sun > vec3<f32>(0.0))) {
-                        var tl = vec3<f32>(340.0 * s.x * sig_max / max(cl_l.y, 0.14), 80.0 * s.x * sig_max, 0.24);
-                        if (night_w >= 0.55) {
-                            // Fast 2-tap lunar light march at night (saves ~2 ms on nocturnal waterfront).
-                            var tau_m = 110.0 * s.x;
-                            let qm = pc + cl_l * 340.0;
-                            if (qm.y < top && vc_envelope(qm, fp + 60.0, 0.12) > 0.001) {
-                                let sm = vc_shape(qm, fp + 60.0, min(lod + 0.7, 2.4));
-                                if (sm.x > 0.002) {
-                                    tau_m = tau_m + 460.0 * vc_vapor_curve(sm.x, sm.z, sm.y, smoothstep(0.08, 0.34, sm.y), sm.w, strat, t);
+                    } else {
+                        // Altitude-stepped golden-hour sunset solar gradient (fiery burnished tangerine-amber on
+                        // lower bellies climbing to luminous champagne-gold crowns) + lunar silver-blue at night.
+                        let alt_grad = mix(vec3<f32>(1.26, 0.90, 0.38), vec3<f32>(1.12, 1.05, 0.80), smoothstep(0.12, 0.78, s.y));
+                        let sun_alt_tint = mix(vec3<f32>(1.0), alt_grad, low_sun * (1.0 - strat * 0.85));
+                        let moon_tint = mix(vec3<f32>(1.0), vec3<f32>(1.95, 2.15, 2.65), moon_key_w);
+                        let e_sun = cl_sun(pc.y) * vc_beam * sun_alt_tint * moon_tint;
+                        if (any(e_sun > vec3<f32>(0.0))) {
+                            var tl = vec3<f32>(340.0 * s.x * sig_max / max(cl_l.y, 0.14), 80.0 * s.x * sig_max, 0.24);
+                            if (night_w >= 0.55) {
+                                // Fast 2-tap lunar light march at night (saves ~2 ms on nocturnal waterfront).
+                                var tau_m = 110.0 * s.x;
+                                let qm = pc + cl_l * 340.0;
+                                if (qm.y < top && vc_envelope(qm, fp + 60.0, 0.12) > 0.001) {
+                                    let sm = vc_shape(qm, fp + 60.0, min(lod + 0.7, 2.4));
+                                    if (sm.x > 0.002) {
+                                        tau_m = tau_m + 460.0 * vc_vapor_curve(sm.x, sm.z, sm.y, smoothstep(0.08, 0.34, sm.y), sm.w, strat, t);
+                                    }
                                 }
+                                tl = vec3<f32>(tau_m * sig_max, 80.0 * s.x * sig_max, 0.24);
+                            } else if (t <= 122000.0 && (strat < 0.45 || t < 24000.0)) {
+                                tl = vc_light_tau(pc, cl_l, t, fp, lod, s.x, jit);
                             }
-                            tl = vec3<f32>(tau_m * sig_max, 80.0 * s.x * sig_max, 0.24);
-                        } else if (t <= 122000.0 && (strat < 0.45 || t < 24000.0)) {
-                            tl = vc_light_tau(pc, cl_l, t, fp, lod, s.x, jit);
+                            sun_slope = tl.z;
+                            let spike_w = twi_spike_soft * (1.0 - 0.65 * smoothstep(32000.0, 74000.0, t));
+                            let sub_top = ao_res.y * mix(1.0, 1.32 - 0.52 * s.z, day_hi);
+                            sun = e_sun * vc_ms(tl.x, tl.y, tl.z, s.w, sub_top, spike_w, cl_cs, low_sun, strat) * VC_SUN_GAIN;
                         }
-                        sun_slope = tl.z;
-                        let spike_w = twi_spike_soft * (1.0 - 0.65 * smoothstep(32000.0, 74000.0, t));
-                        let sub_top = ao_res.y * mix(1.0, 1.32 - 0.52 * s.z, day_hi);
-                        sun = e_sun * vc_ms(tl.x, tl.y, tl.z, s.w, sub_top, spike_w, cl_cs, low_sun, strat) * VC_SUN_GAIN;
                     }
                     hit_n = hit_n + 1;
                     sun_held = sun;
@@ -1579,18 +1623,18 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let hor_fade = 1.0 - smoothstep(mix(44000.0, 14000.0, night_w), mix(86000.0, 38000.0, night_w), t_m);
                 let alpha_h = alpha * hor_fade;
                 let Lc_h = Lc * hor_fade;
-                var behind = lk_sky_dome(dir);
-                if (atmo_on) {
-                    behind = mix(behind, vol_atmo_sky(dir), skyu.atmo2.y);
-                }
-                if (night_w > 0.01 && skyu.amb_top.w > 0.0) {
-                    behind = behind + sky_city_glow(dir, eye, skyu.amb_top.w) * (0.5 * night_w);
-                }
                 if (cl_defer) {
                     cl_rad = Lc_h;
                     cl_a = alpha_h;
                     cl_tm = t_m;
                 } else {
+                    var behind = lk_sky_dome(dir);
+                    if (atmo_on) {
+                        behind = mix(behind, vol_atmo_sky(dir), skyu.atmo2.y);
+                    }
+                    if (night_w > 0.01 && skyu.amb_top.w > 0.0) {
+                        behind = behind + sky_city_glow(dir, eye, skyu.amb_top.w) * (0.5 * night_w);
+                    }
                     Lc = Lc_h * far_rgb + behind * alpha_h * (vec3<f32>(1.0) - far_rgb);
                     if (above) {
                         L = Lc + (1.0 - alpha_h) * L;
@@ -1750,11 +1794,6 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             // Aerial perspective on the cloud: with the distance to its mean depth (the shallow
             // share of the path) it sinks into the sky drawn behind it, so the far field piles
             // up into the horizon haze in the haze's own colour instead of ending on a line.
-            let far = exp(-t_m * (1.0 - 0.85 * abs(dir.y)) / mix(24000.0, 16000.0, strat));
-            var behind = lk_sky_dome(dir);
-            if (atmo_on) {
-                behind = mix(behind, vol_atmo_sky(dir), skyu.atmo2.y);
-            }
             if (cl_defer) {
                 // held for the aerial step, which hazes it by its depth (`far` is the
                 // sky pixels' stand-in for that aerial)
@@ -1762,6 +1801,11 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 cl_a = alpha;
                 cl_tm = t_m;
             } else {
+                let far = exp(-t_m * (1.0 - 0.85 * abs(dir.y)) / mix(24000.0, 16000.0, strat));
+                var behind = lk_sky_dome(dir);
+                if (atmo_on) {
+                    behind = mix(behind, vol_atmo_sky(dir), skyu.atmo2.y);
+                }
                 Lc = Lc * far + behind * alpha * (1.0 - far);
                 if (above) {
                     // Seen from above, the deck is in front of the marine layer.

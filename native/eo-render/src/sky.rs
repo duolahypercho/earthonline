@@ -832,6 +832,11 @@ struct State {
     atmo_built: Option<[[f32; 4]; 4]>,
     /// the medium the tables are built for (`atmo_m`, `atmo_s`, `atmo_r`, `atmo_o`), the rebuild key.
     atmo_medium: [[f32; 4]; 4],
+    /// exact input key `(medium, sun_dir_bits, r0_bits)` for the sky-view and aerial-perspective LUTs
+    /// (`at_view_main` and `at_ap_main` depend only on medium, `skyu.atmo.xyz`, and `AT_R + max(eye.y, 1.0) * 0.001`).
+    atmo_view_key: Option<([[f32; 4]; 4], [u32; 3], u32)>,
+    atmo_view_built: Option<([[f32; 4]; 4], [u32; 3], u32)>,
+    ap_built: Option<([[f32; 4]; 4], [u32; 3], u32)>,
     /// the (hour, weather) the histories were made under; frames left to discard after a change; frames of history since the last cut.
     hist_look: Option<(f64, (i64, i64, i64))>,
     recut: u32,
@@ -867,6 +872,12 @@ struct State {
     /// Whether any local light is lit this frame (street lamps, vehicle lamps or
     /// a bore's lamps, with the lights on): the lit fog has nothing to scatter otherwise.
     lights_live: bool,
+    /// Whether any luminaire sprite emitter is active (street lamps or bore lamps).
+    sprites_live: bool,
+    /// Whether any shop window lights are active this frame.
+    shops_live: bool,
+    /// Whether rain streaks are active this frame (`rate > 0`).
+    rain_live: bool,
     /// (lighting, `--light-shadows`) the street lamps in SF's 3000 K LED colour
     /// (`eo_sky::lights::led_street_lamp_color`): the gather's lamps, their
     /// luminaires and the city's glow. Off: the JS role's 0xffc46a, as before.
@@ -1598,6 +1609,9 @@ impl SkyGpu {
                 meter_floor: 0,
                 atmo_built: None,
                 atmo_medium: [[0.0; 4]; 4],
+                atmo_view_key: None,
+                atmo_view_built: None,
+                ap_built: None,
                 hist_look: None,
                 recut: 0,
                 cut_hold: false,
@@ -1616,6 +1630,9 @@ impl SkyGpu {
                 bore_depth: None,
                 tunnel_lamps: false,
                 lights_live: false,
+                sprites_live: false,
+                shops_live: false,
+                rain_live: false,
                 led: false,
                 photo: 0,
                 shops: None,
@@ -2357,8 +2374,11 @@ impl SkyGpu {
         let atmo_s = [atm.aerosol_spectral[0] as f32, atm.aerosol_spectral[1] as f32, atm.aerosol_spectral[2] as f32, AP_REACH_KM];
         let atmo_r = [atm.rayleigh[0] as f32, atm.rayleigh[1] as f32, atm.rayleigh[2] as f32, atm.rayleigh_h_km as f32];
         let atmo_o = [atm.ozone[0] as f32, atm.ozone[1] as f32, atm.ozone[2] as f32, 0.0];
-        // the transmittance and multiple-scattering tables are rebuilt when any of the medium moves
+        // the transmittance and multiple-scattering tables are rebuilt when any of the medium moves;
+        // the sky-view and aerial-perspective tables also depend on sun direction and r0 = AT_R + max(eye.y, 1.0) * 0.001.
         s.atmo_medium = [[atmo_m[0], atmo_m[1], atmo_m[2], 0.0], atmo_s, atmo_r, atmo_o];
+        let atmo_r0 = 6360.0_f32 + cam.eye.y.max(1.0) * 0.001_f32;
+        s.atmo_view_key = Some((s.atmo_medium, [(m.sun.x as f32).to_bits(), (m.sun.y as f32).to_bits(), (m.sun.z as f32).to_bits()], atmo_r0.to_bits()));
         let atmo4 = match daylight.filter(|_| o.phys_sky) {
             Some(d) => [d.sun_toa[0] as f32, d.sun_toa[1] as f32, d.sun_toa[2] as f32, d.weight as f32],
             None => [0.0; 4],
@@ -2401,6 +2421,9 @@ impl SkyGpu {
         let bore_units = if s.tunnel_lamps && o.lights { crate::structures::bore_interior_units(f, terms) } else { 0.0 };
         // (lighting, `--lit-fog`) any local light lit this frame.
         s.lights_live = lamps_on > 0.0 || veh > 0.0 || bore_units > 0.0;
+        s.sprites_live = lamps_on > 0.0 || bore_units > 0.0;
+        s.shops_live = shop_k > 0.0;
+        s.rain_live = rate > 0.0;
         let u = SkyUniform {
             vp: vp.to_cols_array_2d(),
             prev_vp: prev_vp.to_cols_array_2d(),
@@ -2602,7 +2625,7 @@ impl SkyGpu {
         // the cloud noise (once) and this frame's cloud-shadow map, before the city pass reads it
         self.clouds.encode(enc, ts.map(|(q, b)| (q, b + Q_CLOUD_SHADOW)), vol_clouds);
         let mut s = self.state.lock().unwrap();
-        let on = s.opts.lights;
+        let on = s.opts.lights && (s.lights_live || s.shops_live || s.opts.cinematic);
         enc.clear_buffer(&self.counter, 0, None);
         let ncl = CLUSTERS[0] * CLUSTERS[1] * CLUSTERS[2];
         if !on {
@@ -2803,9 +2826,9 @@ impl SkyGpu {
                 });
             }
         };
-        let (o, parity, history_valid, frame_bloom) = {
+        let (o, parity, history_valid, frame_bloom, sprites_live, rain_live) = {
             let s = self.state.lock().unwrap();
-            (s.opts, s.parity, s.history_valid, s.frame_bloom)
+            (s.opts, s.parity, s.history_valid, s.frame_bloom, s.sprites_live, s.rain_live)
         };
         let depth_ok = depth_now;
         if !o.any_post() || !depth_ok {
@@ -2819,7 +2842,11 @@ impl SkyGpu {
         let mut tg = self.targets.lock().unwrap();
         let t = tg.as_mut().expect("ensure_targets before encode_after");
         // FX: luminaires (additive) and rain (premultiplied) over the scene.
-        {
+        // Skip the full-screen HDR + depth TBDR pass altogether when neither sprites nor rain are live.
+        let draw_sprites = o.sprites && o.lights && sprites_live;
+        let draw_rain = o.rain && rain_live;
+        let fx_pass = draw_sprites || draw_rain;
+        if fx_pass {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sky-fx"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: hdr, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
@@ -2829,7 +2856,7 @@ impl SkyGpu {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.fx_bg, &[]);
-            if o.sprites && o.lights {
+            if draw_sprites {
                 // Luminaires and far pools (12 vertices an instance, from the gather).
                 pass.set_pipeline(&self.sprite_pipe);
                 pass.draw_indirect(&self.counter, 16);
@@ -2843,7 +2870,7 @@ impl SkyGpu {
                     pass.draw_indirect(&self.counter, 16);
                 }
             }
-            if o.rain {
+            if draw_rain {
                 pass.set_pipeline(&self.rain_pipe);
                 pass.draw(0..6, 0..11_000);
             }
@@ -2859,7 +2886,11 @@ impl SkyGpu {
                     ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r: VEL_NONE, g: VEL_NONE, b: 0.0, a: 0.0 }), store: wgpu::StoreOp::Store },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }), stencil_ops: None }),
-                timestamp_writes: tw(Q_SKY_FX).map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: None, end_of_pass_write_index: Some(b + 1) }),
+                timestamp_writes: tw(Q_SKY_FX).map(|(q, b)| wgpu::RenderPassTimestampWrites {
+                    query_set: q,
+                    beginning_of_pass_write_index: (!fx_pass).then_some(b),
+                    end_of_pass_write_index: Some(b + 1),
+                }),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2972,24 +3003,44 @@ impl SkyGpu {
         let sb = &t.scene.as_ref().unwrap().2;
         // the atmosphere tables, before the volume reads them.
         if o.atmosphere && o.needs_volume() {
-            // The transmittance and multiple-scattering tables only when the medium changed (0.3-0.4 ms each frame otherwise).
-            let first = {
+            // Rebuild transmittance + multi-scatter only on medium changes, and sky-view + aerial-perspective
+            // LUTs only when `(medium, sun_dir, AT_R + max(eye.y, 1.0) * 0.001)` changes (bit-identical).
+            let (rebuild_base, rebuild_view, rebuild_ap) = {
                 let mut s = self.state.lock().unwrap();
-                let rebuild = s.atmo_built != Some(s.atmo_medium);
-                s.atmo_built = Some(s.atmo_medium);
-                if rebuild { 0 } else { 2 }
+                let base = s.atmo_built != Some(s.atmo_medium);
+                if base {
+                    s.atmo_built = Some(s.atmo_medium);
+                }
+                let view = base || s.atmo_view_built != s.atmo_view_key;
+                if view {
+                    s.atmo_view_built = s.atmo_view_key;
+                }
+                let ap = o.ap_lut && (base || s.ap_built != s.atmo_view_key);
+                if ap {
+                    s.ap_built = s.atmo_view_key;
+                }
+                (base, view, ap)
             };
             // (`--photo-finish`'s measured air reaches these passes through the medium: `update`'s `atmo_m`.)
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("sky-atmosphere"), timestamp_writes: None });
-            for k in first..3 {
-                pass.set_pipeline(&self.atmo_pipes[k]);
-                pass.set_bind_group(0, &self.atmo_bgs[k], &[]);
-                pass.dispatch_workgroups(self.atmo_sizes[k].0.div_ceil(8), self.atmo_sizes[k].1.div_ceil(8), 1);
-            }
-            if o.ap_lut {
-                pass.set_pipeline(&self.ap_pipe);
-                pass.set_bind_group(0, &self.ap_bg, &[]);
-                pass.dispatch_workgroups(AP_SIZE[0].div_ceil(8), AP_SIZE[1].div_ceil(8), 1);
+            if rebuild_base || rebuild_view || rebuild_ap {
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("sky-atmosphere"), timestamp_writes: None });
+                if rebuild_base {
+                    for k in 0..2 {
+                        pass.set_pipeline(&self.atmo_pipes[k]);
+                        pass.set_bind_group(0, &self.atmo_bgs[k], &[]);
+                        pass.dispatch_workgroups(self.atmo_sizes[k].0.div_ceil(8), self.atmo_sizes[k].1.div_ceil(8), 1);
+                    }
+                }
+                if rebuild_view {
+                    pass.set_pipeline(&self.atmo_pipes[2]);
+                    pass.set_bind_group(0, &self.atmo_bgs[2], &[]);
+                    pass.dispatch_workgroups(self.atmo_sizes[2].0.div_ceil(8), self.atmo_sizes[2].1.div_ceil(8), 1);
+                }
+                if rebuild_ap {
+                    pass.set_pipeline(&self.ap_pipe);
+                    pass.set_bind_group(0, &self.ap_bg, &[]);
+                    pass.dispatch_workgroups(AP_SIZE[0].div_ceil(8), AP_SIZE[1].div_ceil(8), 1);
+                }
             }
         }
         // Volume.

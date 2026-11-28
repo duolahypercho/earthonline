@@ -693,7 +693,12 @@ fn vc_shape(p: vec3<f32>, fp: f32, lod: f32) -> vec4<f32> {
 /// Every cascade is mutually unaligned (>= 27 deg) and exact integer-periodic at 51.2 km, eliminating
 /// repetitive Voronoi balls while keeping overhead cloud undersides crisp, fibrous, and sculpted.
 fn vc_density(p: vec3<f32>, t: f32, fp: f32, lod: f32, want_fine: bool, allow_micro: bool) -> vec4<f32> {
-    var s = vc_shape(p, fp, lod);
+    let s0 = vc_shape(p, fp, lod);
+    return vc_density_from_shape(s0, p, t, fp, want_fine, allow_micro);
+}
+
+fn vc_density_from_shape(s0: vec4<f32>, p: vec3<f32>, t: f32, fp: f32, want_fine: bool, allow_micro: bool) -> vec4<f32> {
+    var s = s0;
     if (s.x <= 0.001) {
         return s;
     }
@@ -1192,30 +1197,14 @@ fn vc_ambient(top_col: vec3<f32>, side_col: vec3<f32>, bot_col: vec3<f32>, sun_u
     return (a * cav_shade * dir_amb + under_lit + c2c_lit) * mix(1.0, 0.90, clamp(d, 0.0, 1.0));
 }
 
-/// the cloud-shadow map (clouds.rs, before the city pass): for the sea-level point
-/// each texel stands for (a 32 km window about the eye, wrapped, so it is anchored to the
-/// world), the transmittance of the low deck along the key, through the same shape the
-/// march draws. The city, the water and the volume read it (`sky_cloud_transmittance`,
-/// `vol_cloud_t`) at the point their own key ray reaches sea level.
-/// Under `--volumetric-clouds`, `.r` carries Cascade-1 detail-carved ground/water
-/// transmittance while `.gba` (on all texels outside `(0..4, 0)`) pack cumulative physical
-/// optical depth above slab heights `h = 0.20, 0.45, 0.72` for single-fetch cloud-to-cloud
-/// shadow projection (`vc_cloud_cast_tau`).
-@compute @workgroup_size(8, 8)
-fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let res = i32(SKY_CSHADOW_RES);
-    let ij = vec2<i32>(gid.xy);
-    if (ij.x >= res || ij.y >= res) {
-        return;
-    }
-    let l = look.key_dir.xyz;
+/// One texel of the cloud-shadow map (`.r` transmittance, `.gba` cumulative optical depth above
+/// `h = 0.20, 0.45, 0.72` under `--volumetric-clouds`).
+fn cl_shadow_texel(ij: vec2<i32>, res: i32, k0: vec2<i32>, l: vec3<f32>, vc_on: bool) -> vec4<f32> {
     var tr = 1.0;
     var gba = vec3<f32>(0.0);
-    let vc_on = sky_vol_clouds_on(skyu.cirrus);
     if (vc_on) {
         let st = vc_stratus();
         if (skyu.cloud0.z > 0.0 && l.y > 0.02 && st < 0.85) {
-            let k0 = vec2<i32>(floor((look.cam_pos.xz - 0.5 * SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL) / SKY_CSHADOW_TEXEL));
             let wi = k0 + (((ij - k0) % res) + res) % res;
             let g = (vec2<f32>(wi) + 0.5) * SKY_CSHADOW_TEXEL;
             let base = skyu.cloud0.x;
@@ -1300,7 +1289,6 @@ fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     } else if (cl_low_deck_on() && l.y > 0.02 && cl_stratus() < 0.999) {
         // The window's first texel (world index), and this texel's world index in it.
-        let k0 = vec2<i32>(floor((look.cam_pos.xz - 0.5 * SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL) / SKY_CSHADOW_TEXEL));
         let wi = k0 + (((ij - k0) % res) + res) % res;
         let g = (vec2<f32>(wi) + 0.5) * SKY_CSHADOW_TEXEL;
         let base = skyu.cloud0.x;
@@ -1326,15 +1314,69 @@ fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
         tr = exp(-tau);
     }
-    // the sky's light on the clouds, once a frame: texels (0..4, 0) carry it in
-    // their g, b, a (amb, zen, top, sun, anti; sky_volume `cl_sky_light`); the receivers read r
-    // alone. The volume pass reads these five texels instead of the sky table per pixel.
-    if (ij.y == 0 && ij.x < 5) {
-        let sk = cl_sky_light();
-        var parts = array<vec3<f32>, 5>(sk.amb, sk.zen, sk.top, sk.sun, sk.anti);
-        gba = parts[ij.x];
+    return vec4<f32>(tr, gba);
+}
+
+/// the cloud-shadow map (clouds.rs, before the city pass): for the sea-level point
+/// each texel stands for (a 32 km window about the eye, wrapped, so it is anchored to the
+/// world), the transmittance of the low deck along the key, through the same shape the
+/// march draws. The city, the water and the volume read it (`sky_cloud_transmittance`,
+/// `vol_cloud_t`) at the point their own key ray reaches sea level.
+/// Dispatched at half-res (`SHADOW_RES / 2`, 2x2 blocks): fills all 4 texels on cuts, wrap-seam
+/// bands, the `ClSky` row `(0..4, 0)`, and non-marching regimes; on steady frames refines 1/4
+/// texels per frame (full 32 km world-anchored refresh every 4 frames, ~0.004 texel cloud drift).
+@compute @workgroup_size(8, 8)
+fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let res = i32(SKY_CSHADOW_RES);
+    let base_ij = vec2<i32>(gid.xy) * 2;
+    if (base_ij.x >= res || base_ij.y >= res) {
+        return;
     }
-    textureStore(cl_shadow_out, ij, vec4<f32>(tr, gba));
+    let l = look.key_dir.xyz;
+    let vc_on = sky_vol_clouds_on(skyu.cirrus);
+    let is_sky_row = base_ij.y == 0 && base_ij.x < 6;
+    let marching = select(
+        cl_low_deck_on() && l.y > 0.02 && cl_stratus() < 0.999,
+        skyu.cloud0.z > 0.0 && l.y > 0.02 && vc_stratus() < 0.85,
+        vc_on,
+    );
+    var offs = array<vec2<i32>, 4>(vec2<i32>(0, 0), vec2<i32>(1, 1), vec2<i32>(1, 0), vec2<i32>(0, 1));
+    if (!marching) {
+        let tr = select(1.0, skyu.cloud1.w, vc_on && skyu.cloud0.z > 0.0 && l.y > 0.02);
+        var parts = array<vec3<f32>, 5>(vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0));
+        if (is_sky_row) {
+            let sk = cl_sky_light();
+            parts = array<vec3<f32>, 5>(sk.amb, sk.zen, sk.top, sk.sun, sk.anti);
+        }
+        for (var k = 0; k < 4; k = k + 1) {
+            let ij = base_ij + offs[k];
+            let gba = select(vec3<f32>(0.0), parts[min(ij.x, 4)], is_sky_row && ij.y == 0 && ij.x < 5);
+            textureStore(cl_shadow_out, ij, vec4<f32>(tr, gba));
+        }
+        return;
+    }
+    let k0 = vec2<i32>(floor((look.cam_pos.xz - 0.5 * SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL) / SKY_CSHADOW_TEXEL));
+    let d0 = (((base_ij - k0) % res) + res) % res;
+    let on_seam = d0.x < 2 || d0.x >= res - 2 || d0.y < 2 || d0.y >= res - 2;
+    let fill_all = skyu.taa.y < 0.5 || on_seam || is_sky_row;
+    var parts = array<vec3<f32>, 5>(vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0));
+    if (is_sky_row) {
+        // the sky's light on the clouds, once a frame: texels (0..4, 0) carry it in
+        // their g, b, a (amb, zen, top, sun, anti; sky_volume `cl_sky_light`); the receivers read r
+        // alone. The volume pass reads these five texels instead of the sky table per pixel.
+        let sk = cl_sky_light();
+        parts = array<vec3<f32>, 5>(sk.amb, sk.zen, sk.top, sk.sun, sk.anti);
+    }
+    let slot = i32(skyu.flags.y % 4u);
+    let n_iter = select(1, 4, fill_all);
+    for (var k = 0; k < n_iter; k = k + 1) {
+        let ij = base_ij + offs[select(slot, k, fill_all)];
+        var v = cl_shadow_texel(ij, res, k0, l, vc_on);
+        if (is_sky_row && ij.y == 0 && ij.x < 5) {
+            v = vec4<f32>(v.r, parts[ij.x]);
+        }
+        textureStore(cl_shadow_out, ij, v);
+    }
 }
 
 /// Seamless hemi-octahedral decode (`uv` in `[0, 1]^2` -> unit upper-hemisphere direction, `d.y > 0`).

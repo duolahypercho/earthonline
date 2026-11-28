@@ -634,13 +634,17 @@ pub struct Renderer {
     pub counts: Option<std::sync::Arc<counted::Counts>>,
     /// The opaque, transparent and late opaque lists in the emulation.
     main_lists: Option<counted::CountedLists>,
-    /// The last update's camera, and the writes counted then (`vis_writes`):
-    /// a jump is a cut for the emulation; the step, the motion-aware bounds'
-    /// (counted.rs `ViewStep`).
-    last_view: std::sync::Mutex<Option<(Camera, u64)>>,
-    /// Writes that can change what the cull selects (objects, their groups,
-    /// the far layer's residency, any streamed bytes; counted.rs `ViewStep::quiet`).
+    /// The last update's camera, and the writes counted then (`vis_writes`,
+    /// `vis_added`): a jump is a cut for the emulation; the step, the
+    /// motion-aware bounds' (counted.rs `ViewStep`).
+    last_view: std::sync::Mutex<Option<(Camera, u64, u64)>>,
+    /// Structural writes that invalidate steady bounds (scene resets, multiplier,
+    /// far-tree block count changes; counted.rs `ViewStep::quiet`).
     vis_writes: std::sync::atomic::AtomicU64,
+    /// Incremental object/group streaming delta (upper bound on newly added
+    /// objects in `Target::Object` / `Target::Group` writes) so steady late lists
+    /// can add exact headroom instead of falling back to the full early floor.
+    vis_added: std::sync::atomic::AtomicU64,
     /// The far layer draws without the compacted lists (an adapter without
     /// multi-draw-indirect-count, unless `--no-far-fallback`): fixed-size
     /// lists, see `hlod::HlodGpu::draw` and `hlod_trees::FarTrees::draw`.
@@ -1432,6 +1436,7 @@ impl Renderer {
             main_lists,
             last_view: std::sync::Mutex::new(None),
             vis_writes: std::sync::atomic::AtomicU64::new(0),
+            vis_added: std::sync::atomic::AtomicU64::new(0),
             far_fallback: !ctx.compaction() && far_city::FarCity::from_env().fallback,
             color_format: init.color_format,
             sample_count: init.sample_count,
@@ -1638,7 +1643,8 @@ impl Renderer {
 
     /// the CPU copy of the object table follows a write of the GPU table (bytes at `offset`).
     pub fn note_object_write(&self, offset: u64, data: &[u8]) {
-        self.note_vis_write();
+        let objs = (data.len() / std::mem::size_of::<scene::GpuObject>()).max(1) as u64;
+        self.note_vis_added(objs);
         if let Some(r) = &self.ranges {
             r.lock().unwrap().write(offset, data);
         }
@@ -1696,6 +1702,7 @@ impl Renderer {
         if self.hlod_trees.get().is_some() || !(self.compact || self.far_fallback || self.look.options.cove_detail) || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
             return 0;
         }
+        let use_list = !ctx.indirect_count && !self.bounded && (self.compact || self.far_fallback);
         let t = hlod_trees::FarTrees::new(&hlod_trees::FarTreesInit {
             // without the compacted lists: every far tree from the fixed-size lists (`far_fallback`),
             // else the Black Point grove alone (`--cove-detail`)
@@ -1707,9 +1714,10 @@ impl Renderer {
             late_bgl: &self.occlusion.late_bgl,
             sample_count: self.sample_count,
             debug_ids: self.debug_ids,
-            fallback: !self.compact && self.far_fallback,
+            fallback: use_list,
+            late_discard: !self.compact,
         });
-        if let Some(c) = self.counts.as_ref().filter(|_| !self.bounded) {
+        if let Some(c) = self.counts.as_ref().filter(|_| !self.bounded && !t.uses_list()) {
             t.register_counts(c); // (the bounded draws: its guards instead)
         }
         let b = t.bytes;
@@ -1797,9 +1805,22 @@ impl Renderer {
     }
 
     /// One budgeted write (see `upload::UploadQueue`). Object writes are
-    /// repeated for every stress copy.
+    /// repeated for every stress copy. Only object and LOD-group table writes
+    /// can change what the city/shadow/probe culls select (`note_vis_added`).
     pub fn write(&self, queue: &wgpu::Queue, target: upload::Target, offset: u64, data: &[u8]) {
-        self.note_vis_write();
+        match target {
+            upload::Target::Object if self.multiplier > 1 => {
+                let objs = (data.len() / std::mem::size_of::<scene::GpuObject>()).max(1) as u64;
+                self.note_vis_added(objs.saturating_mul(self.multiplier as u64));
+            }
+            upload::Target::Group => {
+                // Full GpuLodGroup slices (kit) or single 4-byte ready words (street/models):
+                // conservative upper bound of 2 newly visible objects per flipped group.
+                let groups = (data.len() / std::mem::size_of::<GpuLodGroup>()).max(1) as u64;
+                self.note_vis_added(groups.saturating_mul(2));
+            }
+            _ => {}
+        }
         self.write_quiet(queue, target, offset, data);
     }
 
@@ -1857,20 +1878,38 @@ impl Renderer {
     /// streamed bytes copied to the GPU this frame outside `write` (the
     /// upload stager's copies), counted like a write for the probe deferral.
     pub fn note_streamed(&self, bytes: u64) {
-        self.frame_upload_bytes.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+        self.note_streamed_bytes(bytes);
         if bytes > 0 {
             self.note_vis_write();
         }
     }
 
-    /// A write that can change what the cull selects (counted.rs `ViewStep::quiet`).
+    /// Streamed bytes accounted for probe deferral without marking cull tables dirty
+    /// (for bulk vertex, index, texture, or prop uploads that do not change cull selection).
+    pub fn note_streamed_bytes(&self, bytes: u64) {
+        self.frame_upload_bytes.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// A structural write that can change what the cull selects (counted.rs `ViewStep::quiet`).
     pub fn note_vis_write(&self) {
         self.vis_writes.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Such writes so far.
+    /// An incremental object/group streaming delta (upper bound on newly visible objects).
+    pub fn note_vis_added(&self, objs: u64) {
+        if objs > 0 {
+            self.vis_added.fetch_add(objs, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// Such structural writes so far.
     pub fn vis_writes(&self) -> u64 {
         self.vis_writes.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Incremental streamed objects/group-equivalents written so far.
+    pub fn vis_added(&self) -> u64 {
+        self.vis_added.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// the device (the upload stager makes its chunks with it).
@@ -2041,6 +2080,9 @@ impl Renderer {
     pub fn attach_props(&self, ctx: &GpuContext, lib: &props_lib::PropLibrary) -> Result<()> {
         if self.props.get().is_none() {
             let p = props::PropsGpu::new(&self.props_init(ctx), lib)?;
+            if let Some(c) = &self.counts {
+                p.register_counts(c);
+            }
             let _ = self.props.set(p);
             self.bind_props_cc0();
         }
@@ -2062,7 +2104,12 @@ impl Renderer {
 
     /// attach a props renderer built elsewhere (once; later calls are ignored).
     pub fn attach_props_gpu(&self, p: props::PropsGpu) {
-        let _ = self.props.set(p);
+        if self.props.get().is_none() {
+            if let Some(c) = &self.counts {
+                p.register_counts(c);
+            }
+            let _ = self.props.set(p);
+        }
         self.bind_props_cc0();
     }
 
@@ -2226,18 +2273,29 @@ impl Renderer {
             // update): recover bounds for the new view while read-backs catch up.
             let fwd = cam.forward();
             let writes = self.vis_writes() + self.occlusion.resets();
+            let added = self.vis_added();
             let mut last = self.last_view.lock().unwrap();
-            if last.is_some_and(|(p, _)| p.eye.distance(cam.eye) > COUNT_CUT_M || p.forward().dot(fwd) < COUNT_CUT_COS) {
+            if last.is_some_and(|(p, _, _)| p.eye.distance(cam.eye) > COUNT_CUT_M || p.forward().dot(fwd) < COUNT_CUT_COS) {
                 c.force_full();
             }
             // what changed since the last update (the motion-aware bounds).
-            let step = last.map(|(p, seen)| counted::ViewStep {
-                turn: view_turn(&p, cam),
-                step: p.eye.distance(cam.eye),
-                quiet: seen == writes && same_lens(&p, cam),
-                occlusion: occlusion && self.compact,
+            let step = last.map(|(p, seen_w, seen_a)| {
+                let lens_ok = same_lens(&p, cam);
+                let quiet = seen_w == writes && seen_a == added && lens_ok;
+                let stream_added = if !quiet && seen_w == writes && lens_ok {
+                    Some(added.saturating_sub(seen_a).min(u32::MAX as u64) as u32)
+                } else {
+                    None
+                };
+                counted::ViewStep {
+                    turn: view_turn(&p, cam),
+                    step: p.eye.distance(cam.eye),
+                    quiet,
+                    stream_added,
+                    occlusion: occlusion && self.compact,
+                }
             });
-            *last = Some((*cam, writes));
+            *last = Some((*cam, writes, added));
             drop(last);
             c.begin_frame(step); // the emulated lists' bounds for this frame, from the counts read back
             if self.probe_grid.active(&self.look) {
@@ -2655,7 +2713,7 @@ impl Renderer {
         ts: Option<(&wgpu::QuerySet, u32)>,
     ) {
         if let Some(c) = &self.counts {
-            if self.last_view.lock().unwrap().is_some_and(|(_, seen)| seen != self.vis_writes() + self.occlusion.resets()) {
+            if self.last_view.lock().unwrap().is_some_and(|(_, seen_w, seen_a)| seen_w != self.vis_writes() + self.occlusion.resets() || seen_a != self.vis_added()) {
                 c.relax(); // written since the update: no motion-aware bound this frame
             }
             c.encode_zero(enc);
@@ -2736,6 +2794,10 @@ impl Renderer {
         // with the water pass on, the glass is drawn after the water (its own pass below).
         let water = self.water.get().filter(|_| self.water_active());
         let water_on = water.is_some();
+        // When single-sample with no debug_ids / RT / visible surf strip, fold the overhead
+        // wires into the water pass (or late city pass when water is off) to avoid a separate
+        // full-screen HDR + depth TBDR render pass.
+        let fold_wires = !self.debug_ids && resolve.is_none() && rt.is_none() && (!water_on || !self.surf.get().is_some_and(|s| s.has_visible()));
         // What a city pass draws: everything (without the traced light), the
         // opaque city alone (with its G-buffer), or the rest after the composite.
         #[derive(Clone, Copy, PartialEq)]
@@ -2919,6 +2981,11 @@ impl Renderer {
                     self.look.bind_main(&mut pass);
                     l.draw_wires(&mut pass);
                 }
+                if fold_wires {
+                    if let Some(p) = self.props.get() {
+                        p.draw_wires_in_pass(&mut pass, &self.look);
+                    }
+                }
             }
         };
         let first = if rt.is_some() { CityPart::Opaque } else { CityPart::All };
@@ -3038,6 +3105,11 @@ impl Renderer {
                     self.look.bind_main(pass);
                     l.draw(pass);
                 }
+                if fold_wires {
+                    if let Some(p) = self.props.get() {
+                        p.draw_wires_in_pass(pass, &self.look);
+                    }
+                }
             });
             if let Some(s) = self.surf.get() {
                 s.encode(enc, w, &self.look, &hdr, front); // the surf strip over the sea, its own depth
@@ -3052,7 +3124,11 @@ impl Renderer {
             }
         }
         if let Some(p) = self.props.get() {
-            p.draw_wires(enc, color, resolve, depth, &self.look); // the overhead wires, a timed pass of their own
+            if fold_wires {
+                p.empty_wires_ts(enc);
+            } else {
+                p.draw_wires(enc, color, resolve, depth, &self.look); // the overhead wires, a timed pass of their own
+            }
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
         // rain, luminaires, velocity, volume, (lighting) the lit fog, resolve, bloom
@@ -3218,6 +3294,18 @@ impl Renderer {
     /// set the per-cell residency words directly (tests; the far layer's streamer writes them otherwise).
     pub fn write_hlod_flags(&self, queue: &wgpu::Queue, flags: &[u32]) {
         self.note_vis_write();
+        self.write_hlod_flags_inner(queue, flags);
+    }
+
+    /// Update per-cell residency words from `HlodRuntime`, accounting only for buildings
+    /// whose cell transitioned from covered (`!= 0`) to uncovered (`0`) and therefore
+    /// return to the city cull lists (`restored_buildings`).
+    pub fn write_hlod_flags_delta(&self, queue: &wgpu::Queue, flags: &[u32], restored_buildings: u64) {
+        self.note_vis_added(restored_buildings);
+        self.write_hlod_flags_inner(queue, flags);
+    }
+
+    fn write_hlod_flags_inner(&self, queue: &wgpu::Queue, flags: &[u32]) {
         queue.write_buffer(&self.hlod_flags_buf, 0, bytemuck::cast_slice(flags));
         if let Some(r) = &self.ranges {
             r.lock().unwrap().set_hlod_flags(flags); // the kit boxes' rule (draw_ranges)

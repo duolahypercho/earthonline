@@ -424,6 +424,9 @@ pub struct StreetRuntime {
     pub near_out_of_view: usize,
     /// the arena freed space since a tile was deferred.
     freed: bool,
+    /// Reusable per-frame scratch sets (`update`) to avoid heap allocations.
+    wanted_scratch: HashSet<u32>,
+    gone_scratch: HashSet<u32>,
 }
 
 fn tag_of(tile: u32) -> u64 {
@@ -522,6 +525,8 @@ impl StreetRuntime {
             hold: Default::default(),
             near_out_of_view: 0,
             freed: false,
+            wanted_scratch: HashSet::new(),
+            gone_scratch: HashSet::new(),
         }
     }
 
@@ -554,12 +559,12 @@ impl StreetRuntime {
         let tm = eo_street::STREET_TILE_M;
         let reach = (r.near_drop as f64 / tm).ceil() as i32 + 1;
         let (cx, cz) = eo_street::tile_key(cam.x as f64, cam.z as f64);
-        let mut wanted: HashSet<u32> = HashSet::new();
+        self.wanted_scratch.clear();
         for tz in cz - reach..=cz + reach {
             for tx in cx - reach..=cx + reach {
                 let Some(&t) = self.set.tile_of_key.get(&(tx, tz)) else { continue };
                 let d = self.set.tile_distance(t as usize, cam);
-                if d <= r.near_load || (self.slots.contains_key(&t) && d <= r.near_drop && !under) {
+                if d <= r.near_load || (!under && d <= r.near_drop && self.slots.contains_key(&t)) {
                     if let Some(c) = cone.as_ref() {
                         let (mn, mx) = self.set.tile_box(t as usize);
                         let held = self.hold.wanted(c, t, mn, mx);
@@ -568,7 +573,7 @@ impl StreetRuntime {
                             continue;
                         }
                     }
-                    wanted.insert(t);
+                    self.wanted_scratch.insert(t);
                 }
             }
         }
@@ -579,7 +584,7 @@ impl StreetRuntime {
         let gone: Vec<u32> = self
             .slots
             .iter()
-            .filter(|(k, _)| !wanted.contains(k))
+            .filter(|(k, _)| !self.wanted_scratch.contains(k))
             .filter(|(_, s)| {
                 if matches!(s, Slot::Resident(_)) {
                     evictable += 1;
@@ -591,11 +596,13 @@ impl StreetRuntime {
             .map(|(k, _)| *k)
             .collect();
         if !gone.is_empty() {
-            let gone_set: HashSet<u32> = gone.iter().copied().collect();
-            for k in &gone_set {
+            self.gone_scratch.clear();
+            self.gone_scratch.extend(gone.iter().copied());
+            for k in &self.gone_scratch {
                 self.outbox.cancel(*k); // applied without waiting for the workers' lock
             }
-            uploads.cancel(|tag| tag & TAG_STREET == 0 || tag & crate::kit::TAG_KIT != 0 || !gone_set.contains(&((tag & 0xffff_ffff) as u32)));
+            let gone_ref = &self.gone_scratch;
+            uploads.cancel(|tag| tag & TAG_STREET == 0 || tag & crate::kit::TAG_KIT != 0 || !gone_ref.contains(&((tag & 0xffff_ffff) as u32)));
             for k in gone {
                 match self.slots.remove(&k) {
                     Some(Slot::Resident(a)) => {
@@ -611,10 +618,10 @@ impl StreetRuntime {
                 self.release_decals(renderer, queue, k); // cc0
             }
         }
-        for k in &wanted {
-            if !self.slots.contains_key(k) {
-                self.slots.insert(*k, Slot::Requested);
-                self.outbox.request(*k); // hitch
+        for &k in &self.wanted_scratch {
+            if !self.slots.contains_key(&k) {
+                self.slots.insert(k, Slot::Requested);
+                self.outbox.request(k); // hitch
             }
         }
         self.outbox.flush(&self.pending); // try_lock only

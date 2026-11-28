@@ -354,6 +354,11 @@ impl SurfGpu {
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&SurfUniform { misc: [CREST_WARP, storm, height, debug_mode()] }));
     }
 
+    /// Whether any surf strip is visible this frame (`encode` will open a render pass).
+    pub fn has_visible(&self) -> bool {
+        !self.visible.lock().unwrap().is_empty()
+    }
+
     /// The strip's pass, after the water pass (`water` holds this frame's group-0 bind group).
     pub fn encode(&self, enc: &mut wgpu::CommandEncoder, water: &crate::water::WaterGpu, look: &crate::look::LookGpu, hdr: &wgpu::TextureView, probe_front: usize) {
         let vis = self.visible.lock().unwrap();

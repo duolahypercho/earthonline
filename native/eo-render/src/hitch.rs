@@ -429,6 +429,18 @@ pub fn on_cpu_ms(c0: u64, c1: u64) -> f64 {
     if k > 0.0 { (c1.saturating_sub(c0)) as f64 / k } else { f64::NAN }
 }
 
+#[cfg(target_os = "macos")]
+mod mac {
+    // qos_class_t values from <sys/qos.h>.
+    pub const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
+    pub const QOS_CLASS_UTILITY: u32 = 0x11;
+
+    unsafe extern "C" {
+        pub fn pthread_set_qos_class_self_np(qos_class: u32, relative_priority: i32) -> i32;
+        pub fn pthread_get_qos_class_np(pthread: libc::pthread_t, qos_class: *mut u32, relative_priority: *mut i32) -> i32;
+    }
+}
+
 /// Raise the calling thread (the render thread, which also runs the player
 /// step) above normal: the frame's CPU work is a few hundred microseconds
 /// and must not wait a scheduler quantum behind CPU-bound work.
@@ -439,7 +451,12 @@ pub fn raise_render_thread() -> bool {
         // SAFETY: plain Win32 calls on the current thread's pseudo handle.
         unsafe { win::SetThreadPriority(win::GetCurrentThread(), win::THREAD_PRIORITY_HIGHEST) != 0 }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: Darwin pthread QoS call on the current thread.
+        unsafe { mac::pthread_set_qos_class_self_np(mac::QOS_CLASS_USER_INTERACTIVE, 0) == 0 }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         false
     }
@@ -466,20 +483,36 @@ pub fn lower_worker_thread() -> bool {
         // SAFETY: as above.
         unsafe { win::SetThreadPriority(win::GetCurrentThread(), win::THREAD_PRIORITY_BELOW_NORMAL) != 0 }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: Darwin pthread QoS call on the current thread.
+        unsafe { mac::pthread_set_qos_class_self_np(mac::QOS_CLASS_UTILITY, 0) == 0 }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         false
     }
 }
 
-/// The calling thread's priority (Win32 value; 0 normal), for the bench report.
+/// The calling thread's priority (Win32 value or macOS QoS class; 0 normal), for the bench report.
 pub fn thread_priority() -> i32 {
     #[cfg(windows)]
     {
         // SAFETY: as above.
         unsafe { win::GetThreadPriority(win::GetCurrentThread()) }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let mut qos = 0u32;
+        let mut rel = 0i32;
+        // SAFETY: Darwin pthread QoS query on the current thread.
+        if unsafe { mac::pthread_get_qos_class_np(libc::pthread_self(), &mut qos, &mut rel) } == 0 {
+            qos as i32
+        } else {
+            0
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         0
     }

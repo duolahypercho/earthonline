@@ -1281,6 +1281,15 @@ pub struct KitRuntime {
     /// (`--rt-gi`) each uploading pack's buildings as acceleration-structure
     /// geometries, handed to the renderer when the pack is resident.
     rt_pending: HashMap<(u32, u8), (Vec<crate::rt_scene::RtGeom>, Vec3, Vec3)>,
+    /// Reusable per-frame scratch sets (`update`) to avoid heap allocations.
+    wanted_scratch: HashSet<(u32, u8)>,
+    gone_scratch: HashSet<(u32, u8)>,
+    /// Reusable zeroed object buffer for `evict`.
+    evict_zeros: Vec<GpuObject>,
+    /// Dense 2D tile-key lookup grid built once from `set.tiles` (avoids per-frame HashMap probes).
+    tile_grid: Vec<u32>,
+    tile_grid_min: (i32, i32),
+    tile_grid_dim: (i32, i32),
 }
 
 impl KitRuntime {
@@ -1385,6 +1394,30 @@ impl KitRuntime {
             }));
         }
         let mirror = set.groups.clone();
+        let (tile_grid, tile_grid_min, tile_grid_dim) = if set.tiles.is_empty() {
+            (vec![], (0, 0), (0, 0))
+        } else {
+            let (mut x0, mut x1) = (i32::MAX, i32::MIN);
+            let (mut z0, mut z1) = (i32::MAX, i32::MIN);
+            for t in &set.tiles {
+                x0 = x0.min(t.key.0);
+                x1 = x1.max(t.key.0);
+                z0 = z0.min(t.key.1);
+                z1 = z1.max(t.key.1);
+            }
+            let (w, h) = (x1 - x0 + 1, z1 - z0 + 1);
+            if w > 0 && h > 0 && (w as i64) * (h as i64) <= 262_144 {
+                let mut g = vec![u32::MAX; (w * h) as usize];
+                for (idx, t) in set.tiles.iter().enumerate() {
+                    let gx = (t.key.0 - x0) as usize;
+                    let gz = (t.key.1 - z0) as usize;
+                    g[gz * w as usize + gx] = idx as u32;
+                }
+                (g, (x0, z0), (w, h))
+            } else {
+                (vec![], (0, 0), (0, 0))
+            }
+        };
         Self {
             vtx: RangeAlloc::new(arena.vertex_capacity),
             idx: RangeAlloc::new(arena.index_capacity),
@@ -1414,6 +1447,12 @@ impl KitRuntime {
             near_pool: None,
             freed: [false; 2],
             rt_pending: HashMap::new(),
+            wanted_scratch: HashSet::new(),
+            gone_scratch: HashSet::new(),
+            evict_zeros: vec![],
+            tile_grid,
+            tile_grid_min,
+            tile_grid_dim,
         }
     }
 
@@ -1461,15 +1500,34 @@ impl KitRuntime {
         let r = self.radii;
         let reach = (r.mid_drop as f64 / KIT_TILE_M).ceil() as i32 + 1;
         let (cx, cz) = tile_key(cam.x as f64, cam.z as f64);
-        let mut wanted: HashSet<(u32, u8)> = HashSet::new();
-        for tz in cz - reach..=cz + reach {
-            for tx in cx - reach..=cx + reach {
-                let Some(&t) = self.set.tile_of_key.get(&(tx, tz)) else { continue };
+        self.wanted_scratch.clear();
+        let use_grid = !self.tile_grid.is_empty();
+        let (gx0, gz0) = self.tile_grid_min;
+        let (gw, gh) = self.tile_grid_dim;
+        let tz_lo = if use_grid { (cz - reach).max(gz0) } else { cz - reach };
+        let tz_hi = if use_grid { (cz + reach).min(gz0 + gh - 1) } else { cz + reach };
+        let tx_lo = if use_grid { (cx - reach).max(gx0) } else { cx - reach };
+        let tx_hi = if use_grid { (cx + reach).min(gx0 + gw - 1) } else { cx + reach };
+        for tz in tz_lo..=tz_hi {
+            let row = if use_grid { ((tz - gz0) * gw) as usize } else { 0 };
+            for tx in tx_lo..=tx_hi {
+                let t = if use_grid {
+                    let v = self.tile_grid[row + (tx - gx0) as usize];
+                    if v == u32::MAX {
+                        continue;
+                    }
+                    v
+                } else {
+                    let Some(&v) = self.set.tile_of_key.get(&(tx, tz)) else { continue };
+                    v
+                };
                 let d = self.set.tile_distance(t as usize, cam);
+                if d > r.mid_drop {
+                    continue;
+                }
                 for (rung, load, drop) in [(RUNG_NEAR, r.near_load, r.near_drop), (RUNG_MID, r.mid_load, r.mid_drop)] {
-                    let have = self.slots.contains_key(&(t, rung));
                     let under = pressure[pool_of(split, rung)];
-                    if d <= load || (have && d <= drop && !(under && rung == RUNG_MID)) {
+                    if d <= load || (d <= drop && !(under && rung == RUNG_MID) && self.slots.contains_key(&(t, rung))) {
                         if let (RUNG_NEAR, Some(c)) = (rung, cone.as_ref()) {
                             let (mn, mx) = self.set.tile_box(t as usize, &self.tile_y);
                             let held = self.hold.wanted(c, t, mn, mx);
@@ -1478,7 +1536,7 @@ impl KitRuntime {
                                 continue;
                             }
                         }
-                        wanted.insert((t, rung));
+                        self.wanted_scratch.insert((t, rung));
                     }
                 }
             }
@@ -1492,7 +1550,7 @@ impl KitRuntime {
         let gone: Vec<(u32, u8)> = self
             .slots
             .iter()
-            .filter(|(k, _)| !wanted.contains(k))
+            .filter(|(k, _)| !self.wanted_scratch.contains(k))
             .filter(|(_, s)| {
                 if matches!(s, Slot::Resident(_)) {
                     evictable += 1;
@@ -1505,15 +1563,17 @@ impl KitRuntime {
             .collect();
         self.stale_resident = evictable;
         if !gone.is_empty() {
-            let gone_set: HashSet<(u32, u8)> = gone.iter().copied().collect();
-            for k in &gone_set {
+            self.gone_scratch.clear();
+            self.gone_scratch.extend(gone.iter().copied());
+            for k in &self.gone_scratch {
                 self.outbox.cancel(*k); // applied without waiting for the workers' lock
             }
+            let gone_ref = &self.gone_scratch;
             uploads.cancel(|tag| {
                 if tag & TAG_KIT == 0 {
                     return true;
                 }
-                !gone_set.contains(&(((tag >> 8) & 0xffff_ffff) as u32, (tag & 0xff) as u8))
+                !gone_ref.contains(&(((tag >> 8) & 0xffff_ffff) as u32, (tag & 0xff) as u8))
             });
             for k in gone {
                 match self.slots.remove(&k) {
@@ -1531,10 +1591,10 @@ impl KitRuntime {
             }
         }
         // Request what is wanted and absent.
-        for k in &wanted {
-            if !self.slots.contains_key(k) {
-                self.slots.insert(*k, Slot::Requested);
-                self.outbox.request(*k); // hitch
+        for &k in &self.wanted_scratch {
+            if !self.slots.contains_key(&k) {
+                self.slots.insert(k, Slot::Requested);
+                self.outbox.request(k); // hitch
             }
         }
         self.outbox.flush(&self.pending); // try_lock only
@@ -1721,9 +1781,12 @@ impl KitRuntime {
         // by later writes, which the queue orders after the frames in flight.
         self.set_ready(key.0, key.1, false);
         self.write_groups(renderer, queue, key.0);
-        let zero = vec![GpuObject::zeroed_kit(); a.objects as usize];
-        renderer.write(queue, Target::Object, (self.arena.object_base + a.object) as u64 * std::mem::size_of::<GpuObject>() as u64, bytemuck::cast_slice(&zero));
-        self.last_group_bytes += (zero.len() * std::mem::size_of::<GpuObject>()) as u64;
+        let n_obj = a.objects as usize;
+        if self.evict_zeros.len() < n_obj {
+            self.evict_zeros.resize(n_obj, GpuObject::zeroed_kit());
+        }
+        renderer.write(queue, Target::Object, (self.arena.object_base + a.object) as u64 * std::mem::size_of::<GpuObject>() as u64, bytemuck::cast_slice(&self.evict_zeros[..n_obj]));
+        self.last_group_bytes += (n_obj * std::mem::size_of::<GpuObject>()) as u64;
         self.account(a, false, key.1);
         self.free(a);
     }

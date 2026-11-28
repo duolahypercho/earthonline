@@ -642,6 +642,8 @@ pub struct PropsGpu {
     counts: wgpu::Buffer,
     cmds: wgpu::Buffer,
     list_counts: wgpu::Buffer,
+    /// The 12 compacted lists in the count emulation (no MULTI_DRAW_INDIRECT_COUNT), registered at attach.
+    counted: std::sync::OnceLock<crate::counted::CountedLists>,
     stats: wgpu::Buffer,
     cull_bg_s: wgpu::BindGroup,
     cull_bg_c: wgpu::BindGroup,
@@ -811,7 +813,7 @@ impl PropsGpu {
         if mesh_count == 0 || mesh_count > PROP_MESH_MAX {
             return Err(anyhow!("props library has {mesh_count} meshes (1..={PROP_MESH_MAX} supported)"));
         }
-        let wg_bytes = (6 * PROP_MESH_MAX + 6) * 4; // props_cull.wgsl `pr_wg` and `pr_wg_total`
+        let wg_bytes = (6 * PROP_MESH_MAX + 6 + 12) * 4; // props_cull.wgsl `pr_wg`, `pr_wg_total` and `pr_wg_tail`
         if d.limits().max_compute_workgroup_storage_size < wg_bytes {
             return Err(anyhow!("the props cull needs {wg_bytes} bytes of compute workgroup storage (props_cull.wgsl `offsets`); the device gives {}", d.limits().max_compute_workgroup_storage_size));
         }
@@ -843,7 +845,7 @@ impl PropsGpu {
         let m = mesh_count as u64;
         let counts = empty("prop-counts", m * VIEWS * 2 * 4, U::STORAGE | U::COPY_DST);
         let cmds = empty("prop-draws", m * VIEWS * 2 * DRAW_ARGS_BYTES, U::STORAGE | U::INDIRECT | U::COPY_SRC);
-        let list_counts = empty("prop-list-counts", VIEWS * 2 * 4, U::STORAGE | U::INDIRECT | U::COPY_DST);
+        let list_counts = empty("prop-list-counts", VIEWS * 2 * 4, U::STORAGE | U::INDIRECT | U::COPY_DST | U::COPY_SRC);
         let stats = empty("prop-stats", 16 * 4, U::STORAGE | U::COPY_DST | U::COPY_SRC);
         // wires and lamp lights.
         let wires = init("prop-wires", bytemuck::cast_slice(&vec![GpuWireSeg::default(); WIRE_CAPACITY as usize]), U::STORAGE | U::COPY_DST);
@@ -1234,6 +1236,7 @@ impl PropsGpu {
             counts,
             cmds,
             list_counts,
+            counted: std::sync::OnceLock::new(),
             stats,
             cull_bg_s,
             cull_bg_c,
@@ -1270,6 +1273,25 @@ impl PropsGpu {
             dome: lib.dome,
             bytes,
         })
+    }
+
+    /// Put the 12 compacted prop draw lists in the count emulation (no MULTI_DRAW_INDIRECT_COUNT).
+    /// `props_cull.wgsl` zeroes unused command slots itself and `mesh_count` is small (<= 512), so
+    /// no per-frame clear or synchronous recovery stall is needed.
+    pub fn register_counts(&self, counts: &std::sync::Arc<crate::counted::Counts>) {
+        let m = self.mesh_count as u64;
+        let lists: Vec<crate::counted::List> = (0..VIEWS * 2)
+            .map(|k| crate::counted::List {
+                word: k as u32,
+                draws: self.cmds.clone(),
+                offset: k * m * DRAW_ARGS_BYTES,
+                stride: DRAW_ARGS_BYTES,
+                max: self.mesh_count,
+                floor: None,
+            })
+            .collect();
+        let opts = crate::counted::EntryOptions { margin: 32, zero_cmds: false, recover_sync: false };
+        let _ = self.counted.set(counts.register_with("props", &self.list_counts, lists, opts));
     }
 
     /// Bind the CC0 material sets (once they are all on the GPU; later calls are ignored).
@@ -1414,9 +1436,11 @@ impl PropsGpu {
             wire: [w.fade_near_m, w.fade_far_m, w.min_coverage, wind_speed_norm],
             extra: [self.wire_high_water(), rain_milli, self.grade_model.load(Ordering::Relaxed), 0],
         };
-        // Run S: the cascades (+ the camera when there is no occlusion pass this frame).
+        // Run S: only the cascades refreshed this frame (+ the camera when there is no occlusion pass).
+        let cascade_bits = (look.encoded_shadow_mask() & 0b111) << 1;
         let cam_bits = if occlusion { 0 } else { 0b110001 };
-        let s = PrParams { mode: [0b1110 | cam_bits, 0b1110 | cam_bits, feat, 0], ..base };
+        let run_s = cascade_bits | cam_bits;
+        let s = PrParams { mode: [run_s, run_s, feat, 0], ..base };
         let c = PrParams { mode: [0b110001, 0b110001, feat, 0], ..base };
         queue.write_buffer(&self.params_s, 0, bytemuck::bytes_of(&s));
         queue.write_buffer(&self.params_c, 0, bytemuck::bytes_of(&c));
@@ -1471,7 +1495,10 @@ impl PropsGpu {
         enc.clear_buffer(&self.stats, 0, None);
         let mask = look.encoded_shadow_mask();
         let list: Vec<usize> = (0..3).filter(|c| mask & (1 << c) != 0).collect();
-        {
+        let cam_late = self.camera_late.load(Ordering::Relaxed);
+        if list.is_empty() && cam_late {
+            Self::empty_ts(enc, &ts, 0);
+        } else {
             let tw = ts.as_ref().map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(*b), end_of_pass_write_index: Some(*b + 1) });
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("props-cull"), timestamp_writes: tw });
             pass.set_bind_group(0, &self.cull_bg_s, &[]);
@@ -1481,7 +1508,7 @@ impl PropsGpu {
                 pass.dispatch_workgroups(if k == 1 { 1 } else { groups }, 1, 1);
             }
             // the wires, when the camera is culled here (occlusion off).
-            if wires_on && !self.camera_late.load(Ordering::Relaxed) {
+            if wires_on && !cam_late {
                 pass.set_pipeline(&self.wire_cull_s);
                 pass.set_bind_group(0, &self.wire_cull_bg_s, &[]);
                 pass.dispatch_workgroups(nw.div_ceil(64), 1, 1);
@@ -1522,10 +1549,13 @@ impl PropsGpu {
         }
     }
 
-    /// One compacted command list (props2): count-driven where the device can.
+    /// One compacted command list (props2): count-driven where the device can,
+    /// else bounded by the count emulation (Metal).
     fn draw_list(&self, pass: &mut wgpu::RenderPass<'_>, list: u64) {
         let m = self.mesh_count as u64;
-        if self.indirect_count {
+        if let Some(c) = self.counted.get() {
+            crate::counted::draw_indexed(pass, Some(c), list as usize, &self.cmds, list * m * DRAW_ARGS_BYTES, &self.list_counts, list * 4, self.mesh_count);
+        } else if self.indirect_count {
             pass.multi_draw_indexed_indirect_count(&self.cmds, list * m * DRAW_ARGS_BYTES, &self.list_counts, list * 4, self.mesh_count);
         } else {
             pass.multi_draw_indexed_indirect(&self.cmds, list * m * DRAW_ARGS_BYTES, self.mesh_count);
@@ -1583,6 +1613,24 @@ impl PropsGpu {
     /// whether the wire pass will draw this frame (the city pass keeps its depth for it).
     pub fn wires_pending(&self) -> bool {
         self.enabled() && self.wire_high_water() > 0
+    }
+
+    /// Draw the wires inside an existing HDR + depth render pass (depth test Greater, no depth
+    /// write) to avoid a full-screen TBDR load/store pass on Metal.
+    pub fn draw_wires_in_pass(&self, pass: &mut wgpu::RenderPass<'_>, look: &LookGpu) {
+        if !self.wires_active.load(Ordering::Relaxed) {
+            return;
+        }
+        pass.set_pipeline(&self.wire_pipe);
+        pass.set_bind_group(0, &self.wire_draw_bg, &[]);
+        look.bind_main(pass);
+        pass.draw_indirect(&self.wire_args, 0);
+    }
+
+    /// Write an empty timestamp span for the wire slot when wires were folded into another pass.
+    pub fn empty_wires_ts(&self, enc: &mut wgpu::CommandEncoder) {
+        let ts = self.timing.lock().unwrap().clone();
+        Self::empty_ts(enc, &ts, 4);
     }
 
     /// the wires, a pass of its own after the late city pass (timed).
