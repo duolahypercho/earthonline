@@ -49,6 +49,12 @@ pub struct Leg {
     pub next_end: u8,
     pub arc: f64,
     pub dir: i8,
+    /// Origin footway arc and retreat direction, so a walker deadlocked
+    /// against a stopped vehicle mid-leg can step back onto its kerb cleanly.
+    origin_arc: f64,
+    origin_dir: i8,
+    /// True once reversed mid-leg to step back onto the origin kerb (not counted as a completed crossing).
+    retreating: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -89,6 +95,8 @@ pub struct Party {
 pub struct Walker {
     /// Transient offset from the walking line while passing oncoming people.
     passing_offset: f64,
+    /// Seconds spent blocked at zero speed by a vehicle while walking a `Leg`.
+    leg_blocked: f64,
     /// `ambient-<key>`: the walker's identity for every keyed draw.
     pub key: u32,
     pub footway: FootwayId,
@@ -190,6 +198,7 @@ impl Walker {
     pub fn new(key: u32, footway: FootwayId, s: f64, dir: i8, speed: f64, lateral: f64, road_side: i8, group: bool, gait: f64) -> Self {
         Walker {
             passing_offset: 0.0,
+            leg_blocked: 0.0,
             key,
             footway,
             leg: None,
@@ -843,9 +852,12 @@ fn begin_leg(net: &Network, w: &mut Walker, pts: &[P2], next: FootwayId, next_en
         adopt(net, w, next, next_end, arc, dir);
         return;
     }
-    w.leg = Some(Leg { pts: leg_pts, n: n as u8, cum, total, kind, next, next_end, arc, dir });
+    let origin_arc = w.s;
+    let origin_dir = if w.dir == 0 { 1 } else { -w.dir };
+    w.leg = Some(Leg { pts: leg_pts, n: n as u8, cum, total, kind, next, next_end, arc, dir, origin_arc, origin_dir, retreating: false });
     w.s = 0.01;
     w.dir = 1;
+    w.leg_blocked = 0.0;
     w.activity = Activity::Walk;
     w.facing = Facing::Keep;
 }
@@ -861,6 +873,7 @@ fn adopt(net: &Network, w: &mut Walker, index: FootwayId, end: u8, arc: f64, dir
     w.footway = index;
     w.road_side = f.road_side;
     w.leg = None;
+    w.leg_blocked = 0.0;
     if let Some(h) = w.lateral_hold.take() {
         w.lateral = h;
     } else if w.road_side != previous_side && w.lateral != 0.0 {
@@ -1085,7 +1098,7 @@ fn route_at_end(ctx: &WalkCtx, w: &mut Walker, end: usize, stats: &mut CrowdStat
     let net = ctx.net;
     if w.kerb.is_some() { return PathEnd::Wait; }
     if let Some(leg) = w.leg {
-        if leg.kind == LegKind::Cross {
+        if leg.kind == LegKind::Cross && !leg.retreating {
             stats.crossings_completed += 1;
         }
         return if adopt(net, w, leg.next, leg.next_end, leg.arc, leg.dir) { PathEnd::Continued } else { PathEnd::Reverse };
@@ -1399,6 +1412,44 @@ fn step_walker(ctx: &WalkCtx, w: &mut Walker, dt: f64, gap: f64, stats: &mut Cro
             }
         }
         pace *= clear.clamp(0.0, 1.0);
+        if !routed && pace <= 1e-6 && clear <= 1e-6 {
+            w.leg_blocked += dt;
+            // A walker frozen mid-leg against a stopped car (which is also
+            // yielding to the walker) retreats smoothly back to its origin kerb
+            // when the retreat direction is clear, breaking mutual deadlocks
+            // without ever clipping a vehicle.
+            if w.leg_blocked >= 5.0 {
+                if let Some(mut leg) = w.leg.filter(|l| !l.retreating) {
+                    let n = leg.n as usize;
+                    let mut rev_pts = leg.pts;
+                    rev_pts[..n].reverse();
+                    let mut rev_cum = [0.0; 3];
+                    for k in 1..n {
+                        rev_cum[k] = rev_cum[k - 1] + geom::hypot(rev_pts[k][0] - rev_pts[k - 1][0], rev_pts[k][1] - rev_pts[k - 1][1]);
+                    }
+                    let rev_s = (leg.total - w.s).clamp(0.01, (leg.total - 0.01).max(0.01));
+                    let rev_next = (rev_s + w.speed * dt).min(leg.total);
+                    let (rx0, rz0, _, _, _) = geom::at_arc(&rev_pts[..n], &rev_cum[..n], rev_s);
+                    let (rx1, rz1, _, _, _) = geom::at_arc(&rev_pts[..n], &rev_cum[..n], rev_next);
+                    if vehicle_hit_fraction(ctx, [rx0, rz0], [rx1, rz1], PERSON_CAPSULE_R_M, true) > 0.0 {
+                        leg.pts = rev_pts;
+                        leg.cum = rev_cum;
+                        leg.retreating = true;
+                        leg.next = w.footway;
+                        leg.arc = leg.origin_arc;
+                        leg.dir = leg.origin_dir;
+                        w.leg = Some(leg);
+                        w.s = rev_s;
+                        w.dir = 1;
+                        w.leg_blocked = 0.0;
+                    }
+                }
+            }
+        } else {
+            w.leg_blocked = 0.0;
+        }
+    } else if !routed {
+        w.leg_blocked = 0.0;
     }
     w.ground_speed = if moving { pace } else { 0.0 };
     if moving {
