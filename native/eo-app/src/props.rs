@@ -47,6 +47,7 @@ struct VegRing {
     pending: Arc<Mutex<Vec<Key>>>,
     outbox: eo_render::hitch::Outbox<Key>,
     slots: HashMap<Key, Slot>,
+    wanted_scratch: HashSet<Key>,
 }
 /// The moored boats' one upload (with `TAG_PROPS`): never a tile's, so never cancelled with one.
 pub const TAG_BOATS: u64 = 1 << 56;
@@ -431,6 +432,14 @@ pub struct PropsRuntime {
     /// (`--signal-spill`) a vehicle signal head's channel: its instance's position, yaw and scale.
     lamp_heads: HashMap<u32, ([f32; 3], f32, [f32; 3])>,
     lamp_words: Vec<u32>,
+    last_lamp_words: Vec<u32>,
+    tiles_dirty: bool,
+    evicting: bool,
+    empty_instances: Vec<GpuPropInstance>,
+    empty_wires: Vec<GpuWireSeg>,
+    empty_lights: Vec<GpuLampLight>,
+    wanted_scratch: HashSet<Key>,
+    vehicle_rings: Vec<(f64, usize)>,
     parked_cam: Option<Vec3>,
     parked_dirty: bool,
     pub parked: Vec<eo_agents::GpuAgent>,
@@ -478,6 +487,14 @@ impl PropsRuntime {
             lamp_src: HashMap::new(),
             lamp_heads: HashMap::new(),
             lamp_words: vec![],
+            last_lamp_words: vec![],
+            tiles_dirty: false,
+            evicting: false,
+            empty_instances: vec![],
+            empty_wires: vec![],
+            empty_lights: vec![],
+            wanted_scratch: HashSet::new(),
+            vehicle_rings: vec![],
             parked_cam: None,
             parked_dirty: true,
             parked: vec![],
@@ -791,6 +808,7 @@ impl PropsRuntime {
                 && self.outbox.is_empty()
                 && self.pending.lock().unwrap().is_empty()
                 && self.in_flight.load(Ordering::SeqCst) == 0
+                && !self.evicting
                 && self.veg_epoch == veg_epoch()
                 && self.slots.values().all(|s| matches!(s, Slot::Resident { .. }))
                 && self.rings.iter().all(|r| r.outbox.is_empty() && r.pending.lock().unwrap().is_empty() && r.slots.values().all(|s| matches!(s, Slot::Resident { .. }))))
@@ -867,6 +885,12 @@ impl PropsRuntime {
                             }
                         }
                         self.veg = facts.veg.clone();
+                        self.vehicle_rings = world
+                            .js
+                            .value("vehicleRings")
+                            .as_array()
+                            .map(|arr| arr.iter().map(|r| (r["radius"].as_f64().unwrap_or(0.0), r["maxVehicles"].as_u64().unwrap_or(0) as usize)).collect())
+                            .unwrap_or_default();
                         self.start_workers(world.clone(), source.clone(), facts);
                         self.world = Some(world);
                         self.source = Some(source);
@@ -909,9 +933,21 @@ impl PropsRuntime {
         let tm = eo_street::STREET_TILE_M as f32;
         let reach = (DROP_M / tm).ceil() as i32 + 1;
         let (cx, cz) = eo_street::tile_key(eye.x as f64, eye.z as f64);
-        let mut wanted: HashSet<Key> = HashSet::new();
+        self.wanted_scratch.clear();
+        let drop2 = DROP_M * DROP_M;
         for tz in cz - reach..=cz + reach {
+            let z0 = tz as f32 * tm;
+            let dz = (z0 - eye.z).max(eye.z - (z0 + tm)).max(0.0);
+            let dz2 = dz * dz;
+            if dz2 > drop2 {
+                continue;
+            }
             for tx in cx - reach..=cx + reach {
+                let x0 = tx as f32 * tm;
+                let dx = (x0 - eye.x).max(eye.x - (x0 + tm)).max(0.0);
+                if dx * dx + dz2 > drop2 {
+                    continue;
+                }
                 let k = (tx, tz);
                 let structure_lights = self.structure_light_heights.get(&k);
                 // A street, lights on a structure, or vegetation away from a street.
@@ -925,13 +961,30 @@ impl PropsRuntime {
                 if let Some(&[low, high]) = structure_lights {
                     d = d.min(tile_distance_3d(k, eye, |_, _| eye.y.clamp(low, high)));
                 }
-                if d <= LOAD_M || (self.slots.contains_key(&k) && d <= DROP_M) {
-                    wanted.insert(k);
+                if d <= LOAD_M || (d <= DROP_M && self.slots.contains_key(&k)) {
+                    self.wanted_scratch.insert(k);
                 }
             }
         }
-        let gone: Vec<Key> = self.slots.keys().filter(|k| !wanted.contains(k)).copied().collect();
-        if !gone.is_empty() {
+        self.evicting = false;
+        const EVICTIONS_PER_FRAME: usize = 8;
+        let gone_all: Vec<Key> = self.slots.keys().filter(|k| !self.wanted_scratch.contains(k)).copied().collect();
+        if !gone_all.is_empty() {
+            // Cancel pending worker/upload work for all unwanted tiles immediately,
+            // and spread the synchronous zero-writes of resident evictions across frames.
+            let mut resident_budget = EVICTIONS_PER_FRAME;
+            let mut gone = Vec::with_capacity(gone_all.len().min(EVICTIONS_PER_FRAME + 8));
+            for k in gone_all {
+                let is_res = matches!(self.slots.get(&k), Some(Slot::Resident { .. }));
+                if is_res {
+                    if resident_budget == 0 {
+                        self.evicting = true;
+                        continue;
+                    }
+                    resident_budget -= 1;
+                }
+                gone.push(k);
+            }
             let gone_set: HashSet<Key> = gone.iter().copied().collect();
             for k in &gone_set {
                 self.outbox.cancel(*k);
@@ -939,16 +992,24 @@ impl PropsRuntime {
             uploads.cancel(|tag| tag & TAG_PROPS == 0 || tag & (eo_render::kit::TAG_KIT | eo_render::street::TAG_STREET | (1 << 60) | (1 << 61) | TAG_FINE | TAG_MID | TAG_BOATS) != 0 || !gone_set.contains(&untag(tag)));
             for k in gone {
                 if let Some(Slot::Resident { at, n, lamps, wire_at, wire_n, light_at, light_n, .. }) = self.slots.remove(&k) {
-                    let empty = vec![EMPTY; n as usize];
-                    renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&empty));
+                    if self.empty_instances.len() < n as usize {
+                        self.empty_instances.resize(n as usize, EMPTY);
+                    }
+                    renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&self.empty_instances[..n as usize]));
                     self.alloc.free(at, n);
                     // the tile's wire segments and lamp lights.
                     if wire_n > 0 {
-                        renderer.write(&ctx.queue, Target::PropWires, wire_at as u64 * 32, bytemuck::cast_slice(&vec![GpuWireSeg::default(); wire_n as usize]));
+                        if self.empty_wires.len() < wire_n as usize {
+                            self.empty_wires.resize(wire_n as usize, GpuWireSeg::default());
+                        }
+                        renderer.write(&ctx.queue, Target::PropWires, wire_at as u64 * 32, bytemuck::cast_slice(&self.empty_wires[..wire_n as usize]));
                         self.wire_alloc.free(wire_at, wire_n);
                     }
                     if light_n > 0 {
-                        renderer.write(&ctx.queue, Target::PropLights, light_at as u64 * 64, bytemuck::cast_slice(&vec![GpuLampLight::default(); light_n as usize]));
+                        if self.empty_lights.len() < light_n as usize {
+                            self.empty_lights.resize(light_n as usize, GpuLampLight::default());
+                        }
+                        renderer.write(&ctx.queue, Target::PropLights, light_at as u64 * 64, bytemuck::cast_slice(&self.empty_lights[..light_n as usize]));
                         self.light_alloc.free(light_at, light_n);
                     }
                     for l in lamps {
@@ -957,10 +1018,11 @@ impl PropsRuntime {
                         self.lamp_free.push(l);
                     }
                     self.parked_dirty = true;
+                    self.tiles_dirty = true;
                 }
             }
         }
-        for k in &wanted {
+        for k in &self.wanted_scratch {
             if !self.slots.contains_key(k) {
                 self.slots.insert(*k, Slot::Requested);
                 self.outbox.request(*k);
@@ -1051,6 +1113,9 @@ impl PropsRuntime {
                     pack.key,
                     Slot::Resident { at, n, lamps, parked: Arc::new(pack.parked), counts: pack.counts, wire_at: wat, wire_n: wn, light_at: lat, light_n: ln, extra: pack.extra_counts },
                 );
+                if pack.ring == 0 {
+                    self.tiles_dirty = true;
+                }
                 self.parked_dirty = true;
             }
         }
@@ -1077,7 +1142,10 @@ impl PropsRuntime {
         gpu.set_high_water(end);
         gpu.set_wire_high_water(wend);
         // the city lights take these tiles' lamps; the fallback placement stands down in them.
-        renderer.look.sky.set_props_tiles(&ctx.queue, self.slots.iter().filter(|(_, s)| matches!(s, Slot::Resident { .. })).map(|(k, _)| *k));
+        if self.tiles_dirty {
+            renderer.look.sky.set_props_tiles(&ctx.queue, self.slots.iter().filter(|(_, s)| matches!(s, Slot::Resident { .. })).map(|(k, _)| *k));
+            self.tiles_dirty = false;
+        }
         if self.light_count_written != Some(lend) {
             gpu.set_light_count(&ctx.queue, lend);
             self.light_count_written = Some(lend);
@@ -1107,8 +1175,9 @@ impl PropsRuntime {
                 },
             };
         }
-        if len > 0 {
+        if len > 0 && self.lamp_words != self.last_lamp_words {
             gpu.write_lamps(&ctx.queue, &self.lamp_words);
+            self.last_lamp_words.clone_from(&self.lamp_words);
         }
         if renderer.look.sky.options().signal_spill {
             // (`--signal-spill`) the lit lens of each vehicle signal head near the eye as a light
@@ -1158,38 +1227,65 @@ impl PropsRuntime {
         let (load, drop) = if fine { (vegetation::FINE_LOAD_M, vegetation::FINE_DROP_M) } else { (hill_rock::MID_LOAD_M, hill_rock::MID_DROP_M) };
         let reach = (drop / c).ceil() as i32 + 1;
         let (cx, cz) = ((eye.x / c).floor() as i32, (eye.z / c).floor() as i32);
-        let mut wanted: HashSet<Key> = HashSet::new();
+        r.wanted_scratch.clear();
+        let drop2 = drop * drop;
         for tz in cz - reach..=cz + reach {
+            let z0 = tz as f32 * c;
+            let dz = (z0 - eye.z).max(eye.z - (z0 + c)).max(0.0);
+            let dz2 = dz * dz;
+            if dz2 > drop2 {
+                continue;
+            }
             for tx in cx - reach..=cx + reach {
-                let k = (tx, tz);
-                let resident = r.slots.contains_key(&k);
-                let land = if fine {
-                    let (x0, z0) = (tx as f64 * c as f64, tz as f64 * c as f64);
-                    [(0.5, 0.5), (0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)].iter().any(|(u, v)| veg.grid.height(x0 + u * c as f64, z0 + v * c as f64).is_some_and(|y| y > eo_water::SEA_LEVEL_Y + 0.3))
-                } else {
-                    veg.tiles.contains(&k)
-                };
-                if !land {
+                let x0 = tx as f32 * c;
+                let dx = (x0 - eye.x).max(eye.x - (x0 + c)).max(0.0);
+                let h2 = dx * dx + dz2;
+                if h2 > drop2 {
                     continue;
                 }
+                let k = (tx, tz);
                 let want = if fine {
                     let (gx, gz) = ((tx as f32 + 0.5) * c, (tz as f32 + 0.5) * c);
                     let gy = veg.grid.height(gx as f64, gz as f64).unwrap_or(eye.y as f64) as f32;
-                    let d = fine_distance(k, eye).hypot((eye.y - gy).abs());
-                    d <= load || (resident && d <= drop)
+                    let d = h2.sqrt().hypot((eye.y - gy).abs());
+                    if d > drop {
+                        false
+                    } else if d <= load || r.slots.contains_key(&k) {
+                        let (x0d, z0d) = (tx as f64 * c as f64, tz as f64 * c as f64);
+                        [(0.5, 0.5), (0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)].iter().any(|(u, v)| veg.grid.height(x0d + u * c as f64, z0d + v * c as f64).is_some_and(|y| y > eo_water::SEA_LEVEL_Y + 0.3))
+                    } else {
+                        false
+                    }
                 } else {
+                    if !veg.tiles.contains(&k) {
+                        continue;
+                    }
                     let d = tile_distance_3d(k, eye, |x, z| veg.grid.height(x as f64, z as f64).unwrap_or(0.0) as f32);
                     // from just inside the props tiles' reach (an overlap of identical rocks while they hand over).
-                    (d > LOAD_M - 20.0 && d <= load) || (resident && d > LOAD_M - 60.0 && d <= drop)
+                    (d > LOAD_M - 20.0 && d <= load) || (d > LOAD_M - 60.0 && d <= drop && r.slots.contains_key(&k))
                 };
                 if want {
-                    wanted.insert(k);
+                    r.wanted_scratch.insert(k);
                 }
             }
         }
         let tag_bit = if fine { TAG_FINE } else { TAG_MID };
-        let gone: Vec<Key> = r.slots.keys().filter(|k| evict_all || !wanted.contains(k)).copied().collect();
-        if !gone.is_empty() {
+        const RING_EVICTIONS_PER_FRAME: usize = 16;
+        let gone_all: Vec<Key> = r.slots.keys().filter(|k| evict_all || !r.wanted_scratch.contains(k)).copied().collect();
+        if !gone_all.is_empty() {
+            let mut resident_budget = if evict_all { usize::MAX } else { RING_EVICTIONS_PER_FRAME };
+            let mut gone = Vec::with_capacity(gone_all.len().min(RING_EVICTIONS_PER_FRAME + 8));
+            for k in gone_all {
+                let is_res = matches!(r.slots.get(&k), Some(Slot::Resident { .. }));
+                if is_res {
+                    if resident_budget == 0 {
+                        self.evicting = true;
+                        continue;
+                    }
+                    resident_budget -= 1;
+                }
+                gone.push(k);
+            }
             let gone_set: HashSet<Key> = gone.iter().copied().collect();
             for k in &gone_set {
                 r.outbox.cancel(*k);
@@ -1198,13 +1294,16 @@ impl PropsRuntime {
             for k in gone {
                 if let Some(Slot::Resident { at, n, .. }) = r.slots.remove(&k) {
                     if n > 0 {
-                        renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&vec![EMPTY; n as usize]));
+                        if self.empty_instances.len() < n as usize {
+                            self.empty_instances.resize(n as usize, EMPTY);
+                        }
+                        renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&self.empty_instances[..n as usize]));
                         self.alloc.free(at, n);
                     }
                 }
             }
         }
-        for k in &wanted {
+        for k in &r.wanted_scratch {
             if !r.slots.contains_key(k) {
                 r.slots.insert(*k, Slot::Requested);
                 r.outbox.request(*k);
@@ -1253,9 +1352,14 @@ impl PropsRuntime {
         }
         self.parked_cam = Some(eye);
         self.parked_dirty = false;
-        let Some(world) = &self.world else { return &self.parked };
-        let rings = world.js.value("vehicleRings").as_array().cloned().unwrap_or_default();
-        let ring: Vec<(f64, usize)> = rings.iter().map(|r| (r["radius"].as_f64().unwrap_or(0.0), r["maxVehicles"].as_u64().unwrap_or(0) as usize)).collect();
+        if self.world.is_none() {
+            return &self.parked;
+        }
+        if self.slots.is_empty() || self.vehicle_rings.is_empty() {
+            self.parked.clear();
+            return &self.parked;
+        }
+        let ring = &self.vehicle_rings;
         let far = ring.last().map(|r| r.0).unwrap_or(0.0);
         let mut cars: Vec<(f64, &GroundedParkedCar)> = vec![];
         for s in self.slots.values() {

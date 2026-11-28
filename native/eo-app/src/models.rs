@@ -1083,7 +1083,11 @@ impl ModelRuntime {
                         }
                     }
                     if self.hlod_trees == 2 {
-                        renderer.note_streamed(t.pump(&ctx.queue));
+                        let before = t.block_count();
+                        renderer.note_streamed_bytes(t.pump(&ctx.queue));
+                        if t.block_count() != before {
+                            renderer.note_vis_write();
+                        }
                         if t.idle() {
                             self.hlod_trees = 0;
                         }
