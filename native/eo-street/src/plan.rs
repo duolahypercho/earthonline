@@ -1908,7 +1908,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
         e.driveway_owners = [None; 2];
         for (a, b, owner) in spans {
             e.yield_spans.push([a, b]);
-            if e.highway == "service" && e.walks.iter().all(|w| *w < o.min_sidewalk_width) {
+            if owner != usize::MAX && e.highway == "service" && e.walks.iter().all(|w| *w < o.min_sidewalk_width) {
                 if a == 0.0 && e.approach_start.is_none() { e.driveway_owners[0] = Some(owner); }
                 if b == e.length && e.approach_end.is_none() { e.driveway_owners[1] = Some(owner); }
             }
