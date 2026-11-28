@@ -302,9 +302,10 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
         let v = select(wear, paint, drive == 1u);
         let th = 0.5 + (fract(seed * 0.6180340) - 0.5) * 0.3;
         if (v > th) {
+            let scale_ratio = e0.zw / max(cc0_linv(i32(e0.x)), vec2<f32>(1e-5));
             layer = i32(e0.y);
             mul = e2.rgb;
-            inv = cc0_linv(layer);
+            inv = cc0_linv(layer) * scale_ratio;
         }
     }
     let fr = fa_frame(n);
@@ -1027,7 +1028,7 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     // olive-sage & sun-dappled dry-gold, break up bare urban hillside yards/backlots out to 950 m,
     // and texture steep neutral-grey urban cut-banks/slopes (`05a` & `05b` terrain blobs).
     var aaa_tn = vec2<f32>(0.0);
-    let aaa_paved = SF_AAA_DETAIL && n.y > 0.94 && (sets.x == CC0_L_CONCRETE_FLOOR_WORN_001 || (sets.x == CC0_L_GRAVEL_FLOOR_03 && world.y < LM_SEA_LEVEL_Y + 9.0));
+    let aaa_paved = SF_AAA_DETAIL && n.y > 0.97 && world.y < LM_SEA_LEVEL_Y + 6.5 && hm_ground_w < 0.05 && sets.x == CC0_L_CONCRETE_FLOOR_WORN_001;
     if (SF_AAA_DETAIL && !aaa_paved) {
         let fw_g = max(length(dpx), length(dpy));
         let mid_fade = 1.0 - smoothstep(550.0, 1050.0, dist);

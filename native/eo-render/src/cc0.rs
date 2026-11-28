@@ -137,7 +137,7 @@ pub fn kit_class(name: &str) -> Option<ClassUse> {
         "brick-buff" => cu("yellow_bricks", None, MODE_NATURAL, DRIVE_NONE, 1.15, 0.014, 0.50, 1.0),
         // Cast stone is moulded and dressed smooth: smooth concrete with subtle architectural panel micro-relief.
         "cast-stone" => cu("concrete_wall_008", None, MODE_NATURAL, DRIVE_NONE, 0.85, 0.004, 0.35, 0.80),
-        "limestone-ashlar" => cu("white_sandstone_blocks_02", Some("granite_wall"), MODE_NATURAL, DRIVE_WEAR, 1.05, 0.012, 0.45, 0.88),
+        "limestone-ashlar" => cu("white_sandstone_blocks_02", None, MODE_NATURAL, DRIVE_NONE, 0.9, 0.010, 0.4, 0.8),
         "cast-stone-trim" => cu("concrete_wall_008", None, MODE_NATURAL, DRIVE_NONE, 0.70, 0.002, 0.24, 0.68),
         "concrete-precast" => cu("concrete_wall_008", Some("wood_textured_concrete"), MODE_NATURAL, DRIVE_WEAR, 1.05, 0.006, 0.42, 0.95),
         "corrugated-metal" => cu("corrugated_iron_02", None, MODE_NATURAL, DRIVE_NONE, 1.15, 0.014, 0.25, 0.90),
