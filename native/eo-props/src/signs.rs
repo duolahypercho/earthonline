@@ -7,7 +7,17 @@
 //! (`createStreetSignKerbSnap`, CA MUTCD 2A.16 lateral offset
 //! `sign-lateral-offset-urban`), dropped when no kerb is within the snap
 //! reach; a post repeating every plate of a post already placed within the
-//! merge radius collapsed (F3).
+//! merge radius collapsed (F3). With [`set_merge_posts`] (eo-app; its
+//! `--no-sign-post-merge` leaves it off), a post seated within the merge
+//! radius of one already placed is that pole: the inventory lists the signs
+//! of one physical pole under several records, often at the same point, and
+//! each stood its own post (one 0-15 cm in front of another's plates). Its
+//! plates hang on the pole already standing: a repeated plate (same face,
+//! same facing) is dropped; a plate back to back with the pole's plates
+//! (facings at least `BACK_TO_BACK_DEG` apart) shares their height; any other
+//! plate that would cross one goes under the pole's plates of that facing
+//! (keeping the secondary-plate minimum), else over all of them, and the pole
+//! reaches its top plate.
 //!
 //! Differences from the JS, stated: posts are planned per 128 m tile of their
 //! listed point in inventory order (the JS plans a 180 m window round the
@@ -21,6 +31,21 @@ const INCH_M: f64 = 0.0254;
 /// The JS merge rule (`SIGN_MERGE`: 0.9 m, 20 deg).
 const MERGE_M: f64 = 0.9;
 const MERGE_YAW_DEG: f64 = 20.0;
+/// Two plates on one pole facing at least this far apart are back to back and may share a
+/// height; nearer facings (a corner's two plates at 90 deg) would cross each other's edges.
+const BACK_TO_BACK_DEG: f64 = 150.0;
+
+static MERGE_POSTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// One pole per spot: a post seated within the merge radius of one already placed hangs its
+/// plates on it (eo-app; `--no-sign-post-merge` leaves it off). Off in the library unless set.
+pub fn set_merge_posts(on: bool) {
+    MERGE_POSTS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn merge_posts() -> bool {
+    MERGE_POSTS.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 #[allow(non_snake_case)]
 pub fn SIGN_CELL_M(js: &crate::JsProps) -> f64 {
@@ -184,7 +209,53 @@ pub struct PlacedPost {
     pub moved_m: f64,
     /// (face index, yaw, centre y above ground) per plate.
     pub plates: Vec<(u16, f64, f64)>,
+    /// (yaw, bottom, top above ground) per plate: what a plate hung on this pole must not cross.
+    pub spans: Vec<(f64, f64, f64)>,
+    /// The drawn surface at the seat, and the pole's top above it.
+    pub ground: f64,
+    pub top: f64,
     pub props: Vec<Prop>,
+}
+
+/// Hang the plates of a post seated on `host`'s spot (`merge_posts`) on `host`.
+fn mount_on(host: &mut PlacedPost, stack: &[(u16, f64, f64, i32)], top: f64, post_yaw: Option<f64>, post_r: f64, secondary_min: f64) {
+    let max_yaw = MERGE_YAW_DEG.to_radians();
+    let back = BACK_TO_BACK_DEG.to_radians();
+    let mut cursor = top;
+    for pl in stack {
+        let h = pl.2;
+        let yaw = plate_yaw(pl.3, post_yaw.unwrap_or(0.0));
+        let mut bottom = cursor - h;
+        cursor = bottom;
+        // the pole already carries this face this way.
+        if host.plates.iter().any(|q| q.0 == pl.0 && yaw_gap(q.1, yaw) <= max_yaw) {
+            continue;
+        }
+        let crosses = |b: f64, spans: &[(f64, f64, f64)]| spans.iter().any(|s| yaw_gap(s.0, yaw) < back && b < s.2 - 0.01 && b + h > s.1 + 0.01);
+        if crosses(bottom, &host.spans) {
+            let low = host.spans.iter().filter(|s| yaw_gap(s.0, yaw) < back).map(|s| s.1).fold(f64::INFINITY, f64::min);
+            bottom = low - h;
+            if bottom < secondary_min || crosses(bottom, &host.spans) {
+                bottom = host.spans.iter().map(|s| s.2).fold(host.top, f64::max);
+            }
+        }
+        host.spans.push((yaw, bottom, bottom + h));
+        host.plates.push((pl.0, yaw, bottom + h / 2.0));
+        host.top = host.top.max(bottom + h);
+        let plate = Prop {
+            model: Model::SignPlate,
+            pos: [host.seat[0] + yaw.sin() * post_r, host.ground + bottom + h / 2.0, host.seat[1] + yaw.cos() * post_r],
+            yaw,
+            scale: [pl.1 as f32, h as f32, 1.0],
+            variant: pl.0,
+            live: Live::None,
+        };
+        let at = host.props.len().saturating_sub(1); // before the post (the last prop)
+        host.props.insert(at, plate);
+    }
+    if let Some(post) = host.props.last_mut().filter(|p| p.model == Model::SignPost) {
+        post.scale[1] = host.top as f32;
+    }
 }
 
 pub fn plan_posts(w: &PropsWorld, key: (i32, i32), paved: bool) -> Vec<PlacedPost> {
@@ -250,8 +321,26 @@ pub fn plan_posts_with(w: &PropsWorld, key: (i32, i32), paved: bool, structures:
             }
         };
         let Some((x, z, moved)) = seat else { continue };
-        // F3: a post repeating every plate of a post placed within 0.9 m.
         let (gx, gz) = ((x / MERGE_M).floor() as i64, (z / MERGE_M).floor() as i64);
+        // One pole per spot (`merge_posts`): the nearest post placed within the merge radius takes the plates.
+        if merge_posts() {
+            let mut host: Option<(f64, usize)> = None;
+            for di in -1..=1 {
+                for dj in -1..=1 {
+                    for &p in seats.get(&(gx + di, gz + dj)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                        let d = (placed[p].seat[0] - x).hypot(placed[p].seat[1] - z);
+                        if d <= MERGE_M && host.is_none_or(|h| d < h.0) {
+                            host = Some((d, p));
+                        }
+                    }
+                }
+            }
+            if let Some((_, p)) = host {
+                mount_on(&mut placed[p], &stack, top, post_yaw, post_r, w.std.sign_mount_secondary_min);
+                continue;
+            }
+        }
+        // F3: a post repeating every plate of a post placed within 0.9 m.
         let repeats = (-1..=1).any(|di| {
             (-1..=1).any(|dj| {
                 seats.get(&(gx + di, gz + dj)).is_some_and(|v| {
@@ -272,12 +361,14 @@ pub fn plan_posts_with(w: &PropsWorld, key: (i32, i32), paved: bool, structures:
         let ground = w.ground(x, z);
         let mut cursor = top;
         let mut plates = vec![];
+        let mut spans = vec![];
         let mut props = vec![];
         for pl in &stack {
             let bottom = cursor - pl.2;
             cursor = bottom;
             let yaw = plate_yaw(pl.3, post_yaw.unwrap_or(0.0));
             plates.push((pl.0, yaw, bottom + pl.2 / 2.0));
+            spans.push((yaw, bottom, bottom + pl.2));
             props.push(Prop {
                 model: Model::SignPlate,
                 pos: [x + yaw.sin() * post_r, ground + bottom + pl.2 / 2.0, z + yaw.cos() * post_r],
@@ -289,7 +380,7 @@ pub fn plan_posts_with(w: &PropsWorld, key: (i32, i32), paved: bool, structures:
         }
         props.push(Prop { model: Model::SignPost, pos: [x, ground, z], yaw: post_yaw.unwrap_or(0.0), scale: [1.0, top as f32, 1.0], variant: 0, live: Live::None });
         seats.entry((gx, gz)).or_default().push(placed.len());
-        placed.push(PlacedPost { index: i, listed: [lx, lz], seat: [x, z], moved_m: moved, plates, props });
+        placed.push(PlacedPost { index: i, listed: [lx, lz], seat: [x, z], moved_m: moved, plates, spans, ground, top, props });
     }
     placed
 }

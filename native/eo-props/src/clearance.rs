@@ -126,6 +126,8 @@ pub struct Dims {
     pole_r: f64,
     head_half: f64,
     post_r: f64,
+    /// Per `signals::ArmClass` row, the arm's rise (a `MastArm` of variant 1 + row).
+    arm_rise: Vec<f64>,
 }
 
 impl Dims {
@@ -151,6 +153,7 @@ impl Dims {
             pole_r: w.js.num("signalHardware", "poleRadiusBaseM"),
             head_half: w.js.num("signalHardware", "headHalfHeightM"),
             post_r: w.js.consts["signPostRadiusM"].as_f64().unwrap_or(0.03),
+            arm_rise: w.std.signal_arms.iter().map(|c| c.rise).collect(),
         }
     }
 
@@ -179,8 +182,9 @@ pub fn extents(d: &Dims, p: &Prop, out: &mut Vec<Extent>) {
     match p.model {
         Model::SignalPole => out.push(Extent::new(x, z, d.pole_r, y, y + sc(1))),
         Model::MastArm => {
-            // local +X (three.js rotation.y = yaw): (cos yaw, -sin yaw).
-            along(out, [x, z], [p.yaw.cos(), -p.yaw.sin()], sc(0), 0.15, y - 0.25, y + 0.25, 1.0);
+            // local +X (three.js rotation.y = yaw): (cos yaw, -sin yaw); a rising arm up to its rise.
+            let rise = (p.variant as usize).checked_sub(1).and_then(|c| d.arm_rise.get(c)).copied().unwrap_or(0.0);
+            along(out, [x, z], [p.yaw.cos(), -p.yaw.sin()], sc(0), 0.15, y - 0.25, y + rise + 0.25, 1.0);
         }
         Model::SignalHead => out.push(Extent::new(x, z, 0.35, y - d.head_half - 0.1, y + d.head_half + 0.1)),
         Model::PedHead => out.push(Extent::new(x, z, 0.3, y - 0.35, y + 0.35)),

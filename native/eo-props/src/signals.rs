@@ -24,6 +24,219 @@
 use crate::roadway::seg_distance;
 use crate::{Live, Model, Prop, PropsWorld, station_at};
 use eo_street::plan::{Approach, Node};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// (eo-app `--no-arm-rise` turns it off; off by default outside eo-app) every mast arm at
+/// least as long as Caltrans RSP ES-7E's shortest rises from the pole to its end as that sheet
+/// draws it ([`ArmClass`]), and the heads hung from it follow it.
+static ARM_RISE: AtomicBool = AtomicBool::new(false);
+
+/// Turn the arm rise on or off for the plans that follow (eo-app, at each world load).
+pub fn set_arm_rise(on: bool) {
+    ARM_RISE.store(on, Ordering::Relaxed);
+}
+
+pub fn arm_rise() -> bool {
+    ARM_RISE.load(Ordering::Relaxed)
+}
+
+/// (eo-app `--no-arm-rise-routes` turns it off; off by default outside eo-app) with the arm rise
+/// on, only the arms of a junction on a State route rise ([`on_state_route`]: Caltrans RSP ES-7E
+/// governs the State's signals); every other arm stays level (`signal-mast-arm-sf-city-street`).
+/// Off, every arm the table covers rises (round 2).
+static ARM_RISE_ROUTES: AtomicBool = AtomicBool::new(false);
+
+/// Turn the route rule on or off for the plans that follow (eo-app, at each world load).
+pub fn set_arm_rise_routes(on: bool) {
+    ARM_RISE_ROUTES.store(on, Ordering::Relaxed);
+}
+
+pub fn arm_rise_routes() -> bool {
+    ARM_RISE_ROUTES.load(Ordering::Relaxed)
+}
+
+/// The level ramp-junction arm is an approved departure from Caltrans ES-7E
+/// (`CALIFORNIA_STREET_DEVIATIONS` `signal-arm-ramp-junction-level`): without the entry the
+/// ramp junctions keep the State route's arm.
+fn ramp_level_approved() -> bool {
+    eo_data::standards::deviation("signal-arm-ramp-junction-level").is_ok()
+}
+
+/// Whether a junction is on a State route: one of its approaches is a road the data marks as
+/// one (`eo_data::standards::is_sf_state_route`: the trunk and motorway ways, Sloat and Skyline
+/// Boulevards; the standards' `stateHighwaysInSF`).
+pub fn on_state_route(street: &eo_street::StreetWorld, node: &Node) -> bool {
+    node.approaches.iter().any(|a| {
+        let seg = &street.city.segments[street.plan.entries[a.entry].road];
+        let hw = seg.highway.trim();
+        // (`--no-ramp-level` off) a freeway ramp (`*_link`) does not make its junction a State
+        // route's: the junction's own streets do
+        eo_data::standards::is_sf_state_route(hw, &seg.street_name) && !(ramp_level() && hw.ends_with("_link") && ramp_level_approved())
+    })
+}
+
+/// (eo-app `--no-ramp-level` turns it off; off by default outside eo-app) a junction that
+/// meets a State route only through a freeway ramp (`motorway_link`, `trunk_link`) is a city
+/// junction ([`on_state_route`]): its arms stay level. Off, the ramp counts (round 3).
+static RAMP_LEVEL: AtomicBool = AtomicBool::new(false);
+
+pub fn set_ramp_level(on: bool) {
+    RAMP_LEVEL.store(on, Ordering::Relaxed);
+}
+
+pub fn ramp_level() -> bool {
+    RAMP_LEVEL.load(Ordering::Relaxed)
+}
+
+/// (eo-app `--no-arm-lower` turns it off; off by default outside eo-app) every level mast arm
+/// as low as the California MUTCD lets it hang ([`lower_arms`]): each head's bottom (its
+/// backplate) the binding 15 ft over the roadway under it (`signal-mounting-height-over-roadway`,
+/// 4D.09) and its Street Name sign's bottom the binding 17 ft (`sign-mounting-height-urban`
+/// `overheadMin`, 2A.15). Off, the arm at the game's arm height, as before.
+static ARM_LOWER: AtomicBool = AtomicBool::new(false);
+/// How far a Street Name sign's bottom hangs under its arm's axis (m, f64 bits; 0: no signs
+/// drawn): the arm's radius, the sign's hang under it and the sign's height (eo-app, from the
+/// D3-1 blade it draws and the arm parts' dims).
+static NAME_SIGN_DROP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn set_arm_lower(on: bool) {
+    ARM_LOWER.store(on, Ordering::Relaxed);
+}
+
+pub fn arm_lower() -> bool {
+    ARM_LOWER.load(Ordering::Relaxed)
+}
+
+/// Set how far a Street Name sign's bottom hangs under its arm's axis (0: no signs drawn).
+pub fn set_name_sign_drop(m: f64) {
+    NAME_SIGN_DROP.store(m.max(0.0).to_bits(), Ordering::Relaxed);
+}
+
+pub fn name_sign_drop() -> f64 {
+    f64::from_bits(NAME_SIGN_DROP.load(Ordering::Relaxed))
+}
+
+/// (eo-app `--no-rise-clearance` turns it off; off by default outside eo-app) a rising arm keeps
+/// what hangs from it clear of the binding minimums over the roadway under it, as the level arms
+/// do ([`clear_rising_arms`]): its heads' bottoms (their backplates) 15 ft (4D.09), its Street
+/// Name sign in the stretch of the arm where it hangs highest, its bottom 17 ft (2A.15). Off,
+/// round 3's rise (its heads 15 ft over the pole's foot, the sign in the longest stretch).
+static RISE_CLEARANCE: AtomicBool = AtomicBool::new(false);
+/// The drawn Street Name signs' widths by legend (eo-app, from the D3-1 blades it draws): a
+/// rising arm's sign goes where it fits ([`clear_rising_arms`]).
+static NAME_SIGN_WIDTHS: std::sync::Mutex<Option<std::sync::Arc<std::collections::HashMap<String, f64>>>> = std::sync::Mutex::new(None);
+
+pub fn set_rise_clearance(on: bool) {
+    RISE_CLEARANCE.store(on, Ordering::Relaxed);
+}
+
+pub fn rise_clearance() -> bool {
+    RISE_CLEARANCE.load(Ordering::Relaxed)
+}
+
+/// Set the drawn Street Name signs' widths by legend (None: unknown, the signs stay where round 3 hung them).
+pub fn set_name_sign_widths(widths: Option<std::collections::HashMap<String, f64>>) {
+    *NAME_SIGN_WIDTHS.lock().unwrap() = widths.map(std::sync::Arc::new);
+}
+
+fn name_sign_widths() -> Option<std::sync::Arc<std::collections::HashMap<String, f64>>> {
+    NAME_SIGN_WIDTHS.lock().unwrap().clone()
+}
+
+/// (`--no-pull-boxes` off; eo-app sets it from the pull box model) The No. 5 traffic pull box's
+/// outside (length, width, m) a box is laid beside each signal pole at ([`plan_pull_boxes`]);
+/// None: no pull boxes, the plan as before.
+static PULL_BOX_M: std::sync::Mutex<Option<[f64; 2]>> = std::sync::Mutex::new(None);
+
+pub fn set_pull_boxes(size: Option<[f64; 2]>) {
+    *PULL_BOX_M.lock().unwrap() = size;
+}
+
+pub fn pull_boxes() -> Option<[f64; 2]> {
+    *PULL_BOX_M.lock().unwrap()
+}
+
+/// How far the drawn vehicle head reaches under its centre (m): its backplate's half height
+/// when the modelled heads draw (`signal_models`, the file's bounds), else the larger of the
+/// JS head's half height and the v2 file's bounds.
+pub fn head_reach_down(js_half: f64) -> f64 {
+    let bound = |rows: Option<&serde_json::Value>| rows.and_then(|r| r["boundsM"]["min"][1].as_f64()).map(|y| -y);
+    let modelled = crate::signal_models::active().and_then(|s| bound(s.rows.get("signalHead")));
+    let v2 = crate::props_v2::active().and_then(|v| bound(v.rows.get("signalHead")));
+    modelled.unwrap_or_else(|| v2.unwrap_or(0.0).max(js_half))
+}
+
+/// One row of Caltrans RSP ES-7E's signal arm data (`signal-mast-arm-caltrans`): an arm length
+/// class and how it rises. The arm's height over its root at the share `t` of its length is
+/// `rise * (1 - (1 - t)^p)`, `p` chosen so it leaves the pole at the sheet's angle and ends
+/// level (the sheet's curved arm).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ArmClass {
+    /// Projected length E (m).
+    pub length: f64,
+    /// G - H: the mounting height over the arm's connection height on the pole (m).
+    pub rise: f64,
+    /// The arm's angle at the pole (rad).
+    pub angle: f64,
+    /// Minimum outside diameter at the pole (m).
+    pub od_at_pole: f64,
+}
+
+impl ArmClass {
+    /// The table's rows (`signal-mast-arm-caltrans`).
+    pub fn table(ca: &eo_data::CaStandards) -> anyhow::Result<Vec<ArmClass>> {
+        let id = "signal-mast-arm-caltrans";
+        let (e, g, h, a, od) = (ca.metric_list(id, "projectedLength")?, ca.metric_list(id, "mountingHeight")?, ca.metric_list(id, "armConnectionHeight")?, ca.metric_list(id, "riseAngleDeg")?, ca.metric_list(id, "minOdAtPole")?);
+        let n = e.len();
+        if n == 0 || [g.len(), h.len(), a.len(), od.len()].iter().any(|&k| k != n) || e.windows(2).any(|w| w[1] <= w[0]) {
+            anyhow::bail!("{id}: the rows do not line up");
+        }
+        Ok((0..n).map(|i| ArmClass { length: e[i], rise: g[i] - h[i], angle: a[i].to_radians(), od_at_pole: od[i] }).collect())
+    }
+
+    /// The profile's exponent `p` (at least 1: the arm never dips).
+    pub fn exponent(&self) -> f64 {
+        (self.angle.tan() * self.length / self.rise).max(1.0)
+    }
+
+    /// The arm's height over its root at the share `t` of its length.
+    pub fn height_at(&self, t: f64) -> f64 {
+        self.rise * (1.0 - (1.0 - t.clamp(0.0, 1.0)).powf(self.exponent()))
+    }
+
+    /// The class an arm of length `l` is drawn in: the row nearest in length; None for an arm
+    /// shorter than the shortest row (the sheet has none: it stays level).
+    pub fn of(table: &[ArmClass], l: f64) -> Option<usize> {
+        if table.is_empty() || l < table[0].length {
+            return None;
+        }
+        (0..table.len()).min_by(|&i, &j| (table[i].length.ln() - l.ln()).abs().total_cmp(&(table[j].length.ln() - l.ln()).abs()))
+    }
+}
+
+/// What a junction's plan hangs on its poles and arms besides the heads ([`NodePlan::fittings`]):
+/// drawn by the renderer's signal hardware (eo-props `signal_poles::hardware`), each found
+/// again on the pole or arm it belongs to (one dropped or cut down takes its fittings with it).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Fitting {
+    /// A Street Name (D3-1) sign under a mast arm, naming the street its traffic crosses: the
+    /// arm (its root and yaw), the stretch of the arm (m from its root) it may hang in (the
+    /// longest free of the heads and the pole's plate), the way its face looks (the heads'
+    /// yaw) and the legend.
+    NameSign { arm: [f64; 3], yaw: f64, gap: [f64; 2], facing: f64, legend: String },
+    /// A pedestrian push button with its sign on a pole, for the crosswalk whose end the pole
+    /// stands at: the pole's foot, the button's height over it, the yaw that turns the
+    /// button's local +X to the way its face looks (along the street, toward the crosswalk:
+    /// its face parallel to the crosswalk) and whether its arrow (the crossing direction)
+    /// points along its local +Z.
+    PushButton { pole: [f64; 3], height: f64, yaw: f64, arrow_plus_z: bool },
+    /// A street light standing on the mast pole whose foot this is (`signal_lamps`, a
+    /// combination pole): the light's prop stands on the same foot, its post inside the pole.
+    Luminaire { pole: [f64; 3] },
+    /// A traffic pull box in the sidewalk beside a signal pole ([`plan_pull_boxes`]): its lid's
+    /// centre on the sidewalk and the yaw that turns its length (local +X) along the kerb.
+    PullBox { pos: [f64; 3], yaw: f64 },
+}
 
 type P2 = [f64; 2];
 const DEG: f64 = std::f64::consts::PI / 180.0;
@@ -55,6 +268,10 @@ pub struct Pole {
 #[derive(Clone, Debug)]
 pub struct Arm {
     pub pole: String,
+    /// The leg (approach index) whose traffic the arm's heads face.
+    pub leg: usize,
+    /// (`--no-arm-rise` off) its [`ArmClass`] row: the arm rises; None: level.
+    pub class: Option<usize>,
     pub x: f64,
     pub z: f64,
     pub y: f64,
@@ -92,6 +309,8 @@ pub struct NodePlan {
     pub heads: Vec<Head>,
     pub ped_heads: Vec<PedHead>,
     pub unplaced_legs: usize,
+    /// Name signs on the arms and push buttons on the poles ([`Fitting`]).
+    pub fittings: Vec<Fitting>,
 }
 
 struct H {
@@ -300,15 +519,26 @@ fn circular_mean(a: &[f64]) -> f64 {
     sz.atan2(sx)
 }
 
+/// A mast arm's prop: `variant` 0 a level arm, else 1 + its [`ArmClass`] row (it rises).
+fn arm_prop(a: &Arm) -> Prop {
+    Prop { model: Model::MastArm, pos: [a.x, a.y, a.z], yaw: a.yaw, scale: [a.length as f32, 1.0, 1.0], variant: a.class.map_or(0, |c| c as u16 + 1), live: Live::None }
+}
+
 /// Plan one signalised junction and append its props.
 pub fn plan_node(w: &PropsWorld, ni: usize, out: &mut Vec<Prop>) {
+    plan_node_with(w, ni, out, &mut vec![]);
+}
+
+/// [`plan_node`] and the junction's [`Fitting`]s.
+pub fn plan_node_with(w: &PropsWorld, ni: usize, out: &mut Vec<Prop>, fittings: &mut Vec<Fitting>) {
     let plan = plan_node_parts(w, ni);
+    fittings.extend(plan.fittings.iter().cloned());
     let c = w.street.plan.nodes[ni].position;
     for p in &plan.poles {
         out.push(Prop { model: Model::SignalPole, pos: [p.x, p.base_y, p.z], yaw: 0.0, scale: [1.0, p.height as f32, 1.0], variant: p.kind_mast as u16, live: Live::None });
     }
     for a in &plan.arms {
-        out.push(Prop { model: Model::MastArm, pos: [a.x, a.y, a.z], yaw: a.yaw, scale: [a.length as f32, 1.0, 1.0], variant: 0, live: Live::None });
+        out.push(arm_prop(a));
     }
     for h in &plan.heads {
         out.push(Prop { model: Model::SignalHead, pos: [h.x, h.y, h.z], yaw: h.yaw, scale: [1.0; 3], variant: h.mount as u16, live: Live::Vehicle { node: c, bearing: h.bearing } });
@@ -333,6 +563,8 @@ pub struct PoleChange {
 #[derive(Clone, Debug, Default)]
 pub struct ClearedNode {
     pub props: Vec<Prop>,
+    /// The fittings of the poles and arms kept (found on them again when drawn).
+    pub fittings: Vec<Fitting>,
     pub changes: Vec<PoleChange>,
     pub stats: crate::clearance::ClearStats,
 }
@@ -359,7 +591,6 @@ pub fn plan_node_clear(w: &PropsWorld, s: &eo_structures::StructureWorld, ni: us
         .collect();
     let c = w.street.plan.nodes[ni].position;
     let pole_prop = |p: &Pole| Prop { model: Model::SignalPole, pos: [p.x, p.base_y, p.z], yaw: 0.0, scale: [1.0, p.height as f32, 1.0], variant: p.kind_mast as u16, live: Live::None };
-    let arm_prop = |a: &Arm| Prop { model: Model::MastArm, pos: [a.x, a.y, a.z], yaw: a.yaw, scale: [a.length as f32, 1.0, 1.0], variant: 0, live: Live::None };
     let head_prop = |hd: &Head| Prop { model: Model::SignalHead, pos: [hd.x, hd.y, hd.z], yaw: hd.yaw, scale: [1.0; 3], variant: hd.mount as u16, live: Live::Vehicle { node: c, bearing: hd.bearing } };
     let ped_prop = |hd: &PedHead| Prop { model: Model::PedHead, pos: [hd.x, hd.y, hd.z], yaw: hd.yaw, scale: [1.0; 3], variant: 0, live: Live::Pedestrian { node: c, bearing: hd.bearing, length_m: hd.length } };
     let clear = |props: &[Prop]| {
@@ -439,6 +670,7 @@ pub fn plan_node_clear(w: &PropsWorld, s: &eo_structures::StructureWorld, ni: us
     out.props.extend(np.arms.iter().zip(&keep_arm).filter(|x| *x.1).map(|x| arm_prop(x.0)));
     out.props.extend(np.heads.iter().zip(&keep_head).filter(|x| *x.1).map(|x| head_prop(x.0)));
     out.props.extend(np.ped_heads.iter().zip(&keep_ped).filter(|x| *x.1).map(|x| ped_prop(x.0)));
+    out.fittings = np.fittings.clone();
     out
 }
 
@@ -674,7 +906,7 @@ pub fn plan_node_parts(w: &PropsWorld, ni: usize) -> NodePlan {
             });
             if best.mast && best.layout.reach > 0.0 {
                 let dir = [n[0] * best.layout.toward, n[1] * best.layout.toward];
-                np.arms.push(Arm { pole: pole_id.clone(), x: best.p[0], z: best.p[1], y: base_y + h.mast_arm_height, length: best.layout.reach + 0.35, yaw: (-dir[1]).atan2(dir[0]), near_arm: false });
+                np.arms.push(Arm { pole: pole_id.clone(), leg: li, class: None, x: best.p[0], z: best.p[1], y: base_y + h.mast_arm_height, length: best.layout.reach + 0.35, yaw: (-dir[1]).atan2(dir[0]), near_arm: false });
             }
             for hd in &best.layout.heads {
                 let p = to_world(best.along, hd.1);
@@ -807,7 +1039,7 @@ pub fn plan_node_parts(w: &PropsWorld, ni: usize) -> NodePlan {
                 }
             };
             let arm_y = base_y + h.mast_arm_height;
-            np.arms.push(Arm { pole: pole_id.clone(), x: p[0], z: p[1], y: arm_y, length: (hp[0] - p[0]).hypot(hp[1] - p[1]) + 0.3, yaw: (-(hp[1] - p[1])).atan2(hp[0] - p[0]), near_arm: true });
+            np.arms.push(Arm { pole: pole_id.clone(), leg: li, class: None, x: p[0], z: p[1], y: arm_y, length: (hp[0] - p[0]).hypot(hp[1] - p[1]) + 0.3, yaw: (-(hp[1] - p[1])).atan2(hp[0] - p[0]), near_arm: true });
             let aim = to_world(kl.along - 12.0, leg_mean_lat);
             let (fx, fz) = (aim[0] - hp[0], aim[1] - hp[1]);
             np.heads.push(Head { pole: pole_id, mount: 1, near_arm: true, x: hp[0], y: arm_y - (h.mast_arm_height - h.mast_head_centre), z: hp[1], yaw: fx.atan2(fz), bearing });
@@ -829,8 +1061,386 @@ pub fn plan_node_parts(w: &PropsWorld, ni: usize) -> NodePlan {
         }
     }
     merge_corner_masts(&mut np, &h);
+    // (`--no-arm-rise-routes`: every arm) the arms of a junction on a State route rise; a city
+    // street's stay level (`Standards::signal_arm_city_rise`).
+    let rises = arm_rise() && (!arm_rise_routes() || on_state_route(&w.street, node));
+    if rises {
+        rise_arms(w, &mut np, &h);
+    }
+    name_signs(w, node, &mut np, &h);
+    // (`--no-rise-clearance`: round 3's rise) a rising arm's heads and sign clear the minimums
+    if rises && rise_clearance() {
+        clear_rising_arms(w, &mut np, &h);
+    }
+    // (`--no-arm-lower`: the game's arm height) every level arm as low as what it carries may
+    // hang (a State route's too short for ES-7E's table as well; its rising arms are kept)
+    if arm_lower() {
+        lower_arms(w, &mut np, &h);
+    }
     plan_ped(w, node, &mut np, &mut rules);
+    // (`--no-pull-boxes` off) a pull box beside each pole
+    if let Some(size) = pull_boxes() {
+        plan_pull_boxes(w, node, &mut np, size);
+    }
     np
+}
+
+/// The foundation round a signal pole's foot, as the pole parts are built (signal-poles-v1: a
+/// mast pole on Caltrans RSP ES-7C's 30 in pile, a pedestal or post on its 0.24 m pad), and how
+/// far a pull box keeps from its edge, m (modelling value).
+pub const MAST_FOUNDATION_R_M: f64 = 0.381;
+pub const POST_FOUNDATION_R_M: f64 = 0.24;
+const PULL_BOX_FOUNDATION_GAP_M: f64 = 0.12;
+
+/// The traffic pull boxes (`--no-pull-boxes` off): each signal pole's conductors come up from a
+/// pull box in the sidewalk beside its foot (Caltrans Standard Plans ES-8B, the No. 5 box; the
+/// reference photographs' lids by the poles). One per pole, its length along the kerb of the
+/// pole's approach (a pedestrian post's: the approach it stands along), away from the junction
+/// first, its near end clear of the foundation; never on the roadway or a kerb ramp, on another
+/// pole or another pole's box (two poles that close share one). `size`: the box's outside.
+pub fn plan_pull_boxes(w: &PropsWorld, node: &Node, np: &mut NodePlan, size: [f64; 2]) {
+    let [len, wid] = size;
+    let c = node.position;
+    let mut placed: Vec<P2> = vec![];
+    for pi in 0..np.poles.len() {
+        let p = &np.poles[pi];
+        let u = match usize::try_from(p.leg).ok().and_then(|l| node.approaches.get(l)) {
+            Some(a) => a.u,
+            None => {
+                // the approach the post stands along: the least off its line, ahead of the node
+                let Some(a) = node
+                    .approaches
+                    .iter()
+                    .filter(|a| (p.x - c[0]) * a.u[0] + (p.z - c[1]) * a.u[1] > 0.0)
+                    .min_by(|a, b| ((p.x - c[0]) * a.u[1] - (p.z - c[1]) * a.u[0]).abs().total_cmp(&((p.x - c[0]) * b.u[1] - (p.z - c[1]) * b.u[0]).abs()))
+                else {
+                    continue;
+                };
+                a.u
+            }
+        };
+        let n = [-u[1], u[0]];
+        let s0 = if p.kind_mast { MAST_FOUNDATION_R_M } else { POST_FOUNDATION_R_M } + PULL_BOX_FOUNDATION_GAP_M + len / 2.0;
+        if placed.iter().any(|q| (q[0] - p.x).hypot(q[1] - p.z) < s0 + len / 2.0) {
+            continue; // a pole that close shares the box laid already
+        }
+        for s in [s0, s0 + 0.4, -s0, -(s0 + 0.4)] {
+            let q = [p.x + u[0] * s, p.z + u[1] * s];
+            let pts = [q, [q[0] + u[0] * len / 2.0 + n[0] * wid / 2.0, q[1] + u[1] * len / 2.0 + n[1] * wid / 2.0], [q[0] + u[0] * len / 2.0 - n[0] * wid / 2.0, q[1] + u[1] * len / 2.0 - n[1] * wid / 2.0], [q[0] - u[0] * len / 2.0 + n[0] * wid / 2.0, q[1] - u[1] * len / 2.0 + n[1] * wid / 2.0], [q[0] - u[0] * len / 2.0 - n[0] * wid / 2.0, q[1] - u[1] * len / 2.0 - n[1] * wid / 2.0]];
+            if pts.iter().any(|t| w.roadway.hit(t[0], t[1], 0.02).is_some() || w.roadway.ramp_hit(t[0], t[1], 0.02)) {
+                continue;
+            }
+            let clear = |x: f64, z: f64, r: f64| (x - q[0]).hypot(z - q[1]) >= r;
+            if np.poles.iter().enumerate().any(|(k, o)| k != pi && !clear(o.x, o.z, len / 2.0 + if o.kind_mast { MAST_FOUNDATION_R_M } else { POST_FOUNDATION_R_M })) || placed.iter().any(|t| !clear(t[0], t[1], len + 0.1)) {
+                continue;
+            }
+            placed.push(q);
+            np.fittings.push(Fitting::PullBox { pos: [q[0], w.ground(q[0], q[1]), q[1]], yaw: (-u[1]).atan2(u[0]) });
+            break;
+        }
+    }
+}
+
+/// The legend of the Street Name sign facing the traffic of a junction's approach `leg`: the
+/// street that traffic crosses (the approach of another name most nearly square to it, at
+/// least 30 degrees off), None where there is none (`sign_atlas::normalize_street_legend`).
+pub fn cross_street_legend(street: &eo_street::StreetWorld, node: &Node, leg: usize) -> Option<String> {
+    let app = node.approaches.get(leg)?;
+    let name_of = |a: &Approach| crate::sign_atlas::normalize_street_legend(&street.city.segments[street.plan.entries[a.entry].road].street_name);
+    let own = name_of(app);
+    node.approaches
+        .iter()
+        .filter_map(|o| name_of(o).filter(|n| Some(n) != own.as_ref()).map(|n| (n, (o.u[0] * app.u[0] + o.u[1] * app.u[1]).abs())))
+        .filter(|x| x.1 < (30.0 * DEG).cos())
+        .min_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0)))
+        .map(|x| x.0)
+}
+
+/// Every legend a mast arm's Street Name sign may carry, city-wide (each signalised
+/// junction's approaches' [`cross_street_legend`]), sorted, once each.
+pub fn name_sign_legends(street: &eo_street::StreetWorld) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for node in street.plan.nodes.iter().filter(|n| n.signalised()) {
+        out.extend((0..node.approaches.len()).filter_map(|li| cross_street_legend(street, node, li)));
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// (`--no-arm-rise` off) Each arm the ES-7E table covers rises from the pole to its end
+/// ([`ArmClass`]); its heads hang from it the same distance below it as before, the innermost
+/// at its planned height (the others higher as the arm rises), all of them lowered together if
+/// the outermost would reach past the highest top the standard guides
+/// (`signal_top_max`), never so far the innermost's bottom goes under the binding minimum.
+/// A pole whose arms all rise ends the ES-7C distance over the highest arm's connection
+/// (`mast_pole_top_over_arm`; a pole still carrying a level arm keeps its height).
+fn rise_arms(w: &PropsWorld, np: &mut NodePlan, h: &H) {
+    let table = &w.std.signal_arms;
+    let drop = h.mast_arm_height - h.mast_head_centre;
+    for k in 0..np.arms.len() {
+        let a = np.arms[k].clone();
+        let Some(ci) = ArmClass::of(table, a.length) else { continue };
+        let cl = table[ci];
+        let u = [a.yaw.cos(), -a.yaw.sin()];
+        let base = a.y - h.mast_arm_height;
+        // the heads hung from this arm: along it, under it
+        let heads: Vec<(usize, f64)> = np
+            .heads
+            .iter()
+            .enumerate()
+            .filter(|(_, hd)| hd.mount == 1 && hd.pole == a.pole && hd.near_arm == a.near_arm)
+            .filter_map(|(i, hd)| {
+                let (vx, vz) = (hd.x - a.x, hd.z - a.z);
+                let along = vx * u[0] + vz * u[1];
+                let off = (vx * u[1] - vz * u[0]).abs();
+                (off < 0.5 && (-0.05..=a.length + 0.05).contains(&along)).then_some((i, cl.height_at(along / a.length)))
+            })
+            .collect();
+        let f_min = heads.iter().map(|x| x.1).fold(f64::INFINITY, f64::min);
+        let f_max = heads.iter().map(|x| x.1).fold(f64::NEG_INFINITY, f64::max);
+        let f_min = if heads.is_empty() { cl.rise } else { f_min };
+        let mut y0 = a.y - f_min;
+        if !heads.is_empty() {
+            let top = y0 + f_max - drop + h.head_half_height;
+            if top > base + w.std.signal_top_max {
+                y0 -= top - (base + w.std.signal_top_max);
+            }
+            let bottom = y0 + f_min - drop - h.head_half_height;
+            if bottom < base + w.std.signal_bottom_min {
+                y0 += base + w.std.signal_bottom_min - bottom;
+            }
+        }
+        for &(i, f) in &heads {
+            np.heads[i].y = y0 + f - drop;
+        }
+        let arm = &mut np.arms[k];
+        arm.y = y0;
+        arm.class = Some(ci);
+    }
+    for pole in np.poles.iter_mut().filter(|p| p.kind_mast) {
+        let on: Vec<&Arm> = np.arms.iter().filter(|a| a.pole == pole.id).collect();
+        if on.is_empty() || on.iter().any(|a| a.class.is_none()) {
+            continue;
+        }
+        let top = on.iter().map(|a| a.y).fold(f64::NEG_INFINITY, f64::max) + w.std.mast_pole_top_over_arm;
+        // never under a head or a pedestrian head it carries
+        let heads = np.heads.iter().filter(|x| x.pole == pole.id && x.mount != 1).map(|x| x.y + h.head_half_height + 0.3).fold(f64::NEG_INFINITY, f64::max);
+        pole.height = (top.max(heads) - pole.base_y).min(pole.height);
+    }
+}
+
+/// A rising arm's Street Name sign in the free stretch of the arm where it hangs highest (centred
+/// in it, its lower end the higher; among the stretches it fits, `name_sign_widths` and
+/// `signal_poles::SIGN_CLEAR_M`), then the arm raised as far as its heads' bottoms (their
+/// backplates, `head_reach_down`) need to keep the binding 15 ft over the roadway under them
+/// (4D.09) and its sign's bottom the binding 17 ft over the roadway under it (2A.15,
+/// `name_sign_drop` under the arm's axis). The binding minimums win over 4D.09's 25.6 ft top
+/// guidance. A pole ends the ES-7C distance over the highest of its rising arms, as `rise_arms`.
+fn clear_rising_arms(w: &PropsWorld, np: &mut NodePlan, h: &H) {
+    const ROOT_CLEAR_M: f64 = 0.45;
+    const TIP_CLEAR_M: f64 = 0.12;
+    let table = &w.std.signal_arms;
+    let drop = h.mast_arm_height - h.mast_head_centre;
+    let down = head_reach_down(h.head_half_height);
+    let sign_drop = name_sign_drop();
+    let widths = name_sign_widths();
+    let head_half_w = h.head_half_height * 0.55;
+    for k in 0..np.arms.len() {
+        let a = np.arms[k].clone();
+        let Some(ci) = a.class else { continue };
+        let cl = table[ci];
+        let u = [a.yaw.cos(), -a.yaw.sin()];
+        let at = |t: f64| [a.x + u[0] * t, a.z + u[1] * t];
+        let f = |t: f64| cl.height_at((t / a.length).clamp(0.0, 1.0));
+        let on: Vec<(usize, f64)> = np
+            .heads
+            .iter()
+            .enumerate()
+            .filter(|(_, hd)| hd.mount == 1 && hd.pole == a.pole && hd.near_arm == a.near_arm)
+            .filter_map(|(i, hd)| {
+                let (vx, vz) = (hd.x - a.x, hd.z - a.z);
+                let along = vx * u[0] + vz * u[1];
+                ((vx * u[1] - vz * u[0]).abs() < 0.5 && (-0.05..=a.length + 0.05).contains(&along)).then_some((i, along))
+            })
+            .collect();
+        // the heads: y0 + f(along) - drop - down over the roadway under each
+        let mut need = on.iter().map(|&(i, t)| w.ground(np.heads[i].x, np.heads[i].z) + w.std.signal_bottom_min + down + drop - f(t)).fold(a.y, f64::max);
+        // the sign: in the stretch it fits where its lower end hangs highest
+        let sign = np.fittings.iter().position(|ft| matches!(ft, Fitting::NameSign { arm, yaw, .. } if (arm[0] - a.x).hypot(arm[2] - a.z) < 0.05 && (yaw - a.yaw).abs() < 1e-9));
+        if let (Some(si), Some(widths)) = (sign, widths.as_ref()) {
+            let Fitting::NameSign { legend, .. } = &np.fittings[si] else { unreachable!() };
+            if let Some(&wd) = widths.get(legend) {
+                let mut cuts: Vec<(f64, f64)> = on.iter().map(|&(_, t)| (t - head_half_w - 0.1, t + head_half_w + 0.1)).collect();
+                cuts.push((f64::NEG_INFINITY, ROOT_CLEAR_M));
+                cuts.push((a.length - TIP_CLEAR_M, f64::INFINITY));
+                cuts.sort_by(|p, q| p.0.total_cmp(&q.0));
+                let mut best: Option<([f64; 2], f64)> = None; // (stretch, the arm height it needs)
+                let mut reach = f64::NEG_INFINITY;
+                for (c0, c1) in cuts {
+                    let g = [reach, c0];
+                    if g[1] - g[0] >= wd + 2.0 * crate::signal_poles::SIGN_CLEAR_M {
+                        let lo = (g[0] + g[1]) / 2.0 - wd / 2.0;
+                        let n = (wd / 0.5).ceil().max(1.0) as usize;
+                        let ground = (0..=n).map(|j| { let p = at(lo + wd * j as f64 / n as f64); w.ground(p[0], p[1]) }).fold(f64::NEG_INFINITY, f64::max);
+                        let y = ground + w.std.sign_overhead_min + sign_drop - f(lo);
+                        if best.is_none_or(|b| y < b.1 - 1e-9) {
+                            best = Some((g, y));
+                        }
+                    }
+                    reach = reach.max(c1);
+                }
+                if let Some((g, y)) = best {
+                    if let Fitting::NameSign { gap, .. } = &mut np.fittings[si] {
+                        *gap = g;
+                    }
+                    if sign_drop > 0.0 {
+                        need = need.max(y);
+                    }
+                }
+            }
+        }
+        let dy = need - a.y;
+        if dy <= 0.0 {
+            continue;
+        }
+        np.arms[k].y = need;
+        for &(i, _) in &on {
+            np.heads[i].y += dy;
+        }
+        if let Some(si) = sign
+            && let Fitting::NameSign { arm, .. } = &mut np.fittings[si]
+        {
+            arm[1] = need;
+        }
+    }
+    for pole in np.poles.iter_mut().filter(|p| p.kind_mast) {
+        let top = np.arms.iter().filter(|a| a.pole == pole.id && a.class.is_some()).map(|a| a.y + w.std.mast_pole_top_over_arm).fold(f64::NEG_INFINITY, f64::max);
+        if top.is_finite() {
+            pole.height = pole.height.max(top - pole.base_y);
+        }
+    }
+}
+
+/// Every level arm as low as the California MUTCD lets what hangs from it go: the lowest arm
+/// height at which each head on it keeps its bottom (`head_reach_down`, the backplate) the
+/// binding minimum over the roadway under it (`Standards::signal_bottom_min`, 15 ft, 4D.09) and
+/// its Street Name sign, anywhere in the stretch it may hang in, its bottom the binding overhead
+/// minimum over the roadway under the stretch (`Standards::sign_overhead_min`, 17 ft, 2A.15;
+/// `name_sign_drop` under the arm's axis). The heads keep their drop under the arm. An arm with
+/// no head keeps its height; a pole's own heads and its height are as before.
+fn lower_arms(w: &PropsWorld, np: &mut NodePlan, h: &H) {
+    let drop = h.mast_arm_height - h.mast_head_centre;
+    let down = head_reach_down(h.head_half_height);
+    let sign_drop = name_sign_drop();
+    for k in 0..np.arms.len() {
+        let a = np.arms[k].clone();
+        if a.class.is_some() {
+            continue;
+        }
+        let u = [a.yaw.cos(), -a.yaw.sin()];
+        let on: Vec<usize> = np
+            .heads
+            .iter()
+            .enumerate()
+            .filter(|(_, hd)| hd.mount == 1 && hd.pole == a.pole && hd.near_arm == a.near_arm)
+            .filter(|(_, hd)| {
+                let (vx, vz) = (hd.x - a.x, hd.z - a.z);
+                let along = vx * u[0] + vz * u[1];
+                (vx * u[1] - vz * u[0]).abs() < 0.5 && (-0.05..=a.length + 0.05).contains(&along)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        if on.is_empty() {
+            continue;
+        }
+        let mut need = on.iter().map(|&i| w.ground(np.heads[i].x, np.heads[i].z) + w.std.signal_bottom_min + down + drop).fold(f64::NEG_INFINITY, f64::max);
+        if sign_drop > 0.0 {
+            for f in &np.fittings {
+                if let Fitting::NameSign { arm, yaw, gap, facing, .. } = f
+                    && (arm[0] - a.x).hypot(arm[2] - a.z) < 0.05
+                    && (yaw - a.yaw).abs() < 1e-9
+                {
+                    // the sign hangs centred in the stretch, square to its facing: its ends within
+                    // half the stretch of the middle, along the arm or along its face
+                    let len = gap[1] - gap[0];
+                    let mid = (gap[0] + gap[1]) / 2.0;
+                    let c = [a.x + u[0] * mid, a.z + u[1] * mid];
+                    let v = [facing.cos(), -facing.sin()];
+                    let n = (len / 0.5).ceil().max(1.0) as usize;
+                    for j in 0..=n {
+                        let t = len * (j as f64 / n as f64 - 0.5);
+                        for d in [u, v] {
+                            need = need.max(w.ground(c[0] + d[0] * t, c[1] + d[1] * t) + w.std.sign_overhead_min + sign_drop);
+                        }
+                    }
+                }
+            }
+        }
+        let dy = need - a.y;
+        np.arms[k].y = need;
+        for &i in &on {
+            np.heads[i].y += dy;
+        }
+        for f in np.fittings.iter_mut() {
+            if let Fitting::NameSign { arm, yaw, .. } = f
+                && (arm[0] - a.x).hypot(arm[2] - a.z) < 0.05
+                && (*yaw - a.yaw).abs() < 1e-9
+            {
+                arm[1] = need;
+            }
+        }
+    }
+    // a pole whose arms are all level keeps the game's height over its highest arm (the pole's
+    // over its arm's, `mastPoleHeightM - mastArmHeightM`), never under a head it carries
+    for pole in np.poles.iter_mut().filter(|p| p.kind_mast) {
+        let on: Vec<&Arm> = np.arms.iter().filter(|a| a.pole == pole.id).collect();
+        if on.is_empty() || on.iter().any(|a| a.class.is_some()) {
+            continue;
+        }
+        let top = on.iter().map(|a| a.y).fold(f64::NEG_INFINITY, f64::max) + (h.mast_pole_height - h.mast_arm_height);
+        let heads = np.heads.iter().filter(|x| x.pole == pole.id && x.mount != 1).map(|x| x.y + down + 0.3).fold(f64::NEG_INFINITY, f64::max);
+        pole.height = top.max(heads) - pole.base_y;
+    }
+}
+
+/// The free stretches of each arm (between the pole's plate, the heads and its end): the
+/// longest carries the Street Name sign for the street its traffic crosses ([`Fitting::NameSign`]).
+fn name_signs(w: &PropsWorld, node: &Node, np: &mut NodePlan, h: &H) {
+    // the pole's arm plate and the end cap (modelling values, eo-props signal_poles' parts)
+    const ROOT_CLEAR_M: f64 = 0.45;
+    const TIP_CLEAR_M: f64 = 0.12;
+    let head_half_w = h.head_half_height * 0.55; // a head's half width beside its half height (signalHead-v1: 0.30 / 0.53)
+    for a in &np.arms {
+        let u = [a.yaw.cos(), -a.yaw.sin()];
+        let on: Vec<(f64, f64)> = np
+            .heads
+            .iter()
+            .filter(|hd| hd.mount == 1 && hd.pole == a.pole && hd.near_arm == a.near_arm)
+            .filter_map(|hd| {
+                let (vx, vz) = (hd.x - a.x, hd.z - a.z);
+                let along = vx * u[0] + vz * u[1];
+                ((vx * u[1] - vz * u[0]).abs() < 0.5 && (-0.05..=a.length + 0.05).contains(&along)).then_some((along, hd.yaw))
+            })
+            .collect();
+        let Some(&(_, facing)) = on.first() else { continue };
+        let Some(legend) = cross_street_legend(&w.street, node, a.leg) else { continue };
+        let mut cuts: Vec<(f64, f64)> = on.iter().map(|(x, _)| (x - head_half_w - 0.1, x + head_half_w + 0.1)).collect();
+        cuts.push((f64::NEG_INFINITY, ROOT_CLEAR_M));
+        cuts.push((a.length - TIP_CLEAR_M, f64::INFINITY));
+        cuts.sort_by(|p, q| p.0.total_cmp(&q.0));
+        let mut best: Option<[f64; 2]> = None;
+        let mut reach = f64::NEG_INFINITY;
+        for (c0, c1) in cuts {
+            if c0 > reach && best.is_none_or(|b| c0 - reach > b[1] - b[0]) {
+                best = Some([reach, c0]);
+            }
+            reach = reach.max(c1);
+        }
+        if let Some(gap) = best.filter(|g| g[1] > g[0]) {
+            np.fittings.push(Fitting::NameSign { arm: [a.x, a.y, a.z], yaw: a.yaw, gap, facing, legend });
+        }
+    }
 }
 
 fn arms_cross(a: &Arm, b: &Arm) -> bool {
@@ -982,7 +1592,7 @@ fn plan_ped(w: &PropsWorld, node: &Node, np: &mut NodePlan, rules: &mut Rules) {
             continue;
         }
         let bearing = (b[1] - a[1]).atan2(b[0] - a[0]);
-        let mark = (np.poles.len(), np.ped_heads.len());
+        let mark = (np.poles.len(), np.ped_heads.len(), np.fittings.len());
         let mut failed = false;
         for (end, other, sgn) in [(a, b, 1.0), (b, a, -1.0)] {
             let facing = [(other[0] - end[0]) / length, (other[1] - end[1]) / length];
@@ -1046,12 +1656,22 @@ fn plan_ped(w: &PropsWorld, node: &Node, np: &mut NodePlan, rules: &mut Rules) {
                     }
                 }
             }
-            let (_, mount, y) = best.unwrap();
+            let (pi, mount, y) = best.unwrap();
             np.ped_heads.push(PedHead { x: mount[0], y, z: mount[1], yaw: facing[0].atan2(facing[1]), bearing, length });
+            // the push button for the pedestrians at this end, on the same pole (CA MUTCD 4I.05):
+            // its face parallel to the crosswalk, looking along the street toward it (away from
+            // the junction for a pole on its line), its arrow the crossing direction
+            let pole = &np.poles[pi];
+            let al = (pole.x - end[0]) * app.u[0] + (pole.z - end[1]) * app.u[1];
+            let look = if al.abs() < 0.1 { app.u } else { [-al.signum() * app.u[0], -al.signum() * app.u[1]] };
+            let yaw = (-look[1]).atan2(look[0]);
+            let arrow_plus_z = facing[0] * yaw.sin() + facing[1] * yaw.cos() > 0.0;
+            np.fittings.push(Fitting::PushButton { pole: [pole.x, pole.base_y, pole.z], height: w.std.ped_button_height, yaw, arrow_plus_z });
         }
         if failed {
             np.poles.truncate(mark.0);
             np.ped_heads.truncate(mark.1);
+            np.fittings.truncate(mark.2);
         }
     }
 }

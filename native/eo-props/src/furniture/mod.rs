@@ -880,6 +880,42 @@ impl Furniture {
         EntryFurniture { items, props, lights }
     }
 
+    /// The district lights' median spacing on one ribbon (`placeStreetLights`: by the
+    /// street's class), or None where the walk stands no lamps (a distribution way,
+    /// whose timber poles carry the cobra heads, or a class with no measured spacing).
+    pub fn lamp_spacing(&self, w: &PropsWorld, ei: usize) -> Option<f64> {
+        let seg = w.segment_of(&w.street.plan.entries[ei]);
+        if Furniture::way_id(seg.street_id.as_deref()).is_some_and(|id| self.dist_ways.contains(&id)) {
+            return None;
+        }
+        let hw = seg.highway.as_str();
+        let cls = if hw.starts_with("primary") || hw.starts_with("trunk") {
+            "primary"
+        } else if hw.starts_with("secondary") {
+            "secondary"
+        } else if hw.starts_with("tertiary") {
+            "tertiary"
+        } else {
+            "residential"
+        };
+        self.js.street_lights.spacing.get(cls).and_then(|v| v["medianM"].as_f64()).filter(|v| *v != 0.0)
+    }
+
+    /// A district street light (`lampCobra`, `lampBanner`, `lampHistoric`).
+    pub fn is_street_light(&self, k: u16) -> bool {
+        matches!(self.kind_id(k), "lampCobra" | "lampBanner" | "lampHistoric")
+    }
+
+    /// One lamp item stood at `to` instead (a lamp standard that is also a trolley
+    /// support pole, `overhead::Overhead::lamp_moves`): its prop and its light.
+    pub fn moved_lamp(&self, it: &Item, to: [f64; 3]) -> Option<(Prop, Option<LampLight>)> {
+        let model = self.model_of(it.kind)?;
+        let mut m = it.clone();
+        (m.x, m.y, m.z) = (to[0], to[1], to[2]);
+        let prop = Prop { model, pos: to, yaw: m.rotation, scale: [m.scale as f32, m.height_scale as f32, m.scale as f32], variant: m.variant as u16, live: Live::None };
+        Some((prop, self.lamp_light(&m, model)))
+    }
+
     /// `districtLightFixtures` + `streetLampHead` + `lampPoolOptics` for a district light.
     fn lamp_light(&self, it: &Item, model: Model) -> Option<LampLight> {
         let id = self.kind_id(it.kind);
@@ -1528,6 +1564,10 @@ impl<'a> Walk<'a> {
             if (id == "pedSignalPost" || id == "signalCabinet") && !c.signal_corner {
                 continue;
             }
+            // (`--no-one-cabinet` off) the junction's one cabinet is the overhead's
+            if id == "signalCabinet" && crate::overhead::one_cabinet() {
+                continue;
+            }
             if c.band.walk < kind.min_walk {
                 continue;
             }
@@ -2158,20 +2198,7 @@ impl<'a> Walk<'a> {
         let e = &w.street.plan.entries[sc.ei];
         let seg = w.segment_of(e);
         let way = Furniture::way_id(seg.street_id.as_deref());
-        if way.is_some_and(|id| f.dist_ways.contains(&id)) {
-            return;
-        }
-        let hw = seg.highway.as_str();
-        let cls = if hw.starts_with("primary") || hw.starts_with("trunk") {
-            "primary"
-        } else if hw.starts_with("secondary") {
-            "secondary"
-        } else if hw.starts_with("tertiary") {
-            "tertiary"
-        } else {
-            "residential"
-        };
-        let Some(spacing) = f.js.street_lights.spacing.get(cls).and_then(|v| v["medianM"].as_f64()).filter(|v| *v != 0.0) else { return };
+        let Some(spacing) = f.lamp_spacing(w, sc.ei) else { return };
         let code = way.and_then(|id| f.light_ways.get(&id)).map(|c| c.to_string());
         let kind_id = code.and_then(|c| f.js.consts.street_light_kind.get(&c).cloned()).unwrap_or_else(|| "lampCobra".into());
         let k = f.k(&kind_id);

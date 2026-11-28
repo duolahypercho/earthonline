@@ -37,7 +37,11 @@ pub mod parking_rules;
 pub mod roadway;
 pub mod sign_atlas;
 pub mod shop_lettering; // the shop signs' words from the system's fonts (eo-kit `--facade-clutter`, stage S1)
+pub mod signal_models; // the signal heads as photographed models (eo-app `--no-signal-models`)
+pub mod signal_poles; // the signal poles, mast arms and head mounts as Blender models (eo-app `--no-signal-poles`)
+pub mod signal_lamps; // street lights on the signal mast poles (eo-app `--no-signal-luminaires`)
 pub mod signals;
+pub mod sign_models; // the SFMTA sign plates as Blender models (eo-app `--no-sign-models`)
 pub mod signs;
 pub mod trees;
 
@@ -198,6 +202,9 @@ pub struct TilePlacement {
     pub parked: Vec<ParkedCar>,
     /// The district street lights' luminaires (one per lamp prop, owned by its foot). // props2
     pub lights: Vec<furniture::LampLight>,
+    /// The signalised junctions' name signs and push buttons (`signals::Fitting`), drawn on the
+    /// poles and arms in `props` they belong to.
+    pub fittings: Vec<signals::Fitting>,
 }
 
 /// The California values the rules read (`caMetric`), named.
@@ -208,6 +215,9 @@ pub struct Standards {
     pub sign_lateral_typical: f64,
     pub sign_lateral_limited: f64,
     pub throughway_min: f64,
+    /// How near the kerb face a vertical element may stand (`sidewalk-edge-zone-sf`
+    /// `verticalElementOffsetFromCurb`, 18 in): the controller cabinet's back, m.
+    pub kerb_vertical_offset: f64,
     pub hydrant_clear: f64,
     pub signal_approach_near_side: f64,
     pub signal_view_min: f64,
@@ -217,6 +227,34 @@ pub struct Standards {
     /// Street tree basins (`street-tree-basin-sf`, Director's Order 187,246): per sidewalk
     /// class (the surveyed width it starts at, the basin across the walk, along the kerb), m.
     pub tree_basin: [[f64; 3]; 4],
+    /// Signal mast arms (`signal-mast-arm-caltrans`, Caltrans RSP ES-7E): one row per arm
+    /// length class (`signals::ArmClass`).
+    pub signal_arms: Vec<signals::ArmClass>,
+    /// Pedestrian push buttons (`ped-push-button-location`, CA MUTCD 4I.05): mounting height
+    /// above the sidewalk (m).
+    pub ped_button_height: f64,
+    /// The push button's R10-3e(CA) sign over it (`ped-push-button-sign`): width, height (m).
+    pub ped_button_sign: [f64; 2],
+    /// Overhead Street Name signs' upper-case letter height (`street-name-sign-overhead-letter-height`), m.
+    pub overhead_name_cap: f64,
+    /// Signal faces over the roadway (`signal-mounting-height-over-roadway`): the lowest a
+    /// housing's bottom may hang (the binding 15 ft) and the highest its top should (m).
+    pub signal_bottom_min: f64,
+    pub signal_top_max: f64,
+    /// Overhead signs' least vertical clearance over the roadway (`sign-mounting-height-urban`
+    /// `overheadMin`, CA MUTCD 2A.15, 17 ft): a Street Name sign under a mast arm, m.
+    pub sign_overhead_min: f64,
+    /// A signal standard without a luminaire ends this far over its arm's connection
+    /// (`signal-mast-pole-top-caltrans`, Caltrans RSP ES-7C Types 16 and 18), m.
+    pub mast_pole_top_over_arm: f64,
+    /// A mast arm's rise on a San Francisco city street, every street that is not a State
+    /// route (`signal-mast-arm-sf-city-street`: level; no SFMTA drawing was found, the
+    /// reference photographs show level arms), m. Only level is modelled.
+    pub signal_arm_city_rise: f64,
+    /// How far a street light may move onto a signal mast pole and stay the same light
+    /// (`streetlight-sf-like-for-like-move`, SFPUC Streetlight Guidelines: within 10 ft, the
+    /// same fixture, mounting height and orientation), m.
+    pub lamp_share_move_max: f64,
 }
 
 impl Standards {
@@ -227,6 +265,7 @@ impl Standards {
             sign_lateral_typical: ca.metric_key("sign-lateral-offset-urban", "typicalFromCurbFace")?,
             sign_lateral_limited: ca.metric_key("sign-lateral-offset-urban", "minWhereLimited")?,
             throughway_min: ca.metric_key("sidewalk-throughway-zone-sf", "alleyOrAdaMin")?,
+            kerb_vertical_offset: ca.metric_key("sidewalk-edge-zone-sf", "verticalElementOffsetFromCurb")?,
             hydrant_clear: ca.metric("no-parking-fire-hydrant")?,
             signal_approach_near_side: ca.metric_key("no-parking-signalized-approach", "nearSide")?,
             signal_view_min: ca.metric_key("signal-face-longitudinal-position", "min")?,
@@ -242,6 +281,22 @@ impl Standards {
                     [k("walk13ft")?, k("basinAcrossWalk13")?, k("basinAlongWalk13")?],
                 ]
             },
+            signal_arms: signals::ArmClass::table(ca)?,
+            ped_button_height: ca.metric_key("ped-push-button-location", "heightApprox")?,
+            ped_button_sign: [ca.metric_key("ped-push-button-sign", "r10_3eWidth")?, ca.metric_key("ped-push-button-sign", "r10_3eHeight")?],
+            overhead_name_cap: ca.metric_key("street-name-sign-overhead-letter-height", "upper")?,
+            signal_bottom_min: ca.metric_key("signal-mounting-height-over-roadway", "min")?,
+            signal_top_max: ca.metric_key("signal-mounting-height-over-roadway", "maxTopGuidance")?,
+            sign_overhead_min: ca.metric_key("sign-mounting-height-urban", "overheadMin")?,
+            mast_pole_top_over_arm: ca.metric_key("signal-mast-pole-top-caltrans", "poleTopOverArmConnection")?,
+            signal_arm_city_rise: {
+                let r = ca.metric_key("signal-mast-arm-sf-city-street", "rise")?;
+                if r != 0.0 {
+                    anyhow::bail!("signal-mast-arm-sf-city-street: a rise of {r} m; only level city arms are modelled");
+                }
+                r
+            },
+            lamp_share_move_max: ca.metric_key("streetlight-sf-like-for-like-move", "moveMax")?,
         })
     }
 }
@@ -407,6 +462,19 @@ impl PropsWorld {
         })
     }
 
+    /// A signalised junction's signal props as `plan_tile` draws them (kept clear of the
+    /// structures where the world has them), before its street lights join its mast poles.
+    pub fn signal_node_props(&self, ni: usize) -> Vec<Prop> {
+        match self.clear_structures() {
+            Some(s) => self.cleared_node(s, ni as u32).props.clone(),
+            None => {
+                let (mut v, mut f) = (vec![], vec![]);
+                signals::plan_node_with(self, ni, &mut v, &mut f);
+                v
+            }
+        }
+    }
+
     /// One signalised junction kept clear of the structures (cached).
     fn cleared_node(&self, s: &eo_structures::StructureWorld, ni: u32) -> Arc<signals::ClearedNode> {
         if let Some(c) = self.clear_nodes.lock().unwrap().get(&ni) {
@@ -483,13 +551,26 @@ impl PropsWorld {
         }
         if let Some(nodes) = self.signal_nodes.get(&key) {
             for &ni in nodes {
+                let first = out.props.len();
                 match clear {
                     Some(s) => {
                         let c = self.cleared_node(s, ni);
                         out.props.extend(c.props.iter().copied());
+                        out.fittings.extend(c.fittings.iter().cloned());
                         stats.add(&c.stats);
                     }
-                    None => signals::plan_node(self, ni as usize, &mut out.props),
+                    None => signals::plan_node_with(self, ni as usize, &mut out.props, &mut out.fittings),
+                }
+                // (`--no-signal-luminaires` off) the street lights standing on its mast poles, owned
+                // by the junction's tile with the poles: each pole reaches its light's post top.
+                for l in signal_lamps::node_lamps(self, ni as usize).iter() {
+                    let top = signal_lamps::LAMP_POST_TOP_M * l.prop.scale[1] as f64;
+                    if let Some(p) = out.props[first..].iter_mut().find(|p| p.model == Model::SignalPole && p.variant == 1 && p.pos == l.pole) {
+                        p.scale[1] = p.scale[1].max(top as f32);
+                    }
+                    out.props.push(l.prop);
+                    out.lights.extend(l.light);
+                    out.fittings.push(signals::Fitting::Luminaire { pole: l.pole });
                 }
             }
         }
@@ -512,12 +593,37 @@ impl PropsWorld {
         pads::entry_pads(self, e, &mut ep.props);
         // the furniture walk (trees, palms and every other kind, lamps with their lights).
         let fe = self.furniture().entry(self, ei as usize);
+        let first_prop = ep.props.len();
         ep.props.extend(fe.props.iter().copied());
         // (`--tree-basins`) a basin under each street tree and palm on this ribbon's footways.
         if self.tree_basins {
             basins::entry_basins(self, e, &fe.props, &mut ep.props);
         }
         ep.lights.extend(fe.lights.iter().copied());
+        // (eo-app `--no-shared-poles` turns it off) a street light beside a trolley support pole
+        // stands on the pole's spot instead, and holds its wires (`overhead::Overhead::lamp_moves`).
+        if overhead::lamp_standards() {
+            let f = self.furniture();
+            for m in overhead::shared(self).lamp_moves(self, ei).iter() {
+                let it = &fe.items[m.item];
+                let from = [it.x, it.y, it.z];
+                let Some((prop, light)) = f.moved_lamp(it, m.to) else { continue };
+                if let Some(p) = ep.props[first_prop..].iter_mut().find(|p| p.model == prop.model && p.pos == from) {
+                    *p = prop;
+                }
+                if let (Some(l), Some(nl)) = (ep.lights.iter_mut().find(|l| l.base == from), light) {
+                    *l = nl;
+                }
+            }
+        }
+        // (`--no-signal-luminaires` off) a street light beside a signal mast pole stands on the
+        // pole instead: its junction draws it (`signal_lamps`), this ribbon no longer.
+        for m in signal_lamps::entry_moves(self, ei as usize) {
+            if let Some(k) = ep.props[first_prop..].iter().position(|p| matches!(p.model, Model::LampCobra | Model::LampBanner) && p.pos == m.from) {
+                ep.props.remove(first_prop + k);
+            }
+            ep.lights.retain(|l| l.base != m.from);
+        }
         ep.parked = parking::plan_entry(self, ei as usize);
         let ep = Arc::new(ep);
         let mut c = self.entry_cache.lock().unwrap();
