@@ -1830,6 +1830,12 @@ impl Renderer {
                 let groups = (data.len() / std::mem::size_of::<GpuLodGroup>()).max(1) as u64;
                 self.note_vis_added(groups.saturating_mul(2));
             }
+            upload::Target::PropInstances => {
+                // Direct writes (tile eviction, tests) count as visibility writes; per-frame
+                // boat pose updates use `write_prop_poses` (`write_quiet`) and staged tile
+                // uploads go through `UploadQueue` (`note_streamed_bytes`).
+                self.note_vis_write();
+            }
             _ => {}
         }
         self.write_quiet(queue, target, offset, data);
