@@ -646,58 +646,84 @@ pub fn place(world: &StreetWorld, key: (i32, i32), cx: &Context, out: &mut Vec<D
                 let u_in = side * (half - o.gutter_width - INNER_PAD_M);
                 let u_out = side * (back + wall_d.max(0.0) + WALL_REACH_M);
                 let u_mid = (u_in + u_out) * 0.5;
-                let (pa, pb) = (at_s(g, sa, u_mid), at_s(g, sb, u_mid));
-                let (dx, dz) = (pb[0] - pa[0], pb[1] - pa[1]);
-                let len = (dx * dx + dz * dz).sqrt();
-                if len < 0.5 {
+                let (pa0, pb0) = (at_s(g, sa, u_mid), at_s(g, sb, u_mid));
+                let full_len = (pb0[0] - pa0[0]).hypot(pb0[1] - pa0[1]);
+                if full_len < 0.5 {
                     continue;
                 }
-                let mut a = [dx / len, dz / len];
-                // +across (the decal's (-a.z, a.x)) points away from the road, toward the building line.
-                let n = normal_at(g, sm);
-                let flipped = (-a[1]) * n[0] * side + a[0] * n[1] * side < 0.0;
-                if flipped {
-                    a = [-a[0], -a[1]];
+                // Mitred end stations can stretch the outer sidewalk offset `u_mid`
+                // past centerline `STRETCH_MAX_M`; subdivide this side so every
+                // `DK_LIFE` decal stays within `STRETCH_MAX_M` (with `PAD_M` overlap).
+                let mut subs = (full_len / STRETCH_MAX_M).ceil().max(1.0) as usize;
+                while subs < 16 {
+                    let too_long = (0..subs).any(|q| {
+                        let a_s = sa + (sb - sa) * q as f64 / subs as f64;
+                        let b_s = sa + (sb - sa) * (q + 1) as f64 / subs as f64;
+                        let (pa, pb) = (at_s(g, a_s, u_mid), at_s(g, b_s, u_mid));
+                        (pb[0] - pa[0]).hypot(pb[1] - pa[1]) > STRETCH_MAX_M
+                    });
+                    if !too_long {
+                        break;
+                    }
+                    subs += 1;
                 }
-                let walk_mid = at_s(g, sm, side * (half + walk * 0.5));
-                let draw = cx.hot.draw(walk_mid);
-                let deck = cx.structures.is_some_and(|sw| under_deck(world, sw, walk_mid));
-                let (wa, wb) = (at_s(g, sa, side * (half + walk * 0.5)), at_s(g, sb, side * (half + walk * 0.5)));
-                let trees = cx.trees.along(wa, wb, TREE_REACH_M);
                 let care = hash(run ^ 0x51f3_a7c1, wi as u32);
-                let p = params_for(lu, wall, deck, corner, alley, draw, busy, &trees, care).at_level(cx.level);
-                // The seed: the anchors' places along the stretch as the decal runs (its
-                // axis may run from sb to sa): the two nearest trees, the nearest storm drain
-                // at the kerb, the bin at a stop or the corner (some stretches' only).
-                let own = |t: f64| if flipped { 1.0 - t } else { t };
-                let drain = cx.hot.drains_along(at_s(g, sa, side * half), at_s(g, sb, side * half), DRAIN_REACH_M).first().map(|d| own(d.0));
-                // (stage W2d) the stop is an anchor of its own: people wait there whether or not its bin's pile is drawn
-                let stop = cx.hot.stops_along(wa, wb, BIN_STOP_REACH_M).first().map(|s| s.0);
-                let bin = if cx.level >= 2 || hash(run ^ 0x6a09_e667, salt) < BIN_PILE_SHARE {
-                    let at_end = |s: f64| (s > sa && s < sb).then(|| (s - sa) / (sb - sa));
-                    let start = if e.approach_start.is_some() { at_end(f0 + BIN_FROM_CORNER_M) } else { None };
-                    let near_corner = start.or(if e.approach_end.is_some() { at_end(f1 - BIN_FROM_CORNER_M) } else { None });
-                    stop.or(near_corner).map(own)
-                } else {
-                    None
-                };
-                // (stage W2d) the trees' basins at their trunks' kerb offset (the kind's, eo-props)
-                let tree_kd = if trees.is_empty() { None } else { cx.trees.trunk_kd(o.curb_top_width) };
-                let seed = seed_of([
-                    anchor_code(trees.first().map(|t| own(t.0))),
-                    anchor_code(trees.get(1).map(|t| own(t.0))),
-                    anchor_code(drain),
-                    anchor_code(bin),
-                    anchor_code(stop.map(own)),
-                    tree_kd_code(tree_kd),
-                ]);
-                out.push(Decal {
-                    c: [((pa[0] + pb[0]) * 0.5) as f32, ((pa[1] + pb[1]) * 0.5) as f32],
-                    a: [a[0] as f32, a[1] as f32],
-                    half: [(len * 0.5 + PAD_M) as f32, ((u_out - u_in).abs() * 0.5) as f32],
-                    kind: kind_with(DK_LIFE, p.pack()),
-                    seed,
-                });
+                for q in 0..subs {
+                    let sub_a = sa + (sb - sa) * q as f64 / subs as f64;
+                    let sub_b = sa + (sb - sa) * (q + 1) as f64 / subs as f64;
+                    let sub_m = (sub_a + sub_b) * 0.5;
+                    let (pa, pb) = (at_s(g, sub_a, u_mid), at_s(g, sub_b, u_mid));
+                    let (dx, dz) = (pb[0] - pa[0], pb[1] - pa[1]);
+                    let len = (dx * dx + dz * dz).sqrt();
+                    if len < 0.5 {
+                        continue;
+                    }
+                    let mut a = [dx / len, dz / len];
+                    // +across (the decal's (-a.z, a.x)) points away from the road, toward the building line.
+                    let n = normal_at(g, sub_m);
+                    let flipped = (-a[1]) * n[0] * side + a[0] * n[1] * side < 0.0;
+                    if flipped {
+                        a = [-a[0], -a[1]];
+                    }
+                    let walk_mid = at_s(g, sub_m, side * (half + walk * 0.5));
+                    let draw = cx.hot.draw(walk_mid);
+                    let deck = cx.structures.is_some_and(|sw| under_deck(world, sw, walk_mid));
+                    let (wa, wb) = (at_s(g, sub_a, side * (half + walk * 0.5)), at_s(g, sub_b, side * (half + walk * 0.5)));
+                    let trees = cx.trees.along(wa, wb, TREE_REACH_M);
+                    let p = params_for(lu, wall, deck, corner, alley, draw, busy, &trees, care).at_level(cx.level);
+                    // The seed: the anchors' places along the stretch as the decal runs (its
+                    // axis may run from sb to sa): the two nearest trees, the nearest storm drain
+                    // at the kerb, the bin at a stop or the corner (some stretches' only).
+                    let own = |t: f64| if flipped { 1.0 - t } else { t };
+                    let drain = cx.hot.drains_along(at_s(g, sub_a, side * half), at_s(g, sub_b, side * half), DRAIN_REACH_M).first().map(|d| own(d.0));
+                    // (stage W2d) the stop is an anchor of its own: people wait there whether or not its bin's pile is drawn
+                    let stop = cx.hot.stops_along(wa, wb, BIN_STOP_REACH_M).first().map(|s| s.0);
+                    let bin = if cx.level >= 2 || hash(run ^ 0x6a09_e667, salt) < BIN_PILE_SHARE {
+                        let at_end = |s: f64| (s > sub_a && s < sub_b).then(|| (s - sub_a) / (sub_b - sub_a));
+                        let start = if e.approach_start.is_some() { at_end(f0 + BIN_FROM_CORNER_M) } else { None };
+                        let near_corner = start.or(if e.approach_end.is_some() { at_end(f1 - BIN_FROM_CORNER_M) } else { None });
+                        stop.or(near_corner).map(own)
+                    } else {
+                        None
+                    };
+                    // (stage W2d) the trees' basins at their trunks' kerb offset (the kind's, eo-props)
+                    let tree_kd = if trees.is_empty() { None } else { cx.trees.trunk_kd(o.curb_top_width) };
+                    let seed = seed_of([
+                        anchor_code(trees.first().map(|t| own(t.0))),
+                        anchor_code(trees.get(1).map(|t| own(t.0))),
+                        anchor_code(drain),
+                        anchor_code(bin),
+                        anchor_code(stop.map(own)),
+                        tree_kd_code(tree_kd),
+                    ]);
+                    out.push(Decal {
+                        c: [((pa[0] + pb[0]) * 0.5) as f32, ((pa[1] + pb[1]) * 0.5) as f32],
+                        a: [a[0] as f32, a[1] as f32],
+                        half: [(len * 0.5 + PAD_M) as f32, ((u_out - u_in).abs() * 0.5) as f32],
+                        kind: kind_with(DK_LIFE, p.pack()),
+                        seed,
+                    });
+                }
             }
         }
     }
