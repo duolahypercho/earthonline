@@ -477,6 +477,20 @@ pub fn surveyed_first() -> bool {
     SURVEYED_FIRST.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+static POSTER_HOARDINGS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set before the furniture world is built (eo-app, from `--poster-hoardings`). Off (the
+/// default): the walk still plans every `posterHoarding` (its slot and its draws stay, so
+/// every other item stands where it did) but none is drawn; the flat-toned board stood
+/// free of the walls and the slope and read as stray debris along the shopfronts.
+pub fn set_poster_hoardings(on: bool) {
+    POSTER_HOARDINGS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn poster_hoardings() -> bool {
+    POSTER_HOARDINGS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub struct Furniture {
     pub js: FurnitureJs,
     pub kinds: Vec<KindSpec>,
@@ -862,8 +876,12 @@ impl Furniture {
     fn finish(&self, w: &PropsWorld, items: Vec<Item>) -> EntryFurniture {
         let mut props = vec![];
         let mut lights = vec![];
+        let hoardings = poster_hoardings();
         for it in &items {
             let Some(model) = self.model_of(it.kind) else { continue };
+            if model == Model::PosterHoarding && !hoardings {
+                continue;
+            }
             props.push(Prop {
                 model,
                 pos: [it.x, it.y, it.z],

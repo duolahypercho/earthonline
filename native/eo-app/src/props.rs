@@ -195,11 +195,14 @@ pub struct Props2Args {
     /// (with the arm name signs) Two stiffener channels across each Street Name sign's back
     /// (eo-props `signal_poles::Part::SignChannel`). `--no-sign-channels` draws none, as before.
     pub sign_channels: bool,
+    /// `--poster-hoardings`: draw the furniture walk's poster hoardings again (eo-props
+    /// `furniture::set_poster_hoardings`). Off (the default): they are planned but not drawn.
+    pub poster_hoardings: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false, shared_poles: true, joint_dedupe: true, sign_models: true, sign_post_merge: true, sign_variants: true, signal_models: true, signal_poles: true, signal_pole_variants: true, arm_rise: true, arm_name_signs: true, push_buttons: true, arm_rise_routes: true, arm_lower: true, ramp_level: true, rise_clearance: true, arm_diameter: true, arm_far: true, pole_cut: true, signal_luminaires: true, name_sign_matte: true, signal_light: true, one_cabinet: true, cabinet_model: true, pull_boxes: true, sign_channels: true }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false, poster_hoardings: false, shared_poles: true, joint_dedupe: true, sign_models: true, sign_post_merge: true, sign_variants: true, signal_models: true, signal_poles: true, signal_pole_variants: true, arm_rise: true, arm_name_signs: true, push_buttons: true, arm_rise_routes: true, arm_lower: true, ramp_level: true, rise_clearance: true, arm_diameter: true, arm_far: true, pole_cut: true, signal_luminaires: true, name_sign_matte: true, signal_light: true, one_cabinet: true, cabinet_model: true, pull_boxes: true, sign_channels: true }
     }
 }
 
@@ -208,7 +211,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires, shared_poles: self.shared_poles, joint_dedupe: self.joint_dedupe, sign_models: false, sign_post_merge: self.sign_post_merge, sign_variants: self.sign_variants, signal_models: false, signal_poles: false, signal_pole_variants: self.signal_pole_variants, arm_rise: self.arm_rise, arm_name_signs: self.arm_name_signs, push_buttons: self.push_buttons, arm_rise_routes: self.arm_rise_routes, arm_lower: self.arm_lower, ramp_level: self.ramp_level, rise_clearance: self.rise_clearance, arm_diameter: self.arm_diameter, arm_far: self.arm_far, pole_cut: self.pole_cut, signal_luminaires: self.signal_luminaires, name_sign_matte: self.name_sign_matte, signal_light: false, one_cabinet: self.one_cabinet, cabinet_model: self.cabinet_model, pull_boxes: self.pull_boxes, sign_channels: self.sign_channels };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires, poster_hoardings: self.poster_hoardings, shared_poles: self.shared_poles, joint_dedupe: self.joint_dedupe, sign_models: false, sign_post_merge: self.sign_post_merge, sign_variants: self.sign_variants, signal_models: false, signal_poles: false, signal_pole_variants: self.signal_pole_variants, arm_rise: self.arm_rise, arm_name_signs: self.arm_name_signs, push_buttons: self.push_buttons, arm_rise_routes: self.arm_rise_routes, arm_lower: self.arm_lower, ramp_level: self.ramp_level, rise_clearance: self.rise_clearance, arm_diameter: self.arm_diameter, arm_far: self.arm_far, pole_cut: self.pole_cut, signal_luminaires: self.signal_luminaires, name_sign_matte: self.name_sign_matte, signal_light: false, one_cabinet: self.one_cabinet, cabinet_model: self.cabinet_model, pull_boxes: self.pull_boxes, sign_channels: self.sign_channels };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -252,6 +255,8 @@ impl Props2Args {
             "--no-fade" => self.features &= !eo_render::props::F_FADE,
             "--no-wind" => self.features &= !eo_render::props::F_WIND,
             "--capture-props2" => self.capture = true,
+            "--poster-hoardings" => self.poster_hoardings = true,
+            "--no-poster-hoardings" => self.poster_hoardings = false,
             _ => return false,
         }
         true
@@ -640,6 +645,7 @@ impl PropsRuntime {
                     eo_props::overhead::set_lamp_standards(p2.shared_poles && p2.furniture && p2.overhead);
                     eo_props::overhead::set_joint_dedupe(p2.joint_dedupe);
                     eo_props::signs::set_merge_posts(p2.sign_post_merge);
+                    eo_props::furniture::set_poster_hoardings(p2.poster_hoardings);
                     if p2.furniture || p2.eztree {
                         world.install_furniture(&city.buildings)?;
                     }
