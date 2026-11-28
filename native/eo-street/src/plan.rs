@@ -1331,7 +1331,10 @@ fn plan_junction(node: &mut Node, entries: &mut [Entry], o: &StreetOptions) {
         }
     }
     // (`merge_trim`) a slip alongside a through leg, neither with a walk.
-    if has_through && o.pavement_repairs && crate::seams::road_seams() {
+    // Skip junctions carrying a grade-separated structure leg: their corner
+    // returns carry the elevated retaining faces (`eo-structures::walls::leg_walls`).
+    let has_structure_leg = node.approaches.iter().any(|a| entries[a.entry].structure_leg.is_some());
+    if has_through && !has_structure_leg && o.pavement_repairs && crate::seams::road_seams() {
         let walkless = |a: &Approach| !(entries[a.entry].walks[0] >= o.min_sidewalk_width) && !(entries[a.entry].walks[1] >= o.min_sidewalk_width);
         for i in 0..count {
             if !slip[i] || !walkless(&node.approaches[i]) {

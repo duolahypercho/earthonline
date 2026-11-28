@@ -138,7 +138,7 @@ impl StreetWorld {
                 ax /= al;
                 az /= al;
                 let c = ax * n1[0] + az * n1[1];
-                if c > 0.25 && c < 1.0 - 1e-9 {
+                if (e.half - o.half).abs() < 0.5 && c > 0.25 && c < 1.0 - 1e-9 {
                     set.push((ei, k, [ax, az], 1.0 / c));
                 }
             }
@@ -297,6 +297,22 @@ impl StreetWorld {
             let g = &self.geoms[o];
             if g.stations.len() < 2 || self.seam_joint(me, o, x, z) {
                 continue;
+            }
+            // Past a jointed end, only the mitred wedge actually covered by `g`'s end
+            // section counts — never a semicircle projecting past a straight/stepped joint.
+            if raw < -1e-6 && piece == 0 {
+                let f0 = g.stations[0];
+                let sign = if f0.nz * f0.tx - f0.nx * f0.tz >= 0.0 { 1.0 } else { -1.0 };
+                if ((x - f0.x) * f0.nz - (z - f0.z) * f0.nx) * sign < -SEAM_OVERLAP_M {
+                    continue;
+                }
+            }
+            if raw > 1.0 + 1e-6 && piece + 2 >= e.points.len() {
+                let f1 = g.stations[g.stations.len() - 1];
+                let sign = if f1.nz * f1.tx - f1.nx * f1.tz >= 0.0 { 1.0 } else { -1.0 };
+                if ((x - f1.x) * f1.nz - (z - f1.z) * f1.nx) * sign > SEAM_OVERLAP_M {
+                    continue;
+                }
             }
             let s = e.cum[piece] + t * len;
             if s < g.stations[0].s || s > g.stations[g.stations.len() - 1].s || e.in_yield_span(s) {
