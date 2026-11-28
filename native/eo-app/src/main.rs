@@ -665,6 +665,16 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--rear-lamps" => a.look.sky.rear_lamps = true,
             "--no-rear-lamps" => a.look.sky.rear_lamps = false,
             "--signal-spill" => a.look.sky.signal_spill = true,
+            // (`--no-headlamp-stray`) the low beams' stray light high over the cut-off (FMVSS 108): before any pipeline
+            "--headlamp-stray" | "--no-headlamp-stray" => eo_render::sky::set_headlamp_stray(s == "--headlamp-stray"),
+            // (`--no-signal-chroma`) the lit lens's light on its visor held as the camera renders it: before any pipeline
+            "--signal-chroma" | "--no-signal-chroma" => eo_render::props::set_signal_chroma(s == "--signal-chroma"),
+            // (`--no-signal-unlit`) the unlit LED module's albedo refitted: before any pipeline
+            "--signal-unlit" | "--no-signal-unlit" => eo_render::props::set_signal_unlit(s == "--signal-unlit"),
+            // (`--no-signal-hold-all`, `--no-signal-unlit-look`) round 5's fits: before any pipeline
+            "--signal-hold-all" | "--no-signal-hold-all" => eo_render::props::set_signal_hold_all(s == "--signal-hold-all"),
+            "--signal-unlit-look" | "--no-signal-unlit-look" => eo_render::props::set_signal_unlit_look(s == "--signal-unlit-look"),
+            "--signal-bounce" | "--no-signal-bounce" => eo_render::props::set_signal_bounce(s == "--signal-bounce"),
             "--no-signal-spill" => a.look.sky.signal_spill = false,
             "--lit-rooms" => a.look.sky.lit_rooms = true,
             "--no-lit-rooms" => a.look.sky.lit_rooms = false,
@@ -835,7 +845,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--quay-fill" | "--no-quay-fill" => {} // read where the landmarks are composed (`quay_fill`)
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             "--no-photo-mode" | "--no-dof" | "--photo-bench" => {} // read by photo.rs (and the bench, `--photo-bench`)
-            s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
+            s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-shared-poles, --no-joint-dedupe, --no-sign-models, --no-sign-post-merge, --no-sign-variants, --no-signal-models, --no-signal-poles, --no-signal-pole-variants, --no-arm-rise, --no-arm-name-signs, --no-push-buttons, --no-arm-rise-routes, --no-pole-cut, --no-signal-luminaires, --no-name-sign-matte, --no-arm-lower, --no-ramp-level, --no-rise-clearance, --no-arm-diameter, --no-arm-far, --no-one-cabinet, --no-cabinet-model, --no-pull-boxes, --no-sign-channels, --no-retro-viewer, --no-sign-back-aged, --no-signal-light, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
             "--no-rocketbox" => a.rocketbox = false, // people
             "--no-rocketbox-motions" => eo_agents::motion::set_enabled(false), // no motion, so no people
@@ -1177,6 +1187,10 @@ pub fn load_world(args: &Args) -> Result<World> {
     let _build_guard = WORLD_BUILD.lock().unwrap_or_else(|error| error.into_inner());
     // street props v2 (`--no-street-props-v2`): before anything reads the props manifest.
     eo_props::props_v2::set_street_props_v2(args.props && args.props2.street_v2);
+    // the modelled signal heads (`--no-signal-models`): before the props manifest is read, as v2.
+    eo_props::signal_models::set_signal_models(args.props && args.props2.signal_models);
+    // the signal lenses as lights (`--no-signal-light`): before the props draw module is built.
+    eo_render::props::set_signal_light(args.props2.signal_light);
     let street_plan = args.streets.then(streets::spawn_plan);
     let paths = DataPaths::discover()?;
     let street_maps_job = args.streets.then(|| spawn_street_maps(paths.repo_root.clone(), cache_dir(args)));

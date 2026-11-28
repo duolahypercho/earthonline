@@ -92,11 +92,114 @@ pub struct Props2Args {
     /// (`--luminaires`, main.rs) the district lights' lamps at their GLBs' glass (a twin
     /// post's two lanterns), the glass drawn lit. Off (the default): the JS heads as before.
     pub luminaires: bool,
+    /// A street light beside a trolley support pole stands on the pole's spot and holds its
+    /// wires, one standard in place of two poles (eo-props `overhead::Overhead::lamp_moves`;
+    /// only while both the furniture and the overhead are drawn). `--no-shared-poles` stands
+    /// both, as before.
+    pub shared_poles: bool,
+    /// Where two pieces of a street meet with no junction, one trolley support station and
+    /// distribution poles at the measured spacing, not one of each piece's (eo-props
+    /// `overhead::set_joint_dedupe`). `--no-joint-dedupe` stands both pieces' poles, as before.
+    pub joint_dedupe: bool,
+    /// The SFMTA sign plates draw their Blender models (eo-props `sign_models`, eo-render
+    /// `props_lib2::SIGN_MODEL_BASE`): the official face on a weathered aluminium blank with its
+    /// bolts, saddle brackets and post bands. `--no-sign-models` (or `--no-props2`) keeps the
+    /// plates built in code, as before.
+    pub sign_models: bool,
+    /// One pole per spot: an SFMTA post seated within the merge radius of one already placed
+    /// hangs its plates on that pole instead of standing its own a few centimetres away
+    /// (eo-props `signs::set_merge_posts`). `--no-sign-post-merge` stands every listed post, as before.
+    pub sign_post_merge: bool,
+    /// Each sign plate draws one of its face's wear variants (aged, rusty, battered; eo-props
+    /// `sign_models::wear_of`, by where it stands). `--no-sign-variants` draws every plate aged.
+    pub sign_variants: bool,
+    /// The vehicle and pedestrian signal heads draw the modelled McCain heads (eo-props
+    /// `signal_models`): the LED lenses and the countdown head's face lit through the LED images
+    /// the build draws. `--no-signal-models` (or `--no-props2`) keeps the v2 vehicle
+    /// head and the pedestrian head built in code, as before.
+    pub signal_models: bool,
+    /// The signal poles, mast arms and head mounts draw their Blender models (eo-props
+    /// `signal_poles`, eo-render `props_lib2::SIGNAL_POLE_BASE`): the mast pole on its base plate
+    /// and anchor bolts with its handhole and cap, the pedestal posts on their cast bases, the
+    /// arm's bolted root and end cap, a hanger for each head on an arm, pipe brackets for each
+    /// head on a pole, a clamshell for each pedestrian head; painted or galvanised, weathered. `--no-signal-poles`
+    /// (or `--no-props2`) keeps the poles and arms built in code and no mounts, as before.
+    pub signal_poles: bool,
+    /// Each signal pole and its hardware in the finish of the spot it stands on, painted or
+    /// galvanised (eo-props `signal_poles::finish_at`). `--no-signal-pole-variants` paints every one.
+    pub signal_pole_variants: bool,
+    /// (with the signal poles' models) Each mast arm the Caltrans RSP ES-7E table covers rises
+    /// from the pole to its end as that sheet draws it, its heads hung from it (eo-props
+    /// `signals::set_arm_rise`). `--no-arm-rise` keeps the arms level, as before.
+    pub arm_rise: bool,
+    /// (with the signal poles' models) A CA MUTCD D3-1 Street Name sign under each mast arm,
+    /// naming the street its traffic crosses (eo-props `signals::Fitting::NameSign`,
+    /// `sign_atlas::arm_name_signs`). `--no-arm-name-signs` draws none, as before.
+    pub arm_name_signs: bool,
+    /// (with the signal poles' models) A pedestrian push button with its R10-3e(CA) sign on the
+    /// pole at each end of each signalised crosswalk (eo-props `signals::Fitting::PushButton`).
+    /// `--no-push-buttons` draws none, as before.
+    pub push_buttons: bool,
+    /// (with the arm rise) Only the arms of a junction on a State route rise (Caltrans RSP
+    /// ES-7E); a city street's stay level (eo-props `signals::set_arm_rise_routes`,
+    /// `signal-mast-arm-sf-city-street`). `--no-arm-rise-routes` raises every arm, as before.
+    pub arm_rise_routes: bool,
+    /// (with the signal poles' models) Every level arm as low as CA MUTCD lets its heads and
+    /// Street Name sign hang (eo-props `signals::set_arm_lower`). `--no-arm-lower` keeps the
+    /// game's arm height, as before.
+    pub arm_lower: bool,
+    /// (with the route rule) A junction that meets a State route only through a freeway ramp is
+    /// a city junction, its arms level (eo-props `signals::set_ramp_level`). `--no-ramp-level`
+    /// counts the ramp, as before.
+    pub ramp_level: bool,
+    /// (with the rise) A rising arm keeps its heads and Street Name sign clear of CA MUTCD's
+    /// binding minimums over the roadway under them, the sign where it hangs highest (eo-props
+    /// `signals::set_rise_clearance`). `--no-rise-clearance` rises as before.
+    pub rise_clearance: bool,
+    /// (with the signal poles' models) A level arm drawn at Caltrans RSP ES-7E's diameter and
+    /// taper for its length (eo-props `signal_poles::ARM_LEVEL_PARTS`). `--no-arm-diameter`
+    /// draws the round 1 tube, as before.
+    pub arm_diameter: bool,
+    /// (with the signal poles' models) The rising arms drawn as far as their poles and heads
+    /// (eo-render `LibExtras::rising_arm_far`). `--no-arm-far` stops them at the hardware's
+    /// distance, as before (their heads then hang in the air past it).
+    pub arm_far: bool,
+    /// (with the signal poles' models) A mast pole of another height than its model is cut at
+    /// its shaft, its foot (base plate, bolts, handhole) and cap at their true size (eo-props
+    /// `signal_poles::Part::MastMid`). `--no-pole-cut` scales the whole model, as before.
+    pub pole_cut: bool,
+    /// (with the signal poles' models and the furniture) A district street light within the
+    /// SFPUC like-for-like distance of a mast pole stands on it, a combination pole (eo-props
+    /// `signal_lamps`). `--no-signal-luminaires` leaves every light where the walk stood it, as before.
+    pub signal_luminaires: bool,
+    /// (with the arm name signs) Their sheeting at its own roughness, matte and aged (eo-props
+    /// `signal_poles::NAME_SIGN_ROUGHNESS`, through the face colour's alpha). `--no-name-sign-matte`
+    /// shades them as the other plates, as before.
+    pub name_sign_matte: bool,
+    /// The signal lenses and pedestrian symbols lit as lights (eo-render `props::set_signal_light`):
+    /// their luminance toward the eye by the module's lobe in the frame's units, under weathered
+    /// glass that reflects the sky through the visor's mouth. `--no-signal-light` (or
+    /// `--no-props2`) keeps each lens the display value it was solved to, as before.
+    pub signal_light: bool,
+    /// (with the overhead) One controller cabinet a signalised junction, the overhead's, shared
+    /// by a divided street's nodes (eo-props `overhead::set_one_cabinet`). `--no-one-cabinet`
+    /// draws each node's and the walk's, as before.
+    pub one_cabinet: bool,
+    /// (with the signal poles' models and the overhead) The cabinet drawn as the city's MSF60
+    /// on its pad, along the kerb (eo-props `signal_poles::Part::Cabinet`,
+    /// `overhead::set_cabinet_model`). `--no-cabinet-model` draws the code-built box, as before.
+    pub cabinet_model: bool,
+    /// (with the signal poles' models) A No. 5 traffic pull box in the sidewalk beside each
+    /// signal pole (eo-props `signals::plan_pull_boxes`). `--no-pull-boxes` draws none, as before.
+    pub pull_boxes: bool,
+    /// (with the arm name signs) Two stiffener channels across each Street Name sign's back
+    /// (eo-props `signal_poles::Part::SignChannel`). `--no-sign-channels` draws none, as before.
+    pub sign_channels: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false, shared_poles: true, joint_dedupe: true, sign_models: true, sign_post_merge: true, sign_variants: true, signal_models: true, signal_poles: true, signal_pole_variants: true, arm_rise: true, arm_name_signs: true, push_buttons: true, arm_rise_routes: true, arm_lower: true, ramp_level: true, rise_clearance: true, arm_diameter: true, arm_far: true, pole_cut: true, signal_luminaires: true, name_sign_matte: true, signal_light: true, one_cabinet: true, cabinet_model: true, pull_boxes: true, sign_channels: true }
     }
 }
 
@@ -105,7 +208,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires, shared_poles: self.shared_poles, joint_dedupe: self.joint_dedupe, sign_models: false, sign_post_merge: self.sign_post_merge, sign_variants: self.sign_variants, signal_models: false, signal_poles: false, signal_pole_variants: self.signal_pole_variants, arm_rise: self.arm_rise, arm_name_signs: self.arm_name_signs, push_buttons: self.push_buttons, arm_rise_routes: self.arm_rise_routes, arm_lower: self.arm_lower, ramp_level: self.ramp_level, rise_clearance: self.rise_clearance, arm_diameter: self.arm_diameter, arm_far: self.arm_far, pole_cut: self.pole_cut, signal_luminaires: self.signal_luminaires, name_sign_matte: self.name_sign_matte, signal_light: false, one_cabinet: self.one_cabinet, cabinet_model: self.cabinet_model, pull_boxes: self.pull_boxes, sign_channels: self.sign_channels };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -114,6 +217,34 @@ impl Props2Args {
                 self.wires = false;
             }
             "--no-wires" => self.wires = false,
+            "--no-shared-poles" => self.shared_poles = false,
+            "--no-joint-dedupe" => self.joint_dedupe = false,
+            "--no-sign-models" => self.sign_models = false,
+            "--no-sign-post-merge" => self.sign_post_merge = false,
+            "--no-sign-variants" => self.sign_variants = false,
+            "--no-signal-models" => self.signal_models = false,
+            "--no-signal-poles" => self.signal_poles = false,
+            "--no-signal-pole-variants" => self.signal_pole_variants = false,
+            "--no-arm-rise" => self.arm_rise = false,
+            "--no-arm-name-signs" => self.arm_name_signs = false,
+            "--no-push-buttons" => self.push_buttons = false,
+            "--no-arm-rise-routes" => self.arm_rise_routes = false,
+            "--no-arm-lower" => self.arm_lower = false,
+            "--no-ramp-level" => self.ramp_level = false,
+            "--no-rise-clearance" => self.rise_clearance = false,
+            "--no-arm-diameter" => self.arm_diameter = false,
+            "--no-arm-far" => self.arm_far = false,
+            "--no-pole-cut" => self.pole_cut = false,
+            "--no-signal-luminaires" => self.signal_luminaires = false,
+            "--no-name-sign-matte" => self.name_sign_matte = false,
+            "--no-signal-light" => self.signal_light = false,
+            "--no-one-cabinet" => self.one_cabinet = false,
+            "--no-cabinet-model" => self.cabinet_model = false,
+            "--no-pull-boxes" => self.pull_boxes = false,
+            "--no-sign-channels" => self.sign_channels = false,
+            "--no-retro-viewer" => self.features &= !eo_render::props::F_RETRO_VIEWER,
+            "--no-sign-back-aged" => self.features &= !eo_render::props::F_SIGN_BACK_AGED,
+            "--signal-light" => self.signal_light = true,
             "--no-boats" => self.boats = false,
             "--no-boat-motion" => self.features &= !eo_render::props::F_AFLOAT,
             "--no-street-props-v2" => self.street_v2 = false,
@@ -138,6 +269,22 @@ const SIGNAL_SPILL_NEAR_M: f32 = 250.0;
 const SIGNAL_LENS_Y_M: [f32; 3] = [0.35, 0.0, -0.35];
 const SIGNAL_LENS_Z_M: f32 = 0.3;
 
+/// A district light's unit seed (`eo_sky::lamp_units::seed_of` of its post's foot), as its
+/// prop instance word and its light both carry it: without the afloat bit, which in an
+/// instance word means a moored boat (eo-render props_types.wgsl `pr_afloat_on`), so the
+/// props shader never rolls and pitches a lamp post by its seed's bits.
+/// `EO_SIGNAL_CLOCK_S` (captures): the signal controllers' clock moved on by this many seconds
+/// (the lamps only; the wind keeps the simulation's), so a shot can show a head's other aspects:
+/// `--shots` steps every run's agents from the same clock, so every capture lands on one phase.
+fn signal_clock_offset() -> f64 {
+    static OFFSET: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    *OFFSET.get_or_init(|| std::env::var("EO_SIGNAL_CLOCK_S").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0))
+}
+
+fn lamp_seed(foot: [f64; 3]) -> u32 {
+    eo_sky::lamp_units::seed_of(foot) & !eo_props::boats::AFLOAT_BIT
+}
+
 /// the library facts the tile workers need.
 #[derive(Clone, Default)]
 struct LibFacts {
@@ -149,6 +296,27 @@ struct LibFacts {
     /// (`--luminaires`) the district lights' sockets by model (eo-render
     /// `props_lib::district_light_sockets`; empty without the switch).
     sockets: Vec<(Model, Vec<([f32; 3], [f32; 4])>)>,
+    /// Per inventory face, how many of its wear variants its sign plates draw from
+    /// (`lib2::sign_model_id`; 0: the plate built in code, as with `--no-sign-models`).
+    sign_faces: Vec<u8>,
+    /// The signal poles' parts' dimensions when every part cooked (`lib2::SIGNAL_POLE_BASE`;
+    /// None: the poles and arms built in code, as with `--no-signal-poles`).
+    signal_poles: Option<eo_props::signal_poles::Dims>,
+    /// (`--no-signal-pole-variants` off) each pole in the finish of its spot.
+    signal_pole_variants: bool,
+    /// (`--no-arm-name-signs` off) the arms' Street Name signs the library drew, by legend.
+    name_signs: Option<eo_props::signal_poles::NameSigns>,
+    /// (`--no-push-buttons` off) the push buttons drawn.
+    push_buttons: bool,
+    /// (`--no-pole-cut` off) a mast pole of another height cut at its shaft.
+    pole_cut: bool,
+    /// (`--no-arm-diameter` off) a level arm at its length class's diameter.
+    level_arm_diameter: bool,
+    /// (`--no-cabinet-model` off) the overhead's cabinets drawn as the MSF60 part.
+    cabinet_model: bool,
+    /// (`--no-pull-boxes`, `--no-sign-channels` off) the pull boxes and the sign channels drawn.
+    pull_boxes: bool,
+    sign_channels: bool,
 }
 
 #[derive(Clone)]
@@ -369,8 +537,90 @@ impl PropsRuntime {
                     let bodies = (p2.boats && fleet.is_some())
                         .then(|| eo_props::boats::load_bodies(&paths.repo_root).map_err(|e| eprintln!("props: boats not drawn ({e:#})")).ok())
                         .flatten();
-                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins, boats: bodies.as_deref(), luminaires: p2.luminaires };
+                    // the SFMTA sign plates' Blender models (`--no-sign-models`: none, the library as before them).
+                    let sign_models = p2
+                        .sign_models
+                        .then(|| eo_props::sign_models::load(&paths.repo_root, &js.signs.faces).map_err(|e| eprintln!("props: sign models not drawn ({e:#}); plates built in code")).ok())
+                        .flatten();
+                    // (with the signal poles) the arms rise (`--no-arm-rise`): set before any junction is planned.
+                    eo_props::signals::set_arm_rise(p2.signal_poles && p2.arm_rise);
+                    // (with the rise) only a State route's junctions rise (`--no-arm-rise-routes`).
+                    eo_props::signals::set_arm_rise_routes(p2.arm_rise_routes);
+                    // (with the poles) level arms as low as they may hang (`--no-arm-lower`); a ramp
+                    // makes no State-route junction (`--no-ramp-level`).
+                    eo_props::signals::set_arm_lower(p2.signal_poles && p2.arm_lower);
+                    eo_props::signals::set_ramp_level(p2.ramp_level);
+                    eo_props::signals::set_rise_clearance(p2.signal_poles && p2.rise_clearance);
+                    // (with the signal poles) the arms' Street Name signs (`--no-arm-name-signs`):
+                    // every legend a junction's arm may carry, drawn into the sign face atlas.
+                    let name_atlas = (p2.signal_poles && p2.arm_name_signs && signs.is_some())
+                        .then(|| {
+                            let legends = eo_props::signals::name_sign_legends(&street);
+                            let art = eo_props::sign_atlas::art::SignArt::load_default()?;
+                            eo_props::sign_atlas::arm_name_signs(&legends, &art, js.signs.faces.len(), std.overhead_name_cap).map_err(|e| eprintln!("props: arm name signs not drawn ({e:#})")).ok()
+                        })
+                        .flatten()
+                        // (`--no-name-sign-matte` off) their sheeting's own roughness in their colours' alpha
+                        .map(|mut n| {
+                            if p2.name_sign_matte {
+                                for c in &mut n.colours {
+                                    c[3] = eo_props::signal_poles::NAME_SIGN_ROUGHNESS;
+                                }
+                            }
+                            n
+                        });
+                    // the signal poles' Blender models (`--no-signal-poles`: none, the library as before them).
+                    let signal_poles = p2
+                        .signal_poles
+                        .then(|| eo_props::signal_poles::load(&paths.repo_root).map_err(|e| eprintln!("props: signal pole models not drawn ({e:#}); poles and arms built in code")).ok())
+                        .flatten();
+                    let extras = lib2::LibExtras {
+                        ez: ez.as_deref(),
+                        signs: signs.as_ref(),
+                        overhead: overhead_js.as_ref(),
+                        stand_ins: p2.stand_ins,
+                        boats: bodies.as_deref(),
+                        luminaires: p2.luminaires,
+                        sign_models: sign_models.as_ref(),
+                        signal_poles: signal_poles.as_ref(),
+                        name_signs: name_atlas.as_ref(),
+                        pole_lamps: p2.signal_poles && p2.signal_luminaires && p2.furniture,
+                        rising_arm_far: p2.signal_poles && p2.arm_far,
+                    };
                     let lib = PropLibrary::load_full(&paths.repo_root, &js, lens, &extras, dome, cache.as_deref())?;
+                    // per face, how many of its wear variants cooked, in order (0: the code-built plate;
+                    // `--no-sign-variants`: at most the first).
+                    let wears = if p2.sign_variants { lib2::SIGN_WEARS } else { 1 };
+                    let cooked = |f: u32, w: u32| lib.models.get(lib2::sign_model_id(f, w) as usize).is_some_and(|m| m.meshes[0] != eo_render::props_lib::NONE);
+                    let sign_faces: Vec<u8> = (0..lib2::MAX_SIGN_FACES).map(|f| (0..wears).take_while(|&w| cooked(f, w)).count() as u8).collect();
+                    // the signal poles drawn only when every part cooked (else all built in code).
+                    let part_cooked = |k: u32| lib.models.get((lib2::SIGNAL_POLE_BASE + k) as usize).is_some_and(|m| m.meshes[0] != eo_render::props_lib::NONE);
+                    let signal_poles = signal_poles.filter(|_| (0..lib2::SIGNAL_POLE_MODELS).all(part_cooked)).map(|s| s.dims);
+                    // (`--no-signal-luminaires` off) the street lights stand on the mast poles only
+                    // where the poles and both pole lamps drew (set before any junction is planned).
+                    let pole_lamps = signal_poles.is_some() && (0..lib2::SIGNAL_LAMP_MODELS).all(|k| part_cooked(lib2::SIGNAL_LAMP_BASE - lib2::SIGNAL_POLE_BASE + k));
+                    eo_props::signal_lamps::set_signal_luminaires(p2.signal_luminaires && p2.furniture && pole_lamps);
+                    // the name signs' faces follow the inventory's in the library's face list
+                    let inventory = js.signs.faces.len();
+                    let name_signs = name_atlas.as_ref().filter(|n| lib.face_count as usize == inventory + n.legends.len()).map(|n| eo_props::signal_poles::NameSigns {
+                        faces: n.legends.iter().enumerate().map(|(i, l)| (l.clone(), ((inventory + i) as u32, n.sizes[i]))).collect(),
+                    });
+                    // (`--no-arm-lower`, `--no-rise-clearance` off) how far a drawn name sign's bottom hangs
+                    // under its arm's axis: the thickest arm's radius at the pole, the sign's hang, the
+                    // tallest blade (0: none drawn); and each legend's width, for a rising arm's sign
+                    let blade = name_signs.as_ref().and_then(|n| n.faces.values().map(|f| f.1[1]).reduce(f64::max));
+                    eo_props::signals::set_name_sign_drop(match (blade, signal_poles.as_ref()) {
+                        (Some(h), Some(d)) => d.arms.iter().map(|a| a.root_radius_m).fold(d.arm_root_radius_m, f64::max) + eo_props::signal_poles::SIGN_HANG_M + h,
+                        _ => 0.0,
+                    });
+                    eo_props::signals::set_name_sign_widths(name_signs.as_ref().map(|n| n.faces.iter().map(|(l, f)| (l.clone(), f.1[0])).collect()));
+                    // (`--no-one-cabinet`, `--no-cabinet-model`, `--no-pull-boxes` off) the corner hardware:
+                    // the junction's one cabinet (the overhead's), drawn as the MSF60 along the kerb, and
+                    // a pull box beside each signal pole (set before any junction is planned)
+                    eo_props::overhead::set_one_cabinet(p2.one_cabinet && p2.overhead);
+                    let cabinet_model = p2.cabinet_model && p2.overhead && signal_poles.is_some();
+                    eo_props::overhead::set_cabinet_model(signal_poles.as_ref().filter(|_| cabinet_model).map(|d| [d.cabinet_m[0], d.cabinet_m[1], d.cabinet_m[2], d.cabinet_pad_m[0], d.cabinet_pad_m[1]]));
+                    eo_props::signals::set_pull_boxes(signal_poles.as_ref().filter(|_| p2.pull_boxes).map(|d| d.pull_box_m));
                     // (`--luminaires`) the district lights' sockets from their GLBs' glass.
                     let sockets = if p2.luminaires { eo_render::props_lib::district_light_sockets(&paths.repo_root, &js) } else { vec![] };
                     // what stands in for an absent GLB: the procedural model (`--stand-ins`) or the grey proxy.
@@ -387,6 +637,9 @@ impl PropsRuntime {
                     eo_props::basins::set_tree_basins(p2.tree_basins);
                     let world = Arc::new(PropsWorld::new(street, js, std).with_structures(structures));
                     eo_props::furniture::set_surveyed_first(p2.surveyed_furniture);
+                    eo_props::overhead::set_lamp_standards(p2.shared_poles && p2.furniture && p2.overhead);
+                    eo_props::overhead::set_joint_dedupe(p2.joint_dedupe);
+                    eo_props::signs::set_merge_posts(p2.sign_post_merge);
                     if p2.furniture || p2.eztree {
                         world.install_furniture(&city.buildings)?;
                     }
@@ -410,7 +663,7 @@ impl PropsRuntime {
                         let land = eo_data::LandCover::load(&paths).map_err(|e| eprintln!("vegetation: land cover not read ({e:#}); classes from the greens only")).ok();
                         Arc::new(vegetation::VegGround::new(g, world.street.clone(), land, veg_water, veg_switches, &paths.repo_root))
                     });
-                    let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg, sockets };
+                    let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg, sockets, sign_faces, signal_poles, signal_pole_variants: p2.signal_pole_variants, name_signs, push_buttons: p2.push_buttons, pole_cut: p2.pole_cut, level_arm_diameter: p2.arm_diameter, cabinet_model, pull_boxes: p2.pull_boxes, sign_channels: p2.sign_channels };
                     // one boat per occupied berth, its waterline on the still sea (where the docks float),
                     // bow along the berth's heading (the model's +Z turned by yaw lies along (sin yaw, cos yaw)).
                     // the fleet at rest, in its order (eo-app boats.rs poses it each frame unless `--no-boat-motion`);
@@ -546,6 +799,12 @@ impl PropsRuntime {
                         let Loaded { world, lib, source, facts, wire_look, boats } = l;
                         self.boats_pending = boats;
                         let features = self.p2.features;
+                        // (`--no-pull-boxes` off) the pull box's lid takes the sidewalk's grade
+                        let grade = if facts.pull_boxes && facts.signal_poles.is_some() {
+                            lib2::SIGNAL_POLE_BASE + eo_props::signal_poles::Piece { part: eo_props::signal_poles::Part::PullBox, finish: 0, pos: [0.0; 3], yaw: 0.0, scale: [1.0; 3] }.model()
+                        } else {
+                            u32::MAX
+                        };
                         std::thread::Builder::new()
                             .name("eo-props-gpu".into())
                             .spawn(move || {
@@ -554,6 +813,7 @@ impl PropsRuntime {
                                 let _ = tx.send(r.map(|mut g| {
                                     g.set_wire_look(wire_look);
                                     g.set_features(features);
+                                    g.set_grade_model(grade);
                                     (g, world, source, facts)
                                 }));
                             })
@@ -799,6 +1059,7 @@ impl PropsRuntime {
         self.clock += dt;
         let t = sim_time.unwrap_or(self.clock);
         gpu.set_time(t); // the wind runs on the simulation clock
+        let t = t + signal_clock_offset();
         let timing = self.source.as_ref().map(|s| s.timing.clone());
         let len = self.lamp_next as usize;
         self.lamp_words.resize(len, 3);
@@ -1156,7 +1417,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     // a tile with no street tile is the vegetation's alone (land beyond the street world),
     // unless a tunnel's bore runs under it (`--tunnels`): its lamps come through `plan_tile`.
     let planned = world.street.tiles.contains_key(&key) || !world.tunnel_lights(key).is_empty();
-    let TilePlacement { mut props, parked, lights } = if planned { world.plan_tile(key) } else { TilePlacement { props: vec![], parked: vec![], lights: vec![] } }; // mut
+    let TilePlacement { mut props, parked, lights, fittings } = if planned { world.plan_tile(key) } else { TilePlacement::default() }; // mut
     let veg = facts.veg.as_deref();
     let mut plants: Vec<eo_landmarks::vegetation::Plant> = vec![];
     // the park trees (tile-trees.js `plantTileTrees` over the
@@ -1254,7 +1515,23 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     let mut counts: HashMap<Model, usize> = HashMap::new();
     let mut extra_counts: HashMap<&'static str, usize> = HashMap::new();
     vegetation::instances(&plants, &mut instances, &mut extra_counts);
-    for p in &props {
+    // the street overhead of this tile (planned first: a pull box keeps off its cabinets)
+    let t1 = Instant::now();
+    let oh = (p2.overhead || p2.wires).then(|| eo_props::overhead::plan_tile(world, key));
+    let overhead_plan_ms = t1.elapsed().as_secs_f64() * 1e3;
+    // (`--no-signal-poles` off) the signal poles' and arms' models, and the pieces they add.
+    let hw_options = eo_props::signal_poles::Options {
+        variants: facts.signal_pole_variants,
+        name_signs: facts.name_signs.as_ref(),
+        push_buttons: facts.push_buttons,
+        pole_cut: facts.pole_cut,
+        level_arm_diameter: facts.level_arm_diameter,
+        pull_boxes: facts.pull_boxes,
+        sign_channels: facts.sign_channels,
+        cabinets: oh.as_ref().map_or(&[], |o| o.cabinets.as_slice()),
+    };
+    let signal_hw = facts.signal_poles.as_ref().map(|d| eo_props::signal_poles::hardware(&props, &fittings, d, &hw_options));
+    for (pi, p) in props.iter().enumerate() {
         // the walk's kinds (hydrants ... signal cabinets) are `--no-furniture`'s.
         if (p.model as u32) >= Model::Hydrant as u32 && p.model != Model::TreeBasin && !p2.furniture {
             continue;
@@ -1269,6 +1546,11 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             // a species' ez-tree (scale = the JS item's scale, heightScale, scale on the metre mesh), or
             // with `--no-eztree` the card tree at that species' size (crown diameter, height, crown diameter).
             Model::Tree if p2.eztree && facts.species > 0 => (lib2::TREE_BASE + (p.variant as u32 % facts.species as u32), p.scale),
+            // a sign plate whose face has a Blender model draws it (same scale: the plate's size).
+            Model::SignPlate if facts.sign_faces.get(p.variant as usize).copied().unwrap_or(0) > 0 => {
+                let wears = facts.sign_faces[p.variant as usize] as usize;
+                (lib2::sign_model_id(p.variant as u32, eo_props::sign_models::wear_of(p.pos, wears) as u32), p.scale)
+            }
             Model::Tree => {
                 let d = facts.tree_dims.get(p.variant as usize % facts.tree_dims.len().max(1)).copied().unwrap_or([9.0, 3.0]);
                 let crown = 2.0 * d[1] * p.scale[0];
@@ -1276,19 +1558,25 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             }
             _ => (p.model as u32, p.scale),
         };
+        // a signal pole or mast arm drawn as its part (its own yaw: the pole turned to its arm)
+        let piece = signal_hw.as_ref().and_then(|h| h.replace[pi]);
+        let (model, scale) = piece.map_or((model, scale), |pc| (lib2::SIGNAL_POLE_BASE + pc.model(), pc.scale));
+        // (`--no-signal-luminaires` off) a street light on a mast pole: its post inside the pole, no base
+        let model = if signal_hw.as_ref().is_some_and(|h| h.pole_lamps.contains(&pi)) { lib2::SIGNAL_LAMP_BASE + u32::from(p.model == Model::LampBanner) } else { model };
+        let yaw = piece.map_or(p.yaw, |pc| pc.yaw);
         let i = instances.len() as u32;
         // (`--lamp-units`, `--luminaires`) a district light's unit seed (its lights carry the same):
         // its glass is lit as its lamp is (props_draw.wgsl `pr_lamp_glass`); 0 for every other kind.
         let district = matches!(p.model, Model::LampCobra | Model::LampBanner | Model::LampHistoric);
         instances.push(GpuPropInstance {
             pos: [p.pos[0] as f32, p.pos[1] as f32, p.pos[2] as f32],
-            yaw: p.yaw as f32,
+            yaw: yaw as f32,
             scale,
             model,
             variant: p.variant as u32,
             lamp: 0,
             slope,
-            pad: if district { eo_sky::lamp_units::seed_of(p.pos) } else { 0 },
+            pad: if district { lamp_seed(p.pos) } else { 0 },
         });
         match p.live {
             Live::None => {}
@@ -1307,6 +1595,44 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 lives.push((i, r.unwrap_or(LiveRef::Dark)));
             }
         }
+    }
+    // the signal poles' added pieces: the arms' roots and end caps, the heads' mounts.
+    for pc in signal_hw.iter().flat_map(|h| h.added.iter()) {
+        *extra_counts.entry("signal pole hardware").or_insert(0) += 1;
+        // a pull box's lid lies on the sidewalk's plane: the ground's gradient under it (props_types.wgsl
+        // `pr_veg_grad` shears it so, its model `props::set_grade_model`)
+        let pad = if pc.part == eo_props::signal_poles::Part::PullBox {
+            let g = |x: f64, z: f64| world.ground(x, z);
+            let e = 0.3;
+            let (x, z) = (pc.pos[0], pc.pos[2]);
+            vegetation::pack_grad([((g(x + e, z) - g(x - e, z)) / (2.0 * e)) as f32, ((g(x, z + e) - g(x, z - e)) / (2.0 * e)) as f32])
+        } else {
+            0
+        };
+        instances.push(GpuPropInstance {
+            pos: [pc.pos[0] as f32, pc.pos[1] as f32, pc.pos[2] as f32],
+            yaw: pc.yaw as f32,
+            scale: pc.scale,
+            model: lib2::SIGNAL_POLE_BASE + pc.model(),
+            variant: 0,
+            lamp: 0,
+            slope: 0.0,
+            pad,
+        });
+    }
+    // the arms' Street Name signs: the plates' own model, their faces past the inventory's.
+    for pl in signal_hw.iter().flat_map(|h| h.plates.iter()) {
+        *extra_counts.entry("arm name sign").or_insert(0) += 1;
+        instances.push(GpuPropInstance {
+            pos: [pl.pos[0] as f32, pl.pos[1] as f32, pl.pos[2] as f32],
+            yaw: pl.yaw as f32,
+            scale: pl.scale,
+            model: Model::SignPlate as u32,
+            variant: pl.face,
+            lamp: 0,
+            slope: 0.0,
+            pad: 0,
+        });
     }
     // the district lights' luminaires (kept for the night lighting), and a
     // tunnel bore's lamps (`--tunnels`, eo-props `PropsWorld::tunnel_lights`;
@@ -1327,7 +1653,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
         kind: l.kind as u32,
         // the tunnel flag; (`--lamp-units`) the unit's seed from its post's foot; (`--luminaires`)
         // the lantern's share of the post's light (f32 bits, 0: the whole), read only with their switches.
-        pad: [if in_bore { eo_render::structures::TUNNEL_LAMP_FLAG } else { 0 }, if in_bore { 0 } else { eo_sky::lamp_units::seed_of(l.base) }, if share < 1.0 { share.to_bits() } else { 0 }],
+        pad: [if in_bore { eo_render::structures::TUNNEL_LAMP_FLAG } else { 0 }, if in_bore { 0 } else { lamp_seed(l.base) }, if share < 1.0 { share.to_bits() } else { 0 }],
     };
     let lights: Vec<GpuLampLight> = lights
         .iter()
@@ -1356,8 +1682,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     // the street overhead of this tile.
     let t1 = Instant::now();
     let mut wires = vec![];
-    if p2.overhead || p2.wires {
-        let oh = eo_props::overhead::plan_tile(world, key);
+    if let Some(oh) = &oh {
         let mut put = |model: u32, pos: [f64; 3], yaw: f64, scale: [f32; 3], name: &'static str| {
             *extra_counts.entry(name).or_insert(0) += 1;
             instances.push(GpuPropInstance { pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32], yaw: yaw as f32, scale, model, variant: 0, lamp: 0, slope: 0.0, pad: 0 });
@@ -1366,6 +1691,8 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             for pole in &oh.poles {
                 match pole.kind {
                     eo_props::overhead::PoleKind::Distribution => put(lib2::OH_DIST_POLE, pole.pos, pole.yaw, [1.0; 3], "overhead distribution pole"),
+                    // a street lamp stands here and holds the wires (`--no-shared-poles`).
+                    _ if pole.lamp_standard => {}
                     _ => {
                         let wood = pole.material == eo_props::overhead::PoleMaterial::Wood;
                         put(if wood { lib2::OH_POLE_WOOD } else { lib2::OH_POLE_STEEL }, pole.pos, pole.yaw, [1.0, pole.height as f32, 1.0], "overhead span/support pole");
@@ -1376,6 +1703,12 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 }
             }
             for c in &oh.cabinets {
+                // (`--no-cabinet-model` off) the MSF60 on its pad, as modelled
+                if facts.cabinet_model {
+                    let pc = eo_props::signal_poles::Piece { part: eo_props::signal_poles::Part::Cabinet, finish: 0, pos: c.pos, yaw: c.yaw, scale: [1.0; 3] };
+                    put(lib2::SIGNAL_POLE_BASE + pc.model(), c.pos, c.yaw, [1.0; 3], "overhead signal cabinet");
+                    continue;
+                }
                 let n = lib2::CABINET_NOMINAL;
                 put(lib2::OH_CABINET, c.pos, c.yaw, [c.size[0] as f32 / n[0], c.size[2] as f32 / n[1], c.size[1] as f32 / n[2]], "overhead signal cabinet");
             }
@@ -1401,7 +1734,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             *extra_counts.entry("wires").or_insert(0) += oh.wires.len();
         }
     }
-    let overhead_ms = t1.elapsed().as_secs_f64() * 1e3;
+    let overhead_ms = overhead_plan_ms + t1.elapsed().as_secs_f64() * 1e3;
     TilePack { key, ring: 0, instances, lives, parked, counts, ms: t0.elapsed().as_secs_f64() * 1e3, wires, lights, overhead_ms, extra_counts }
 }
 
@@ -1919,5 +2252,17 @@ mod tests {
         assert_eq!(veg_epoch_on(103.0, g3), veg_epoch_on(103.0, g3));
         // the bloom alone (same season step) changes it too: 1 June, the window just shut.
         assert_ne!(veg_epoch_on(140.0, g3), veg_epoch_on(160.0, g3));
+    }
+
+    #[test]
+    fn signal_light_is_on_by_default_and_its_switches_turn_it_off() {
+        assert!(Props2Args::default().signal_light);
+        for flag in ["--no-signal-light", "--no-props2"] {
+            let mut a = Props2Args::default();
+            assert!(a.parse_flag(flag));
+            assert!(!a.signal_light, "{flag}");
+        }
+        let mut a = Props2Args::default();
+        assert!(a.parse_flag("--no-signal-light") && a.parse_flag("--signal-light") && a.signal_light);
     }
 }

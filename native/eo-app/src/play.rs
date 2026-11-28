@@ -456,6 +456,12 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-luminaires" => { a.look.sky.luminaires = false; a.props2.luminaires = false; }
             "--rear-lamps" | "--no-rear-lamps" => a.look.sky.rear_lamps = s == "--rear-lamps",
             "--signal-spill" | "--no-signal-spill" => a.look.sky.signal_spill = s == "--signal-spill",
+            "--headlamp-stray" | "--no-headlamp-stray" => eo_render::sky::set_headlamp_stray(s == "--headlamp-stray"), // the low beams' stray light (FMVSS 108)
+            "--signal-chroma" | "--no-signal-chroma" => eo_render::props::set_signal_chroma(s == "--signal-chroma"), // the visor's lens light, held
+            "--signal-unlit" | "--no-signal-unlit" => eo_render::props::set_signal_unlit(s == "--signal-unlit"), // the unlit module refitted
+            "--signal-hold-all" | "--no-signal-hold-all" => eo_render::props::set_signal_hold_all(s == "--signal-hold-all"), // every colour's visor held
+            "--signal-unlit-look" | "--no-signal-unlit-look" => eo_render::props::set_signal_unlit_look(s == "--signal-unlit-look"), // the unlit module per look
+            "--signal-bounce" | "--no-signal-bounce" => eo_render::props::set_signal_bounce(s == "--signal-bounce"), // the lens's bounce held
             "--lit-rooms" | "--no-lit-rooms" => a.look.sky.lit_rooms = s == "--lit-rooms",
             "--wire-light" | "--no-wire-light" => a.look.sky.wire_light = s == "--wire-light",
             "--foliage-light" => a.look.nature |= eo_render::look::NATURE_FOLIAGE,
