@@ -1,0 +1,3670 @@
+{
+ "meta": {
+  "version": "sf-tree-allometry-v1",
+  "generator": "scripts/world-data/build-sf-tree-sizes.py",
+  "source": "USDA Forest Service Urban Tree Database (RDS-2016-0005), Data/TS6_Growth_coefficients.csv",
+  "citation": "McPherson, E. Gregory; van Doorn, Natalie S.; Peper, Paula J. 2016. Urban tree database. Fort Collins, CO: Forest Service Research Data Archive. Updated 21 January 2020. https://doi.org/10.2737/RDS-2016-0005",
+  "report": "McPherson, E. Gregory; van Doorn, Natalie S.; Peper, Paula J. 2016. Urban tree database and allometric equations. Gen. Tech. Rep. PSW-GTR-253. Albany, CA: U.S. Department of Agriculture, Forest Service, Pacific Southwest Research Station. https://doi.org/10.2737/PSW-GTR-253",
+  "use": "These data were collected using funding from the U.S. Government and can be used without additional permissions or fees. (RDS-2016-0005 metadata, Use_Constraints.)",
+  "archive": {
+   "url": "https://www.fs.usda.gov/rds/archive/products/RDS-2016-0005/RDS-2016-0005.zip",
+   "sha256": "c0c888e2531ca58b673b7c18a30a01cbd33e90bd8b041fb3483e394bd8664faf",
+   "files": {
+    "Data/TS6_Growth_coefficients.csv": "85829e053d29a1ecdc272f7153d9309983a32c1cac3bc51accd022df28806b76",
+    "Data/TS2_Regional_species_and_counts.csv": "5e47dca7d3ebd9d8a84c7b314d814c24af9dba12ed79ab4bfd154a0d0fbffc04",
+    "Data/TS1_Regional_information.csv": "4a57afd4703eb30d1f44bf974b2dc77cd8afd5dc09960524aa7661cf513aba47"
+   }
+  },
+  "units": "DBH in centimetres; crown diameter (crown) and total tree height (height) in metres; ageDbh: DBH (cm) from years since planting",
+  "equations": "TS4_Growth_eqn_forms.csv: lin a+bx; quad a+bx+cx^2; cub a+bx+cx^2+dx^3; quart +ex^4; loglogw1..4 exp(a+b ln(ln(x+1)) + w mse/2) and expow1..4 exp(a+bx + w mse/2) with mse = c and w = 1, sqrt(x), x, x^2; prediction clamped to [min, max] (the equation's application range) and DBH to dbhCm (the species' measured range)",
+  "rule": "A list species is sized with the database record of the same species in NoCalC (Berkeley, CA: San Francisco's region), else the same species in the nearest other region (order: regionOrder), else the genus (its most-measured species) in that order, else for a Myrtaceae genus Melaleuca quinquenervia (SoCalC), for a conifer genus Pinus radiata (NoCalC), else the median over the NoCalC broadleaf species (broadleaf); palms and palm-like monocots are not sized.",
+  "regionOrder": [
+   "NoCalC",
+   "SoCalC",
+   "PacfNW",
+   "InlVal",
+   "SacVal",
+   "InlEmp",
+   "SWDsrt",
+   "Tropic",
+   "InterW",
+   "TpIntW",
+   "NMtnPr",
+   "MidWst",
+   "LoMidW",
+   "NoEast",
+   "Piedmt",
+   "GulfCo",
+   "CenFla"
+  ],
+  "synonyms": {
+   "Platanus x hispanica": "Platanus x acerifolia",
+   "Platanus acerifolia": "Platanus x acerifolia",
+   "Platanus hispanica": "Platanus x acerifolia",
+   "Lophostemon confertus": "Tristaniopsis conferta",
+   "Tristania conferta": "Tristaniopsis conferta"
+  },
+  "trueGenus": {
+   "Tristaniopsis conferta": "Lophostemon"
+  }
+ },
+ "equations": [
+  {
+   "key": "NoCalC/Acacia melanoxylon",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Acacia melanoxylon",
+   "common": "black acacia",
+   "spCode": "ACME",
+   "treeType": "BEL",
+   "n": 35,
+   "crown": {
+    "eq": "quad",
+    "a": 0.72517,
+    "b": 0.23255,
+    "c": -0.00072,
+    "min": 1.37,
+    "max": 16.71
+   },
+   "height": {
+    "eq": "loglogw2",
+    "a": 0.50713,
+    "b": 1.54757,
+    "c": 0.00894,
+    "min": 2.6,
+    "max": 18.45
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 2.85114,
+    "b": -0.12224,
+    "c": 0.05596,
+    "d": -0.0005,
+    "min": 2.78,
+    "max": 99.03
+   },
+   "dbhCm": [
+    1.5,
+    130.9
+   ]
+  },
+  {
+   "key": "SoCalC/Melaleuca quinquenervia",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Melaleuca quinquenervia",
+   "common": "punk tree",
+   "spCode": "MEQU",
+   "treeType": "BEM",
+   "n": 31,
+   "crown": {
+    "eq": "quad",
+    "a": 0.66969,
+    "b": 0.16919,
+    "c": -0.00064,
+    "min": 1.09,
+    "max": 10.22
+   },
+   "height": {
+    "eq": "loglogw2",
+    "a": -0.00309,
+    "b": 1.73737,
+    "c": 0.00204,
+    "min": 1.49,
+    "max": 13.29
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.52993,
+    "b": 1.00644,
+    "c": 0.01677,
+    "min": 2.53,
+    "max": 81.79
+   },
+   "dbhCm": [
+    2.5,
+    80.0
+   ]
+  },
+  {
+   "key": "NoCalC/Acer palmatum",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Acer palmatum",
+   "common": "Japanese maple",
+   "spCode": "ACPA",
+   "treeType": "BDS",
+   "n": 38,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -1.01932,
+    "b": 2.48188,
+    "c": 0.03998,
+    "min": 0.78,
+    "max": 10.57
+   },
+   "height": {
+    "eq": "lin",
+    "a": 2.02054,
+    "b": 0.15818,
+    "min": 2.47,
+    "max": 9.52
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 2.84767,
+    "b": 0.23083,
+    "c": 0.02511,
+    "d": -0.00028,
+    "min": 2.85,
+    "max": 47.39
+   },
+   "dbhCm": [
+    2.5,
+    71.1
+   ]
+  },
+  {
+   "key": "PacfNW/Acer macrophyllum",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Acer macrophyllum",
+   "common": "bigleaf maple",
+   "spCode": "ACMA",
+   "treeType": "BDL",
+   "n": 40,
+   "crown": {
+    "eq": "quad",
+    "a": 0.39369,
+    "b": 0.24616,
+    "c": -0.00081,
+    "min": 0.82,
+    "max": 19.1
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.85132,
+    "b": 1.48977,
+    "c": 0.02171,
+    "min": 2.42,
+    "max": 27.14
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -0.21317,
+    "b": 1.97429,
+    "c": -0.01051,
+    "d": 3e-05,
+    "min": 1.75,
+    "max": 174.33
+   },
+   "dbhCm": [
+    1.3,
+    174.0
+   ]
+  },
+  {
+   "key": "MidWst/Acer negundo",
+   "region": "MidWst",
+   "city": "Minneapolis, Minnesota",
+   "species": "Acer negundo",
+   "common": "boxelder",
+   "spCode": "ACNE",
+   "treeType": "BDM",
+   "n": 43,
+   "crown": {
+    "eq": "loglogw3",
+    "a": -0.11047,
+    "b": 1.80298,
+    "c": 0.00065,
+    "min": 2.25,
+    "max": 13.85
+   },
+   "height": {
+    "eq": "cub",
+    "a": 1.74178,
+    "b": 0.71565,
+    "c": -0.01319,
+    "d": 8e-05,
+    "min": 4.57,
+    "max": 18.74
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 4.2805,
+    "b": 2.10929,
+    "min": 4.28,
+    "max": 88.65
+   },
+   "dbhCm": [
+    4.3,
+    92.5
+   ]
+  },
+  {
+   "key": "PacfNW/Acer platanoides",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Acer platanoides",
+   "common": "Norway maple",
+   "spCode": "ACPL",
+   "treeType": "BDM",
+   "n": 74,
+   "crown": {
+    "eq": "cub",
+    "a": 0.0926,
+    "b": 0.36724,
+    "c": -0.00266,
+    "d": 1e-05,
+    "min": 0.66,
+    "max": 23.43
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.56416,
+    "b": 0.3118,
+    "c": -0.00127,
+    "min": 3.05,
+    "max": 21.68
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -0.85211,
+    "b": 2.4427,
+    "c": -0.02993,
+    "d": 0.00022,
+    "min": 1.56,
+    "max": 146.78
+   },
+   "dbhCm": [
+    1.1,
+    129.4
+   ]
+  },
+  {
+   "key": "PacfNW/Acer rubrum",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Acer rubrum",
+   "common": "red maple",
+   "spCode": "ACRU",
+   "treeType": "BDM",
+   "n": 39,
+   "crown": {
+    "eq": "cub",
+    "a": 0.16933,
+    "b": 0.43289,
+    "c": -0.00526,
+    "d": 3e-05,
+    "min": 0.73,
+    "max": 21.87
+   },
+   "height": {
+    "eq": "cub",
+    "a": 1.95274,
+    "b": 0.61834,
+    "c": -0.01179,
+    "d": 8e-05,
+    "min": 2.75,
+    "max": 27.55
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": -0.28784,
+    "b": 1.61264,
+    "min": 1.32,
+    "max": 96.47
+   },
+   "dbhCm": [
+    1.2,
+    95.0
+   ]
+  },
+  {
+   "key": "InlVal/Acer saccharinum",
+   "region": "InlVal",
+   "city": "Modesto, California",
+   "species": "Acer saccharinum",
+   "common": "silver maple",
+   "spCode": "ACSA1",
+   "treeType": "BDL",
+   "n": 29,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.30003,
+    "b": 2.0639,
+    "c": 0.02938,
+    "min": 1.22,
+    "max": 19.37
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.3591,
+    "b": 1.81159,
+    "c": 0.03437,
+    "min": 2.22,
+    "max": 25.15
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.51245,
+    "b": 1.6505,
+    "min": 2.51,
+    "max": 126.3
+   },
+   "dbhCm": [
+    2.5,
+    119.9
+   ]
+  },
+  {
+   "key": "PacfNW/Acer saccharum",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Acer saccharum",
+   "common": "sugar maple",
+   "spCode": "ACSA2",
+   "treeType": "BDL",
+   "n": 37,
+   "crown": {
+    "eq": "quad",
+    "a": -0.04297,
+    "b": 0.26749,
+    "c": -0.00063,
+    "min": 0.35,
+    "max": 19.18
+   },
+   "height": {
+    "eq": "cub",
+    "a": 1.10482,
+    "b": 0.62678,
+    "c": -0.0077,
+    "d": 4e-05,
+    "min": 2.02,
+    "max": 25.88
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 1.47953,
+    "b": 1.65885,
+    "c": 0.00513,
+    "d": -0.00015,
+    "min": 1.48,
+    "max": 91.77
+   },
+   "dbhCm": [
+    1.3,
+    97.9
+   ]
+  },
+  {
+   "key": "NoEast/Aesculus hippocastanum",
+   "region": "NoEast",
+   "city": "Queens, New York",
+   "species": "Aesculus hippocastanum",
+   "common": "horsechestnut",
+   "spCode": "AEHI",
+   "treeType": "BDL",
+   "n": 33,
+   "crown": {
+    "eq": "cub",
+    "a": 0.16411,
+    "b": 0.36854,
+    "c": -0.00599,
+    "d": 4e-05,
+    "min": 1.33,
+    "max": 16.29
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.36605,
+    "b": 0.31715,
+    "c": -0.00145,
+    "min": 2.41,
+    "max": 18.15
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 3.34694,
+    "b": 0.45797,
+    "c": 0.00782,
+    "min": 3.35,
+    "max": 90.02
+   },
+   "dbhCm": [
+    2.4,
+    90.2
+   ]
+  },
+  {
+   "key": "NoCalC/Pinus radiata",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Pinus radiata",
+   "common": "Monterey pine",
+   "spCode": "PIRA",
+   "treeType": "CEL",
+   "n": 35,
+   "crown": {
+    "eq": "lin",
+    "a": 2.38939,
+    "b": 0.14434,
+    "min": 2.79,
+    "max": 18.99
+   },
+   "height": {
+    "eq": "quad",
+    "a": 0.34861,
+    "b": 0.39871,
+    "c": -0.00177,
+    "min": 1.45,
+    "max": 22.75
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.80551,
+    "b": 1.60318,
+    "min": 2.81,
+    "max": 115.03
+   },
+   "dbhCm": [
+    2.5,
+    127.2
+   ]
+  },
+  {
+   "key": "Piedmt/Betula nigra",
+   "region": "Piedmt",
+   "city": "Charlotte, North Carolina",
+   "species": "Betula nigra",
+   "common": "river birch",
+   "spCode": "BENI",
+   "treeType": "BDM",
+   "n": 39,
+   "crown": {
+    "eq": "lin",
+    "a": 2.45947,
+    "b": 0.20529,
+    "min": 2.65,
+    "max": 17.47
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.67649,
+    "b": 0.39402,
+    "c": -0.00246,
+    "min": 3.05,
+    "max": 18.34
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": -1.17183,
+    "b": 2.12321,
+    "min": 0.95,
+    "max": 73.14
+   },
+   "dbhCm": [
+    3.6,
+    72.1
+   ]
+  },
+  {
+   "key": "PacfNW/Betula pendula",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Betula pendula",
+   "common": "European white birch",
+   "spCode": "BEPE",
+   "treeType": "BDM",
+   "n": 41,
+   "crown": {
+    "eq": "cub",
+    "a": 0.35044,
+    "b": 0.37618,
+    "c": -0.00631,
+    "d": 7e-05,
+    "min": 0.79,
+    "max": 11.19
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.42669,
+    "b": 0.70065,
+    "c": -0.00668,
+    "min": 2.24,
+    "max": 19.68
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": -0.91466,
+    "b": 2.11608,
+    "c": -0.02273,
+    "min": 1.18,
+    "max": 48.32
+   },
+   "dbhCm": [
+    1.2,
+    58.5
+   ]
+  },
+  {
+   "key": "InlEmp/Brachychiton populneum",
+   "region": "InlEmp",
+   "city": "Claremont, California",
+   "species": "Brachychiton populneum",
+   "common": "kurrajong",
+   "spCode": "BRPO",
+   "treeType": "BEM",
+   "n": 37,
+   "crown": {
+    "eq": "quad",
+    "a": 1.35462,
+    "b": 0.23061,
+    "c": -0.00172,
+    "min": 1.74,
+    "max": 9.07
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.56417,
+    "b": 0.2668,
+    "c": -0.0021,
+    "min": 2.01,
+    "max": 10.05
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 1.67923,
+    "b": 2.25021,
+    "c": -0.08017,
+    "d": 0.00122,
+    "min": 1.68,
+    "max": 66.02
+   },
+   "dbhCm": [
+    1.5,
+    63.8
+   ]
+  },
+  {
+   "key": "SoCalC/Callistemon citrinus",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Callistemon citrinus",
+   "common": "lemon bottlebrush",
+   "spCode": "CACI",
+   "treeType": "BES",
+   "n": 31,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.96023,
+    "b": 2.24998,
+    "c": 0.00872,
+    "min": 0.65,
+    "max": 6.83
+   },
+   "height": {
+    "eq": "quad",
+    "a": 0.61551,
+    "b": 0.35108,
+    "c": -0.00472,
+    "min": 1.47,
+    "max": 7.13
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.53402,
+    "b": 0.59754,
+    "min": 2.53,
+    "max": 35.4
+   },
+   "dbhCm": [
+    2.5,
+    38.0
+   ]
+  },
+  {
+   "key": "PacfNW/Calocedrus decurrens",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Calocedrus decurrens",
+   "common": "incense cedar",
+   "spCode": "CADE2",
+   "treeType": "CEM",
+   "n": 38,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.81693,
+    "b": 1.39977,
+    "c": 0.05206,
+    "min": 0.87,
+    "max": 3.05
+   },
+   "height": {
+    "eq": "quad",
+    "a": -0.43078,
+    "b": 0.46333,
+    "c": -0.00309,
+    "min": 1.34,
+    "max": 15.12
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": -0.5418,
+    "b": 2.23052,
+    "min": 3.92,
+    "max": 50.76
+   },
+   "dbhCm": [
+    2.9,
+    89.6
+   ]
+  },
+  {
+   "key": "PacfNW/Carpinus betulus 'Fastigiata'",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Carpinus betulus 'Fastigiata'",
+   "common": "columnar hornbeam",
+   "spCode": "CABEF",
+   "treeType": "BDM",
+   "n": 39,
+   "crown": {
+    "eq": "cub",
+    "a": 0.124,
+    "b": 0.11118,
+    "c": 0.00861,
+    "d": -0.00015,
+    "min": 0.53,
+    "max": 9.26
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.68427,
+    "b": 1.47106,
+    "c": 0.01592,
+    "min": 3.23,
+    "max": 15.11
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -0.99936,
+    "b": 2.16074,
+    "c": -0.08853,
+    "d": 0.00412,
+    "min": 3.0,
+    "max": 51.96
+   },
+   "dbhCm": [
+    0.8,
+    51.6
+   ]
+  },
+  {
+   "key": "GulfCo/Carya illinoinensis",
+   "region": "GulfCo",
+   "city": "Charleston, South Carolina",
+   "species": "Carya illinoinensis",
+   "common": "pecan",
+   "spCode": "CAIL",
+   "treeType": "BDL",
+   "n": 36,
+   "crown": {
+    "eq": "lin",
+    "a": 2.537300911,
+    "b": 0.202324078,
+    "min": 3.05,
+    "max": 20.87
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.17767,
+    "b": 1.92206,
+    "c": 0.0509,
+    "min": 1.94,
+    "max": 21.91
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.527410532,
+    "b": 1.258242634,
+    "min": 2.53,
+    "max": 90.6
+   },
+   "dbhCm": [
+    2.5,
+    90.9
+   ]
+  },
+  {
+   "key": "Tropic/Cassia x nealiae",
+   "region": "Tropic",
+   "city": "Honolulu, Hawaii",
+   "species": "Cassia x nealiae",
+   "common": "rainbow shower tree",
+   "spCode": "CANE33",
+   "treeType": "BDM",
+   "n": 41,
+   "crown": {
+    "eq": "quad",
+    "a": 0.34958,
+    "b": 0.36286,
+    "c": -0.0023,
+    "min": 1.59,
+    "max": 14.69
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.10992,
+    "b": 1.66696,
+    "c": 0.04536,
+    "min": 2.26,
+    "max": 13.19
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.38894,
+    "b": 1.10447,
+    "min": 3.49,
+    "max": 78.6
+   },
+   "dbhCm": [
+    2.5,
+    93.7
+   ]
+  },
+  {
+   "key": "Tropic/Casuarina equisetifolia",
+   "region": "Tropic",
+   "city": "Honolulu, Hawaii",
+   "species": "Casuarina equisetifolia",
+   "common": "Australian pine",
+   "spCode": "CAEQ",
+   "treeType": "BEL",
+   "n": 62,
+   "crown": {
+    "eq": "quad",
+    "a": 1.60609,
+    "b": 0.15719,
+    "c": -0.00044,
+    "min": 1.99,
+    "max": 13.88
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.26166,
+    "b": 0.36074,
+    "c": -0.00147,
+    "min": 3.13,
+    "max": 24.3
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.44092,
+    "b": 0.99003,
+    "min": 2.44,
+    "max": 116.29
+   },
+   "dbhCm": [
+    2.5,
+    162.3
+   ]
+  },
+  {
+   "key": "SoCalC/Cedrus deodara",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Cedrus deodara",
+   "common": "deodar cedar",
+   "spCode": "CEDE",
+   "treeType": "CEL",
+   "n": 28,
+   "crown": {
+    "eq": "quad",
+    "a": 1.06017,
+    "b": 0.24149,
+    "c": -0.00075,
+    "min": 1.28,
+    "max": 18.68
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.43343,
+    "b": 1.64844,
+    "c": 0.05391,
+    "min": 0.82,
+    "max": 20.15
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 0.92345,
+    "b": 1.42681,
+    "c": 0.01585,
+    "min": 0.92,
+    "max": 111.88
+   },
+   "dbhCm": [
+    2.5,
+    125.0
+   ]
+  },
+  {
+   "key": "InlVal/Celtis sinensis",
+   "region": "InlVal",
+   "city": "Modesto, California",
+   "species": "Celtis sinensis",
+   "common": "Chinese hackberry",
+   "spCode": "CESI4",
+   "treeType": "BDL",
+   "n": 30,
+   "crown": {
+    "eq": "loglogw4",
+    "a": -0.96824,
+    "b": 2.60965,
+    "c": 1e-05,
+    "min": 0.69,
+    "max": 16.4
+   },
+   "height": {
+    "eq": "loglogw4",
+    "a": 0.16259,
+    "b": 1.81586,
+    "c": 1e-05,
+    "min": 1.8,
+    "max": 16.4
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.5184,
+    "b": 2.16011,
+    "c": -0.01839,
+    "min": 2.52,
+    "max": 65.95
+   },
+   "dbhCm": [
+    2.5,
+    82.5
+   ]
+  },
+  {
+   "key": "SacVal/Celtis occidentalis",
+   "region": "SacVal",
+   "city": "Sacramento, California",
+   "species": "Celtis occidentalis",
+   "common": "northern hackberry",
+   "spCode": "CEOC",
+   "treeType": "BDL",
+   "n": 37,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.40489,
+    "b": 2.1918,
+    "c": 0.04639,
+    "min": 1.06,
+    "max": 16.08
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.59923,
+    "b": 0.27032,
+    "c": -0.00124,
+    "min": 3.23,
+    "max": 15.33
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 0.59486,
+    "b": 1.77385,
+    "c": -0.0115,
+    "min": 2.36,
+    "max": 69.02
+   },
+   "dbhCm": [
+    2.0,
+    94.6
+   ]
+  },
+  {
+   "key": "SoCalC/Ceratonia siliqua",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Ceratonia siliqua",
+   "common": "algarrobo Europeo",
+   "spCode": "CESI3",
+   "treeType": "BEM",
+   "n": 31,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -1.12431,
+    "b": 2.46165,
+    "c": 0.02272,
+    "min": 0.59,
+    "max": 13.03
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": -0.21866,
+    "b": 1.74001,
+    "c": 0.02071,
+    "min": 1.22,
+    "max": 10.92
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.53495,
+    "b": 0.50529,
+    "c": 0.01848,
+    "min": 2.53,
+    "max": 86.24
+   },
+   "dbhCm": [
+    2.5,
+    90.0
+   ]
+  },
+  {
+   "key": "LoMidW/Cercis canadensis",
+   "region": "LoMidW",
+   "city": "Indianapolis, Indiana",
+   "species": "Cercis canadensis",
+   "common": "eastern redbud",
+   "spCode": "CECA",
+   "treeType": "BDS",
+   "n": 33,
+   "crown": {
+    "eq": "cub",
+    "a": 0.39722,
+    "b": 0.42905,
+    "c": -0.0074,
+    "d": 4e-05,
+    "min": 1.46,
+    "max": 9.52
+   },
+   "height": {
+    "eq": "loglogw2",
+    "a": 0.49306,
+    "b": 1.15202,
+    "c": 0.00872,
+    "min": 2.19,
+    "max": 9.2
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -8.59751,
+    "b": 3.09997,
+    "c": -0.07802,
+    "d": 0.00073,
+    "min": 2.6,
+    "max": 75.0
+   },
+   "dbhCm": [
+    2.8,
+    75.4
+   ]
+  },
+  {
+   "key": "SWDsrt/Chilopsis linearis",
+   "region": "SWDsrt",
+   "city": "Glendale, Arizona",
+   "species": "Chilopsis linearis",
+   "common": "desert willow",
+   "spCode": "CHLI",
+   "treeType": "BDS",
+   "n": 34,
+   "crown": {
+    "eq": "lin",
+    "a": 0.56745,
+    "b": 0.25862,
+    "min": 1.23,
+    "max": 14.52
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": -0.07766,
+    "b": 1.68466,
+    "c": 0.04283,
+    "min": 1.41,
+    "max": 9.67
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.54375,
+    "b": 0.96983,
+    "min": 2.54,
+    "max": 53.94
+   },
+   "dbhCm": [
+    2.5,
+    41.4
+   ]
+  },
+  {
+   "key": "NoCalC/Cinnamomum camphora",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Cinnamomum camphora",
+   "common": "camphor tree",
+   "spCode": "CICA",
+   "treeType": "BEM",
+   "n": 70,
+   "crown": {
+    "eq": "quad",
+    "a": 0.27422,
+    "b": 0.27039,
+    "c": -0.00112,
+    "min": 1.03,
+    "max": 16.23
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.54056,
+    "b": 0.21062,
+    "c": -0.00102,
+    "min": 3.13,
+    "max": 13.43
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.84131,
+    "b": 0.57502,
+    "c": 0.00312,
+    "min": 2.84,
+    "max": 103.88
+   },
+   "dbhCm": [
+    2.9,
+    112.3
+   ]
+  },
+  {
+   "key": "Piedmt/Cornus florida",
+   "region": "Piedmt",
+   "city": "Charlotte, North Carolina",
+   "species": "Cornus florida",
+   "common": "flowering dogwood",
+   "spCode": "COFL",
+   "treeType": "BDS",
+   "n": 34,
+   "crown": {
+    "eq": "quad",
+    "a": 1.23571,
+    "b": 0.31119,
+    "c": -0.00233,
+    "min": 1.68,
+    "max": 11.1
+   },
+   "height": {
+    "eq": "loglogw3",
+    "a": 0.8693,
+    "b": 0.90913,
+    "c": 0.00214,
+    "min": 2.16,
+    "max": 8.81
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": -2.14081,
+    "b": 1.79176,
+    "min": 1.44,
+    "max": 51.61
+   },
+   "dbhCm": [
+    1.3,
+    49.0
+   ]
+  },
+  {
+   "key": "PacfNW/Crataegus x lavallei",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Crataegus x lavallei",
+   "common": "Carriere hawthorn",
+   "spCode": "CRLA",
+   "treeType": "BDS",
+   "n": 74,
+   "crown": {
+    "eq": "quad",
+    "a": 0.17454,
+    "b": 0.40208,
+    "c": -0.00444,
+    "min": 0.92,
+    "max": 9.06
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.88852,
+    "b": 0.33423,
+    "c": -0.00252,
+    "min": 2.51,
+    "max": 10.99
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 0.20544,
+    "b": 0.81745,
+    "c": 0.01594,
+    "d": -0.00034,
+    "min": 1.9,
+    "max": 38.23
+   },
+   "dbhCm": [
+    0.9,
+    52.0
+   ]
+  },
+  {
+   "key": "SoCalC/Cupaniopsis anacardioides",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Cupaniopsis anacardioides",
+   "common": "carrotwood",
+   "spCode": "CUAN",
+   "treeType": "BES",
+   "n": 30,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.34737,
+    "b": 1.92743,
+    "c": 0.02662,
+    "min": 0.51,
+    "max": 10.47
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.19362,
+    "b": 0.26965,
+    "c": -0.00226,
+    "min": 2.54,
+    "max": 10.19
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 1.30481,
+    "b": 1.3781,
+    "c": -0.00872,
+    "min": 1.3,
+    "max": 55.64
+   },
+   "dbhCm": [
+    2.1,
+    55.0
+   ]
+  },
+  {
+   "key": "InterW/Elaeagnus angustifolia",
+   "region": "InterW",
+   "city": "Albuquerque, New Mexico",
+   "species": "Elaeagnus angustifolia",
+   "common": "Russian olive",
+   "spCode": "ELAN",
+   "treeType": "BDS",
+   "n": 30,
+   "crown": {
+    "eq": "lin",
+    "a": 2.39569,
+    "b": 0.18355,
+    "min": 2.7,
+    "max": 17.22
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": -0.14852,
+    "b": 1.7873,
+    "c": 0.01978,
+    "min": 0.83,
+    "max": 12.24
+   },
+   "ageDbh": {
+    "eq": "loglogw2",
+    "a": 1.23943,
+    "b": 2.09658,
+    "c": 0.03678,
+    "min": 1.63,
+    "max": 80.74
+   },
+   "dbhCm": [
+    5.2,
+    80.8
+   ]
+  },
+  {
+   "key": "CenFla/Eriobotrya japonica",
+   "region": "CenFla",
+   "city": "",
+   "species": "Eriobotrya japonica",
+   "common": "loquat tree",
+   "spCode": "ERJA",
+   "treeType": "BES",
+   "n": 31,
+   "crown": {
+    "eq": "lin",
+    "a": 0.83558,
+    "b": 0.22941,
+    "min": 1.23,
+    "max": 13.42
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.15555,
+    "b": 0.28024,
+    "c": -0.00266,
+    "min": 1.63,
+    "max": 8.54
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 1.72609,
+    "b": 1.77157,
+    "min": 1.73,
+    "max": 54.87
+   },
+   "dbhCm": [
+    1.5,
+    43.0
+   ]
+  },
+  {
+   "key": "NoCalC/Eucalyptus globulus",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Eucalyptus globulus",
+   "common": "blue gum eucalyptus",
+   "spCode": "EUGL",
+   "treeType": "BEL",
+   "n": 67,
+   "crown": {
+    "eq": "quad",
+    "a": 0.69946,
+    "b": 0.22521,
+    "c": -0.00051,
+    "min": 1.11,
+    "max": 22.25
+   },
+   "height": {
+    "eq": "cub",
+    "a": 1.74868,
+    "b": 0.74848,
+    "c": -0.00619,
+    "d": 2e-05,
+    "min": 3.11,
+    "max": 34.98
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 1.84032,
+    "b": 2.33198,
+    "c": -0.00865,
+    "min": 1.84,
+    "max": 140.07
+   },
+   "dbhCm": [
+    2.9,
+    184.0
+   ]
+  },
+  {
+   "key": "InlEmp/Eucalyptus sideroxylon",
+   "region": "InlEmp",
+   "city": "Claremont, California",
+   "species": "Eucalyptus sideroxylon",
+   "common": "red ironbark",
+   "spCode": "EUSI",
+   "treeType": "BEL",
+   "n": 37,
+   "crown": {
+    "eq": "expow1",
+    "a": 1.66042,
+    "b": 0.01674,
+    "c": 0.06526,
+    "min": 5.9,
+    "max": 20.96
+   },
+   "height": {
+    "eq": "expow1",
+    "a": 1.78929,
+    "b": 0.01692,
+    "c": 0.05577,
+    "min": 6.68,
+    "max": 24.07
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 4.85016,
+    "b": 1.82135,
+    "c": -0.01093,
+    "min": 4.85,
+    "max": 80.62
+   },
+   "dbhCm": [
+    8.4,
+    95.0
+   ]
+  },
+  {
+   "key": "PacfNW/Fagus sylvatica",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Fagus sylvatica",
+   "common": "European beech",
+   "spCode": "FASY",
+   "treeType": "BDL",
+   "n": 38,
+   "crown": {
+    "eq": "cub",
+    "a": -0.02818,
+    "b": 0.46803,
+    "c": -0.0055,
+    "d": 3e-05,
+    "min": 1.57,
+    "max": 20.61
+   },
+   "height": {
+    "eq": "cub",
+    "a": 0.25817,
+    "b": 0.79152,
+    "c": -0.0123,
+    "d": 7e-05,
+    "min": 2.93,
+    "max": 24.99
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -2.64454,
+    "b": 3.28563,
+    "c": -0.09364,
+    "d": 0.00158,
+    "min": 3.56,
+    "max": 87.41
+   },
+   "dbhCm": [
+    1.0,
+    88.3
+   ]
+  },
+  {
+   "key": "SoCalC/Ficus thonningii",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Ficus thonningii",
+   "common": "figueira benjamin",
+   "spCode": "FIMI",
+   "treeType": "BEM",
+   "n": 34,
+   "crown": {
+    "eq": "lin",
+    "a": 0.77625,
+    "b": 0.16301,
+    "min": 1.18,
+    "max": 13.81
+   },
+   "height": {
+    "eq": "quad",
+    "a": 0.94984,
+    "b": 0.21877,
+    "c": -0.00104,
+    "min": 1.49,
+    "max": 11.8
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 2.50388,
+    "b": 3.61389,
+    "c": -0.12425,
+    "d": 0.00163,
+    "min": 2.5,
+    "max": 79.95
+   },
+   "dbhCm": [
+    2.5,
+    80.0
+   ]
+  },
+  {
+   "key": "InterW/Fraxinus americana",
+   "region": "InterW",
+   "city": "Albuquerque, New Mexico",
+   "species": "Fraxinus americana",
+   "common": "white ash",
+   "spCode": "FRAM",
+   "treeType": "BDL",
+   "n": 28,
+   "crown": {
+    "eq": "lin",
+    "a": 0.12373,
+    "b": 0.28514,
+    "min": 0.82,
+    "max": 21.73
+   },
+   "height": {
+    "eq": "lin",
+    "a": 3.47196,
+    "b": 0.19495,
+    "min": 3.95,
+    "max": 18.24
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 0.94594,
+    "b": 1.49623,
+    "min": 2.44,
+    "max": 75.76
+   },
+   "dbhCm": [
+    5.1,
+    68.1
+   ]
+  },
+  {
+   "key": "NoCalC/Fraxinus velutina",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Fraxinus velutina",
+   "common": "velvet ash",
+   "spCode": "FRVE",
+   "treeType": "BDL",
+   "n": 33,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.79158,
+    "b": 2.39893,
+    "c": 0.02292,
+    "min": 0.94,
+    "max": 16.36
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.76815,
+    "b": 1.38864,
+    "c": 0.0221,
+    "min": 3.3,
+    "max": 17.18
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.84341,
+    "b": 0.65806,
+    "c": 0.00963,
+    "min": 2.84,
+    "max": 84.4
+   },
+   "dbhCm": [
+    2.9,
+    78.9
+   ]
+  },
+  {
+   "key": "InlEmp/Fraxinus uhdei",
+   "region": "InlEmp",
+   "city": "Claremont, California",
+   "species": "Fraxinus uhdei",
+   "common": "evergreen ash",
+   "spCode": "FRUH",
+   "treeType": "BDL",
+   "n": 37,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.7885,
+    "b": 2.50884,
+    "c": 0.02599,
+    "min": 0.29,
+    "max": 23.31
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": -0.72201,
+    "b": 2.56053,
+    "c": 0.02087,
+    "min": 0.31,
+    "max": 26.82
+   },
+   "ageDbh": {
+    "eq": "loglogw2",
+    "a": 1.13547,
+    "b": 2.4092,
+    "c": 0.01081,
+    "min": 1.29,
+    "max": 118.04
+   },
+   "dbhCm": [
+    14.1,
+    120.5
+   ]
+  },
+  {
+   "key": "NoCalC/Ginkgo biloba",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Ginkgo biloba",
+   "common": "ginkgo",
+   "spCode": "GIBI",
+   "treeType": "BDM",
+   "n": 36,
+   "crown": {
+    "eq": "quad",
+    "a": 0.34638,
+    "b": 0.37483,
+    "c": -0.0035,
+    "min": 1.11,
+    "max": 9.66
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.0447,
+    "b": 0.56054,
+    "c": -0.00713,
+    "min": 2.17,
+    "max": 12.06
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.07017,
+    "b": 0.63933,
+    "min": 2.07,
+    "max": 39.15
+   },
+   "dbhCm": [
+    0.5,
+    38.7
+   ]
+  },
+  {
+   "key": "InlVal/Gleditsia triacanthos",
+   "region": "InlVal",
+   "city": "Modesto, California",
+   "species": "Gleditsia triacanthos",
+   "common": "honeylocust",
+   "spCode": "GLTR",
+   "treeType": "BDL",
+   "n": 27,
+   "crown": {
+    "eq": "loglogw4",
+    "a": -0.42231,
+    "b": 2.20775,
+    "c": 1e-05,
+    "min": 1.09,
+    "max": 16.55
+   },
+   "height": {
+    "eq": "loglogw4",
+    "a": 0.30463,
+    "b": 1.6554,
+    "c": 3e-05,
+    "min": 1.99,
+    "max": 16.17
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.5264,
+    "b": 1.36037,
+    "min": 2.53,
+    "max": 70.55
+   },
+   "dbhCm": [
+    2.5,
+    80.0
+   ]
+  },
+  {
+   "key": "Tropic/Ilex paraguariensis",
+   "region": "Tropic",
+   "city": "Honolulu, Hawaii",
+   "species": "Ilex paraguariensis",
+   "common": "Paraguay tea",
+   "spCode": "ILPA2",
+   "treeType": "BES",
+   "n": 36,
+   "crown": {
+    "eq": "lin",
+    "a": 0.94213,
+    "b": 0.15046,
+    "min": 1.19,
+    "max": 7.81
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.10095,
+    "b": 0.25404,
+    "c": -0.00195,
+    "min": 1.52,
+    "max": 8.63
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 1.679,
+    "b": 1.21217,
+    "c": -0.03124,
+    "d": 0.00037,
+    "min": 1.68,
+    "max": 45.67
+   },
+   "dbhCm": [
+    1.8,
+    56.4
+   ]
+  },
+  {
+   "key": "Piedmt/Ilex opaca",
+   "region": "Piedmt",
+   "city": "Charlotte, North Carolina",
+   "species": "Ilex opaca",
+   "common": "American holly",
+   "spCode": "ILOP",
+   "treeType": "BES",
+   "n": 34,
+   "crown": {
+    "eq": "lin",
+    "a": 1.31918,
+    "b": 0.12847,
+    "min": 1.48,
+    "max": 8.38
+   },
+   "height": {
+    "eq": "expow1",
+    "a": 0.99411,
+    "b": 0.03554,
+    "c": 0.09418,
+    "min": 2.96,
+    "max": 20.0
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 0.35018,
+    "b": 0.91075,
+    "min": 1.26,
+    "max": 55.0
+   },
+   "dbhCm": [
+    6.6,
+    55.4
+   ]
+  },
+  {
+   "key": "SoCalC/Jacaranda mimosifolia",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Jacaranda mimosifolia",
+   "common": "jacaranda",
+   "spCode": "JAMI",
+   "treeType": "BDS",
+   "n": 33,
+   "crown": {
+    "eq": "quad",
+    "a": 0.48967,
+    "b": 0.33701,
+    "c": -0.00199,
+    "min": 1.38,
+    "max": 13.66
+   },
+   "height": {
+    "eq": "lin",
+    "a": 2.78424,
+    "b": 0.16145,
+    "min": 3.22,
+    "max": 12.68
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.67791,
+    "b": 0.78174,
+    "min": 2.68,
+    "max": 61.31
+   },
+   "dbhCm": [
+    3.0,
+    58.0
+   ]
+  },
+  {
+   "key": "TpIntW/Juglans nigra",
+   "region": "TpIntW",
+   "city": "Boise, Idaho",
+   "species": "Juglans nigra",
+   "common": "black walnut",
+   "spCode": "JUNI",
+   "treeType": "BDL",
+   "n": 57,
+   "crown": {
+    "eq": "cub",
+    "a": 0.558,
+    "b": 0.44195,
+    "c": -0.00517,
+    "d": 3e-05,
+    "min": 1.28,
+    "max": 20.87
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.11898,
+    "b": 1.93702,
+    "c": 0.04543,
+    "min": 1.13,
+    "max": 21.74
+   },
+   "ageDbh": {
+    "eq": "loglogw1",
+    "a": 0.18691,
+    "b": 2.80787,
+    "c": 0.04201,
+    "min": 1.66,
+    "max": 97.17
+   },
+   "dbhCm": [
+    4.1,
+    120.7
+   ]
+  },
+  {
+   "key": "Piedmt/Juniperus virginiana",
+   "region": "Piedmt",
+   "city": "Charlotte, North Carolina",
+   "species": "Juniperus virginiana",
+   "common": "eastern red cedar",
+   "spCode": "JUVI",
+   "treeType": "CEM",
+   "n": 39,
+   "crown": {
+    "eq": "quad",
+    "a": 0.69545,
+    "b": 0.15672,
+    "c": -0.00051,
+    "min": 1.21,
+    "max": 10.39
+   },
+   "height": {
+    "eq": "cub",
+    "a": -1.15219,
+    "b": 0.7686,
+    "c": -0.01386,
+    "d": 0.0001,
+    "min": 1.26,
+    "max": 23.96
+   },
+   "ageDbh": {
+    "eq": "loglogw1",
+    "a": 0.21415,
+    "b": 2.93762,
+    "c": 0.02967,
+    "min": 3.34,
+    "max": 85.95
+   },
+   "dbhCm": [
+    2.5,
+    89.4
+   ]
+  },
+  {
+   "key": "InlVal/Koelreuteria paniculata",
+   "region": "InlVal",
+   "city": "Modesto, California",
+   "species": "Koelreuteria paniculata",
+   "common": "goldenrain tree",
+   "spCode": "KOPA",
+   "treeType": "BDM",
+   "n": 29,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.30329,
+    "b": 1.94526,
+    "c": 0.02743,
+    "min": 1.19,
+    "max": 11.74
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.1107,
+    "b": 0.29037,
+    "c": -0.00151,
+    "min": 2.84,
+    "max": 14.23
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.53372,
+    "b": 0.62574,
+    "c": 0.01098,
+    "min": 2.53,
+    "max": 61.28
+   },
+   "dbhCm": [
+    2.5,
+    60.0
+   ]
+  },
+  {
+   "key": "InlVal/Lagerstroemia indica",
+   "region": "InlVal",
+   "city": "Modesto, California",
+   "species": "Lagerstroemia indica",
+   "common": "common crapemyrtle",
+   "spCode": "LAIN",
+   "treeType": "BDS",
+   "n": 26,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.27841,
+    "b": 1.74771,
+    "c": 0.0854,
+    "min": 1.21,
+    "max": 7.21
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.78206,
+    "b": 0.28887,
+    "c": -0.00349,
+    "min": 2.49,
+    "max": 7.63
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.53611,
+    "b": 0.38823,
+    "min": 2.54,
+    "max": 35.15
+   },
+   "dbhCm": [
+    2.5,
+    35.2
+   ]
+  },
+  {
+   "key": "NoCalC/Liquidambar styraciflua",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Liquidambar styraciflua",
+   "common": "sweetgum",
+   "spCode": "LIST",
+   "treeType": "BDL",
+   "n": 37,
+   "crown": {
+    "eq": "quad",
+    "a": 0.42238,
+    "b": 0.29796,
+    "c": -0.00131,
+    "min": 1.25,
+    "max": 17.17
+   },
+   "height": {
+    "eq": "cub",
+    "a": 0.57478,
+    "b": 0.62687,
+    "c": -0.00837,
+    "d": 4e-05,
+    "min": 2.27,
+    "max": 22.71
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.80359,
+    "b": 1.29151,
+    "c": -0.00299,
+    "min": 2.8,
+    "max": 102.01
+   },
+   "dbhCm": [
+    2.5,
+    100.0
+   ]
+  },
+  {
+   "key": "NoCalC/Liriodendron tulipifera",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Liriodendron tulipifera",
+   "common": "tulip tree",
+   "spCode": "LITU",
+   "treeType": "BDL",
+   "n": 34,
+   "crown": {
+    "eq": "quad",
+    "a": 1.76138,
+    "b": 0.20441,
+    "c": -0.00083,
+    "min": 2.34,
+    "max": 13.06
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.98011,
+    "b": 0.35071,
+    "c": -0.00194,
+    "min": 3.96,
+    "max": 18.78
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.84107,
+    "b": 0.89367,
+    "min": 2.84,
+    "max": 84.17
+   },
+   "dbhCm": [
+    2.9,
+    74.3
+   ]
+  },
+  {
+   "key": "SoCalC/Tristaniopsis conferta",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Tristaniopsis conferta",
+   "common": "Brisbane box",
+   "spCode": "TRCO",
+   "treeType": "BEM",
+   "n": 28,
+   "crown": {
+    "eq": "lin",
+    "a": 0.28926,
+    "b": 0.24112,
+    "min": 1.42,
+    "max": 9.83
+   },
+   "height": {
+    "eq": "lin",
+    "a": 2.84622,
+    "b": 0.21732,
+    "min": 3.86,
+    "max": 11.45
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 4.67682,
+    "b": 0.69794,
+    "min": 4.68,
+    "max": 39.57
+   },
+   "dbhCm": [
+    3.1,
+    36.0
+   ]
+  },
+  {
+   "key": "NoCalC/Magnolia grandiflora",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Magnolia grandiflora",
+   "common": "southern magnolia",
+   "spCode": "MAGR",
+   "treeType": "BEM",
+   "n": 38,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.71525,
+    "b": 2.28462,
+    "c": 0.02997,
+    "min": 1.07,
+    "max": 16.01
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.04859,
+    "b": 1.73726,
+    "c": 0.03172,
+    "min": 1.9,
+    "max": 14.9
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 3.02259,
+    "b": 0.37655,
+    "c": 0.00889,
+    "min": 3.02,
+    "max": 97.39
+   },
+   "dbhCm": [
+    2.9,
+    110.0
+   ]
+  },
+  {
+   "key": "PacfNW/Malus angustifolia",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Malus angustifolia",
+   "common": "southern crabapple",
+   "spCode": "PYAN",
+   "treeType": "BDS",
+   "n": 39,
+   "crown": {
+    "eq": "quad",
+    "a": 0.017297264,
+    "b": 0.489633526,
+    "c": -0.009720787,
+    "min": 0.4,
+    "max": 6.05
+   },
+   "height": {
+    "eq": "cub",
+    "a": 1.67077,
+    "b": 0.07431,
+    "c": 0.03374,
+    "d": -0.00119,
+    "min": 1.75,
+    "max": 7.16
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 0.78363989,
+    "b": 0.885844908,
+    "c": -0.009487773,
+    "min": 0.78,
+    "max": 21.46
+   },
+   "dbhCm": [
+    1.1,
+    24.9
+   ]
+  },
+  {
+   "key": "SoCalC/Metrosideros excelsa",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Metrosideros excelsa",
+   "common": "New Zealand christmas tree",
+   "spCode": "MEEX",
+   "treeType": "BEM",
+   "n": 32,
+   "crown": {
+    "eq": "quad",
+    "a": 0.13671,
+    "b": 0.26448,
+    "c": -0.001,
+    "min": 0.8,
+    "max": 15.38
+   },
+   "height": {
+    "eq": "loglogw2",
+    "a": -0.21955,
+    "b": 1.88185,
+    "c": 0.00401,
+    "min": 1.24,
+    "max": 13.61
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 2.52273,
+    "b": 1.72789,
+    "c": -0.04419,
+    "d": 0.00073,
+    "min": 2.52,
+    "max": 85.16
+   },
+   "dbhCm": [
+    2.5,
+    85.0
+   ]
+  },
+  {
+   "key": "PacfNW/Morus alba",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Morus alba",
+   "common": "white mulberry",
+   "spCode": "MOAL",
+   "treeType": "BDM",
+   "n": 38,
+   "crown": {
+    "eq": "quad",
+    "a": 0.403768894,
+    "b": 0.452307942,
+    "c": -0.002497943,
+    "min": 2.14,
+    "max": 19.64
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.50551,
+    "b": 0.42182,
+    "c": -0.00304,
+    "min": 3.11,
+    "max": 16.11
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -4.50256,
+    "b": 4.49267,
+    "c": -0.14464,
+    "d": 0.00188,
+    "min": 3.92,
+    "max": 68.25
+   },
+   "dbhCm": [
+    1.1,
+    61.5
+   ]
+  },
+  {
+   "key": "SWDsrt/Olea europaea",
+   "region": "SWDsrt",
+   "city": "Glendale, Arizona",
+   "species": "Olea europaea",
+   "common": "olive",
+   "spCode": "OLEU",
+   "treeType": "BES",
+   "n": 36,
+   "crown": {
+    "eq": "loglogw3",
+    "a": -1.25922,
+    "b": 2.5327,
+    "c": 0.00189,
+    "min": 0.51,
+    "max": 11.75
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": -0.38736,
+    "b": 1.87646,
+    "c": 0.03205,
+    "min": 1.07,
+    "max": 10.28
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.52528,
+    "b": 1.47098,
+    "c": -0.00821,
+    "min": 2.53,
+    "max": 68.39
+   },
+   "dbhCm": [
+    2.5,
+    72.0
+   ]
+  },
+  {
+   "key": "TpIntW/Picea pungens",
+   "region": "TpIntW",
+   "city": "Boise, Idaho",
+   "species": "Picea pungens",
+   "common": "blue spruce",
+   "spCode": "PIPU",
+   "treeType": "CEL",
+   "n": 29,
+   "crown": {
+    "eq": "lin",
+    "a": 1.57481,
+    "b": 0.13074,
+    "min": 1.73,
+    "max": 12.94
+   },
+   "height": {
+    "eq": "lin",
+    "a": 1.7073,
+    "b": 0.22767,
+    "min": 1.98,
+    "max": 21.49
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 1.20424,
+    "b": 1.32915,
+    "c": -0.00508,
+    "min": 1.2,
+    "max": 86.89
+   },
+   "dbhCm": [
+    5.6,
+    71.6
+   ]
+  },
+  {
+   "key": "SoCalC/Pinus canariensis",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Pinus canariensis",
+   "common": "Canary Island pine",
+   "spCode": "PICA",
+   "treeType": "CEL",
+   "n": 30,
+   "crown": {
+    "eq": "lin",
+    "a": 0.905,
+    "b": 0.13747,
+    "min": 1.3,
+    "max": 13.34
+   },
+   "height": {
+    "eq": "loglogw3",
+    "a": 0.59695,
+    "b": 1.6787,
+    "c": 0.00069,
+    "min": 3.0,
+    "max": 23.54
+   },
+   "ageDbh": {
+    "eq": "loglogw3",
+    "a": 1.71521,
+    "b": 1.8228,
+    "c": 0.00156,
+    "min": 2.85,
+    "max": 90.44
+   },
+   "dbhCm": [
+    2.8,
+    81.4
+   ]
+  },
+  {
+   "key": "SWDsrt/Pinus halepensis",
+   "region": "SWDsrt",
+   "city": "Glendale, Arizona",
+   "species": "Pinus halepensis",
+   "common": "aleppo pine",
+   "spCode": "PIHA",
+   "treeType": "CEL",
+   "n": 34,
+   "crown": {
+    "eq": "lin",
+    "a": 0.91348,
+    "b": 0.19961,
+    "min": 1.42,
+    "max": 20.72
+   },
+   "height": {
+    "eq": "lin",
+    "a": 0.9211,
+    "b": 0.24385,
+    "min": 1.54,
+    "max": 25.12
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.52414,
+    "b": 1.58514,
+    "min": 2.52,
+    "max": 99.22
+   },
+   "dbhCm": [
+    2.5,
+    89.0
+   ]
+  },
+  {
+   "key": "LoMidW/Pinus strobus",
+   "region": "LoMidW",
+   "city": "Indianapolis, Indiana",
+   "species": "Pinus strobus",
+   "common": "eastern white pine",
+   "spCode": "PIST",
+   "treeType": "CEL",
+   "n": 39,
+   "crown": {
+    "eq": "cub",
+    "a": -0.18953,
+    "b": 0.47775,
+    "c": -0.01044,
+    "d": 0.0001,
+    "min": 0.67,
+    "max": 15.8
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": -0.12577,
+    "b": 2.19595,
+    "c": 0.04364,
+    "min": 1.04,
+    "max": 21.11
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 1.87523,
+    "b": 1.11975,
+    "c": -0.01146,
+    "d": 6e-05,
+    "min": 1.88,
+    "max": 67.36
+   },
+   "dbhCm": [
+    3.6,
+    66.0
+   ]
+  },
+  {
+   "key": "InterW/Pinus sylvestris",
+   "region": "InterW",
+   "city": "Albuquerque, New Mexico",
+   "species": "Pinus sylvestris",
+   "common": "Scotch pine",
+   "spCode": "PISY",
+   "treeType": "CEL",
+   "n": 30,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -1.34267,
+    "b": 2.62192,
+    "c": 0.01422,
+    "min": 1.74,
+    "max": 10.29
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.21342,
+    "b": 1.38995,
+    "c": 0.03472,
+    "min": 3.4,
+    "max": 8.71
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 6.79183,
+    "b": 0.88852,
+    "min": 6.79,
+    "max": 56.55
+   },
+   "dbhCm": [
+    7.6,
+    60.2
+   ]
+  },
+  {
+   "key": "NoCalC/Pistacia chinensis",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Pistacia chinensis",
+   "common": "Chinese pistache",
+   "spCode": "PICH",
+   "treeType": "BDM",
+   "n": 37,
+   "crown": {
+    "eq": "lin",
+    "a": 0.88933,
+    "b": 0.32314,
+    "min": 1.8,
+    "max": 12.83
+   },
+   "height": {
+    "eq": "lin",
+    "a": 2.73417,
+    "b": 0.22614,
+    "min": 3.37,
+    "max": 11.09
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.81535,
+    "b": 0.75851,
+    "min": 2.82,
+    "max": 36.95
+   },
+   "dbhCm": [
+    2.3,
+    30.7
+   ]
+  },
+  {
+   "key": "NoCalC/Pittosporum undulatum",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Pittosporum undulatum",
+   "common": "victorian box",
+   "spCode": "PIUN",
+   "treeType": "BEM",
+   "n": 31,
+   "crown": {
+    "eq": "loglogw2",
+    "a": -0.41356,
+    "b": 1.91669,
+    "c": 0.00729,
+    "min": 0.65,
+    "max": 9.55
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.28894,
+    "b": 0.29578,
+    "c": -0.00235,
+    "min": 2.78,
+    "max": 11.32
+   },
+   "ageDbh": {
+    "eq": "loglogw1",
+    "a": 1.08072,
+    "b": 1.9017,
+    "c": 0.10108,
+    "min": 1.68,
+    "max": 52.08
+   },
+   "dbhCm": [
+    2.5,
+    53.3
+   ]
+  },
+  {
+   "key": "NoCalC/Platanus x acerifolia",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Platanus x acerifolia",
+   "common": "London planetree",
+   "spCode": "PLAC",
+   "treeType": "BDL",
+   "n": 70,
+   "crown": {
+    "eq": "quad",
+    "a": 0.69918,
+    "b": 0.36544,
+    "c": -0.0018,
+    "min": 1.72,
+    "max": 19.29
+   },
+   "height": {
+    "eq": "loglogw3",
+    "a": 0.66567,
+    "b": 1.51202,
+    "c": 0.00088,
+    "min": 3.05,
+    "max": 20.7
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.83419,
+    "b": 1.1265,
+    "c": 0.00238,
+    "min": 2.83,
+    "max": 102.17
+   },
+   "dbhCm": [
+    2.9,
+    114.1
+   ]
+  },
+  {
+   "key": "TpIntW/Platanus occidentalis",
+   "region": "TpIntW",
+   "city": "Boise, Idaho",
+   "species": "Platanus occidentalis",
+   "common": "American sycamore",
+   "spCode": "PLOC",
+   "treeType": "BDL",
+   "n": 48,
+   "crown": {
+    "eq": "cub",
+    "a": -0.37142,
+    "b": 0.42079,
+    "c": -0.00356,
+    "d": 1e-05,
+    "min": 0.62,
+    "max": 23.35
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.12526,
+    "b": 2.07458,
+    "c": 0.01603,
+    "min": 1.76,
+    "max": 28.69
+   },
+   "ageDbh": {
+    "eq": "loglogw1",
+    "a": 0.57189,
+    "b": 2.61632,
+    "c": 0.05324,
+    "min": 2.41,
+    "max": 113.39
+   },
+   "dbhCm": [
+    4.6,
+    122.7
+   ]
+  },
+  {
+   "key": "InlEmp/Platanus racemosa",
+   "region": "InlEmp",
+   "city": "Claremont, California",
+   "species": "Platanus racemosa",
+   "common": "California sycamore",
+   "spCode": "PLRA",
+   "treeType": "BDL",
+   "n": 37,
+   "crown": {
+    "eq": "quad",
+    "a": 1.59635,
+    "b": 0.42899,
+    "c": -0.00233,
+    "min": 2.8,
+    "max": 21.36
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.7084,
+    "b": 0.47757,
+    "c": -0.00264,
+    "min": 3.05,
+    "max": 23.29
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.84648,
+    "b": 1.95623,
+    "c": -0.00876,
+    "min": 2.85,
+    "max": 90.47
+   },
+   "dbhCm": [
+    2.8,
+    82.5
+   ]
+  },
+  {
+   "key": "SoCalC/Podocarpus macrophyllus",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Podocarpus macrophyllus",
+   "common": "yew podocarpus",
+   "spCode": "POMA",
+   "treeType": "BES",
+   "n": 31,
+   "crown": {
+    "eq": "loglogw4",
+    "a": -0.46356,
+    "b": 1.79746,
+    "c": 8e-05,
+    "min": 0.96,
+    "max": 6.76
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.11955,
+    "b": 1.57212,
+    "c": 0.02202,
+    "min": 1.65,
+    "max": 8.61
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.53994,
+    "b": 0.57161,
+    "min": 2.54,
+    "max": 36.84
+   },
+   "dbhCm": [
+    2.5,
+    33.0
+   ]
+  },
+  {
+   "key": "PacfNW/Populus balsamifera subsp. trichocarpa",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Populus balsamifera subsp. trichocarpa",
+   "common": "black cottonwood",
+   "spCode": "POTR2",
+   "treeType": "BDL",
+   "n": 36,
+   "crown": {
+    "eq": "loglogw1",
+    "a": 0.12163,
+    "b": 1.62583,
+    "c": 0.07523,
+    "min": 1.35,
+    "max": 15.17
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.60968,
+    "b": 0.53395,
+    "c": -0.00187,
+    "min": 2.64,
+    "max": 39.61
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -0.52236,
+    "b": 1.19511,
+    "c": 0.01779,
+    "d": -0.00011,
+    "min": 1.94,
+    "max": 134.01
+   },
+   "dbhCm": [
+    1.0,
+    204.5
+   ]
+  },
+  {
+   "key": "LoMidW/Populus deltoides",
+   "region": "LoMidW",
+   "city": "Indianapolis, Indiana",
+   "species": "Populus deltoides",
+   "common": "eastern cottonwood",
+   "spCode": "PODE",
+   "treeType": "BDL",
+   "n": 59,
+   "crown": {
+    "eq": "quad",
+    "a": 0.62884,
+    "b": 0.21447,
+    "c": -0.00037,
+    "min": 1.42,
+    "max": 24.87
+   },
+   "height": {
+    "eq": "cub",
+    "a": 3.05424,
+    "b": 0.60607,
+    "c": -0.00518,
+    "d": 2e-05,
+    "min": 5.24,
+    "max": 32.73
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -23.6314,
+    "b": 6.13541,
+    "c": -0.13834,
+    "d": 0.00102,
+    "min": 3.71,
+    "max": 153.12
+   },
+   "dbhCm": [
+    4.6,
+    145.8
+   ]
+  },
+  {
+   "key": "NoCalC/Prunus cerasifera",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Prunus cerasifera",
+   "common": "cherry plum",
+   "spCode": "PRCE",
+   "treeType": "BDS",
+   "n": 31,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.08704,
+    "b": 1.63242,
+    "c": 0.03852,
+    "min": 1.52,
+    "max": 8.93
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.40011,
+    "b": 1.39656,
+    "c": 0.01612,
+    "min": 2.28,
+    "max": 10.42
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.84436,
+    "b": 0.56298,
+    "c": 0.00934,
+    "min": 2.84,
+    "max": 54.36
+   },
+   "dbhCm": [
+    2.9,
+    53.5
+   ]
+  },
+  {
+   "key": "SoCalC/Prunus caroliniana",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Prunus caroliniana",
+   "common": "Carolina laurelcherry",
+   "spCode": "PRCA",
+   "treeType": "BES",
+   "n": 32,
+   "crown": {
+    "eq": "loglogw3",
+    "a": -0.72711,
+    "b": 2.13161,
+    "c": 0.00093,
+    "min": 0.79,
+    "max": 6.83
+   },
+   "height": {
+    "eq": "loglogw4",
+    "a": 0.42175,
+    "b": 1.15657,
+    "c": 3e-05,
+    "min": 1.99,
+    "max": 6.44
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.52668,
+    "b": 1.33198,
+    "c": -0.01598,
+    "min": 2.53,
+    "max": 30.24
+   },
+   "dbhCm": [
+    2.5,
+    49.9
+   ]
+  },
+  {
+   "key": "PacfNW/Prunus serrulata",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Prunus serrulata",
+   "common": "Kwanzan cherry",
+   "spCode": "PRSE2",
+   "treeType": "BDS",
+   "n": 38,
+   "crown": {
+    "eq": "quad",
+    "a": 0.40377,
+    "b": 0.45231,
+    "c": -0.0025,
+    "min": 0.93,
+    "max": 15.62
+   },
+   "height": {
+    "eq": "cub",
+    "a": 1.54418,
+    "b": 0.31365,
+    "c": -0.00561,
+    "d": 4e-05,
+    "min": 1.9,
+    "max": 12.47
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": -0.65197,
+    "b": 1.81238,
+    "min": 1.16,
+    "max": 79.09
+   },
+   "dbhCm": [
+    1.3,
+    79.0
+   ]
+  },
+  {
+   "key": "PacfNW/Pseudotsuga menziesii",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Pseudotsuga menziesii",
+   "common": "Douglas fir",
+   "spCode": "PSME",
+   "treeType": "CEL",
+   "n": 39,
+   "crown": {
+    "eq": "loglogw2",
+    "a": -0.82603,
+    "b": 2.35246,
+    "c": 0.00584,
+    "min": 0.23,
+    "max": 17.2
+   },
+   "height": {
+    "eq": "quad",
+    "a": 0.04179,
+    "b": 0.5776,
+    "c": -0.00274,
+    "min": 0.7,
+    "max": 30.48
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": -1.19688,
+    "b": 2.36185,
+    "c": -0.01267,
+    "min": 1.15,
+    "max": 108.86
+   },
+   "dbhCm": [
+    1.7,
+    118.2
+   ]
+  },
+  {
+   "key": "NoCalC/Pyrus calleryana",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Pyrus calleryana",
+   "common": "Callery pear",
+   "spCode": "PYCA",
+   "treeType": "BDM",
+   "n": 30,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.50199,
+    "b": 2.15116,
+    "c": 0.03253,
+    "min": 0.11,
+    "max": 12.49
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.80394,
+    "b": 1.21988,
+    "c": 0.03387,
+    "min": 0.86,
+    "max": 12.44
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 0.55185,
+    "b": 1.13712,
+    "min": 0.55,
+    "max": 57.41
+   },
+   "dbhCm": [
+    2.9,
+    53.1
+   ]
+  },
+  {
+   "key": "NoCalC/Pyrus kawakamii",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Pyrus kawakamii",
+   "common": "evergreen pear",
+   "spCode": "PYKA",
+   "treeType": "BEM",
+   "n": 35,
+   "crown": {
+    "eq": "quad",
+    "a": 0.99604,
+    "b": 0.29207,
+    "c": -0.00136,
+    "min": 1.81,
+    "max": 14.56
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.81068,
+    "b": 0.32025,
+    "c": -0.00236,
+    "min": 2.7,
+    "max": 12.65
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.83176,
+    "b": 1.30003,
+    "min": 2.83,
+    "max": 67.83
+   },
+   "dbhCm": [
+    2.9,
+    63.9
+   ]
+  },
+  {
+   "key": "NoCalC/Quercus agrifolia",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Quercus agrifolia",
+   "common": "coastal live oak; California live oak",
+   "spCode": "QUAG",
+   "treeType": "BEL",
+   "n": 66,
+   "crown": {
+    "eq": "quad",
+    "a": 0.35867,
+    "b": 0.27404,
+    "c": -0.00079,
+    "min": 0.78,
+    "max": 23.7
+   },
+   "height": {
+    "eq": "cub",
+    "a": 2.00172,
+    "b": 0.32851,
+    "c": -0.00331,
+    "d": 1e-05,
+    "min": 2.51,
+    "max": 20.46
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 1.55732,
+    "b": 1.48691,
+    "min": 1.56,
+    "max": 150.25
+   },
+   "dbhCm": [
+    1.0,
+    155.2
+   ]
+  },
+  {
+   "key": "Piedmt/Quercus alba",
+   "region": "Piedmt",
+   "city": "Charlotte, North Carolina",
+   "species": "Quercus alba",
+   "common": "white oak",
+   "spCode": "QUAL",
+   "treeType": "BDL",
+   "n": 47,
+   "crown": {
+    "eq": "cub",
+    "a": 0.75315,
+    "b": 0.3164,
+    "c": -0.00215,
+    "d": 1e-05,
+    "min": 1.17,
+    "max": 26.12
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.15056,
+    "b": 0.5531,
+    "c": -0.00232,
+    "min": 1.88,
+    "max": 34.17
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": -0.48742,
+    "b": 1.81656,
+    "min": 1.33,
+    "max": 123.04
+   },
+   "dbhCm": [
+    1.3,
+    143.5
+   ]
+  },
+  {
+   "key": "InlVal/Quercus ilex",
+   "region": "InlVal",
+   "city": "Modesto, California",
+   "species": "Quercus ilex",
+   "common": "holly oak",
+   "spCode": "QUIL2",
+   "treeType": "BEL",
+   "n": 28,
+   "crown": {
+    "eq": "quad",
+    "a": 0.25925,
+    "b": 0.29474,
+    "c": -0.0013,
+    "min": 1.0,
+    "max": 16.9
+   },
+   "height": {
+    "eq": "loglogw4",
+    "a": 0.30663,
+    "b": 1.64757,
+    "c": 2e-05,
+    "min": 1.99,
+    "max": 20.68
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.52584,
+    "b": 1.41611,
+    "min": 2.53,
+    "max": 115.81
+   },
+   "dbhCm": [
+    2.5,
+    80.0
+   ]
+  },
+  {
+   "key": "SacVal/Quercus lobata",
+   "region": "SacVal",
+   "city": "Sacramento, California",
+   "species": "Quercus lobata",
+   "common": "valley oak",
+   "spCode": "QULO",
+   "treeType": "BDL",
+   "n": 53,
+   "crown": {
+    "eq": "quad",
+    "a": 1.09621,
+    "b": 0.30138,
+    "c": -0.00101,
+    "min": 1.78,
+    "max": 23.43
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.18007,
+    "b": 1.86782,
+    "c": 0.04209,
+    "min": 1.71,
+    "max": 23.62
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 2.28211,
+    "b": 1.66463,
+    "c": -0.01025,
+    "d": 2e-05,
+    "min": 2.28,
+    "max": 135.26
+   },
+   "dbhCm": [
+    3.7,
+    139.4
+   ]
+  },
+  {
+   "key": "MidWst/Quercus palustris",
+   "region": "MidWst",
+   "city": "Minneapolis, Minnesota",
+   "species": "Quercus palustris",
+   "common": "pin oak",
+   "spCode": "QUPA",
+   "treeType": "BDL",
+   "n": 47,
+   "crown": {
+    "eq": "quad",
+    "a": 0.47595,
+    "b": 0.33404,
+    "c": -0.00198,
+    "min": 1.55,
+    "max": 14.0
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.03069,
+    "b": 0.51029,
+    "c": -0.00336,
+    "min": 2.67,
+    "max": 20.14
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 3.31385,
+    "b": -0.16442,
+    "c": 0.14156,
+    "d": -0.00245,
+    "min": 3.29,
+    "max": 67.23
+   },
+   "dbhCm": [
+    3.3,
+    69.1
+   ]
+  },
+  {
+   "key": "PacfNW/Quercus rubra",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Quercus rubra",
+   "common": "northern red oak",
+   "spCode": "QURU",
+   "treeType": "BDL",
+   "n": 39,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.33383,
+    "b": 2.2058,
+    "c": 0.0115,
+    "min": 0.88,
+    "max": 21.52
+   },
+   "height": {
+    "eq": "cub",
+    "a": 4.32011,
+    "b": 0.02074,
+    "c": 0.00596,
+    "d": -4e-05,
+    "min": 4.38,
+    "max": 28.0
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 0.12978,
+    "b": 1.83846,
+    "c": 0.02001,
+    "d": -0.00036,
+    "min": 1.99,
+    "max": 105.87
+   },
+   "dbhCm": [
+    1.2,
+    113.7
+   ]
+  },
+  {
+   "key": "CenFla/Quercus shumardii",
+   "region": "CenFla",
+   "city": "",
+   "species": "Quercus shumardii",
+   "common": "Shumard oak",
+   "spCode": "QUSH",
+   "treeType": "BDL",
+   "n": 37,
+   "crown": {
+    "eq": "quad",
+    "a": 0.01907,
+    "b": 0.35303,
+    "c": -0.00164,
+    "min": 0.91,
+    "max": 17.49
+   },
+   "height": {
+    "eq": "quad",
+    "a": 0.87251,
+    "b": 0.43255,
+    "c": -0.00281,
+    "min": 1.95,
+    "max": 17.53
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.54333,
+    "b": 1.42769,
+    "c": 0.02543,
+    "min": 2.54,
+    "max": 77.35
+   },
+   "dbhCm": [
+    5.3,
+    76.7
+   ]
+  },
+  {
+   "key": "SWDsrt/Quercus virginiana",
+   "region": "SWDsrt",
+   "city": "Glendale, Arizona",
+   "species": "Quercus virginiana",
+   "common": "live oak",
+   "spCode": "QUVI",
+   "treeType": "BEM",
+   "n": 36,
+   "crown": {
+    "eq": "lin",
+    "a": 1.17237,
+    "b": 0.26328,
+    "min": 1.67,
+    "max": 11.18
+   },
+   "height": {
+    "eq": "lin",
+    "a": 2.70454,
+    "b": 0.194,
+    "min": 3.07,
+    "max": 7.95
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 1.90461,
+    "b": 0.50957,
+    "c": 0.03739,
+    "min": 1.9,
+    "max": 38.01
+   },
+   "dbhCm": [
+    2.3,
+    26.6
+   ]
+  },
+  {
+   "key": "SWDsrt/Rhus lancea",
+   "region": "SWDsrt",
+   "city": "Glendale, Arizona",
+   "species": "Rhus lancea",
+   "common": "African sumac",
+   "spCode": "RHLA",
+   "treeType": "BES",
+   "n": 32,
+   "crown": {
+    "eq": "quad",
+    "a": 0.92244,
+    "b": 0.29543,
+    "c": -0.00217,
+    "min": 1.66,
+    "max": 10.98
+   },
+   "height": {
+    "eq": "lin",
+    "a": 2.57067,
+    "b": 0.11784,
+    "min": 2.87,
+    "max": 10.53
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.52775,
+    "b": 1.22711,
+    "min": 2.53,
+    "max": 67.56
+   },
+   "dbhCm": [
+    2.5,
+    60.0
+   ]
+  },
+  {
+   "key": "NoCalC/Robinia pseudoacacia",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Robinia pseudoacacia",
+   "common": "black locust",
+   "spCode": "ROPS",
+   "treeType": "BDM",
+   "n": 34,
+   "crown": {
+    "eq": "loglogw1",
+    "a": 0.43058,
+    "b": 1.44875,
+    "c": 0.02337,
+    "min": 2.4,
+    "max": 12.59
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.94674,
+    "b": 0.36612,
+    "c": -0.00257,
+    "min": 3.97,
+    "max": 15.98
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 2.84813,
+    "b": 0.18509,
+    "c": 0.07077,
+    "d": -0.00096,
+    "min": 2.85,
+    "max": 69.5
+   },
+   "dbhCm": [
+    2.5,
+    87.9
+   ]
+  },
+  {
+   "key": "InlEmp/Schinus molle",
+   "region": "InlEmp",
+   "city": "Claremont, California",
+   "species": "Schinus molle",
+   "common": "California peppertree",
+   "spCode": "SCMO",
+   "treeType": "BEM",
+   "n": 37,
+   "crown": {
+    "eq": "loglogw1",
+    "a": 0.47058,
+    "b": 1.28909,
+    "c": 0.03524,
+    "min": 3.13,
+    "max": 12.14
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.61808,
+    "b": 1.26101,
+    "c": 0.03047,
+    "min": 2.96,
+    "max": 13.29
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 3.19622,
+    "b": 1.05121,
+    "min": 3.2,
+    "max": 114.62
+   },
+   "dbhCm": [
+    3.1,
+    145.7
+   ]
+  },
+  {
+   "key": "SoCalC/Schinus terebinthifolius",
+   "region": "SoCalC",
+   "city": "Santa Monica, California",
+   "species": "Schinus terebinthifolius",
+   "common": "Brazilian pepper",
+   "spCode": "SCTE",
+   "treeType": "BES",
+   "n": 31,
+   "crown": {
+    "eq": "loglogw2",
+    "a": -0.8683,
+    "b": 2.26674,
+    "c": 0.00454,
+    "min": 0.71,
+    "max": 9.11
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": -0.07242,
+    "b": 1.61063,
+    "c": 0.0261,
+    "min": 1.37,
+    "max": 8.24
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.52131,
+    "b": 1.8692,
+    "c": -0.01987,
+    "min": 2.52,
+    "max": 46.48
+   },
+   "dbhCm": [
+    2.5,
+    70.0
+   ]
+  },
+  {
+   "key": "NoCalC/Sequoia sempervirens",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Sequoia sempervirens",
+   "common": "coast redwood",
+   "spCode": "SESE",
+   "treeType": "CEL",
+   "n": 62,
+   "crown": {
+    "eq": "quad",
+    "a": 2.26065,
+    "b": 0.12545,
+    "c": -0.00033,
+    "min": 2.61,
+    "max": 13.77
+   },
+   "height": {
+    "eq": "quad",
+    "a": 1.8397,
+    "b": 0.44555,
+    "c": -0.00144,
+    "min": 3.07,
+    "max": 36.19
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.79785,
+    "b": 1.99742,
+    "min": 2.8,
+    "max": 154.6
+   },
+   "dbhCm": [
+    2.5,
+    190.9
+   ]
+  },
+  {
+   "key": "PacfNW/Tilia americana",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Tilia americana",
+   "common": "American basswood",
+   "spCode": "TIAM",
+   "treeType": "BDM",
+   "n": 39,
+   "crown": {
+    "eq": "quad",
+    "a": 0.00315,
+    "b": 0.30261,
+    "c": -0.00136,
+    "min": 0.34,
+    "max": 15.86
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.16179,
+    "b": 0.30424,
+    "c": -0.0008,
+    "min": 2.5,
+    "max": 22.2
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -0.57558,
+    "b": 1.6899,
+    "c": 0.00442,
+    "d": -0.00016,
+    "min": 1.12,
+    "max": 84.85
+   },
+   "dbhCm": [
+    1.0,
+    94.7
+   ]
+  },
+  {
+   "key": "PacfNW/Tilia cordata",
+   "region": "PacfNW",
+   "city": "Longview, Oregon",
+   "species": "Tilia cordata",
+   "common": "littleleaf linden",
+   "spCode": "TICO",
+   "treeType": "BDM",
+   "n": 40,
+   "crown": {
+    "eq": "quad",
+    "a": -0.01436,
+    "b": 0.29841,
+    "c": -0.0012,
+    "min": 0.35,
+    "max": 18.54
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.18773,
+    "b": 0.32224,
+    "c": -0.0011,
+    "min": 2.58,
+    "max": 25.34
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": -0.74132,
+    "b": 1.99578,
+    "c": -0.02803,
+    "d": 0.00027,
+    "min": 1.23,
+    "max": 125.41
+   },
+   "dbhCm": [
+    1.2,
+    124.6
+   ]
+  },
+  {
+   "key": "NoEast/Tilia tomentosa",
+   "region": "NoEast",
+   "city": "Queens, New York",
+   "species": "Tilia tomentosa",
+   "common": "silver linden",
+   "spCode": "TITO",
+   "treeType": "BDL",
+   "n": 30,
+   "crown": {
+    "eq": "loglogw2",
+    "a": -1.14455,
+    "b": 2.59113,
+    "c": 0.00931,
+    "min": 0.75,
+    "max": 10.7
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.2228,
+    "b": 1.69429,
+    "c": 0.01134,
+    "min": 2.2,
+    "max": 12.22
+   },
+   "ageDbh": {
+    "eq": "loglogw1",
+    "a": 1.36034,
+    "b": 1.49373,
+    "c": 0.29856,
+    "min": 3.02,
+    "max": 45.3
+   },
+   "dbhCm": [
+    1.8,
+    83.8
+   ]
+  },
+  {
+   "key": "NoCalC/Ulmus americana",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Ulmus americana",
+   "common": "American elm",
+   "spCode": "ULAM",
+   "treeType": "BDL",
+   "n": 60,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.02126,
+    "b": 1.91598,
+    "c": 0.03713,
+    "min": 1.45,
+    "max": 20.01
+   },
+   "height": {
+    "eq": "lin",
+    "a": 3.31301,
+    "b": 0.21583,
+    "min": 3.82,
+    "max": 29.62
+   },
+   "ageDbh": {
+    "eq": "lin",
+    "a": 2.3541,
+    "b": 1.40641,
+    "min": 2.35,
+    "max": 121.9
+   },
+   "dbhCm": [
+    2.0,
+    120.1
+   ]
+  },
+  {
+   "key": "NoCalC/Ulmus parvifolia",
+   "region": "NoCalC",
+   "city": "Berkeley, California",
+   "species": "Ulmus parvifolia",
+   "common": "Chinese elm",
+   "spCode": "ULPA",
+   "treeType": "BDL",
+   "n": 33,
+   "crown": {
+    "eq": "loglogw1",
+    "a": -0.37252,
+    "b": 2.26842,
+    "c": 0.02963,
+    "min": 1.38,
+    "max": 15.3
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.51638,
+    "b": 0.40448,
+    "c": -0.0036,
+    "min": 3.64,
+    "max": 13.69
+   },
+   "ageDbh": {
+    "eq": "cub",
+    "a": 2.85154,
+    "b": -0.15554,
+    "c": 0.07672,
+    "d": -0.00112,
+    "min": 2.84,
+    "max": 48.79
+   },
+   "dbhCm": [
+    2.5,
+    62.0
+   ]
+  },
+  {
+   "key": "InterW/Ulmus pumila",
+   "region": "InterW",
+   "city": "Albuquerque, New Mexico",
+   "species": "Ulmus pumila",
+   "common": "Siberian elm",
+   "spCode": "ULPU",
+   "treeType": "BDL",
+   "n": 70,
+   "crown": {
+    "eq": "lin",
+    "a": 1.62714,
+    "b": 0.19071,
+    "min": 1.78,
+    "max": 21.79
+   },
+   "height": {
+    "eq": "quad",
+    "a": 2.40778,
+    "b": 0.28742,
+    "c": -0.00094,
+    "min": 2.64,
+    "max": 22.28
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 0.79765,
+    "b": 1.81294,
+    "c": -0.00775,
+    "min": 0.8,
+    "max": 105.74
+   },
+   "dbhCm": [
+    2.5,
+    120.8
+   ]
+  },
+  {
+   "key": "InlVal/Zelkova serrata",
+   "region": "InlVal",
+   "city": "Modesto, California",
+   "species": "Zelkova serrata",
+   "common": "Japanese zelkova",
+   "spCode": "ZESE",
+   "treeType": "BDM",
+   "n": 31,
+   "crown": {
+    "eq": "cub",
+    "a": -0.40972,
+    "b": 0.63459,
+    "c": -0.01242,
+    "d": 0.00011,
+    "min": 1.11,
+    "max": 24.14
+   },
+   "height": {
+    "eq": "loglogw1",
+    "a": 0.28434,
+    "b": 1.67177,
+    "c": 0.04773,
+    "min": 2.02,
+    "max": 15.72
+   },
+   "ageDbh": {
+    "eq": "quad",
+    "a": 2.52361,
+    "b": 1.63788,
+    "c": -0.00855,
+    "min": 2.52,
+    "max": 77.25
+   },
+   "dbhCm": [
+    2.5,
+    75.0
+   ]
+  }
+ ],
+ "broadleaf": [
+  0,
+  2,
+  26,
+  32,
+  37,
+  39,
+  48,
+  49,
+  51,
+  61,
+  62,
+  63,
+  69,
+  73,
+  74,
+  75,
+  84,
+  91,
+  92
+ ]
+}
