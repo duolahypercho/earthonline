@@ -436,6 +436,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             s if crate::ROAD_REVIEW_SWITCHES.contains(&s) => {}
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--yard-lidar-trees" | "--no-yard-lidar-trees" | "--yard-detail" | "--no-yard-detail" | "--no-yard-plants" | "--no-yard-objects" | "--no-yard-stairs" | "--no-yard-wood" | "--tree-crowns" | "--no-tree-crowns" => {} // main's `roofs_flags`
+            "--street-ground" | "--no-street-ground" | "--junction-ground" | "--no-junction-ground" | "--walk-yield-strict" | "--no-walk-yield-strict" | "--cut-slopes" | "--no-cut-slopes" | "--street-islands" | "--no-street-islands" | "--wall-coping" | "--no-wall-coping" | "--road-seams" | "--no-road-seams" => {} // main's `roofs_flags` (eo_street::ground, mesh, plan, seams)
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
             s if eo_landmarks::vegetation::GRASS2_SWITCHES.contains(&s) || eo_landmarks::vegetation::GRASS3_SWITCHES.contains(&s) => {} // read by its crate (the grass passes)
             "--no-aerial-ground" => {} // read by eo-render (aerial_ground.rs)
@@ -451,11 +452,14 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-external" => {} // main's `external_flag`
             // Round-2 AAA feature switches & kill switches (all parsed cleanly in `--play`)
             "--sun-bounce" | "--no-sun-bounce" => a.look.sun_bounce = s == "--sun-bounce",
+            "--sun-bounce-reach" | "--no-sun-bounce-reach" => a.look.sun_bounce_reach = s == "--sun-bounce-reach", // (`--sun-bounce`) the gather out to a wide street's far front
             "--ao-albedo" | "--no-ao-albedo" => a.look.ao_albedo = s == "--ao-albedo",
             "--soft-shadows" | "--no-soft-shadows" => a.look.soft_shadows = s == "--soft-shadows",
             "--screen-gi" | "--no-screen-gi" => a.look.screen_gi = s == "--screen-gi",
             "--occluder-light" | "--no-occluder-light" => a.look.occluder_light = s == "--occluder-light",
             "--dome-env" | "--no-dome-env" => a.look.dome_env = s == "--dome-env",
+            "--dome-yield" | "--no-dome-yield" => a.look.dome_yield = s == "--dome-yield", // (`--dome-env`) the dome's colour yields to the physical daylight
+            "--no-vol-sky-state" => {} // (eo-look `features::daylight`, read from the command line) the volumetric cumulus whatever the day's sky
             "--wet-surfaces" | "--no-wet-surfaces" => a.look.sky.wet_surfaces = s == "--wet-surfaces",
             "--screen-reflect" | "--no-screen-reflect" => a.look.sky.screen_reflect = s == "--screen-reflect",
             "--probe-sky" | "--no-probe-sky" => a.look.sky.probe_sky = s == "--probe-sky",
@@ -572,7 +576,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             | "--canyon-glass" | "--no-canyon-glass" | "--far-relief" | "--no-far-relief" | "--facade-patina" | "--no-facade-patina"
             | "--window-depth" | "--no-window-depth" | "--room-atlas" | "--no-room-atlas"
             | "--street-pbr" | "--no-street-pbr" | "--street-wear" | "--no-street-wear" | "--street-glare" | "--no-street-glare"
-            | "--street-aggregate" | "--no-street-aggregate" | "--plaza-setts" | "--no-plaza-setts" | "--walk-relief" | "--no-walk-relief" => {}
+            | "--street-aggregate" | "--no-street-aggregate" | "--plaza-setts" | "--no-plaza-setts" | "--walk-relief" | "--no-walk-relief" | "--matte-wheel-paths" | "--no-matte-wheel-paths" | "--aged-aggregate" | "--no-aged-aggregate" => {}
             "--traffic-street-plan" | "--no-traffic-street-plan" | "--no-traffic-passing" | "--no-traffic-model-footprints" => {}
             flag if test_character.parse(flag, &mut val)? => {}
             other => anyhow::bail!("--play: unknown argument {other} (see native/eo-app/src/play.rs)"),
@@ -3180,6 +3184,8 @@ mod play_defaults_tests {
         assert!(a.beaver_house && a.house_finishes && a.house_patina && a.house_furniture && a.house_photo);
         assert!(!o.beaver_spawn, "plain --play should keep the downtown spawn while loading the house in the city");
         assert!(a.look.dome_env && a.look.ao_albedo && a.look.occluder_light && a.look.sun_bounce && a.look.screen_gi && a.look.soft_shadows);
+        assert!(a.look.sun_bounce_reach, "the sun bounce reaches a wide street's far front");
+        assert!(!parse_full(&raw(&["--play", "--no-sun-bounce-reach"])).unwrap().0.look.sun_bounce_reach, "--no-sun-bounce-reach keeps the 32 m gather");
         assert!(a.look.sky.wet_surfaces && a.look.sky.screen_reflect && a.look.sky.wet_relief && a.look.sky.lamp_streaks);
         assert_eq!((a.look.car_materials, a.look.car_contact, a.look.car_reflections, a.look.car_finish), (1, 1, 1, 1));
         assert_eq!((a.look.car_lamps, a.look.car_wet), (0, 0), "car-lamps/car-wet remain opt-in for Apple Metal compiler safety");

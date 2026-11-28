@@ -127,6 +127,14 @@ fn sp_crack_materials(s: ptr<function, Surface>, a: ptr<function, vec3<f32>>, ro
 
 // ---- the carriageway -----------------------------------------------------------
 
+// The wheel paths' polished roughness: with `--matte-wheel-paths`
+// (SF_MATTE_WHEEL_PATHS, street_pbr.rs `ASPHALT_ROUGH_POLISHED_MATTE`) a
+// faint sheen toward grazing only, not sky-blue bands down every path in the
+// shade; without it the polish as before.
+fn sp_wheel_polish() -> f32 {
+    return select(SP_ASPHALT_ROUGH_POLISHED, SP_ASPHALT_ROUGH_POLISHED_MATTE, SF_MATTE_WHEEL_PATHS);
+}
+
 fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_geom: vec3<f32>, fw: f32, fwp: vec2<f32>) {
     let q = world.xz;
     // The earlier composition's tone round the CC0 base (cc0.rs ASPHALT_ALBEDO,
@@ -190,7 +198,7 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
             wpath = wp;
             // worn binder shows the aggregate (lighter, less brown); drips darken and close the texture
             a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp) * (1.0 - 0.24 * oil);
-            rough = mix(rough, SP_ASPHALT_ROUGH_POLISHED, 0.85 * wp);
+            rough = mix(rough, sp_wheel_polish(), 0.85 * wp);
             rough = rough * (1.0 - 0.12 * oil);
             // rutting: each path's floor a few millimetres down (deeper and shallower
             // along the road as the base gave way), its sides leaning in
@@ -209,7 +217,7 @@ fn sp_asphalt(s: ptr<function, Surface>, world: vec3<f32>, cls: u32, kd: f32, n_
         a = a * mix(vec3<f32>(1.0), vec3<f32>(1.1, 1.1, 1.12), wp);
         // (in the wet the film's water is the surface over the polished path: no smoother
         // lane down the middle for the trace to stretch a car's dark reflection along)
-        rough = mix(rough, SP_ASPHALT_ROUGH_POLISHED, 0.85 * wp * (1.0 - sw_wet()));
+        rough = mix(rough, sp_wheel_polish(), 0.85 * wp * (1.0 - sw_wet()));
         lean = lean + sw_wheel_lean * (1.0 - lane_k);
         dip = max(dip, sw_wheel_dip * (1.0 - lane_k));
         wpath = max(wpath, wp);
@@ -1590,7 +1598,15 @@ fn sa_aggregate(q: vec2<f32>, fwp: vec2<f32>, wear: f32) -> SaAgg {
     let mean_r = mix(SA_MEAN_ROUGH0, SA_MEAN_ROUGH1, wear);
     let mean_ao = mix(SA_MEAN_AO0, SA_MEAN_AO1, wear);
     let mean_t = mix(SA_MEAN_TOPS0, SA_MEAN_TOPS1, wear);
-    o.rel = mix(vec3<f32>(1.0), alb / max(mean_a, vec3<f32>(1e-3)), keep_a);
+    var rel = alb / max(mean_a, vec3<f32>(1e-3));
+    var tone_keep = keep_a;
+    if (SF_AGED_AGGREGATE) {
+        // (`--aged-aggregate`) the grime film over every stone, and the tones only
+        // where a stone spans a few pixels (street_pbr.rs `AGG_AGED_*`)
+        rel = mix(vec3<f32>(1.0), rel, SA_AGED_TONE);
+        tone_keep = min(keep_a, 1.0 - smoothstep(sm * SA_AGED_NEAR, sm * SA_AGED_FAR, fwp.y));
+    }
+    o.rel = mix(vec3<f32>(1.0), rel, tone_keep);
     o.rough = mix(1.0, rough / max(mean_r, 1e-3), o.keep);
     o.ao = mix(1.0, ao / max(mean_ao, 1e-3), o.keep);
     o.tops = mix(1.0, m * exk / max(mean_t, 1e-3), o.keep);

@@ -415,7 +415,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
             }
             if paved_node[n] {
                 let p = nodes.at[n];
-                return NodeKind::Paved(streets.ground(p[0], p[1]) + lift);
+                return NodeKind::Paved(streets.street_datum(p[0], p[1]));
             }
             if ends.len() >= 2 { NodeKind::Shared } else { NodeKind::Free }
         })
@@ -432,7 +432,8 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
         legs_by_road.entry(e.road).or_default().push(e);
     }
     let end_height = |tip: P2, half: f64, segment: usize, shared: bool| -> f64 {
-        let terrain = streets.ground(tip[0], tip[1]) + lift;
+        // (the street's datum there: eo-street `seams` moves a run to meet a busier one)
+        let terrain = streets.street_datum(tip[0], tip[1]);
         let datum = paved.runs_near(tip, snap).into_iter().find_map(|n| {
             let entry = &streets.plan.entries[n.entry as usize];
             if n.s <= snap || entry.length - n.s <= snap || !o.landings.is_empty() {
@@ -772,7 +773,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
     // from an apex at the approaches' mean datum plus the crown, to each
     // approach mouth's cross-section at its own datum).
     let road_datum = |entry: &eo_street::plan::Entry, at: P2| {
-        let terrain = streets.ground(at[0], at[1]) + lift;
+        let terrain = streets.street_datum(at[0], at[1]);
         streets.surveyed_datum(entry, at, terrain).unwrap_or(terrain)
     };
     let node_top: Vec<f64> = streets
@@ -836,7 +837,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
                         on_ribbon = true;
                     }
                     let f = e.frame(n.s, false);
-                    let terrain = streets.ground(f.x, f.z) + lift;
+                    let terrain = streets.street_datum(f.x, f.z);
                     let survey = streets.surveyed_datum(e, [f.x, f.z], terrain);
                     surveyed_section |= survey.is_some();
                     let top = survey.unwrap_or(terrain) + o.cross_section_y(0.0, n.dist, e.half);

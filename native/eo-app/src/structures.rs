@@ -107,8 +107,14 @@ impl Pending {
         if let Some(j) = &world.census().joins {
             eprintln!("startup: structures' street joins ({:.0} ms waiting for them):\n{j}", t.elapsed().as_secs_f64() * 1e3);
         }
+        let streets = streets.unwrap_or(first);
+        // the street ground (eo-street `ground`) leaves the tunnels' cuts open, as the terrain does.
+        if !world.is_empty() {
+            let w = world.clone();
+            streets.set_ground_cut(Arc::new(move |x, z| w.terrain_cut_at(x, z).map(|c| c.floor)));
+        }
         self.world = Some(world);
-        Ok(streets.unwrap_or(first))
+        Ok(streets)
     }
 
     /// The structures world `streets` received (None before it).

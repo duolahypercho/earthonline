@@ -273,6 +273,12 @@ mod tests {
         // (`--walk-relief`) alone, and over the street pass with every street bit and the cinematic look
         sets.push(("walk relief".into(), look::ShaderFeatures { street: look::WALK_RELIEF, ..none }));
         sets.push(("walk relief with every street bit over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF, cinematic: true, lx_bits: u32::MAX, ..none }));
+        // (`--matte-wheel-paths`) over the street pass alone, and with every street bit
+        sets.push(("matte wheel paths over street pbr".into(), look::ShaderFeatures { street_pbr: true, street: look::MATTE_WHEEL_PATHS, ..none }));
+        sets.push(("matte wheel paths with every street bit over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF | look::MATTE_WHEEL_PATHS, cinematic: true, lx_bits: u32::MAX, ..none }));
+        // (`--aged-aggregate`) over the aggregate alone, and with every street bit
+        sets.push(("aged aggregate over street aggregate".into(), look::ShaderFeatures { street_pbr: true, street: look::STREET_AGGREGATE | look::AGED_AGGREGATE, ..none }));
+        sets.push(("aged aggregate with every street bit over street pbr, cinematic".into(), look::ShaderFeatures { grime: true, street_pbr: true, street: look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF | look::MATTE_WHEEL_PATHS | look::AGED_AGGREGATE, cinematic: true, lx_bits: u32::MAX, ..none }));
         sets.push(("sun bounce".into(), look::ShaderFeatures { sun_bounce: true, ..none })); // (`--sun-bounce`)
         sets.push(("ao albedo".into(), look::ShaderFeatures { ao_albedo: true, ..none })); // (`--ao-albedo`)
         sets.push(("soft shadows".into(), look::ShaderFeatures { soft_shadows: true, ..none })); // (`--soft-shadows`)
@@ -347,7 +353,7 @@ mod tests {
         }
         sets.push(("all + nature".into(), look::ShaderFeatures { nature: look::NATURE_ALL, ..look::ShaderFeatures::ALL }));
         // (round 2 integration) every track's switches together, as the round's capture compiles them
-        let street = look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF;
+        let street = look::STREET_WEAR | look::STREET_GLARE | look::STREET_AGGREGATE | look::PLAZA_SETTS | look::WALK_RELIEF | look::MATTE_WHEEL_PATHS | look::AGED_AGGREGATE;
         sets.push((
             "round 2: every track together".into(),
             look::ShaderFeatures { far_relief: true, facade_patina: true, window_depth: true, street_pbr: true, street, car_lamps: true, car_wet: true, car_finish: true, camera_bits: crate::cine_post::CAM_BITS_ALL, nature: look::NATURE_ALL, volumetric_clouds: true, weather_fx: true, ..look::ShaderFeatures::ALL },

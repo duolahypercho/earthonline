@@ -600,6 +600,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--probe-yield" => a.look.facade |= eo_render::facade::RUN_PROBE_YIELD, // opt in
             // (opt in) the sun's first bounce off the sunlit walls, gathered from the far sun map (needs --far-shadows)
             "--sun-bounce" | "--no-sun-bounce" => a.look.sun_bounce = s == "--sun-bounce",
+            "--sun-bounce-reach" | "--no-sun-bounce-reach" => a.look.sun_bounce_reach = s == "--sun-bounce-reach", // (`--sun-bounce`) the gather out to a wide street's far front
             // (opt in) the occlusion's multi-bounce at each surface's own albedo instead of 0.7
             "--ao-albedo" | "--no-ao-albedo" => a.look.ao_albedo = s == "--ao-albedo",
             // (opt in) the sun's penumbra: the cascades filtered over the sun's disc at the caster's distance
@@ -608,6 +609,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--screen-gi" | "--no-screen-gi" => a.look.screen_gi = s == "--screen-gi",
             "--occluder-light" | "--no-occluder-light" => a.look.occluder_light = s == "--occluder-light",
             "--dome-env" | "--no-dome-env" => a.look.dome_env = s == "--dome-env",
+            "--dome-yield" | "--no-dome-yield" => a.look.dome_yield = s == "--dome-yield", // (`--dome-env`) the dome's colour yields to the physical daylight
             // weather (a preset or the shared schedule) and the stage switches.
             "--weather" => {
                 let v = val()?;
@@ -873,7 +875,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-furniture-models" => eo_render::props_lib2::furniture_models::set_enabled(false), // missing-GLB furniture as boxes, as before
             "--no-landmark-access" => a.landmark_access = false, // the landmark decks (eo-landmarks access.rs)
             "--street-pbr" | "--no-street-pbr" => {} // read where the shader features are chosen (`street_pbr`)
-            "--street-wear" | "--no-street-wear" | "--street-glare" | "--no-street-glare" | "--street-aggregate" | "--no-street-aggregate" | "--plaza-setts" | "--no-plaza-setts" | "--walk-relief" | "--no-walk-relief" => {} // read where the shader features are chosen (`street_wear`, `street_glare`, ...)
+            "--street-wear" | "--no-street-wear" | "--street-glare" | "--no-street-glare" | "--street-aggregate" | "--no-street-aggregate" | "--plaza-setts" | "--no-plaza-setts" | "--walk-relief" | "--no-walk-relief" | "--matte-wheel-paths" | "--no-matte-wheel-paths" | "--aged-aggregate" | "--no-aged-aggregate" => {} // read where the shader features are chosen (`street_wear`, `street_glare`, ...)
             "--quay-fill" | "--no-quay-fill" => {} // read where the landmarks are composed (`quay_fill`)
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             "--no-photo-mode" | "--no-dof" | "--photo-bench" => {} // read by photo.rs (and the bench, `--photo-bench`)
@@ -932,6 +934,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--no-ground-beach-fit" | "--yard-lidar-trees" | "--no-yard-lidar-trees" | "--yard-detail" | "--no-yard-detail" | "--no-yard-plants" | "--no-yard-objects" | "--no-yard-stairs" | "--no-yard-wood" | "--tree-crowns" | "--no-tree-crowns" => {} // `roofs_flags`
+            "--street-ground" | "--no-street-ground" | "--junction-ground" | "--no-junction-ground" | "--walk-yield-strict" | "--no-walk-yield-strict" | "--cut-slopes" | "--no-cut-slopes" | "--street-islands" | "--no-street-islands" | "--wall-coping" | "--no-wall-coping" | "--road-seams" | "--no-road-seams" => {} // `roofs_flags` (eo_street::ground, mesh, plan, seams)
             "--no-external" => {} // read by `external_flag` (main): the optional sets only from their variables
             "--no-far-facade" => {} // `roofs_flags`: the far boxes as before (eo-render far_box.rs)
             "--no-period-paint" => {} // `roofs_flags`: the timber rows' period paint at its finish's luminance (eo-kit wall_paint.rs)
@@ -941,7 +944,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // the Golden Gate photo-realism pass's switches, each read by its crate from the command line
             // (the bridges' own are in eo_landmarks::suspension::SWITCHES, above).
             "--no-gg2-camera" | "--no-camera-look" | "--no-scene-meter" | "--no-lamp-photocell" | "--no-night-lift" => {} // read by its crate (the camera)
-            "--no-gg2-daylight" | "--no-ground-albedo" | "--no-photo-date" | "--no-cirrus" | "--no-clear-sky-state" | "--no-terminator-bias" | "--no-spectral-sky" => {} // read by its crate (the daylight)
+            "--no-gg2-daylight" | "--no-ground-albedo" | "--no-photo-date" | "--no-cirrus" | "--no-clear-sky-state" | "--no-vol-sky-state" | "--no-terminator-bias" | "--no-spectral-sky" => {} // read by its crate (the daylight)
             "--no-gg2-water" | "--no-water-exposure" | "--no-water-current" | "--no-water-ppr-blur" | "--no-beach-profiles" | "--no-water-streak-caps" | "--no-water-far-calm" | "--no-baker-surf" | "--no-swash-line" => {} // read by its crate (the water)
             "--no-gg2-ground" | "--no-beach-sand-limit" | "--no-sand-albedo" | "--no-rocks" | "--no-riprap" | "--no-pier-lines" | "--no-ground-steps" | "--no-season-seam" => {} // read by its crate (the shore ground)
             "--no-gg2-far" | "--no-far-fallback" | "--no-landmark-far-models" | "--no-far-tree-density" | "--no-presidio-rule" | "--no-far-paint" => {} // read by its crate (the far layer)
@@ -1005,7 +1008,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "-h" | "--help" => {
                 println!(
                     "eo-app [--ocean-life|--no-ocean-life] [--ocean-reef|--no-ocean-reef] [--dive-detail|--no-dive-detail] [--coastal-habitat|--no-coastal-habitat] [--rocky-reef|--no-rocky-reef] [--dive-daylight|--no-dive-daylight] [--reef-materials|--no-reef-materials] [--no-reef-kelp] [--no-reef-canopy-light] [--no-reef-rocks] [--dive-site bay|bay-surface|black-point|pacific] [--cove-detail|--no-cove-detail] [--cove-canopy|--no-cove-canopy] [--cove-sediment|--no-cove-sediment] [--cove-daylight|--no-cove-daylight] [--black-point-intertidal|--no-black-point-intertidal] [--black-point-rockweed|--no-black-point-rockweed] [--cove-pile-contact|--no-cove-pile-contact] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-count-emulation] [--no-motion-bounds] [--bounded-draws|--no-bounded-draws] [--no-city-classes] [--no-agents-relaxed-math] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--traffic-street-plan|--no-traffic-street-plan] [--no-traffic-passing] [--agent-density N=1] [--no-rocketbox] [--no-external]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n       (with --structures and built decks also freeway_drive,under_viaduct) [--light-shots] (capture cards; EO_LIGHT_SHOTS=a,b; EO_LIGHT_SHOTS_HOUR=H every card at another hour; EO_LIGHT_SHOTS=hero the six key views, clock held)\n       [--cc0-shots] (the scanned sets' matched cards; EO_CC0_SHOTS=a,b; EO_CC0_SHOTS_HOUR=H every card at another hour)\n       [--clutter-shots] (the facade clutter's cards: the kit and authored streets, fronts with fire escapes and shop fronts the planner dresses, a roof; the same poses with or without --facade-clutter; EO_CLUTTER_SHOTS=a,b; EO_CLUTTER_SHOTS_HOUR=H, default 15)\n       [--structures-shots] (the grade-separated roads at four places, from the street and from above, 15:00 clear; the same poses with or without --structures; EO_STRUCTURES_SHOTS=a,b; EO_STRUCTURES_SHOTS_HOUR=H another hour; EO_STRUCTURES_SHOTS_HDR=1 the scene luminance too)\n       [--dusk-strip] (40 frames a clock minute apart across sunset and sunrise at one camera, a CSV of mean luminance; with --smooth-time through the soft path)\n       (--light-shots with EO_PROBE_STRIP=path[,frames[,m a frame[,turn]]]: the reflections along a street while probe captures finish, a CSV and the frames round each)\n\nQuality and lighting (opt-in; a switch wins over the tier wherever it stands; each has a --no- form):\n       [--quality low|medium|high|hyper] (default medium: the street look, grime 1, stand-ins, surveyed furniture and tree basins; bench budget 8 / 10 / 16.6 / 33.3 ms;\n       low: a 2048 sun map, low sky, no SSR, contact shadows, AO, shafts or bloom; high: the lighting additions but the probe grid,\n       with grime, street life, stand-ins, photo finish, facade clutter, shop light and car detail at 1 and the cinematic look; hyper: high at level 2, 48 lamps, the probe grid 2)\n       [--cascade-blend] [--far-shadows [1|2]] [--ambient-volume [1|2]] [--probe-grid [1|2]] [--light-shadows [N lamps, 16..48]]\n       [--light-shadow-moving] [--headlight-shadows [N vehicles]] [--lit-fog [1|2]]\n       (--ambient-volume: narrow streets and the ground under decks get less sky light, baked round the camera and over the city)\n       [--ground-bounce] (with --ambient-volume, on unless --no-ground-bounce: light bounced up from the sunlit ground onto deck undersides and walls facing it)\n       [--smooth-time] (the drawn hour follows the simulation's clock, the exposure converges instead of snapping)
-       [--rt-gi] (ray-traced one-bounce diffuse light: one ray a texel at half resolution through the static city (buildings, terrain, streets' strips, structures, landmarks; no agents, props or water), accumulated over frames and filtered, in place of the sky terms and the ground bounce; Metal with ray queries only, else off with one line; no tier turns it on; EO_RT_GI_* tunables in eo-render rt_gi.rs)\n       [--rt-reflect] (ray-traced reflections on the streets, wet or dry, the buildings and their glazing up to roughness 0.6: one ray a texel at half resolution along the surface's lobe through the same static city, the sky where it leaves; in place of the sky, probe and screen-space reflection; not on cars, props or water yet; Metal with ray queries only; no tier turns it on; EO_RT_REFLECT_* tunables in eo-render rt_reflect.rs)\n       (--far-shadows: sun shadows past the cascades from cached maps round the camera, 1 a 2 km ring, 2 another to the far plane; --cascade-blend: the cascades hand over in a band instead of a line)\n       (--probe-grid: reflection probes on the streets round the camera, cross-faded, read by every lit surface, 1 four of 128 px, 2 nine of 256 px)\n       (--lit-fog: the fog lit by the street lamps and headlamps, a froxel volume added by the resolve; 1 160 x 90 x 64, 2 240 x 135 x 96; nothing by day)\n       (--light-shadows: the nearest N street lamps keep a shadow map, drawn once, at most 2 new a frame, and draw in SF's 3000 K LED colour; --light-shadow-moving: the 4 nearest redrawn every frame with the traffic; --headlight-shadows: the nearest N vehicles' low beams cast shadows; nothing by day)\n       [--shadow-slope-bias] (the sun cascades' casters with a slope-scaled depth bias: no self-shadow stripes where the sun grazes a surface; high and hyper turn it on)\n       [--grime [1|2]] (surface weathering that reads: soiled walks with gum and stains, chipped kerbs and faded kerb paint, patched and sealed carriageways, washed-down facades, dusty cars; high 1, hyper 2)\n       [--street-life [1|2]] (litter, butts, leaves and grit on the walks and in the gutters; graffiti, buffed patches and posters on ground floors and freeway columns; 2 adds stickers, utility marks, pigeon droppings; high 1, hyper 2)\n       [--stand-ins] (procedural models for street-prop kinds whose GLB is absent from the checkout, instead of grey boxes; medium, high and hyper)\n       [--surveyed-furniture] (the furniture walk invents no bollards, planters, barricades, scaffolding or newsracks, and benches, bins, post boxes, bike racks and café sets only at shopfronts; surveyed items as before; every tier)\n       [--tree-basins] (a soil and mulch basin with a flush edge under each street tree on a footway, sized by the footway from SF Public Works Director's Order 187,246; every tier)\n       [--photo-finish [1|2]] (a camera instead of the JS display transform: highlights pale to white on their hue, ISO noise by the scene's light, lens fall-off and lateral colour, a lens's bloom; San Francisco's measured air in the sky and the haze; 2 smoother fringes and chroma noise; high 1, hyper 2)\n       [--facade-clutter [1|2]] (fire escapes, awnings, colour-field and neon signs, roll-down shutters, bars on older ground-floor windows, downspouts, meters and conduit, chimneys, vents, dishes and aerials on the kit buildings; signs lit by night where the shop is; 2 adds window air conditioners, front dishes, scaffolding, boarded shops; high 1, hyper 2)\n       [--shop-light [1|2]] (lit shop windows at night: a light behind every kit shop window in its trade's colour, at its window's luminance, by its opening hours, spilling onto the sidewalk and lighting the fog, the room behind the glass lit or dark with it; 1 within 160 m, 2 to 300 m with two lights a window; high 1, hyper 2)\n       [--car-detail [1|2]] (cars past 220 m (2: 260 m) drawn as their own body simplified to ~1 px instead of three boxes, and the nearest 6 (2: 12) at full detail within 30 m (40 m), 24 (40) at LOD 1 within 90 m (120 m); high 1, hyper 2)\n       [--look default|cinematic] (the look profile: default is today's frame on its physical references; cinematic a graded open-world look, its departures from those references listed in CINEMATIC_DEVIATIONS; high and hyper; --no-look is --look default)\n       (a level left out is the high tier's; --probe-grid, which high leaves off, takes 1)\n       [--street-pbr] [--street-wear] [--street-glare] [--street-aggregate] [--plaza-setts] [--walk-relief] [--quay-fill] (opt-in street PBR, distress, glare, aggregate, plaza setts, walk relief and quay apron fill; off by default and in no tier)\n\nWorld (opt-in; client and server must agree, the handshake refuses a mismatch; each has a --no- form):\n       [--structures] (grade-separated roads: freeways, ramps, road bridges, drawn and cast in three levels of detail) [--tunnels] (bores and portals, with --structures)\n\n\
+       [--rt-gi] (ray-traced one-bounce diffuse light: one ray a texel at half resolution through the static city (buildings, terrain, streets' strips, structures, landmarks; no agents, props or water), accumulated over frames and filtered, in place of the sky terms and the ground bounce; Metal with ray queries only, else off with one line; no tier turns it on; EO_RT_GI_* tunables in eo-render rt_gi.rs)\n       [--rt-reflect] (ray-traced reflections on the streets, wet or dry, the buildings and their glazing up to roughness 0.6: one ray a texel at half resolution along the surface's lobe through the same static city, the sky where it leaves; in place of the sky, probe and screen-space reflection; not on cars, props or water yet; Metal with ray queries only; no tier turns it on; EO_RT_REFLECT_* tunables in eo-render rt_reflect.rs)\n       (--far-shadows: sun shadows past the cascades from cached maps round the camera, 1 a 2 km ring, 2 another to the far plane; --cascade-blend: the cascades hand over in a band instead of a line)\n       (--probe-grid: reflection probes on the streets round the camera, cross-faded, read by every lit surface, 1 four of 128 px, 2 nine of 256 px)\n       (--lit-fog: the fog lit by the street lamps and headlamps, a froxel volume added by the resolve; 1 160 x 90 x 64, 2 240 x 135 x 96; nothing by day)\n       (--light-shadows: the nearest N street lamps keep a shadow map, drawn once, at most 2 new a frame, and draw in SF's 3000 K LED colour; --light-shadow-moving: the 4 nearest redrawn every frame with the traffic; --headlight-shadows: the nearest N vehicles' low beams cast shadows; nothing by day)\n       [--shadow-slope-bias] (the sun cascades' casters with a slope-scaled depth bias: no self-shadow stripes where the sun grazes a surface; high and hyper turn it on)\n       [--grime [1|2]] (surface weathering that reads: soiled walks with gum and stains, chipped kerbs and faded kerb paint, patched and sealed carriageways, washed-down facades, dusty cars; high 1, hyper 2)\n       [--street-life [1|2]] (litter, butts, leaves and grit on the walks and in the gutters; graffiti, buffed patches and posters on ground floors and freeway columns; 2 adds stickers, utility marks, pigeon droppings; high 1, hyper 2)\n       [--stand-ins] (procedural models for street-prop kinds whose GLB is absent from the checkout, instead of grey boxes; medium, high and hyper)\n       [--surveyed-furniture] (the furniture walk invents no bollards, planters, barricades, scaffolding or newsracks, and benches, bins, post boxes, bike racks and café sets only at shopfronts; surveyed items as before; every tier)\n       [--tree-basins] (a soil and mulch basin with a flush edge under each street tree on a footway, sized by the footway from SF Public Works Director's Order 187,246; every tier)\n       [--photo-finish [1|2]] (a camera instead of the JS display transform: highlights pale to white on their hue, ISO noise by the scene's light, lens fall-off and lateral colour, a lens's bloom; San Francisco's measured air in the sky and the haze; 2 smoother fringes and chroma noise; high 1, hyper 2)\n       [--facade-clutter [1|2]] (fire escapes, awnings, colour-field and neon signs, roll-down shutters, bars on older ground-floor windows, downspouts, meters and conduit, chimneys, vents, dishes and aerials on the kit buildings; signs lit by night where the shop is; 2 adds window air conditioners, front dishes, scaffolding, boarded shops; high 1, hyper 2)\n       [--shop-light [1|2]] (lit shop windows at night: a light behind every kit shop window in its trade's colour, at its window's luminance, by its opening hours, spilling onto the sidewalk and lighting the fog, the room behind the glass lit or dark with it; 1 within 160 m, 2 to 300 m with two lights a window; high 1, hyper 2)\n       [--car-detail [1|2]] (cars past 220 m (2: 260 m) drawn as their own body simplified to ~1 px instead of three boxes, and the nearest 6 (2: 12) at full detail within 30 m (40 m), 24 (40) at LOD 1 within 90 m (120 m); high 1, hyper 2)\n       [--look default|cinematic] (the look profile: default is today's frame on its physical references; cinematic a graded open-world look, its departures from those references listed in CINEMATIC_DEVIATIONS; high and hyper; --no-look is --look default)\n       (a level left out is the high tier's; --probe-grid, which high leaves off, takes 1)\n       [--street-pbr] [--street-wear] [--street-glare] [--street-aggregate] [--plaza-setts] [--walk-relief] [--matte-wheel-paths] [--aged-aggregate] [--quay-fill] (opt-in street PBR, distress, glare, aggregate, plaza setts, walk relief, matte wheel paths, aged aggregate and quay apron fill; off by default and in no tier)\n\nWorld (opt-in; client and server must agree, the handshake refuses a mismatch; each has a --no- form):\n       [--structures] (grade-separated roads: freeways, ramps, road bridges, drawn and cast in three levels of detail) [--tunnels] (bores and portals, with --structures)\n\n\
 Golden Gate photo-realism (on by default; each is a kill switch that restores the earlier output):\n       \
 [--no-gg2-camera] [--no-camera-look] [--no-scene-meter] [--no-lamp-photocell] (the camera look, the scene meter, lamp photocells)\n       \
 [--no-gg2-daylight] [--no-bridges4] [--no-gg2-water] [--no-gg2-ground] [--no-gg2-far] [--no-corridor-traffic] [--no-gg2-vegetation]\n       \
@@ -1108,6 +1111,22 @@ pub fn plaza_setts() -> bool {
 /// last of it and `--no-walk-relief` wins.
 pub fn walk_relief() -> bool {
     last_switch("walk-relief").unwrap_or(false)
+}
+
+/// `--matte-wheel-paths`: with `--street-pbr`, the wheel paths' polish a faint
+/// sheen toward grazing, not sky-blue bands down every path in the shade
+/// (eo-render street_pbr.wgsl `sp_wheel_polish`, `SF_MATTE_WHEEL_PATHS`), off
+/// by default (on in `--play`); the last of it and `--no-matte-wheel-paths` wins.
+pub fn matte_wheel_paths() -> bool {
+    last_switch("matte-wheel-paths").unwrap_or(false)
+}
+
+/// `--aged-aggregate`: with `--street-aggregate`, an old street's grime film over
+/// the stones and their tones only where a stone spans a few pixels (eo-render
+/// street_pbr.wgsl `sa_aggregate`, `SF_AGED_AGGREGATE`), off by default (on in
+/// `--play`); the last of it and `--no-aged-aggregate` wins.
+pub fn aged_aggregate() -> bool {
+    last_switch("aged-aggregate").unwrap_or(false)
 }
 
 /// `--quay-fill`: the promenade paved on from the quay apron to the street's
@@ -1558,6 +1577,14 @@ fn load_world_with_footways(args: &Args, keep_footways: bool) -> Result<World> {
             }
             p.field.press_beach(x, z, y)
         }));
+        // the street ground (eo-street `ground`) is not drawn where the water's
+        // press moves the drawn terrain (the shoreline rings, a beach).
+        let p = press.clone().expect("press");
+        let g = sw.terrain.grid.clone();
+        sw.set_ground_water(Arc::new(move |x, z| {
+            let y = g.ground(x, z);
+            (p.field.press_ground_rings(x, z, y) - y).abs() > 0.01 || (p.field.press_beach(x, z, y) - y).abs() > 0.01
+        }));
     }
     let elev = &elevation;
     let carpet_fn: Option<Box<dyn Fn(f32, f32) -> f32 + Sync + '_>> = match (street_world.clone(), press) {
@@ -1696,6 +1723,33 @@ fn load_world_with_footways(args: &Args, keep_footways: bool) -> Result<World> {
     eo_render::ground2::set_bare(args.look.nature & eo_render::look::NATURE_BARE != 0);
     let far_land_fn = ground_tone::far_land(cover.as_deref(), water_field.as_deref(), elev, municipal.as_deref());
     let ground_tone_fn = ground_tone::ground_tone(cover.as_deref(), water_field.as_deref(), elev, land.as_deref(), municipal.as_deref());
+    // the street ground (eo-street `ground`) is drawn as terrain in the street
+    // packs, cooked on their threads for the whole run: the terrain tiles'
+    // vertex colour (scene.rs `colour_at`) over the same inputs, owned for the process.
+    if let Some(grid) = street_world.as_ref().map(|w| w.terrain.grid.clone()).filter(|_| eo_street::ground::street_ground_on()) {
+        let owned: &'static (Option<Arc<_>>, Option<Arc<_>>, Option<Arc<LandCover>>, Option<Arc<_>>, Arc<ElevationGrid>) = Box::leak(Box::new((cover.clone(), water_field.clone(), land.clone(), municipal.clone(), grid)));
+        let tone = ground_tone::ground_tone(owned.0.as_deref(), owned.1.as_deref(), &owned.4, owned.2.as_deref(), owned.3.as_deref());
+        let vertex = move |x: f32, z: f32| tone(x, z).unwrap_or_else(|| eo_render::scene::terrain_land_colour(owned.2.as_deref(), &owned.4, x, z));
+        // the terrain tiles colour their 8 m vertices (a per-vertex patchwork
+        // tuned to that spacing, ground2.rs) and blend between them; the street
+        // ground's 2 m lattice takes that blend, not its own vertices' tones.
+        let m = &owned.4.meta;
+        let (ox, oz, cell) = (m.origin_x as f32, m.origin_z as f32, m.cell_size as f32);
+        eo_render::street::set_ground_colour(Arc::new(move |x: f32, z: f32| {
+            let (fx, fz) = ((x - ox) / cell - 0.5, (z - oz) / cell - 0.5);
+            let (cx, cz) = (fx.floor(), fz.floor());
+            let (u, v) = (fx - cx, fz - cz);
+            let at = |i: f32, j: f32| vertex(ox + (cx + i + 0.5) * cell, oz + (cz + j + 0.5) * cell);
+            let c = [at(0.0, 0.0), at(1.0, 0.0), at(0.0, 1.0), at(1.0, 1.0)];
+            let w = [(1.0 - u) * (1.0 - v), u * (1.0 - v), (1.0 - u) * v, u * v];
+            let mut out = 0u32;
+            for ch in 0..4 {
+                let sum: f32 = (0..4).map(|k| ((c[k] >> (8 * ch)) & 255) as f32 * w[k]).sum();
+                out |= (sum.round().clamp(0.0, 255.0) as u32) << (8 * ch);
+            }
+            out
+        }));
+    }
     // land beyond the city's shoreline rings. The rings call the
     // Marin headlands across the Golden Gate sea (they are not San
     // Francisco's), so the water press drew the elevation grid's own ground
@@ -1750,6 +1804,10 @@ fn load_world_with_footways(args: &Args, keep_footways: bool) -> Result<World> {
             let mapped = |x: f64, z: f64| eo_landmarks::ground_cover::installed().is_some_and(|c| c.tone_name_at(x, z) == Some("bareRock"));
             eo_landmarks::rocks::hills::late_pass(&root, &ground, &mapped);
         });
+    }
+    // the street ground takes the terrain tiles' own vertex data where it is drawn over them (eo_render::street::set_ground_from_scene)
+    if eo_street::ground::street_ground_on() {
+        eo_render::street::set_ground_from_scene(&scene, &elevation.meta);
     }
     let house_vertex_base = scene.vertices.len();
     if let Some(house) = &house { house.append(&mut scene, &authored.materials, args.house_photo_lod); }
@@ -1995,6 +2053,20 @@ fn roofs_flags() {
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),
         ("--no-ground-beach-fit", "EO_GROUND_BEACH_FIT"),
+        // the ground the streets stand in (eo_street::ground::street_ground_on).
+        ("--no-street-ground", "EO_STREET_GROUND"),
+        // junction pads and corners on the ground (eo_street::mesh::junction_ground).
+        ("--no-junction-ground", "EO_JUNCTION_GROUND"),
+        // the ground behind a walk graded as a cut slope (eo_street::ground::cut_slopes).
+        ("--no-cut-slopes", "EO_CUT_SLOPES"),
+        // a small piece of open ground a road encloses drawn as a kerbed island (eo_street::ground::street_islands).
+        ("--no-street-islands", "EO_STREET_ISLANDS"),
+        // a retaining wall behind a walk capped by a coping (eo_street::mesh::wall_coping).
+        ("--no-wall-coping", "EO_WALL_COPING"),
+        // walks and runs giving way on other junctions' pads (eo_street::plan::walk_yield_strict).
+        ("--no-walk-yield-strict", "EO_WALK_YIELD_STRICT"),
+        // two carriageways alongside each other meeting at one surface (eo_street::seams::road_seams).
+        ("--no-road-seams", "EO_ROAD_SEAMS"),
         // the landmark buildings' second generators and the named skyline towers (eo_landmarks::set::Options).
         ("--no-towers2", "EO_TOWERS2"),
         ("--no-skyline", "EO_SKYLINE"),

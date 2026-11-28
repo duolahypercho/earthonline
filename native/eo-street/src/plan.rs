@@ -415,7 +415,18 @@ pub struct Approach {
     pub paint_reach: f64,
     /// Crossing ramps reserved on the [ccw, cw] side.
     pub crossing_ramps: [bool; 2],
+    /// (`seams::road_seams`) a slip road joining or leaving a through road
+    /// alongside it (within `MERGE_COS`; the slip with no walk): the trim of that
+    /// through leg. The slip's ribbon is drawn from there (clipped where the
+    /// through road covers it, `seams`) instead of from its own trim (cut back
+    /// until clear of the through road, often 100 m and more), and the pad
+    /// is the through legs' alone: it had fanned over the through road's
+    /// lanes to the slip's far mouth at its own level, up to 0.6 m off them.
+    pub merge_trim: Option<f64>,
 }
+
+/// (`merge_trim`) a slip road runs alongside a through leg within 25 degrees.
+pub const MERGE_COS: f64 = 0.906;
 
 /// `solveCornerArc`'s fillet.
 #[derive(Clone, Copy, Debug)]
@@ -832,6 +843,7 @@ fn make_approach(entries: &[Entry], ei: usize, at_start: bool) -> Approach {
         crossing_painted: false,
         paint_reach: 0.0,
         crossing_ramps: [false, false],
+        merge_trim: None,
     }
 }
 
@@ -1318,6 +1330,27 @@ fn plan_junction(node: &mut Node, entries: &mut [Entry], o: &StreetOptions) {
             e.trim_end = e.trim_end.max(app.trim);
         }
     }
+    // (`merge_trim`) a slip alongside a through leg, neither with a walk.
+    if has_through && crate::seams::road_seams() {
+        let walkless = |a: &Approach| !(entries[a.entry].walks[0] >= o.min_sidewalk_width) && !(entries[a.entry].walks[1] >= o.min_sidewalk_width);
+        for i in 0..count {
+            if !slip[i] || !walkless(&node.approaches[i]) {
+                continue;
+            }
+            let ui = node.approaches[i].u;
+            let partner = (0..count)
+                .filter(|&j| !slip[j])
+                .map(|j| (j, ui[0] * node.approaches[j].u[0] + ui[1] * node.approaches[j].u[1]))
+                .filter(|&(_, c)| c > MERGE_COS)
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            if let Some((j, _)) = partner {
+                let t = node.approaches[j].trim;
+                if t < node.approaches[i].trim - 1e-6 {
+                    node.approaches[i].merge_trim = Some(t);
+                }
+            }
+        }
+    }
 }
 
 /// `reconcileTrims`.
@@ -1549,8 +1582,135 @@ impl CorridorIndex {
     }
 }
 
+/// The junction pads (the hull of each node's approaches' trimmed mouths,
+/// shrunk `PAD_SHRINK_M`), gridded, for the walk yield.
+#[derive(Default)]
+pub(crate) struct PadIndex {
+    /// (hull, its node's approach entries, the node)
+    hulls: Vec<(Vec<P2>, Vec<usize>, usize)>,
+    cells: HashMap<(i64, i64), Vec<usize>>,
+}
+
+/// A walk point this far inside a pad's hull edge is on the pad (the mouths'
+/// own walks meet the hull's edge there).
+const PAD_SHRINK_M: f64 = 0.5;
+const PAD_CELL_M: f64 = 24.0;
+
+impl PadIndex {
+    pub(crate) fn new(nodes: &[Node], entries: &[Entry]) -> Self {
+        let mut out = PadIndex::default();
+        for (ni, n) in nodes.iter().enumerate() {
+            if n.approaches.len() < 3 {
+                continue;
+            }
+            let mut pts: Vec<P2> = vec![];
+            for app in &n.approaches {
+                let f = approach_end_frame(entries, app);
+                pts.push(f.at(-app.half));
+                pts.push(f.at(app.half));
+            }
+            let hull = convex_hull(pts);
+            if hull.len() < 3 {
+                continue;
+            }
+            let k = out.hulls.len();
+            let (mut x0, mut x1, mut z0, mut z1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+            for p in &hull {
+                x0 = x0.min(p[0]);
+                x1 = x1.max(p[0]);
+                z0 = z0.min(p[1]);
+                z1 = z1.max(p[1]);
+            }
+            for gz in (z0 / PAD_CELL_M).floor() as i64..=(z1 / PAD_CELL_M).floor() as i64 {
+                for gx in (x0 / PAD_CELL_M).floor() as i64..=(x1 / PAD_CELL_M).floor() as i64 {
+                    out.cells.entry((gx, gz)).or_default().push(k);
+                }
+            }
+            out.hulls.push((hull, n.approaches.iter().map(|a| a.entry).collect(), ni));
+        }
+        out
+    }
+
+    /// (x, z) lies on the pad of a junction run `me` is not an approach of.
+    fn on_pad(&self, x: f64, z: f64, me: usize) -> bool {
+        self.find(x, z, |apps, _| !apps.contains(&me))
+    }
+
+    /// (x, z) lies on the pad of a junction other than node `ni` (a corner
+    /// return of a junction in a cluster, lying on its neighbour's pad).
+    pub(crate) fn on_other_pad(&self, x: f64, z: f64, ni: usize) -> bool {
+        self.find(x, z, |_, n| n != ni)
+    }
+
+
+    /// (x, z) lies more than `depth` inside node `ni`'s own pad: a corner
+    /// return's walk there lies in its junction's roadway (an approach trimmed
+    /// short, its mouth inside the cross street's).
+    pub(crate) fn deep_in_own_pad(&self, x: f64, z: f64, ni: usize, depth: f64) -> bool {
+        self.find_by(x, z, depth, |_, n| n == ni)
+    }
+
+    fn find(&self, x: f64, z: f64, keep: impl Fn(&[usize], usize) -> bool) -> bool {
+        self.find_by(x, z, PAD_SHRINK_M, keep)
+    }
+
+    fn find_by(&self, x: f64, z: f64, shrink: f64, keep: impl Fn(&[usize], usize) -> bool) -> bool {
+        let Some(list) = self.cells.get(&((x / PAD_CELL_M).floor() as i64, (z / PAD_CELL_M).floor() as i64)) else { return false };
+        list.iter().any(|&k| {
+            let (h, apps, n) = &self.hulls[k];
+            keep(apps, *n)
+                && (0..h.len()).all(|i| {
+                    let (a, b) = (h[i], h[(i + 1) % h.len()]);
+                    let (ex, ez) = (b[0] - a[0], b[1] - a[1]);
+                    let l = hypot(ex, ez).max(1e-9);
+                    (ex * (z - a[1]) - ez * (x - a[0])) / l >= shrink
+                })
+        })
+    }
+}
+
+/// Monotone chain convex hull, counter-clockwise (x, z).
+pub(crate) fn convex_hull(mut p: Vec<P2>) -> Vec<P2> {
+    p.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    p.dedup();
+    if p.len() < 3 {
+        return p;
+    }
+    let cross = |o: P2, a: P2, b: P2| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let mut h: Vec<P2> = vec![];
+    for pass in 0..2 {
+        let start = h.len();
+        let it: Box<dyn Iterator<Item = &P2>> = if pass == 0 { Box::new(p.iter()) } else { Box::new(p.iter().rev()) };
+        for &q in it {
+            while h.len() >= start + 2 && cross(h[h.len() - 2], h[h.len() - 1], q) <= 0.0 {
+                h.pop();
+            }
+            h.push(q);
+        }
+        h.pop();
+    }
+    h
+}
+
+/// (`--no-walk-yield-strict`, `EO_WALK_YIELD_STRICT=0`) a walk keeps the
+/// junction guard over any lesser road's mouth, as the JS did; on (the
+/// default), only over the mouth of a road its own run meets at a junction.
+pub fn walk_yield_strict() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("EO_WALK_YIELD_STRICT").map(|v| v.trim() != "0" && v.trim() != "off").unwrap_or(true))
+}
+
 pub(crate) fn carriageway_order(entries: &[Entry], city: &StreetCity) -> Vec<usize> {
-    // (structure legs are not drawn: they neither yield nor cover.)
+    priority_order(entries, city).0
+}
+
+/// The drawn runs busiest first (class, then width, then the segment's seed),
+/// and every run's position in that order (`usize::MAX` for a structure leg,
+/// which is not drawn). The JS indexes each run's corridors after probing it,
+/// in this order, so a run is probed against the runs before it: the same
+/// answer as one full index read through `rank < mine`, which lets every run
+/// be probed at once (`plan_carriageway_yield`; `seams`).
+pub fn priority_order(entries: &[Entry], city: &StreetCity) -> (Vec<usize>, Vec<usize>) {
     let mut order: Vec<usize> = (0..entries.len()).filter(|&e| entries[e].structure_leg.is_none()).collect();
     order.sort_by(|&a, &b| {
         let (ea, eb) = (&entries[a], &entries[b]);
@@ -1559,7 +1719,11 @@ pub(crate) fn carriageway_order(entries: &[Entry], city: &StreetCity) -> Vec<usi
             .then(eb.half.partial_cmp(&ea.half).unwrap())
             .then(city.segments[ea.pieces[0]].seed().cmp(city.segments[eb.pieces[0]].seed()))
     });
-    order
+    let mut rank = vec![usize::MAX; entries.len()];
+    for (i, &e) in order.iter().enumerate() {
+        rank[e] = i;
+    }
+    (order, rank)
 }
 
 fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptions, city: &StreetCity) {
@@ -1573,15 +1737,8 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             }
         }
     }
-    let order = carriageway_order(entries, city);
-    // Priority position of every entry (0 = busiest). The JS indexes each run's
-    // corridors after probing it, in this order, so a run is probed against the
-    // runs before it: the same answer as one full index read through `rank < mine`,
-    // which lets every run be probed at once.
-    let mut rank = vec![usize::MAX; entries.len()];
-    for (i, &e) in order.iter().enumerate() {
-        rank[e] = i;
-    }
+    // (structure legs are not drawn: they neither yield nor cover.)
+    let (order, rank) = priority_order(entries, city);
     let corner_close = 0.06;
     let mut cover = CorridorIndex::new(24.0);
     let mut road = CorridorIndex::new(24.0);
@@ -1593,7 +1750,14 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             road.add(CorridorEdge { a: e.points[i], b: e.points[i + 1], half: e.half, owner: ei, first: false, last: false, arc0: e.cum[i] });
         }
     }
-    let covered_by = |x: f64, z: f64, shrink: f64, mine: usize| -> Option<usize> {
+    // (`walk_yield_strict`) a run crossing an earlier one (more than 45 degrees
+    // off it, no junction drawn there: two service roads mapped across each
+    // other, a short stub's mouth inside the road it joins) gives the span its
+    // centreline lies on the other's carriageway up: the clearance (`shrink`,
+    // the run's whole reach) is for a run alongside, and kept both ribbons
+    // drawn coplanar there, fighting.
+    let strict = walk_yield_strict();
+    let covered_by = |x: f64, z: f64, shrink: f64, mine: usize, ux: f64, uz: f64| -> Option<usize> {
         let (gx, gz) = ((x / cover.cell).floor() as i64, (z / cover.cell).floor() as i64);
         let mut best = None;
         let mut best_depth = 0.0;
@@ -1613,7 +1777,10 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                     }
                     t = clamp(t, 0.0, 1.0);
                     let (ex, ez) = (x - (e.a[0] + dx * t), z - (e.a[1] + dz * t));
-                    let reach = e.half - shrink;
+                    // (a stub raised to a structure too: where it crosses another run its
+                    // ramp is back at the datum, and the two stood coplanar, fighting)
+                    let crossing = strict && len2 > 1e-9 && ((dx * ux + dz * uz) / len2.sqrt()).abs() < std::f64::consts::FRAC_1_SQRT_2;
+                    let reach = e.half - if crossing { 0.0 } else { shrink };
                     if ex > reach || ex < -reach || ez > reach || ez < -reach {
                         continue;
                     }
@@ -1630,6 +1797,8 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
     let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
     let chunk = entries.len().div_ceil(threads).max(1);
     let ids: Vec<usize> = (0..entries.len()).collect();
+    // (`walk_yield_strict`) the junction pads, for both passes.
+    let pads = if walk_yield_strict() { PadIndex::new(nodes, entries) } else { PadIndex::default() };
     // Pass 1: the ribbon spans each run gives up.
     let spans1: Vec<Vec<(f64, f64, usize)>> = {
         let entries_r: &[Entry] = entries;
@@ -1651,7 +1820,9 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             loop {
                 let p = s.min(length);
                 let f = at(p);
-                let id = covered_by(f.x, f.z, clear, mine);
+                // (`walk_yield_strict`) a centreline crossing a junction's pad it
+                // is not an approach of gives that span up too (the pad draws it).
+                let id = covered_by(f.x, f.z, clear, mine, f.tx, f.tz).or_else(|| pads.on_pad(f.x, f.z, ei).then_some(usize::MAX));
                 if id.is_some() && prev.is_none() {
                     run_start = p;
                 }
@@ -1680,7 +1851,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                 for _ in 0..12 {
                     let mid = (a + b) / 2.0;
                     let f = at(mid);
-                    if covered_by(f.x, f.z, clear, mine).is_some() == want {
+                    if (covered_by(f.x, f.z, clear, mine, f.tx, f.tz).is_some() || pads.on_pad(f.x, f.z, ei)) == want {
                         b = mid;
                     } else {
                         a = mid;
@@ -1716,6 +1887,9 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                     if !neighbours[ei].contains(&id) {
                         return true;
                     }
+                    if id == usize::MAX {
+                        return true; // on another junction's pad
+                    }
                     let cover_frac = (b.min(s1) - a.max(s0)) / drawable;
                     if cover_frac < o.presentation_duplicate_cover {
                         return false;
@@ -1743,6 +1917,9 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
     // Pass 2: footway strips lying on somebody else's drawn road.
     let crossover_cos = (20.0f64).to_radians().cos();
     let entries_r: &[Entry] = entries;
+    // (`walk_yield_strict`) and on a junction's pad its run is not an approach
+    // of (`pads`): the pad's fan stands at its approaches' datums, and a walk
+    // of another run under or over it is a slab.
     let on_roadway = |x: f64, z: f64, me: usize, ux: f64, uz: f64| -> bool {
         let (gx, gz) = ((x / road.cell).floor() as i64, (z / road.cell).floor() as i64);
         let Some(list) = road.buckets.get(&(gx, gz)) else { return false };
@@ -1768,10 +1945,21 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                 }
             }
             let station = e.arc0 + len2.sqrt() * raw;
-            if station < ow.trim_start - 0.05 || station > ow.length - ow.trim_end + 0.05 || ow.in_yield_span(station) {
+            // (`seams`: a slip merging alongside a through road is drawn from the
+            // through leg's mouth, `Approach::merge_trim`; a walk of that road lying
+            // on it there gives way, no junction guard: the slip's lane takes its place)
+            let merge = |end: Option<(usize, usize)>| end.and_then(|(n, a)| nodes[n].approaches[a].merge_trim);
+            let (m0, m1) = (merge(ow.approach_start), merge(ow.approach_end));
+            let (t0, t1) = (m0.map_or(ow.trim_start, |t| t.min(ow.trim_start)), m1.map_or(ow.trim_end, |t| t.min(ow.trim_end)));
+            if station < t0 - 0.05 || station > ow.length - t1 + 0.05 || ow.in_yield_span(station) {
                 continue;
             }
-            if rank[owner] > rank[me] {
+            let merging = (m0.is_some() && station < ow.trim_start) || (m1.is_some() && station > ow.length - ow.trim_end);
+            // (the guard keeps a walk across a lesser road's mouth at a junction
+            // both runs meet at, where the corner returns take over; two runs
+            // that share no junction keep no such walk: it would lie on the
+            // other's roadway at its own level, a slab over or under it.)
+            if !merging && rank[owner] > rank[me] && (!walk_yield_strict() || neighbours[me].contains(&owner)) {
                 let guard = se.half + se.walks[0].max(se.walks[1]) + 0.5;
                 if station < ow.trim_start + guard || station > ow.length - ow.trim_end - guard {
                     continue;
@@ -1797,9 +1985,17 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             let probe = |sv: f64| -> bool {
                 let f = e.frame(sv, false);
                 let mut hits = 0;
-                for &lat in &laterals {
-                    if on_roadway(f.x + f.nx * lat * f.miter, f.z + f.nz * lat * f.miter, ei, f.nz, -f.nx) {
+                for (q, &lat) in laterals.iter().enumerate() {
+                    let (px, pz) = (f.x + f.nx * lat * f.miter, f.z + f.nz * lat * f.miter);
+                    if on_roadway(px, pz, ei, f.nz, -f.nx) || pads.on_pad(px, pz, ei) {
                         hits += 1;
+                        // (`walk_yield_strict`) a walk whose outer edge lies on
+                        // another road (a divided street's median-side walk,
+                        // wider than its median, across the other carriageway)
+                        // gives way too: it was a slab a kerb over those lanes.
+                        if strict && q == laterals.len() - 1 {
+                            return true;
+                        }
                     }
                     if hits >= 2 {
                         return true;

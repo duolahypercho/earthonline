@@ -147,8 +147,9 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
     return s * min(inverseSqrt(keep), t.z);
 }
 fn pr_afloat_on(i: PrInstance) -> bool {
-    // Vegetation stores a signed terrain gradient in this same word. Its
-    // sign bit must never roll a rock or shrub as though it were a hull.
+    // A boat only (`BOAT_BASE .. BOAT_BASE + PR_BOAT_COUNT`, i.e. `PR_BOAT_START..PR_BOAT_END`).
+    // Vegetation, pull boxes, and district/pole lamps store gradients or lamp seeds in `pad`
+    // whose top bit can be set and must never be turned as a hull's roll and pitch.
     return i.model >= PR_BOAT_START && i.model < PR_BOAT_END
         && (pr.mode.z & PR_F_AFLOAT) != 0u && (i.pad & PR_AFLOAT_BIT) != 0u;
 }

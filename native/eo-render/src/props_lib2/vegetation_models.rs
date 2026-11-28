@@ -151,7 +151,7 @@ pub const YARD_REACH: f32 = 0.75;
 /// WGSL appended to props_types.wgsl: the vegetation range and its thinning
 /// (the same numbers as `THIN`, so the cull, colour and shadow passes agree).
 pub fn thin_wgsl() -> String {
-    let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_VEG_TREES: u32 = {}u;\nconst PR_VEG_GRASS: u32 = {}u;\nconst PR_VEG_ROCK: u32 = {}u;\nconst PR_VEG_MEADOW: u32 = {}u;\n", V_SHRUB - V_TREE, V_GRASS - V_TREE, V_ROCK - V_TREE, V_MEADOW - V_TREE);
+    let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_BOAT_COUNT: u32 = {}u;\nconst PR_VEG_TREES: u32 = {}u;\nconst PR_VEG_GRASS: u32 = {}u;\nconst PR_VEG_ROCK: u32 = {}u;\nconst PR_VEG_MEADOW: u32 = {}u;\n", eo_props::boats::BODIES.len(), V_SHRUB - V_TREE, V_GRASS - V_TREE, V_ROCK - V_TREE, V_MEADOW - V_TREE);
     s += &format!("const PR_VEG_FLOOR: f32 = {THIN_FLOOR:?};\nconst PR_VEG_GRASS_CELL_MEAN: f32 = {GRASS_CELL_MEAN:?};\n");
     s += &format!("const PR_YARD_PLANT: u32 = {YARD_PLANT_BIT}u;\nconst PR_YARD_REACH: f32 = {YARD_REACH:?};\n");
     // the third grass pass's break-up (`--no-meadow-breakup`): props_types.wgsl

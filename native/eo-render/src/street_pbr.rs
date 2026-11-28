@@ -48,6 +48,14 @@ pub const GUTTER_ALBEDO: f64 = 0.21;
 /// toward a low sun).
 pub const ASPHALT_ROUGH: f64 = 0.82;
 pub const ASPHALT_ROUGH_POLISHED: f64 = 0.52;
+/// (`--matte-wheel-paths`, look::MATTE_WHEEL_PATHS) the wheel paths' polish
+/// as drawn with it (a shading choice, matched to a photograph): at 0.52
+/// the paths in a building's shade reflected the bright sky down the street
+/// as sky-blue bands from the eye's feet to the far end (Mission at 3rd,
+/// noon); a photograph of that street from the same corner (Wikimedia
+/// Commons, CC0, 2011) shows the near carriageway matte and the polish only
+/// as a faint sheen far down the road toward grazing, which 0.68 keeps.
+pub const ASPHALT_ROUGH_POLISHED_MATTE: f64 = 0.68;
 /// The share of the design vehicle's width between its wheel paths' centres
 /// (a shading choice: a car's or bus's tyres run inside its body).
 pub const TRACK_SHARE: f64 = 0.7;
@@ -247,6 +255,23 @@ pub const AGG_MASTIC_AO: f64 = 0.85;
 /// (their blotchy 5-10 cm normal field: what the scans are at the road's
 /// scale is the mean of the aggregate, which this layer now draws).
 pub const AGG_SCAN_RELIEF_OUT: f64 = 0.65;
+/// (`--aged-aggregate`, look::AGED_AGGREGATE) An old street's grime film (tyre
+/// rubber, brake dust, soil) over stones and mastic alike: each stone's tone
+/// keeps this share of its departure from the layout's mean, the rest the
+/// mean's own. A shading choice matched to a photograph: Mission at 3rd (the
+/// same corner, CC0, 2011) shows the shaded carriageway 2-4 m from the eye a
+/// near-even grey, its fine contrast (linear luminance less a 6 px blur, its
+/// spread over its mean) 0.13, where the stones' full tones drew 0.76.
+pub const AGG_AGED_TONE: f64 = 0.3;
+/// (`--aged-aggregate`) The stones' tones resolved only while a stone spans a
+/// few pixels or more across the view: whole up to a footprint of this share
+/// of the pitch (a stone over ten pixels), gone at the second (four pixels),
+/// as a camera's lens and sensor take a three-pixel grain's contrast down (the
+/// relief and finish keep their own fade). Without it the tones held to a
+/// stone of a pixel, the tops widened by the footprint brighter than the
+/// layout's mean (the street 16% lighter than its calibrated tone at 3 m).
+pub const AGG_AGED_NEAR: f64 = 0.1;
+pub const AGG_AGED_FAR: f64 = 0.25;
 
 // ---- `--plaza-setts` (look::PLAZA_SETTS; street_pbr.wgsl `ss_*`) ------------------------
 //
@@ -622,6 +647,7 @@ pub fn wgsl() -> String {
         ("SP_GUTTER_ALBEDO", GUTTER_ALBEDO),
         ("SP_ASPHALT_ROUGH", ASPHALT_ROUGH),
         ("SP_ASPHALT_ROUGH_POLISHED", ASPHALT_ROUGH_POLISHED),
+        ("SP_ASPHALT_ROUGH_POLISHED_MATTE", ASPHALT_ROUGH_POLISHED_MATTE),
         ("SP_LANE_M", d.lane_m),
         ("SP_PARKING_M", d.parking_m),
         ("SP_TRACK_M", d.vehicle_m * TRACK_SHARE),
@@ -705,6 +731,9 @@ pub fn wgsl() -> String {
         ("SG_WIDE_MATTE", GLARE_WIDE_MATTE),
         ("SG_SETT_ROUGH", GLARE_SETT_ROUGH),
         ("SA_STONE_M", AGG_STONE_M),
+        ("SA_AGED_TONE", AGG_AGED_TONE),
+        ("SA_AGED_NEAR", AGG_AGED_NEAR),
+        ("SA_AGED_FAR", AGG_AGED_FAR),
         ("SA_STONE_SHARE", AGG_STONE_SHARE),
         ("SA_GAP_MIN", AGG_GAP_MIN),
         ("SA_GAP_MAX", AGG_GAP_MAX),
@@ -830,6 +859,8 @@ mod tests {
         assert!(SEAL_PROUD_M > 0.0015 && SEAL_PROUD_M < 0.0032, "1/16-1/8 in");
         assert!(PAINT_WORN < PAINT_WORN_OLD && PAINT_WORN_OLD < 0.5);
         assert!(PAINT_ROUGH < PAINT_ROUGH_AGED && PAINT_ROUGH_AGED <= ASPHALT_ROUGH_POLISHED);
+        // (`--matte-wheel-paths`) still polished, short of the open binder
+        assert!(ASPHALT_ROUGH_POLISHED < ASPHALT_ROUGH_POLISHED_MATTE && ASPHALT_ROUGH_POLISHED_MATTE < ASPHALT_ROUGH);
         for a in [SETT_ALBEDO, BRICK_PAVER_ALBEDO, CONCRETE_PAVER_ALBEDO] {
             assert!((0.2..=0.4).contains(&a), "{a}");
         }
@@ -896,8 +927,12 @@ mod tests {
         let cover = (ao0 - AGG_MASTIC_AO) / (1.0 - AGG_MASTIC_AO);
         assert!((0.4..=0.8).contains(&cover), "{cover}");
         assert!(AGG_TOP_ROUGH_WHEEL < AGG_TOP_ROUGH && AGG_TOP_ROUGH < AGG_FILM_ROUGH && AGG_FILM_ROUGH < AGG_MASTIC_ROUGH);
+        // (`--aged-aggregate`) the grime keeps a share of each tone, and the tones fade out
+        // over footprints of a tenth to a quarter of the pitch: before the layer's own fade begins
+        assert!(AGG_AGED_TONE > 0.0 && AGG_AGED_TONE < 1.0);
+        assert!(AGG_AGED_NEAR < AGG_AGED_FAR && AGG_AGED_FAR <= 0.3);
         let w = wgsl();
-        for k in ["SA_STONE_M", "SA_MEAN_ALB0", "SA_MEAN_ROUGH1", "SA_MEAN_TOPS0", "SA_GREY_TINT"] {
+        for k in ["SA_STONE_M", "SA_MEAN_ALB0", "SA_MEAN_ROUGH1", "SA_MEAN_TOPS0", "SA_GREY_TINT", "SA_AGED_TONE", "SA_AGED_NEAR", "SA_AGED_FAR"] {
             assert!(w.contains(&format!("const {k}: ")), "{k}");
         }
     }

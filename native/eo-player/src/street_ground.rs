@@ -99,7 +99,13 @@ impl StreetGround {
             Some(s) => Arc::new(s),
             None => first.world,
         };
-        Ok(Self::new(world, Some(Arc::new(joined.structures))))
+        let structures = Arc::new(joined.structures);
+        // the street ground (eo-street `ground`) leaves the tunnels' cuts open, as the heightfield does.
+        if !structures.is_empty() {
+            let s = structures.clone();
+            world.set_ground_cut(Arc::new(move |x, z| s.terrain_cut_at(x, z).map(|c| c.floor)));
+        }
+        Ok(Self::new(world, Some(structures)))
     }
 
     /// The grade-separated roads, when there are any (`--structures` and a
@@ -138,7 +144,7 @@ impl GroundProvider for StreetGround {
     }
 
     fn surface_tile(&self, key: TileKey) -> Option<SurfaceMesh> {
-        let m = self.world.cached_mesh((key.x, key.z));
+        let m = self.world.drawn_mesh((key.x, key.z)); // the paving and its street ground (eo-street `ground`)
         // (before the street's own early return: a tile with only a deck,
         // over the water or freeway-only, still collides.)
         let deck = self.decks().and_then(|w| w.surface_tile_shared((key.x, key.z))).filter(|d| !d.street.is_empty() || !d.barrier.is_empty());

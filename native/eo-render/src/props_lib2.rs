@@ -58,6 +58,7 @@ pub const OH_SIGN_BASE: u32 = OH_BASE + 7;
 pub const MAX_SIGN_VARIANTS: u32 = 32;
 /// The moored boats (`eo_props::boats::BODIES` order), after the vegetation models
 /// (which follow the sign variants).
+/// (props_types.wgsl `pr_afloat_on` checks `BOAT_BASE .. BOAT_BASE + BODIES.len()`.)
 pub const BOAT_BASE: u32 = vegetation_models::VEG_BASE + vegetation_models::COUNT;
 /// The SFMTA sign plates' Blender models (`eo_props::sign_models`), one per inventory face and
 /// wear variant: `sign_model_id(face, wear)` for a `Model::SignPlate` instance of that face

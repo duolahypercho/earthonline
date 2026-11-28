@@ -488,9 +488,12 @@ impl VegGround {
     }
 
     /// The drawn ground's height at (x, z): the detail ground where one is
-    /// set (`eo_data::detail_ground`, none yet), else the terrain triangle.
+    /// set (`eo_data::detail_ground`, none yet), else the terrain triangle,
+    /// or the street ground's triangle where it is drawn over it (eo-street
+    /// `ground`, `--street-ground`: the terrain is lower and hidden there).
     pub fn ground_y(&self, x: f64, z: f64) -> Option<f64> {
-        eo_data::detail_ground::height(x, z).or_else(|| self.grid.height(x, z))
+        let y = eo_data::detail_ground::height(x, z).or_else(|| self.grid.height(x, z))?;
+        Some(self.street.overlay_height(x, z).map_or(y, |o| y.max(o)))
     }
 
     /// The cliff over a beach (`--no-cliff-rock-cover`: never): the ground the

@@ -194,6 +194,28 @@ pub fn env_sh_with_dome_colour(model: &sky::SkyModel, env: &[Rgb; 9]) -> [Rgb; 9
     c.map(|v| scale3(v, k))
 }
 
+/// (`--dome-env` with `--dome-yield`) `env_sh_with_dome_colour` where the
+/// frame's environment is the analytic dome's, and the frame's own where it is
+/// the physical daylight's (`phys::apply`: its sky integrated through the
+/// physical atmosphere, graded by the weather): the painted dome's colour
+/// stands in for the analytic dome's deep blue only, weighted by the share of
+/// the frame the analytic dome still lights, `1 - daylight_weight`
+/// (`SkyTerms::daylight_weight`, 0..1). Over the physical daylight the analytic
+/// painted dome's colour (B/R 3.5 facing up at noon) replaced the daylight's
+/// own (B/R 1.9 up, 1.1 on a wall, with the weather's cirrus and haze): the fill
+/// in every shade went navy.
+pub fn env_sh_with_dome_colour_yielding(model: &sky::SkyModel, env: &[Rgb; 9], daylight_weight: f64) -> [Rgb; 9] {
+    let w = daylight_weight.clamp(0.0, 1.0);
+    if w >= 1.0 {
+        return *env;
+    }
+    let d = env_sh_with_dome_colour(model, env);
+    if w <= 0.0 {
+        return d;
+    }
+    std::array::from_fn(|k| [0, 1, 2].map(|ch| d[k][ch] + (env[k][ch] - d[k][ch]) * w))
+}
+
 /// Evaluate a cosine-convolved SH9 (CPU reference of the shader).
 pub fn sh_eval(c: &[Rgb; 9], n: [f64; 3]) -> Rgb {
     let y = sh_basis(n);
@@ -347,6 +369,24 @@ impl LookFrame {
 #[cfg(test)]
 mod dome_env_tests {
     use super::*;
+
+    /// (`--dome-yield`) the painted dome's colour only over the analytic dome's
+    /// share: the physical daylight's environment is kept whole, the analytic
+    /// frame's recoloured as before, a part-way weight in between.
+    #[test]
+    fn the_dome_colour_yields_to_the_physical_daylight() {
+        let lf = LookFrame::new(12.0);
+        let painted = env_sh_with_dome_colour(&lf.model, &lf.env_sh);
+        assert_eq!(env_sh_with_dome_colour_yielding(&lf.model, &lf.env_sh, 1.0), lf.env_sh);
+        assert_eq!(env_sh_with_dome_colour_yielding(&lf.model, &lf.env_sh, 0.0), painted);
+        let half = env_sh_with_dome_colour_yielding(&lf.model, &lf.env_sh, 0.5);
+        for k in 0..9 {
+            for ch in 0..3 {
+                let m = 0.5 * (painted[k][ch] + lf.env_sh[k][ch]);
+                assert!((half[k][ch] - m).abs() <= 1e-12 * m.abs().max(1.0), "{k} {ch}");
+            }
+        }
+    }
 
     #[test]
     fn the_dome_env_keeps_the_light_and_takes_the_painted_colour() {

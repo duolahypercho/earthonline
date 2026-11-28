@@ -55,7 +55,9 @@ pub struct Bases {
 }
 
 /// Slice 4 street arena (near packs): vertices, indices, objects.
-pub const STREET_ARENA: (u32, u32, u32) = (1_500_000, 2_250_000, 1024);
+/// (the street ground, eo-street `ground`, adds up to 4,225 vertices, 24,576
+/// indices and an object a tile: the sizes below make room for it.)
+pub const STREET_ARENA: (u32, u32, u32) = (2_200_000, 5_000_000, 1536);
 
 /// The kit arena's sizes without `--kit-arena-*` (main.rs defaults).
 const KIT_ARENA_DEFAULT: (u32, u32, u32) = (16_000_000, 26_000_000, 32_768);
@@ -74,7 +76,7 @@ const KIT_ARENA_DEFAULT: (u32, u32, u32) = (16_000_000, 26_000_000, 32_768);
 /// Sized at about 1.33x (mid), 1.4x (near) and 2.5x (street).
 pub const VD_KIT_MID: (u32, u32, u32) = (11_000_000, 17_000_000, 4_608);
 pub const VD_KIT_NEAR: (u32, u32, u32) = (3_500_000, 5_400_000, 640);
-pub const VD_STREET_ARENA: (u32, u32, u32) = (400_000, 600_000, 256);
+pub const VD_STREET_ARENA: (u32, u32, u32) = (640_000, 1_400_000, 384); // with the street ground (eo-street `ground`): up to 4,225 vertices, 24,576 indices and one more object a tile
 
 /// the most model vertices and indices that can stand within
 /// MODEL_DROP_M of any point (a 40 m grid over the models, each counted
@@ -299,6 +301,12 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     }
     if street_switch("walk-relief", crate::walk_relief()) {
         features.street |= eo_render::look::WALK_RELIEF; // (`--walk-relief`)
+    }
+    if street_switch("matte-wheel-paths", crate::matte_wheel_paths()) {
+        features.street |= eo_render::look::MATTE_WHEEL_PATHS; // (`--matte-wheel-paths`)
+    }
+    if street_switch("aged-aggregate", crate::aged_aggregate()) {
+        features.street |= eo_render::look::AGED_AGGREGATE; // (`--aged-aggregate`)
     }
     eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(

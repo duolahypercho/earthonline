@@ -286,6 +286,18 @@ pub fn built_ground_color() -> u32 {
     land_color(50, false)
 }
 
+/// A terrain vertex's colour at (wx, wz) where the ground tone has none
+/// (`colour_at` in the scene build: the land-cover class's tint, the cell's
+/// lidar flag), for the street ground drawn as terrain (street.rs).
+pub fn terrain_land_colour(land: Option<&LandCover>, g: &ElevationGrid, wx: f32, wz: f32) -> u32 {
+    let (ox, oz, cell) = (g.meta.origin_x as f32, g.meta.origin_z as f32, g.meta.cell_size as f32);
+    let cx = ((wx - ox) / cell).floor();
+    let cz = ((wz - oz) / cell).floor();
+    let lidar = cx >= 0.0 && cz >= 0.0 && (cx as usize) < g.meta.width && (cz as usize) < g.meta.height && g.is_lidar_ground_cell(cx as usize, cz as usize);
+    let class = land.map(|l| l.class_at(wx as f64, wz as f64)).unwrap_or(50);
+    land_color(class, !lidar)
+}
+
 /// Flat debug palette for terrain, keyed by WorldCover class. These are
 /// placeholder tones for a performance slice, not a look.
 fn land_color(class: u8, underwater: bool) -> u32 {

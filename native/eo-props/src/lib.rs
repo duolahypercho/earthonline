@@ -649,9 +649,15 @@ impl PropsWorld {
         Ok(())
     }
 
-    /// The drawn street surface (paving, else the ground carpet) at (x, z).
+    /// The drawn street surface (paving, else the ground carpet, or the
+    /// street ground where it is drawn over the carpet: eo-street `ground`,
+    /// `--street-ground`) at (x, z).
     pub fn ground(&self, x: f64, z: f64) -> f64 {
-        self.street.surface_at(x, z, None)
+        let y = self.street.surface_at(x, z, None);
+        if self.street.paved_at(x, z).is_some() {
+            return y;
+        }
+        self.street.overlay_height(x, z).map_or(y, |o| y.max(o))
     }
 
     /// `sidewalkBand(seg, side, o, clear)`.

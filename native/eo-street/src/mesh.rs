@@ -54,7 +54,7 @@ fn PAD() -> [u8; 3] {
     pal("junction")
 }
 #[allow(non_snake_case)]
-fn CURB_FACE() -> [u8; 3] {
+pub(crate) fn CURB_FACE() -> [u8; 3] {
     pal("curbFace")
 }
 #[allow(non_snake_case)]
@@ -127,6 +127,50 @@ pub fn rgba(c: [u8; 3]) -> u32 {
 
 fn tone(c: [u8; 3], k: f64) -> [u8; 3] {
     [(c[0] as f64 * k).clamp(0.0, 255.0) as u8, (c[1] as f64 * k).clamp(0.0, 255.0) as u8, (c[2] as f64 * k).clamp(0.0, 255.0) as u8]
+}
+
+/// A corner return whose walk lies this far inside its own junction's pad
+/// draws no walk (`ring_span`), game metres: its approach was trimmed short,
+/// and the walk would lie across the cross street's roadway.
+const CORNER_IN_PAD_M: f64 = 1.5;
+
+/// A junction's pad follows the survey filtered over this, game metres (`pad_ground`).
+const PAD_SMOOTH_M: f64 = 4.0;
+
+/// (`wall_coping`) a retaining wall rising more than this over the walk is
+/// capped (`bank`), game metres.
+const COPING_MIN_RISE_M: f64 = 0.35;
+/// A capped wall stands this far over the ground it holds, game metres.
+const COPING_UPSTAND_M: f64 = 0.10;
+/// A wall's coping runs this far back over that ground, game metres (a
+/// cast-in-place wall's 12 in top; INFERRED, no SF standard recorded).
+const COPING_WIDTH_M: f64 = 0.30;
+
+/// (`--no-wall-coping`, `EO_WALL_COPING=0`) a retaining wall behind a walk is
+/// a bare face up to the ground, as before; on (the default) a wall over
+/// `COPING_MIN_RISE_M` stands `COPING_UPSTAND_M` proud, capped by a coping.
+pub fn wall_coping() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("EO_WALL_COPING").map(|v| v.trim() != "0" && v.trim() != "off").unwrap_or(true))
+}
+
+/// A bank whose run another paving cuts shorter than this at both ends is
+/// drawn as a face (`bank`), game metres.
+const BANK_SLIVER_M: f64 = 0.1;
+
+/// A junction pad's fan is subdivided this far apart along its spokes when
+/// it follows the ground (`junction_ground`), game metres: the 8 m terrain
+/// grid's half on the 1.25 plan's metres (an INFERRED sampling of a smooth surface).
+pub const JUNCTION_GROUND_STEP_M: f64 = 4.0;
+
+/// (`--no-junction-ground`, `EO_JUNCTION_GROUND=0`) a junction's pad is one
+/// flat fan from an apex at its approaches' mean datum, and its corners blend
+/// their datums in a straight line from mouth to mouth, as the JS drew them;
+/// on (the default), both follow the ground between the mouths (an acute
+/// fork's pad, cut back tens of metres, was one slab across its slope).
+pub fn junction_ground() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("EO_JUNCTION_GROUND").map(|v| v.trim() != "0" && v.trim() != "off").unwrap_or(true))
 }
 
 /// Geometry of one tile, ready for the GPU (positions in world metres).
@@ -235,7 +279,7 @@ impl TileMesh {
 
     /// A planar-ish quad a b c d (in order round it), one flat normal facing up
     /// (or, for a vertical face, toward `face_ref`). Degenerate quads are dropped.
-    fn quad(&mut self, layer: Layer, p: [[f64; 3]; 4], c: [[u8; 3]; 4], face_ref: Option<[f64; 2]>) {
+    pub(crate) fn quad(&mut self, layer: Layer, p: [[f64; 3]; 4], c: [[u8; 3]; 4], face_ref: Option<[f64; 2]>) {
         let n = quad_normal(&p, face_ref);
         let Some(n) = n else { return };
         let base = self.positions.len() as u32;
@@ -332,6 +376,58 @@ pub struct EntryGeom {
     pub keep: Vec<bool>,
     /// Kerb depression (0 full kerb .. 1 ramp lip) per station, [left, right].
     pub dep: [Vec<f64>; 2],
+    /// (`seams`) the carriageway's drawn lateral interval per station, -half..half
+    /// where it is drawn whole; empty where no station is clipped.
+    pub lo: Vec<f64>,
+    pub hi: Vec<f64>,
+    /// (`seams`) the datums were moved to meet a busier run's surface.
+    pub seamed: bool,
+    /// (`seams`) a run clipped by a busier one at another level: the busier
+    /// surface at each station's [lo, hi] clipped edge (NaN where not), a
+    /// face drawn between the two along the seam; empty where none.
+    pub face_lo: Vec<f64>,
+    pub face_hi: Vec<f64>,
+    /// (`seams`) each side's [left, right] drawn walk width per station
+    /// (a busier run's walk alongside takes the rest; empty where whole),
+    /// and its outer edge's height where it meets that walk (NaN where its own).
+    pub walk_w: [Vec<f64>; 2],
+    pub walk_y: [Vec<f64>; 2],
+}
+
+impl EntryGeom {
+    /// The drawn lateral interval at station `i` of a run `half` wide.
+    pub fn clip(&self, i: usize, half: f64) -> (f64, f64) {
+        if self.lo.is_empty() { (-half, half) } else { (self.lo[i], self.hi[i]) }
+    }
+
+    /// The drawn lateral interval at arc length `s` (the narrower of its span's two stations).
+    pub fn clip_at(&self, s: f64, half: f64) -> (f64, f64) {
+        if self.lo.is_empty() || self.stations.len() < 2 {
+            return (-half, half);
+        }
+        let k = self.stations.partition_point(|f| f.s <= s).clamp(1, self.stations.len() - 1);
+        (self.lo[k - 1].max(self.lo[k]), self.hi[k - 1].min(self.hi[k]))
+    }
+
+    /// Side `k`'s walk width at station `i` of a run whose walk is `walk` there (`seams`).
+    pub fn walk_at(&self, k: usize, i: usize, walk: f64) -> f64 {
+        self.walk_w[k].get(i).map_or(walk, |&w| w.min(walk))
+    }
+
+    /// Side `k`'s walk was narrowed to a busier walk at station `i` (`seams`).
+    pub fn walk_met(&self, k: usize, i: usize, walk: f64) -> bool {
+        self.walk_w[k].get(i).is_some_and(|&w| w < walk - 1e-3)
+    }
+
+    /// Side `k` (0 the +normal side, 1 the other) of span `i` is clipped: the
+    /// busier run's carriageway lies there, and no kerb, footway or bank is drawn.
+    pub fn side_clipped(&self, i: usize, k: usize, half: f64) -> bool {
+        if self.lo.is_empty() {
+            return false;
+        }
+        let edge = |j: usize| if k == 0 { self.hi[j] < half - 1e-3 } else { self.lo[j] > -half + 1e-3 };
+        edge(i) || edge(i + 1)
+    }
 }
 
 impl EntryGeom {
@@ -399,7 +495,7 @@ impl StreetWorld {
     /// over `vergeMaxDrop` the JS stands a retaining wall (not ported); the bank
     /// is carried down to the ground instead, steeper, so nothing hangs.
     fn bank_foot_y(&self, foot: [f64; 2], edge_y: f64, own: Option<usize>) -> f64 {
-        let mut y = self.carpet_y(foot[0], foot[1]) - self.o.verge_undercut;
+        let mut y = self.edge_ground(foot[0], foot[1]) - self.o.verge_undercut;
         // bankFootY: a foot landing on another street's paving stops just under
         // that street's walk level (its 0.03 m tuck), never above its own edge.
         if let Some(walk) = self.walk_level_beside(foot[0], foot[1], own) {
@@ -420,7 +516,7 @@ impl StreetWorld {
     #[allow(clippy::too_many_arguments)]
     fn bank(&self, m: &mut TileMesh, own: Option<usize>, a: [f64; 2], ay: f64, a_out: [f64; 2], b: [f64; 2], by: f64, b_out: [f64; 2]) {
         let foot = |p: [f64; 2], y: f64, out: [f64; 2]| {
-            let carpet = self.carpet_y(p[0], p[1]);
+            let carpet = self.edge_ground(p[0], p[1]);
             let drop = y - (carpet - self.o.verge_undercut);
             let mut reach = self.o.graded_bank_reach(drop);
             // a bank stops where another street's paving starts
@@ -458,7 +554,7 @@ impl StreetWorld {
         let lower = |p: [f64; 2], y: f64, out: [f64; 2]| -> Option<f64> {
             let step = 0.25;
             let mut s = step * 0.5;
-            let reach = self.o.graded_bank_reach(y - (self.carpet_y(p[0], p[1]) - self.o.verge_undercut)).max(step);
+            let reach = self.o.graded_bank_reach(y - (self.edge_ground(p[0], p[1]) - self.o.verge_undercut)).max(step);
             while s < reach {
                 let q = [p[0] + out[0] * s, p[1] + out[1] * s];
                 if let Some(level) = self.paving_level_beside(q[0], q[1], own) {
@@ -480,14 +576,29 @@ impl StreetWorld {
         // bases on the uphill side of a street.)
         let rise = |p: [f64; 2], y: f64, out: [f64; 2]| -> Option<f64> {
             let q = [p[0] + out[0] * 0.3, p[1] + out[1] * 0.3];
-            let g = self.carpet_y(q[0], q[1]);
+            let g = self.edge_ground(q[0], q[1]);
             (g - y > self.o.curb_face_height).then_some(g)
         };
         let (ra, rb) = (rise(a, ay, a_out), rise(b, by, b_out));
         if ra.is_some() || rb.is_some() {
             let (ta, tb) = (ra.unwrap_or(ay).max(ay), rb.unwrap_or(by).max(by));
             let inward = [-(a_out[0] + b_out[0]), -(a_out[1] + b_out[1])];
-            m.quad(Layer::CurbFace, [p3(a, ay - RETAINING_TUCK_M), p3(b, by - RETAINING_TUCK_M), p3(b, tb), p3(a, ta)], [CURB_FACE(); 4], Some(inward));
+            // (`wall_coping`) a wall of some height stands a little proud of the
+            // ground it holds, capped by a coping run back over that ground, and
+            // closed behind down into it (not a bare face flush with the turf)
+            let (a2, b2) = ([a[0] + a_out[0] * COPING_WIDTH_M, a[1] + a_out[1] * COPING_WIDTH_M], [b[0] + b_out[0] * COPING_WIDTH_M, b[1] + b_out[1] * COPING_WIDTH_M]);
+            let cope = wall_coping()
+                && (ta - ay).max(tb - by) > COPING_MIN_RISE_M
+                && !self.buildings.contains(a2[0], a2[1])
+                && !self.buildings.contains(b2[0], b2[1]);
+            let (ca, cb) = if cope { (ta + COPING_UPSTAND_M, tb + COPING_UPSTAND_M) } else { (ta, tb) };
+            m.quad(Layer::CurbFace, [p3(a, ay - RETAINING_TUCK_M), p3(b, by - RETAINING_TUCK_M), p3(b, cb), p3(a, ca)], [CURB_FACE(); 4], Some(inward));
+            if cope {
+                m.quad(Layer::CurbTop, [p3(a, ca), p3(b, cb), p3(b2, cb), p3(a2, ca)], [CURB_TOP(); 4], None);
+                let back = |p: [f64; 2], top: f64| (self.edge_ground(p[0], p[1]) - self.o.verge_undercut).min(top) - RETAINING_TUCK_M;
+                let out = [a_out[0] + b_out[0], a_out[1] + b_out[1]];
+                m.quad(Layer::CurbFace, [p3(a2, ca), p3(b2, cb), p3(b2, back(b2, cb)), p3(a2, back(a2, ca))], [CURB_FACE(); 4], Some(out));
+            }
             return;
         }
         // a bank whose run would reach a building (a walk standing over
@@ -496,7 +607,7 @@ impl StreetWorld {
         // outer vertices down under the ground, so no sloped verge face lies
         // against the facade.
         let into_building = |p: [f64; 2], y: f64, out: [f64; 2]| -> bool {
-            let drop = y - (self.carpet_y(p[0], p[1]) - self.o.verge_undercut);
+            let drop = y - (self.edge_ground(p[0], p[1]) - self.o.verge_undercut);
             if drop <= self.o.curb_face_height {
                 return false;
             }
@@ -512,8 +623,8 @@ impl StreetWorld {
         };
         let (mut la, mut lb) = (lower(a, ay, a_out), lower(b, by, b_out));
         if into_building(a, ay, a_out) || into_building(b, by, b_out) {
-            la = Some(la.unwrap_or_else(|| self.carpet_y(a[0], a[1]) - self.o.verge_undercut));
-            lb = Some(lb.unwrap_or_else(|| self.carpet_y(b[0], b[1]) - self.o.verge_undercut));
+            la = Some(la.unwrap_or_else(|| self.edge_ground(a[0], a[1]) - self.o.verge_undercut));
+            lb = Some(lb.unwrap_or_else(|| self.edge_ground(b[0], b[1]) - self.o.verge_undercut));
         }
         if la.is_some() || lb.is_some() {
             let tuck = |l: Option<f64>, p: [f64; 2], y: f64| l.unwrap_or_else(|| self.bank_foot_y(p, y, own)).min(y) - RETAINING_TUCK_M;
@@ -524,6 +635,15 @@ impl StreetWorld {
         }
         let (fa, fay) = foot(a, ay, a_out);
         let (fb, fby) = foot(b, by, b_out);
+        // (`street_ground` on) a bank cut back to nothing at both ends by
+        // another street's paving starting at the walk's edge is a face down
+        // under that paving, not a sliver of verge lying over it.
+        let span = |p: [f64; 2], f: [f64; 2]| (f[0] - p[0]).hypot(f[1] - p[1]);
+        if crate::ground::street_ground_on() && span(a, fa) < BANK_SLIVER_M && span(b, fb) < BANK_SLIVER_M {
+            let face = [a_out[0] + b_out[0], a_out[1] + b_out[1]];
+            m.quad(Layer::CurbFace, [p3(a, ay), p3(b, by), p3(b, fby.min(by) - RETAINING_TUCK_M), p3(a, fay.min(ay) - RETAINING_TUCK_M)], [CURB_FACE(); 4], Some(face));
+            return;
+        }
         let edge = tone(VERGE(), 1.15);
         m.quad(Layer::Verge, [p3(a, ay), p3(b, by), p3(fb, fby), p3(fa, fay)], [edge, edge, VERGE(), VERGE()], None);
     }
@@ -579,21 +699,95 @@ impl StreetWorld {
         let gutter_start = (half - o.gutter_width).max(0.0);
         let gutter = GUTTER();
         let col = |u: f64| if u.abs() <= gutter_start + 1e-9 { asphalt } else { gutter };
-        for k in 0..offs.len() - 1 {
-            let (u0, u1) = (offs[k], offs[k + 1]);
-            // Distance to the kerb line per vertex (the shader's cross fall and silt).
-            let (k0, k1) = ((half - u0.abs()).max(0.0) as f32, (half - u1.abs()).max(0.0) as f32);
-            m.quad_kerb(
-                Layer::Carriageway,
-                [
-                    p3(a.at(u0), g.pavement_y(o, i, u0, half)),
-                    p3(b.at(u0), g.pavement_y(o, i + 1, u0, half)),
-                    p3(b.at(u1), g.pavement_y(o, i + 1, u1, half)),
-                    p3(a.at(u1), g.pavement_y(o, i, u1, half)),
-                ],
-                [col(u0), col(u0), col(u1), col(u1)],
-                [k0, k0, k1, k1],
-            );
+        // (`seams`) the part of the section each station draws: a busier run's
+        // carriageway alongside covers the rest. The band both stations draw
+        // is laid in whole strips (each strip's offset the same at both ends:
+        // the renderer takes the road's frame from the kerb distance's
+        // gradient, and a strip clamped differently at its two ends turned
+        // its patches askew triangle by triangle); the sliver between the two
+        // stations' clips is fanned from the narrower one's edge.
+        let ((la, ha), (lb, hb)) = (g.clip(i, half), g.clip(i + 1, half));
+        let kd = |u: f64| (half - u.abs()).max(0.0) as f32;
+        let (cl, ch) = (la.max(lb), ha.min(hb));
+        if ch - cl > 1e-4 {
+            let mut us = vec![cl];
+            us.extend(offs.iter().copied().filter(|&u| u > cl + 1e-4 && u < ch - 1e-4));
+            us.push(ch);
+            for w in us.windows(2) {
+                let (u0, u1) = (w[0], w[1]);
+                m.quad_kerb(
+                    Layer::Carriageway,
+                    [
+                        p3(a.at(u0), g.pavement_y(o, i, u0, half)),
+                        p3(b.at(u0), g.pavement_y(o, i + 1, u0, half)),
+                        p3(b.at(u1), g.pavement_y(o, i + 1, u1, half)),
+                        p3(a.at(u1), g.pavement_y(o, i, u1, half)),
+                    ],
+                    [col(u0), col(u0), col(u1), col(u1)],
+                    [kd(u0), kd(u0), kd(u1), kd(u1)],
+                );
+            }
+        }
+        if ch - cl <= 1e-4 {
+            // no band both draw (a run going under a busier one): each strip clamped at both ends.
+            for k in 0..offs.len() - 1 {
+                let (u0, u1) = (offs[k], offs[k + 1]);
+                let (a0, a1, b0, b1) = (u0.clamp(la, ha), u1.clamp(la, ha), u0.clamp(lb, hb), u1.clamp(lb, hb));
+                if a1 - a0 < 1e-4 && b1 - b0 < 1e-4 {
+                    continue;
+                }
+                m.quad_kerb(
+                    Layer::Carriageway,
+                    [
+                        p3(a.at(a0), g.pavement_y(o, i, a0, half)),
+                        p3(b.at(b0), g.pavement_y(o, i + 1, b0, half)),
+                        p3(b.at(b1), g.pavement_y(o, i + 1, b1, half)),
+                        p3(a.at(a1), g.pavement_y(o, i, a1, half)),
+                    ],
+                    [col(a0), col(b0), col(b1), col(a1)],
+                    [kd(a0), kd(b0), kd(b1), kd(a1)],
+                );
+            }
+        }
+        // the slivers: (edge at a, edge at b, the band's edge)
+        for (ea, eb, inner) in [(la, lb, cl), (ha, hb, ch)] {
+            if (ea - eb).abs() < 1e-4 || ch - cl <= 1e-4 {
+                continue;
+            }
+            let a_wide = (ea - inner).abs() > (eb - inner).abs();
+            let (edge, iw, in_) = if a_wide { (ea, i, i + 1) } else { (eb, i + 1, i) };
+            let (wide, narrow) = if a_wide { (&a, &b) } else { (&b, &a) };
+            let (lo_u, hi_u) = (edge.min(inner), edge.max(inner));
+            let mut us = vec![lo_u];
+            us.extend(offs.iter().copied().filter(|&u| u > lo_u + 1e-4 && u < hi_u - 1e-4));
+            us.push(hi_u);
+            let apex = p3(narrow.at(inner), g.pavement_y(o, in_, inner, half));
+            for w in us.windows(2) {
+                let (u0, u1) = (w[0], w[1]);
+                let (p0, p1) = (p3(wide.at(u0), g.pavement_y(o, iw, u0, half)), p3(wide.at(u1), g.pavement_y(o, iw, u1, half)));
+                // the strip's winding: a at u0, b at u0, b at u1, a at u1
+                let (q, c, k) = if a_wide {
+                    ([p0, apex, apex, p1], [col(u0), col(inner), col(inner), col(u1)], [kd(u0), kd(inner), kd(inner), kd(u1)])
+                } else {
+                    ([apex, p0, p1, apex], [col(inner), col(u0), col(u1), col(inner)], [kd(inner), kd(u0), kd(u1), kd(inner)])
+                };
+                m.quad_kerb(Layer::Carriageway, q, c, k);
+            }
+        }
+        // (`seams`) a busier run at another level along a clipped edge: a face between the two.
+        if !g.face_lo.is_empty() {
+            for (faces, side, ea, eb) in [(&g.face_hi, 1.0, ha, hb), (&g.face_lo, -1.0, la, lb)] {
+                let (ya, yb) = (faces[i], faces[i + 1]);
+                if !(ya.is_finite() && yb.is_finite()) || (ea - side * half).abs() < 1e-3 || (eb - side * half).abs() < 1e-3 {
+                    continue;
+                }
+                let (oa, ob) = (g.pavement_y(o, i, ea, half), g.pavement_y(o, i + 1, eb, half));
+                // facing the lower side
+                let up = (oa + ob) > (ya + yb);
+                let n = [side * (a.nx + b.nx) / 2.0, side * (a.nz + b.nz) / 2.0];
+                let face = if up { n } else { [-n[0], -n[1]] };
+                m.quad(Layer::CurbFace, [p3(a.at(ea), oa), p3(b.at(eb), ob), p3(b.at(eb), yb), p3(a.at(ea), ya)], [CURB_FACE(); 4], Some(face));
+            }
         }
         let first_footway = (m.layers.len(), m.positions.len());
         // Kerb, footway, frontage and bank per side.
@@ -604,6 +798,9 @@ impl StreetWorld {
         let retained = raised && self.surveyed_datum(e, [a.x, a.z], da).is_some();
         for (k, side) in [(0usize, 1.0f64), (1, -1.0)] {
             let walk = e.walks[k];
+            if g.side_clipped(i, k, half) {
+                continue;
+            }
             if !(walk >= o.min_sidewalk_width) {
                 if raised && with_edges {
                     let (out_a, out_b) = ([side * a.nx, side * a.nz], [side * b.nx, side * b.nz]);
@@ -652,21 +849,31 @@ impl StreetWorld {
                 [top_col(pa), top_col(pb), top_col(pb), top_col(pa)],
                 None,
             );
-            let (eya, eyb) = (o.sidewalk_surface_y(da, half + walk, half), o.sidewalk_surface_y(db, half + walk, half));
-            if walk > ra.max(rb) + 0.02 {
+            // (`seams`) a walk narrowed to a busier one alongside meets it at its edge.
+            let (wwa, wwb) = (g.walk_at(k, i, walk), g.walk_at(k, i + 1, walk));
+            let met = g.walk_met(k, i, walk) || g.walk_met(k, i + 1, walk);
+            let outer_y = |j: usize, d: f64, w: f64| g.walk_y[k].get(j).copied().filter(|y| y.is_finite()).unwrap_or_else(|| o.sidewalk_surface_y(d, half + w, half));
+            let (eya, eyb) = (outer_y(i, da, wwa), outer_y(i + 1, db, wwb));
+            if wwa > ra + 0.02 || wwb > rb + 0.02 {
                 let wc = walk_tint;
+                let (wa2, wb2) = (wwa.max(ra), wwb.max(rb));
                 // each vertex's distance across the walk from the kerb line.
                 m.quad_kerb(
                     Layer::Sidewalk,
-                    [p3(a.at(side * (half + ra)), wya), p3(b.at(side * (half + rb)), wyb), p3(b.at(side * (half + walk)), eyb), p3(a.at(side * (half + walk)), eya)],
+                    [p3(a.at(side * (half + ra)), wya), p3(b.at(side * (half + rb)), wyb), p3(b.at(side * (half + wb2)), eyb), p3(a.at(side * (half + wa2)), eya)],
                     [wc; 4],
-                    [ra as f32, rb as f32, walk as f32, walk as f32],
+                    [ra as f32, rb as f32, wb2 as f32, wa2 as f32],
                 );
             }
+            // a walk meeting a busier one at its level: no frontage, no bank (the other walk goes on).
+            let level = met && [i, i + 1].iter().all(|&j| g.walk_y[k].get(j).is_some_and(|y| y.is_finite()) || !g.walk_met(k, j, walk));
+            if level {
+                continue;
+            }
             // Frontage: level with the walk edge, FRONTAGE_LIFT_M proud.
-            let (fa, fb) = (self.frontage_depth(ei, &a, side, walk), self.frontage_depth(ei, &b, side, walk));
+            let (fa, fb) = if met { (0.0, 0.0) } else { (self.frontage_depth(ei, &a, side, walk), self.frontage_depth(ei, &b, side, walk)) };
             let step = o.frontage_step;
-            let (mut ox_a, mut ox_b, mut oy_a, mut oy_b) = (half + walk, half + walk, eya, eyb);
+            let (mut ox_a, mut ox_b, mut oy_a, mut oy_b) = (half + wwa.max(ra), half + wwb.max(rb), eya, eyb);
             if fa > step || fb > step {
                 let (ya, yb) = (eya + o.frontage_lift, eyb + o.frontage_lift);
                 m.quad(
@@ -800,7 +1007,7 @@ impl StreetWorld {
             }
             // the bank to its foot (`bank`'s graded reach).
             let edge = f.at(side * outer.0);
-            let drop = outer.1 - (self.carpet_y(edge[0], edge[1]) - o.verge_undercut);
+            let drop = outer.1 - (self.edge_ground(edge[0], edge[1]) - o.verge_undercut);
             let reach = o.graded_bank_reach(drop);
             let foot = f.at(side * (outer.0 + reach));
             if !raised || self.surveyed_datum(e, [f.x, f.z], d).is_none() {
@@ -828,7 +1035,7 @@ impl StreetWorld {
                     continue;
                 }
                 let (p0, p1) = (f.at(side * u0), f.at(side * u1));
-                let base = |p: [f64; 2], top: f64| (self.carpet_y(p[0], p[1]) - o.verge_undercut).min(top) - RETAINING_TUCK_M;
+                let base = |p: [f64; 2], top: f64| (self.edge_ground(p[0], p[1]) - o.verge_undercut).min(top) - RETAINING_TUCK_M;
                 m.quad(Layer::CurbFace, [p3(p0, y0), p3(p1, y1), p3(p1, base(p1, y1)), p3(p0, base(p0, y0))], [CURB_FACE(); 4], Some(out));
             }
         }
@@ -889,6 +1096,11 @@ impl StreetWorld {
             } else {
                 pieces.push([lo, hi]);
             }
+            // (`seams`) a line on the part of the section a busier run covers is not drawn.
+            let (cl, ch) = { let ((la, ha), (lb, hb)) = (g.clip(i, e.half), g.clip(i + 1, e.half)); (la.max(lb), ha.min(hb)) };
+            if u0 < cl - 0.01 || u1 > ch + 0.01 {
+                continue;
+            }
             for [s0, s1] in pieces {
                 if e.in_yield_span((s0 + s1) / 2.0) {
                     continue;
@@ -911,7 +1123,16 @@ impl StreetWorld {
     fn approach_datum(&self, app: &Approach) -> (Frame, f64) {
         let f = crate::plan::approach_end_frame(&self.plan.entries, app);
         let terrain = self.ground(f.x, f.z) + self.o.road_lift;
-        (f, self.surveyed_datum(&self.plan.entries[app.entry], [f.x, f.z], terrain).unwrap_or(terrain))
+        if let Some(d) = self.surveyed_datum(&self.plan.entries[app.entry], [f.x, f.z], terrain) {
+            return (f, d);
+        }
+        // (`seams`) a run moved to meet a busier one's surface meets its pad there.
+        if let Some(g) = self.geoms.get(app.entry).filter(|g| g.seamed) {
+            if let Some(d) = self.datum_at_station(g, f.s) {
+                return (f, d);
+            }
+        }
+        (f, terrain)
     }
 
     fn junction_pad(&self, node: &Node, ends: &[(Frame, f64)]) -> ([f64; 3], Vec<[f64; 3]>, Vec<[usize; 3]>) {
@@ -963,28 +1184,94 @@ impl StreetWorld {
     pub(crate) fn emit_node(&self, m: &mut TileMesh, ni: usize, with_edges: bool) {
         let o = &self.o;
         let node: &Node = &self.plan.nodes[ni];
-        if node.approaches.is_empty() {
+        let n = node.approaches.len();
+        if n == 0 {
             return;
         }
-        let ends: Vec<_> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
+        let ends: Vec<(Frame, f64)> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
+        // (`seams`) a slip road merging alongside a through leg (`plan::Approach::merge_trim`)
+        // is drawn by its own ribbon: no mouth in the pad, no corner either side of it.
+        let merge: Vec<bool> = node.approaches.iter().map(|a| a.merge_trim.is_some() && crate::seams::road_seams()).collect();
         let pad = PAD();
-        let (apex, rim, triangles) = self.junction_pad(node, &ends);
-        let vertex = |i| if i == 0 { apex } else { rim[i - 1] };
-        for [a, b, c] in junction::faces(rim.len(), &triangles) {
-            let [a, b, c] = [vertex(a), vertex(b), vertex(c)];
-            if (b[0] - c[0]).abs() < 1e-9 && (b[2] - c[2]).abs() < 1e-9 {
-                continue;
+        if junction_ground() {
+            // --- the pad: one ring round the node, fanned from its centre. -------
+            let ring = self.pad_ring(node, &ends, &merge);
+            let mean_half = node.approaches.iter().map(|a| a.half).sum::<f64>() / n as f64;
+            // the fan subdivided every JUNCTION_GROUND_STEP_M along each spoke,
+            // each point on the ground (+ road lift) plus an offset blended from
+            // the apex's (the ring's mean offset and the crown) to its ring
+            // point's, so the mouths meet their ribbons exactly and a long pad
+            // (an acute fork's, cut back tens of metres) follows its slope
+            // instead of standing as one flat slab across it.
+            let lift = o.road_lift;
+            let off: Vec<f64> = ring.iter().map(|(p, y)| y - (self.pad_ground(p[0], p[1]) + lift)).collect();
+            let apex_off = off.iter().sum::<f64>() / off.len().max(1) as f64 + o.cross_slope * mean_half;
+            // the fan's apex: a point the whole ring is seen from (its kernel's
+            // centroid); a ring seen whole from no point (concave round its
+            // corners, an approach cut back far past the others: a fifth of the
+            // city's pads) is ear-clipped instead, the fan from the node had
+            // folded over itself, two pad surfaces one over the other.
+            let a = match Self::ring_kernel(&ring) {
+                Some(k) => k,
+                None => {
+                    if self.emit_pad_clipped(m, &ring, &off, lift, pad) {
+                        return self.emit_node_rest(m, ni, &ends, &merge, with_edges);
+                    }
+                    node.position
+                }
+            };
+            let reach = ring.iter().map(|(p, _)| ((p[0] - a[0]).powi(2) + (p[1] - a[1]).powi(2)).sqrt()).fold(0.0, f64::max);
+            let levels = ((reach / JUNCTION_GROUND_STEP_M).ceil() as usize).max(1);
+            let at = |k: usize, j: usize| -> [f64; 3] {
+                let t = j as f64 / levels as f64;
+                let r = ring[k].0;
+                let x = [a[0] + (r[0] - a[0]) * t, a[1] + (r[1] - a[1]) * t];
+                if j == levels {
+                    return p3(r, ring[k].1);
+                }
+                p3(x, self.pad_ground(x[0], x[1]) + lift + apex_off + (off[k] - apex_off) * t)
+            };
+            let apex = p3(a, self.pad_ground(a[0], a[1]) + lift + apex_off);
+            for k in 0..ring.len() {
+                let q_k = (k + 1) % ring.len();
+                let (p, q) = (ring[k].0, ring[q_k].0);
+                if (p[0] - q[0]).abs() < 1e-9 && (p[1] - q[1]).abs() < 1e-9 {
+                    continue;
+                }
+                m.tri(Layer::Carriageway, [apex, at(q_k, 1), at(k, 1)], [pad, pad, pad]);
+                for j in 1..levels {
+                    // (the fan's own winding: apex, q, p)
+                    m.tri(Layer::Carriageway, [at(k, j), at(q_k, j), at(q_k, j + 1)], [pad, pad, pad]);
+                    m.tri(Layer::Carriageway, [at(k, j), at(q_k, j + 1), at(k, j + 1)], [pad, pad, pad]);
+                }
             }
-            m.tri(Layer::Carriageway, [a, c, b], [pad; 3]);
+        } else {
+            let (apex, rim, triangles) = self.junction_pad(node, &ends);
+            let vertex = |i| if i == 0 { apex } else { rim[i - 1] };
+            for [a, b, c] in junction::faces(rim.len(), &triangles) {
+                let [a, b, c] = [vertex(a), vertex(b), vertex(c)];
+                if (b[0] - c[0]).abs() < 1e-9 && (b[2] - c[2]).abs() < 1e-9 {
+                    continue;
+                }
+                m.tri(Layer::Carriageway, [a, c, b], [pad; 3]);
+            }
         }
+        self.emit_node_rest(m, ni, &ends, &merge, with_edges);
+    }
+
+    /// A node's corner returns and paint (after its pad).
+    fn emit_node_rest(&self, m: &mut TileMesh, ni: usize, ends: &[(Frame, f64)], merge: &[bool], with_edges: bool) {
+        let o = &self.o;
+        let node: &Node = &self.plan.nodes[ni];
+        let merge_path = |p: &crate::plan::CornerPath| merge.get(p.a).copied().unwrap_or(false) || merge.get(p.b).copied().unwrap_or(false);
         // --- corner returns: kerb, ramps, footway, bank. ----------------------
         let first_corner_face = m.layers.len();
         let first_corner_vertex = m.positions.len();
-        let retained = node.approaches.iter().zip(&ends).any(|(a, (f, datum))| {
+        let retained = node.approaches.iter().zip(ends).any(|(a, (f, datum))| {
             self.plan.entries[a.entry].structure_leg.is_some()
                 || (datum - (self.ground(f.x, f.z) + o.road_lift)).abs() > RAISED_M
         });
-        for path in &node.paths {
+        for path in node.paths.iter().filter(|p| !merge_path(p)) {
             let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1);
             let st = &path.stations;
             let reach_full = o.curb_top_width + o.ramp_run;
@@ -1000,7 +1287,7 @@ impl StreetWorld {
                 if (sa.x - sb.x).abs() < 1e-7 && (sa.z - sb.z).abs() < 1e-7 {
                     continue;
                 }
-                self.ring_span(m, sa, sb, datums[k], datums[k + 1], deps[k], deps[k + 1], retained, with_edges);
+                self.ring_span(m, ni, sa, sb, datums[k], datums[k + 1], deps[k], deps[k + 1], retained, with_edges);
             }
         }
         self.trim_arterial_corner(m, node, first_corner_face, first_corner_vertex);
@@ -1008,7 +1295,7 @@ impl StreetWorld {
         // (none on a structure's leg: its mouth is the structure's own deck.)
         if with_edges && node.earns_paint {
             for (i, app) in node.approaches.iter().enumerate() {
-                if self.plan.entries[app.entry].structure_leg.is_some() {
+                if self.plan.entries[app.entry].structure_leg.is_some() || merge[i] {
                     continue;
                 }
                 self.emit_approach_paint(m, node, app, ends[i].1);
@@ -1016,26 +1303,283 @@ impl StreetWorld {
         }
     }
 
-    /// One datum per corner station, blended by chord length from A's to B's.
+    /// A pad whose ring no fan covers once (`ring_kernel` None): the ring
+    /// ear-clipped, each ear subdivided (the same count on every ear, so
+    /// shared edges agree) so it follows the ground (+ road lift) with the
+    /// ring's offsets from it blended across, its edges along the ring
+    /// straight between their ring points (the mouths meet their ribbons
+    /// exactly). False where the ring does not clip (not simple): the fan.
+    fn emit_pad_clipped(&self, m: &mut TileMesh, ring: &[([f64; 2], f64)], off: &[f64], lift: f64, pad: [u8; 3]) -> bool {
+        // (consecutive duplicate points dropped: a corner's first station on a mouth's corner)
+        let mut keep: Vec<usize> = vec![];
+        for k in 0..ring.len() {
+            let p = ring[k].0;
+            if keep.last().is_some_and(|&l| (ring[l].0[0] - p[0]).hypot(ring[l].0[1] - p[1]) < 1e-6) {
+                continue;
+            }
+            keep.push(k);
+        }
+        while keep.len() > 1 && (ring[keep[0]].0[0] - ring[*keep.last().unwrap()].0[0]).hypot(ring[keep[0]].0[1] - ring[*keep.last().unwrap()].0[1]) < 1e-6 {
+            keep.pop();
+        }
+        let n = keep.len();
+        if n < 3 {
+            return false;
+        }
+        let pts: Vec<[f64; 2]> = keep.iter().map(|&k| ring[k].0).collect();
+        let area: f64 = (0..n).map(|k| { let (p, q) = (pts[k], pts[(k + 1) % n]); p[0] * q[1] - q[0] * p[1] }).sum();
+        let ccw = area > 0.0;
+        // ear clipping on the ring made counter-clockwise (indices into `pts`)
+        let order: Vec<usize> = if ccw { (0..n).collect() } else { (0..n).rev().collect() };
+        let cross = |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+        let mut idx = order.clone();
+        let mut ears: Vec<[usize; 3]> = vec![];
+        let mut guard = 0;
+        while idx.len() > 3 && guard < 4 * n * n {
+            guard += 1;
+            let len = idx.len();
+            let mut clipped = false;
+            for k in 0..len {
+                let (ia, ib, ic) = (idx[(k + len - 1) % len], idx[k], idx[(k + 1) % len]);
+                let (a, b, c) = (pts[ia], pts[ib], pts[ic]);
+                if cross(a, b, c) <= 1e-9 {
+                    continue;
+                }
+                let ear = idx.iter().all(|&q| q == ia || q == ib || q == ic || { let r = pts[q]; !(cross(a, b, r) >= -1e-9 && cross(b, c, r) >= -1e-9 && cross(c, a, r) >= -1e-9) });
+                if ear {
+                    ears.push([ia, ib, ic]);
+                    idx.remove(k);
+                    clipped = true;
+                    break;
+                }
+            }
+            if !clipped {
+                return false;
+            }
+        }
+        if idx.len() == 3 {
+            ears.push([idx[0], idx[1], idx[2]]);
+        }
+        let mut longest = 0.0f64;
+        for e in &ears {
+            for q in 0..3 {
+                let (a, b) = (pts[e[q]], pts[e[(q + 1) % 3]]);
+                longest = longest.max((a[0] - b[0]).hypot(a[1] - b[1]));
+            }
+        }
+        let div = ((longest / JUNCTION_GROUND_STEP_M).ceil() as usize).clamp(1, 12);
+        let ring_edge = |i: usize, j: usize| (i + 1) % n == j || (j + 1) % n == i;
+        let y_of = |k: usize| ring[keep[k]].1;
+        let off_of = |k: usize| off[keep[k]];
+        for e in &ears {
+            // a point at barycentric (u, v, w) of the ear, (i, j) of `div`
+            let at = |i: usize, j: usize| -> [f64; 3] {
+                let (u, v) = (i as f64 / div as f64, j as f64 / div as f64);
+                let w = 1.0 - u - v;
+                let (pa, pb, pc) = (pts[e[0]], pts[e[1]], pts[e[2]]);
+                let x = [pa[0] * w + pb[0] * u + pc[0] * v, pa[1] * w + pb[1] * u + pc[1] * v];
+                // a corner: its ring height; along a ring edge: straight between its ends
+                let bc = [(w, e[0]), (u, e[1]), (v, e[2])];
+                if let Some(&(_, k)) = bc.iter().find(|(t, _)| (*t - 1.0).abs() < 1e-9) {
+                    return p3(x, y_of(k));
+                }
+                for q in 0..3 {
+                    let (t0, k0) = bc[q];
+                    let (t1, k1) = bc[(q + 1) % 3];
+                    let (t2, _) = bc[(q + 2) % 3];
+                    if t2.abs() < 1e-9 && ring_edge(k0, k1) {
+                        return p3(x, (y_of(k0) * t0 + y_of(k1) * t1) / (t0 + t1).max(1e-12));
+                    }
+                }
+                let o = off_of(e[0]) * w + off_of(e[1]) * u + off_of(e[2]) * v;
+                p3(x, self.pad_ground(x[0], x[1]) + lift + o)
+            };
+            for j in 0..div {
+                for i in 0..div - j {
+                    // (the fan's winding: opposite the ring's; the ears run counter-clockwise)
+                    let t1 = [at(i, j), at(i + 1, j), at(i, j + 1)];
+                    m.tri(Layer::Carriageway, if ccw { [t1[0], t1[2], t1[1]] } else { t1 }, [pad, pad, pad]);
+                    if i + j + 1 < div {
+                        let t2 = [at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
+                        m.tri(Layer::Carriageway, if ccw { [t2[0], t2[2], t2[1]] } else { t2 }, [pad, pad, pad]);
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// A node's pad ring: each approach's mouth section (a merging slip's
+    /// none), then the corner path to the next (its interior stations, the
+    /// kerb line), with their heights.
+    fn pad_ring(&self, node: &Node, ends: &[(Frame, f64)], merge: &[bool]) -> Vec<([f64; 2], f64)> {
+        let o = &self.o;
+        let mut ring: Vec<([f64; 2], f64)> = vec![];
+        for (i, app) in node.approaches.iter().enumerate() {
+            let (f, d) = ends[i];
+            let s = if app.at_start { 1.0 } else { -1.0 };
+            if !merge[i] {
+                for lat in o.section_offsets(app.half) {
+                    ring.push((f.at(s * lat), o.cross_section_y(d, lat, app.half)));
+                }
+            }
+            let path = &node.paths[i];
+            if merge.get(path.a).copied().unwrap_or(false) || merge.get(path.b).copied().unwrap_or(false) {
+                continue;
+            }
+            let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1);
+            let last = path.stations.len().saturating_sub(1);
+            for (k, st) in path.stations.iter().enumerate() {
+                if k == 0 || k == last {
+                    continue;
+                }
+                ring.push(([st.x, st.z], datums[k] - o.gutter_depth));
+            }
+        }
+        ring
+    }
+
+    /// A point the whole ring can be seen from (the centroid of its kernel,
+    /// the half-planes inside every edge), None where there is none (a ring
+    /// not star-shaped: no fan covers it once).
+    pub(crate) fn ring_kernel(ring: &[([f64; 2], f64)]) -> Option<[f64; 2]> {
+        let n = ring.len();
+        if n < 3 {
+            return None;
+        }
+        let area: f64 = (0..n).map(|k| { let (p, q) = (ring[k].0, ring[(k + 1) % n].0); p[0] * q[1] - q[0] * p[1] }).sum();
+        let ccw = area > 0.0;
+        let (mut x0, mut x1, mut z0, mut z1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+        for (p, _) in ring {
+            x0 = x0.min(p[0]);
+            x1 = x1.max(p[0]);
+            z0 = z0.min(p[1]);
+            z1 = z1.max(p[1]);
+        }
+        let mut poly = vec![[x0 - 1.0, z0 - 1.0], [x1 + 1.0, z0 - 1.0], [x1 + 1.0, z1 + 1.0], [x0 - 1.0, z1 + 1.0]];
+        if !ccw {
+            poly.reverse();
+        }
+        for k in 0..n {
+            let (p, q) = (ring[k].0, ring[(k + 1) % n].0);
+            let (ex, ez) = (q[0] - p[0], q[1] - p[1]);
+            if ex.abs() < 1e-9 && ez.abs() < 1e-9 {
+                continue;
+            }
+            // inside: left of p->q on a counter-clockwise ring, right on a clockwise one (shrunk 1 cm)
+            let side = |r: [f64; 2]| { let c = ex * (r[1] - p[1]) - ez * (r[0] - p[0]); (if ccw { c } else { -c }) / ex.hypot(ez) - 0.01 };
+            let mut out = vec![];
+            for i in 0..poly.len() {
+                let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+                let (sa, sb) = (side(a), side(b));
+                if sa >= 0.0 {
+                    out.push(a);
+                }
+                if (sa >= 0.0) != (sb >= 0.0) {
+                    let t = sa / (sa - sb);
+                    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+                }
+            }
+            poly = out;
+            if poly.len() < 3 {
+                return None;
+            }
+        }
+        let a2: f64 = (0..poly.len()).map(|k| { let (p, q) = (poly[k], poly[(k + 1) % poly.len()]); p[0] * q[1] - q[0] * p[1] }).sum();
+        if a2.abs() < 1e-4 {
+            return None;
+        }
+        let (mut cx, mut cz) = (0.0, 0.0);
+        for k in 0..poly.len() {
+            let (p, q) = (poly[k], poly[(k + 1) % poly.len()]);
+            let c = p[0] * q[1] - q[0] * p[1];
+            cx += (p[0] + q[0]) * c;
+            cz += (p[1] + q[1]) * c;
+        }
+        Some([cx / (3.0 * a2), cz / (3.0 * a2)])
+    }
+
+    /// (diagnostic) a node's pad fan: its triangles folded back over the
+    /// others (the ring not star-shaped from its apex), and all of them.
+    pub fn pad_folds(&self, ni: usize) -> (usize, usize) {
+        let node: &Node = &self.plan.nodes[ni];
+        if node.approaches.is_empty() {
+            return (0, 0);
+        }
+        let ends: Vec<(Frame, f64)> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
+        let merge: Vec<bool> = node.approaches.iter().map(|a| a.merge_trim.is_some() && crate::seams::road_seams()).collect();
+        let ring = self.pad_ring(node, &ends, &merge);
+        let a = node.position;
+        let cross: Vec<f64> = (0..ring.len()).map(|k| { let (p, q) = (ring[k].0, ring[(k + 1) % ring.len()].0); (p[0] - a[0]) * (q[1] - a[1]) - (p[1] - a[1]) * (q[0] - a[0]) }).filter(|c| c.abs() > 1e-6).collect();
+        let pos = cross.iter().filter(|&&c| c > 0.0).count();
+        let neg = cross.len() - pos;
+        let folded = pos.min(neg);
+        // (with `junction_ground`: none where the ring has a kernel (the fan
+        // from its centroid) or ear-clips; the fan from the node else)
+        if folded > 0 && junction_ground() {
+            let lift = self.o.road_lift;
+            let off: Vec<f64> = ring.iter().map(|(p, y)| y - (self.pad_ground(p[0], p[1]) + lift)).collect();
+            if Self::ring_kernel(&ring).is_some() || self.emit_pad_clipped(&mut TileMesh::default(), &ring, &off, lift, PAD()) {
+                return (0, cross.len());
+            }
+        }
+        (folded, cross.len())
+    }
+
+    /// One datum per corner station, blended by chord length from A's to B's
+    /// (with `junction_ground`, the ground at the station plus the road lift
+    /// and that blend's offset from it, so a long corner follows its slope).
     fn path_datums(&self, st: &[CurbStation], da: f64, db: f64) -> Vec<f64> {
         let mut cum = vec![0.0];
         for k in 1..st.len() {
             cum.push(cum[k - 1] + ((st[k].x - st[k - 1].x).powi(2) + (st[k].z - st[k - 1].z).powi(2)).sqrt());
         }
         let total = cum.last().copied().unwrap_or(0.0).max(1e-9);
+        if junction_ground() && st.len() >= 2 {
+            let g = |k: usize| self.pad_ground(st[k].x, st[k].z) + self.o.road_lift;
+            let (oa, ob) = (da - g(0), db - g(st.len() - 1));
+            return cum.iter().enumerate().map(|(k, c)| g(k) + oa + (ob - oa) * c / total).collect();
+        }
         cum.iter().map(|c| da + (db - da) * c / total).collect()
     }
 
+    /// The ground a junction's pad and corner returns follow (`junction_ground`):
+    /// the survey filtered over `PAD_SMOOTH_M` (a 3 x 3 binomial), so the pad
+    /// carries no crease of the survey's bilinear cells nor a valley's V, but a
+    /// sag or crest drawn round as a road's vertical curve is.
+    fn pad_ground(&self, x: f64, z: f64) -> f64 {
+        let r = PAD_SMOOTH_M;
+        let mut sum = 0.0;
+        for (dz, wz) in [(-r, 1.0), (0.0, 2.0), (r, 1.0)] {
+            for (dx, wx) in [(-r, 1.0), (0.0, 2.0), (r, 1.0)] {
+                sum += wx * wz * self.ground(x + dx, z + dz);
+            }
+        }
+        sum / 16.0
+    }
+
     #[allow(clippy::too_many_arguments)]
-    fn ring_span(&self, m: &mut TileMesh, sa: &CurbStation, sb: &CurbStation, da: f64, db: f64, pa: f64, pb: f64, leg: bool, with_edges: bool) {
+    fn ring_span(&self, m: &mut TileMesh, ni: usize, sa: &CurbStation, sb: &CurbStation, da: f64, db: f64, pa: f64, pb: f64, leg: bool, with_edges: bool) {
         let o = &self.o;
         let off = |s: &CurbStation, d: f64| [s.x + s.out[0] * d * s.scale, s.z + s.out[1] * d * s.scale];
+        // a corner return lying on a neighbouring junction's pad (a cluster of
+        // junctions: a traffic circle, a divided road's crossing) is not drawn:
+        // its kerb and walk would stand over or under that pad at their own datum.
+        let mid = [(sa.x + sb.x) / 2.0, (sa.z + sb.z) / 2.0];
+        if self.pads.on_other_pad(mid[0], mid[1], ni) {
+            return;
+        }
+        let walk_on_pad = {
+            let (wm, om) = ((sa.walk + sb.walk) / 2.0, [(sa.out[0] + sb.out[0]) / 2.0, (sa.out[1] + sb.out[1]) / 2.0]);
+            let wp = [mid[0] + om[0] * wm * 0.6, mid[1] + om[1] * wm * 0.6];
+            wm > 0.0 && (self.pads.on_other_pad(wp[0], wp[1], ni) || self.pads.deep_in_own_pad(wp[0], wp[1], ni, CORNER_IN_PAD_M))
+        };
         let (ia, ib) = (da - o.gutter_depth, db - o.gutter_depth);
         let (ka, kb) = (self.kerb_y(da, pa), self.kerb_y(db, pb));
         let face = [-(sa.out[0] + sb.out[0]), -(sa.out[1] + sb.out[1])];
         // each vertex's height above the gutter flow line (the renderer's kerb-face grime).
         m.quad_kerb_face(Layer::CurbFace, [p3([sa.x, sa.z], ia), p3([sb.x, sb.z], ib), p3([sb.x, sb.z], kb), p3([sa.x, sa.z], ka)], [CURB_FACE(); 4], Some(face), [0.0, 0.0, (kb - ib).max(0.0) as f32, (ka - ia).max(0.0) as f32]);
-        let (wa, wb) = (sa.walk, sb.walk);
+        let (wa, wb) = if walk_on_pad { (0.0, 0.0) } else { (sa.walk, sb.walk) };
         if !(wa > 0.0 || wb > 0.0) {
             // A side with no footway: the bank starts at the kerb top.
             if with_edges { self.ring_edge(m, [sa.x, sa.z], ka, sa.out, [sb.x, sb.z], kb, sb.out, leg); }
@@ -1074,7 +1618,7 @@ impl StreetWorld {
             self.bank(m, None, a, ay, a_out, b, by, b_out);
             return;
         }
-        let foot = |p: [f64; 2], y: f64| (self.carpet_y(p[0], p[1]) - self.o.verge_undercut).min(y) - RETAINING_TUCK_M;
+        let foot = |p: [f64; 2], y: f64| (self.edge_ground(p[0], p[1]) - self.o.verge_undercut).min(y) - RETAINING_TUCK_M;
         let face = [a_out[0] + b_out[0], a_out[1] + b_out[1]];
         m.quad(Layer::CurbFace, [p3(a, ay), p3(b, by), p3(b, foot(b, by)), p3(a, foot(a, ay))], [CURB_FACE(); 4], Some(face));
     }
@@ -1182,16 +1726,20 @@ impl StreetWorld {
         let (a, b) = (g.paving_frame(i), g.paving_frame(j));
         let (da, db) = (g.datums[i], g.datums[j]);
         let h = e.half;
-        m.quad(
-            Layer::Carriageway,
-            [p3(a.at(-h), da), p3(b.at(-h), db), p3(b.at(h), db), p3(a.at(h), da)],
-            [self.run_tints(ei).0; 4],
-            None,
-        );
+        // (`seams`) the drawn part of the section at each end.
+        let ((la, ha), (lb, hb)) = (g.clip(i, h), g.clip(j, h));
+        if ha - la > 1e-4 || hb - lb > 1e-4 {
+            m.quad(
+                Layer::Carriageway,
+                [p3(a.at(la), da), p3(b.at(lb), db), p3(b.at(hb), db), p3(a.at(ha), da)],
+                [self.run_tints(ei).0; 4],
+                None,
+            );
+        }
         let first_footway = (m.layers.len(), m.positions.len());
         for (k, side) in [(0usize, 1.0f64), (1, -1.0)] {
             let w = e.walks[k];
-            if !(w >= o.min_sidewalk_width) {
+            if !(w >= o.min_sidewalk_width) || g.side_clipped(i, k, h) || g.side_clipped(j.saturating_sub(1), k, h) {
                 continue;
             }
             let (ya, yb) = (o.sidewalk_surface_y(da, h + w, h), o.sidewalk_surface_y(db, h + w, h));
@@ -1219,7 +1767,15 @@ impl StreetWorld {
         let wl = if e.walks[0] >= self.o.min_sidewalk_width { e.walks[0] } else { 0.0 };
         let wr = if e.walks[1] >= self.o.min_sidewalk_width { e.walks[1] } else { 0.0 };
         let (l, r) = (e.half + wl, -(e.half + wr));
-        m.quad(Layer::Carriageway, [p3(a.at(r), da), p3(b.at(r), db), p3(b.at(l), db), p3(a.at(l), da)], [self.run_tints(ei).0; 4], None);
+        // (`seams`) a clipped side ends at its clip, no footway.
+        let ((la, ha), (lb, hb)) = (g.clip(i, e.half), g.clip(j, e.half));
+        let side = |c: f64, full: f64, edge: f64| if (c - edge).abs() > 1e-3 { c } else { full };
+        let (ra, rb) = (side(la, r, -e.half), side(lb, r, -e.half));
+        let (lfa, lfb) = (side(ha, l, e.half), side(hb, l, e.half));
+        if lfa - ra < 1e-4 && lfb - rb < 1e-4 {
+            return;
+        }
+        m.quad(Layer::Carriageway, [p3(a.at(ra), da), p3(b.at(rb), db), p3(b.at(lfb), db), p3(a.at(lfa), da)], [self.run_tints(ei).0; 4], None);
     }
 
     /// The far level of a node: its pad over the mouths' kerb corners.
@@ -1228,7 +1784,7 @@ impl StreetWorld {
         let node = &self.plan.nodes[ni];
         let mut ring: Vec<([f64; 2], f64)> = vec![];
         let mut sum = 0.0;
-        for app in &node.approaches {
+        for app in node.approaches.iter().filter(|a| !(a.merge_trim.is_some() && crate::seams::road_seams())) {
             let (f, d) = self.approach_datum(app);
             let s = if app.at_start { 1.0 } else { -1.0 };
             ring.push((f.at(-s * app.half), d));
@@ -1238,7 +1794,7 @@ impl StreetWorld {
         if ring.len() < 3 {
             return;
         }
-        let apex = p3(node.position, sum / node.approaches.len() as f64);
+        let apex = p3(node.position, sum / (ring.len() / 2).max(1) as f64);
         for k in 0..ring.len() {
             let (p, py) = ring[k];
             let (q, qy) = ring[(k + 1) % ring.len()];
