@@ -1906,19 +1906,47 @@ impl GpuObject {
     }
 }
 
+/// The kit city `spawn_kit_city` built, shared with other loaders that plan
+/// buildings (eo-app's yards: the back walls' doors and stairs from the plans
+/// the tiles are cooked from), and whether one is on its way (0 none asked, 1
+/// building, 2 built, 3 failed).
+static SHARED_CITY: std::sync::OnceLock<Arc<KitCity>> = std::sync::OnceLock::new();
+static SHARED_STATE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// The kit city once `spawn_kit_city`'s thread has built it: waits up to
+/// `spawn_wait` for the spawn (a loader may start before it) and up to
+/// `build_wait` for the build; None without the kit or when it failed.
+pub fn shared_kit_city(spawn_wait: std::time::Duration, build_wait: std::time::Duration) -> Option<Arc<KitCity>> {
+    use std::sync::atomic::Ordering;
+    let t = std::time::Instant::now();
+    loop {
+        if let Some(c) = SHARED_CITY.get() {
+            return Some(c.clone());
+        }
+        let state = SHARED_STATE.load(Ordering::Acquire);
+        if state == 3 || t.elapsed() >= if state == 0 { spawn_wait } else { build_wait } {
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 /// Build the planner's city off the render thread (load time). `street_tag`:
 /// the street world's `structures_tag` (empty without the structures' joins).
 pub fn spawn_kit_city(city: Arc<eo_data::City>, repo_root: PathBuf, palette: Vec<String>, streets: bool, street_tag: String) -> Receiver<Result<(Arc<KitCity>, String), String>> {
     let (tx, rx) = std::sync::mpsc::channel();
+    SHARED_STATE.store(1, std::sync::atomic::Ordering::Release);
     // (stage S1) the shop signs' words drawn meanwhile (with `--facade-clutter`; the renderer waits for them).
     crate::sign_letters::start();
     std::thread::spawn(move || {
         let r = (|| {
             eo_data::roof_colours::install(&repo_root); // before the planner and the cache key read it
             let tenancy = eo_kit::tenancy::Tenancy::load(&repo_root)?;
-            let kc = KitCity::build(&city, &tenancy, &eo_kit::city::load_exclusions());
-            Ok((Arc::new(kc), inputs_key_with(&repo_root, &palette, streets, &street_tag)))
+            let kc = Arc::new(KitCity::build(&city, &tenancy, &eo_kit::city::load_exclusions()));
+            let _ = SHARED_CITY.set(kc.clone());
+            Ok((kc, inputs_key_with(&repo_root, &palette, streets, &street_tag)))
         })();
+        SHARED_STATE.store(if r.is_ok() { 2 } else { 3 }, std::sync::atomic::Ordering::Release);
         let _ = tx.send(r);
     });
     rx
