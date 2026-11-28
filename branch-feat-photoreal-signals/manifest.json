@@ -1,0 +1,54 @@
+{
+ "base": "main 4b9e0a27 (the branch point)",
+ "after": "feat/photoreal-signals",
+ "pairs": [
+  {
+   "name": "approach_5th_15h",
+   "before": "before/approach_5th_15h.jpg",
+   "after": "after/approach_5th_15h.jpg",
+   "diff": "diff/approach_5th_15h.jpg",
+   "changedPercent": 2.1,
+   "note": "15:00, 5th St & Harrison: level arm at the CA MUTCD 15 ft clearance, McCain heads, Street Name sign on the arm"
+  },
+  {
+   "name": "signal_head_15h",
+   "before": "before/signal_head_15h.jpg",
+   "after": "after/signal_head_15h.jpg",
+   "diff": "diff/signal_head_15h.jpg",
+   "changedPercent": 7.07,
+   "note": "15:00, a side-mounted head: modelled McCain head on its pipe bracket; lit lens as an LED module, unlit lenses dark"
+  },
+  {
+   "name": "button_post_15h",
+   "before": "before/button_post_15h.jpg",
+   "after": "after/button_post_15h.jpg",
+   "diff": "diff/button_post_15h.jpg",
+   "changedPercent": 16.42,
+   "note": "15:00, push button with its R10-3e(CA) sign at CA MUTCD 4I.05 height"
+  },
+  {
+   "name": "foot_mast_15h",
+   "before": "before/foot_mast_15h.jpg",
+   "after": "after/foot_mast_15h.jpg",
+   "diff": "diff/foot_mast_15h.jpg",
+   "changedPercent": 5.34,
+   "note": "15:00, mast pole foot: base plate, anchor bolts, handhole; pull box lid beside the pole"
+  },
+  {
+   "name": "approach_4th_21h",
+   "before": "before/approach_4th_21h.jpg",
+   "after": "after/approach_4th_21h.jpg",
+   "diff": "diff/approach_4th_21h.jpg",
+   "changedPercent": 6.13,
+   "note": "21:00, 4th St: the arm sign unlit, a street light on the mast pole (combination pole)"
+  },
+  {
+   "name": "signal_head_21h",
+   "before": "before/signal_head_21h.jpg",
+   "after": "after/signal_head_21h.jpg",
+   "diff": "diff/signal_head_21h.jpg",
+   "changedPercent": 5.96,
+   "note": "21:00, the lit lens as a light, its visor lit from inside, matte housing"
+  }
+ ]
+}
