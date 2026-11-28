@@ -140,15 +140,13 @@ fn hlod_vs(
 
 fn hl_keep(in: HlOut) {
     if (in.fade.y > 0.5) {
-// sf:AAA_BUILDINGS-
-        let n = hlod_dither(floor(in.clip.xy));
-// sf:end
+        var dither_p = floor(in.clip.xy);
 // sf:AAA_BUILDINGS+
         // Temporally jitter cross-fade dither (matching hlod_trees.wgsl) so TAA resolves
         // Kit R2 <-> HLOD Cell and Cell <-> District transitions smoothly with zero static zebra stipple.
-        let dither_p = floor(in.clip.xy) + select(vec2<f32>(0.0), vec2<f32>(5.588238 * look.post2.w), SF_AAA_BRDF);
-        let n = hlod_dither(dither_p);
+        dither_p = dither_p + select(vec2<f32>(0.0), vec2<f32>(5.588238 * look.post2.w), SF_AAA_BRDF);
 // sf:end
+        let n = hlod_dither(dither_p);
         if (in.fade.y < 1.5) {
             if (n >= in.fade.x) {
                 discard;
