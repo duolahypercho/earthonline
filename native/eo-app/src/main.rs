@@ -1092,7 +1092,8 @@ pub fn street_wear() -> bool {
 /// between them, most where the traffic waits, in place of the wheel strips
 /// and the drip line; the patches' tones nearer the road's (eo-render
 /// cc0_decals.rs `DK_LANE`, street_pbr.wgsl `rw_*`, `SF_ROAD_WEAR`). Off by
-/// default, in play mode too; the last of it and `--no-road-wear` wins.
+/// default in bench/fly-through/online, on in interactive `--play`; the last of
+/// it and `--no-road-wear` wins.
 pub fn road_wear() -> bool {
     last_switch("road-wear").unwrap_or(false)
 }
@@ -1101,8 +1102,9 @@ pub fn road_wear() -> bool {
 /// Pavement Condition Index, `public/data/sf/sf-pavement.json.gz`): a new
 /// surface dark and filmed, without older repairs or cracks; an old or poor
 /// one worn and cracked (eo-render cc0_decals.rs `DK_SURFACE`,
-/// street_pbr.wgsl `rw_*`, `SF_PAVEMENT_AGE`). Off by default, in play mode
-/// too; the last of it and `--no-pavement-age` wins.
+/// street_pbr.wgsl `rw_*`, `SF_PAVEMENT_AGE`). Off by default in
+/// bench/fly-through/online, on in interactive `--play`; the last of it and
+/// `--no-pavement-age` wins.
 pub fn pavement_age() -> bool {
     last_switch("pavement-age").unwrap_or(false)
 }
@@ -1112,8 +1114,8 @@ pub fn pavement_age() -> bool {
 /// width over the lane-reduction taper (CA MUTCD 3B.12, the standards table),
 /// kerb, gutter, crown and paint with it, no parked car in the taper, instead
 /// of a kerb jog and a lip across the road at the joint (eo-street
-/// `StreetWorld::half_at`). Off by default, in play mode too; the last of it
-/// and `--no-street-tapers` wins.
+/// `StreetWorld::half_at`). Off by default in bench/fly-through/online, on in
+/// interactive `--play`; the last of it and `--no-street-tapers` wins.
 pub fn street_tapers() -> bool {
     last_switch("street-tapers").unwrap_or(false)
 }
@@ -1124,8 +1126,9 @@ pub fn street_tapers() -> bool {
 /// green (in the standards' green chromaticity), a raised concrete island or
 /// tubular markers in its buffer, diagonal buffer markings, a two-way
 /// bikeway's broken yellow centre line, the bicycle symbol and its arrow
-/// after each intersection (eo-street `bikeway`). Off by default, in play
-/// mode too; the last of it and `--no-bikeways` wins.
+/// after each intersection (eo-street `bikeway`). Off by default in
+/// bench/fly-through/online, on in interactive `--play`; the last of it and
+/// `--no-bikeways` wins.
 pub fn bikeways() -> bool {
     last_switch("bikeways").unwrap_or(false)
 }

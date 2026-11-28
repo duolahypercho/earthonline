@@ -163,11 +163,18 @@ Interactive `--play` enables the full Metal-safe game feature set by default:
 roads and tunnels (`--structures --tunnels`), diveable coastal habitats and
 reefs, the furnished 21 Beaver Street terrace house (keeping the downtown
 spawn unless `--beaver-house` or a `--house-*` switch is passed), street PBR,
+lane traffic wear and surveyed pavement age (`--road-wear --pavement-age`),
+tapered plain joints, kerbside bikeways, surveyed kerbside parking and
+mid-block crossings (`--street-tapers --bikeways --survey-parking
+--midblock-crossings`), rear-yard detail (`--yard-detail`), surveyed street
+tree keeping, sizing and species (`--tree-keep --tree-sizes --tree-species`),
 kit facade glass/weathering/patina/window depth, indirect light and soft
 shadows, wet reflections, vehicle detail, crowds and pedestrian shading,
-night photometry, foliage/nature shading, and the cinematic camera model.
-Every feature still honours `--quality <tier>` and its `--no-<feature>` kill
-switch; `--bench --play` stays on the default `medium` budget tier.
+night photometry, foliage/nature shading, and the cinematic camera model
+(`--tree-crowns` remains opt-in). Optional DataSF and parcel tables degrade
+gracefully with a log line when absent. Every feature still honours
+`--quality <tier>` and its `--no-<feature>` kill switch; `--bench --play`,
+`--bench` (`medium`), and `--connect` stay untouched.
 
 The title bar shows the frame rate, and in `--play` the clock time, weather,
 mode, speed and the player step time; at a lift stop it starts with the

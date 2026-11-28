@@ -74,6 +74,13 @@ struct PlayOpts {
 struct PlayGlobals {
     play_street_defaults: bool,
     play_facade_defaults: bool,
+    yard_detail: Option<bool>,
+    road_wear: Option<bool>,
+    pavement_age: Option<bool>,
+    street_tapers: Option<bool>,
+    bikeways: Option<bool>,
+    survey_parking: Option<bool>,
+    midblock_crossings: Option<bool>,
     rocketbox_motions: Option<bool>,
     palm_detail: Option<bool>,
     car_density: Option<bool>,
@@ -103,6 +110,16 @@ impl PlayGlobals {
         if self.play_facade_defaults {
             eo_render::facade::set_play_defaults(true);
         }
+        if let Some(v) = self.yard_detail {
+            // SAFETY: called in play::intercept before window::run / bench spawns any worker threads.
+            unsafe { std::env::set_var("EO_YARD_DETAIL", if v { "on" } else { "off" }) };
+        }
+        if let Some(v) = self.road_wear { crate::models::set_play_road_wear(v); }
+        if let Some(v) = self.pavement_age { crate::models::set_play_pavement_age(v); }
+        if let Some(v) = self.street_tapers { eo_street::options::set_tapers(v); }
+        if let Some(v) = self.bikeways { eo_street::options::set_bikeways(v); }
+        if let Some(v) = self.survey_parking { eo_street::options::set_survey_parking(v); }
+        if let Some(v) = self.midblock_crossings { eo_street::options::set_midblock(v); }
         if let Some(v) = self.rocketbox_motions { eo_agents::motion::set_enabled(v); }
         if let Some(v) = self.palm_detail { eo_landmarks::features::set_palm_detail(v); }
         if let Some(v) = self.car_density { crate::agents::set_car_density(v); }
@@ -637,9 +654,20 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
                 }
             }
         }
-        // 3. Street PBR & Facades tracks
+        // 3. Street PBR, Wave 3a rear yards, Wave 4 surveyed street trees & street-look, and Facades tracks
+        // (`--tree-crowns` remains opt-in: its 70-200 m hull blobs street trees).
         g.play_street_defaults = true;
         g.play_facade_defaults = true;
+        g.yard_detail = Some(want("--yard-detail", "--no-yard-detail"));
+        a.props2.tree_keep = want("--tree-keep", "--no-tree-keep");
+        a.props2.tree_sizes = want("--tree-sizes", "--no-tree-sizes");
+        a.props2.tree_species = want("--tree-species", "--no-tree-species");
+        g.road_wear = Some(want("--road-wear", "--no-road-wear"));
+        g.pavement_age = Some(want("--pavement-age", "--no-pavement-age"));
+        g.street_tapers = Some(want("--street-tapers", "--no-street-tapers"));
+        g.bikeways = Some(want("--bikeways", "--no-bikeways"));
+        g.survey_parking = Some(want("--survey-parking", "--no-survey-parking"));
+        g.midblock_crossings = Some(want("--midblock-crossings", "--no-midblock-crossings"));
         // 4. Light track (sky chromaticity, multi-bounce AO, canyon/soffit bounce, wall sun bounce, denoised screen GI/AO, physical sun penumbra)
         a.look.dome_env = want("--dome-env", "--no-dome-env");
         a.look.ao_albedo = want("--ao-albedo", "--no-ao-albedo");
@@ -3201,6 +3229,15 @@ mod play_defaults_tests {
         assert!(a.look.sky.cine_camera);
         assert_ne!(a.look.sky.cam_bits & eo_render::cine_post::CAM_BIT_TONE, 0);
         assert!(g.play_street_defaults && g.play_facade_defaults);
+        assert_eq!(g.yard_detail, Some(true));
+        assert!(a.props2.tree_keep && a.props2.tree_sizes && a.props2.tree_species);
+        assert_eq!(g.road_wear, Some(true));
+        assert_eq!(g.pavement_age, Some(true));
+        assert_eq!(g.street_tapers, Some(true));
+        assert_eq!(g.bikeways, Some(true));
+        assert_eq!(g.survey_parking, Some(true));
+        assert_eq!(g.midblock_crossings, Some(true));
+        assert!(!eo_props::eztree::tree_crowns_enabled(), "--tree-crowns remains opt-in");
         assert_eq!(g.crowd, Some(true));
         assert_eq!(g.people_shading, Some(true));
         assert_eq!(g.people_capsules, Some(true));
@@ -3232,6 +3269,16 @@ mod play_defaults_tests {
             "--no-wet-surfaces",
             "--no-car-finish",
             "--no-foliage-light",
+            "--no-yard-detail",
+            "--no-tree-keep",
+            "--no-tree-sizes",
+            "--no-tree-species",
+            "--no-road-wear",
+            "--no-pavement-age",
+            "--no-street-tapers",
+            "--no-bikeways",
+            "--no-survey-parking",
+            "--no-midblock-crossings",
         ])).unwrap();
         assert_eq!(a.quality, crate::quality::Quality::Medium);
         assert!(a.structures.is_none());
@@ -3241,6 +3288,14 @@ mod play_defaults_tests {
         assert_eq!(a.look.car_finish, 0);
         assert_eq!(a.look.nature & eo_render::look::NATURE_FOLIAGE, 0);
         assert!(!a.look.sky.cine_camera);
+        assert_eq!(g.yard_detail, Some(false));
+        assert!(!a.props2.tree_keep && !a.props2.tree_sizes && !a.props2.tree_species);
+        assert_eq!(g.road_wear, Some(false));
+        assert_eq!(g.pavement_age, Some(false));
+        assert_eq!(g.street_tapers, Some(false));
+        assert_eq!(g.bikeways, Some(false));
+        assert_eq!(g.survey_parking, Some(false));
+        assert_eq!(g.midblock_crossings, Some(false));
         assert_eq!(g.crowd, Some(false));
         assert_eq!(g.people_groups, Some(false));
     }
@@ -3260,6 +3315,14 @@ mod play_defaults_tests {
         assert!(a.structures.is_none());
         assert!(!a.beaver_house && !a.look.ocean_life && !a.look.dome_env && !a.look.sky.cine_camera);
         assert!(!g.play_street_defaults && !g.play_facade_defaults);
+        assert_eq!(g.yard_detail, None);
+        assert!(!a.props2.tree_keep && !a.props2.tree_sizes && !a.props2.tree_species);
+        assert_eq!(g.road_wear, None);
+        assert_eq!(g.pavement_age, None);
+        assert_eq!(g.street_tapers, None);
+        assert_eq!(g.bikeways, None);
+        assert_eq!(g.survey_parking, None);
+        assert_eq!(g.midblock_crossings, None);
         assert_eq!(g.crowd, None);
     }
 

@@ -18,6 +18,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 static PLAY_STREET_DEFAULTS: AtomicBool = AtomicBool::new(false);
+static PLAY_ROAD_WEAR: AtomicBool = AtomicBool::new(false);
+static PLAY_PAVEMENT_AGE: AtomicBool = AtomicBool::new(false);
 
 /// Enable the street PBR & round-2 street detail passes by default in interactive
 /// play (`--play`), while still letting every `--no-<feature>` switch turn any off.
@@ -25,13 +27,27 @@ pub fn set_play_street_defaults(on: bool) {
     PLAY_STREET_DEFAULTS.store(on, Ordering::Relaxed);
 }
 
-fn street_switch(name: &str, explicit: bool) -> bool {
+/// Set interactive `--play` default for `--road-wear` (`--no-road-wear` overrides).
+pub fn set_play_road_wear(on: bool) {
+    PLAY_ROAD_WEAR.store(on, Ordering::Relaxed);
+}
+
+/// Set interactive `--play` default for `--pavement-age` (`--no-pavement-age` overrides).
+pub fn set_play_pavement_age(on: bool) {
+    PLAY_PAVEMENT_AGE.store(on, Ordering::Relaxed);
+}
+
+fn opt_street_switch(name: &str, default: bool) -> bool {
     let (on, off) = (format!("--{name}"), format!("--no-{name}"));
     let last = std::env::args().rev().find(|a| *a == on || *a == off);
     match last.as_deref() {
         Some(s) => s == on,
-        None => explicit || PLAY_STREET_DEFAULTS.load(Ordering::Relaxed),
+        None => default,
     }
+}
+
+fn street_switch(name: &str, explicit: bool) -> bool {
+    opt_street_switch(name, explicit || PLAY_STREET_DEFAULTS.load(Ordering::Relaxed))
 }
 
 pub struct Bases {
@@ -308,11 +324,13 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     if street_switch("aged-aggregate", crate::aged_aggregate()) {
         features.street |= eo_render::look::AGED_AGGREGATE; // (`--aged-aggregate`)
     }
-    // (`--road-wear`, `--pavement-age`) opt-in in every mode, play included: the street tiles' records and the shader together
-    if crate::road_wear() {
+    // (`--road-wear`, `--pavement-age`) opt-in in bench/fly-through/online, on by default in interactive `--play` (`--no-*` overrides)
+    let road_wear = opt_street_switch("road-wear", PLAY_ROAD_WEAR.load(Ordering::Relaxed));
+    let pavement_age = opt_street_switch("pavement-age", PLAY_PAVEMENT_AGE.load(Ordering::Relaxed));
+    if road_wear {
         features.street |= eo_render::look::ROAD_WEAR;
     }
-    if crate::pavement_age() {
+    if pavement_age {
         features.street |= eo_render::look::PAVEMENT_AGE;
     }
     eo_render::look::set_shader_features(features);
@@ -400,8 +418,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     // surface weathering (`--grime`): its street decals (kerb paint, building-line dirt) placed from the first tile on.
     eo_render::cc0_decals::set_weathering(args.look.grime > 0);
     // (`--road-wear`, `--pavement-age`) the lanes' wear and the pavement's age, placed from the first tile on.
-    eo_render::cc0_decals::set_road_wear(crate::road_wear());
-    eo_render::cc0_decals::set_pavement_age(crate::pavement_age());
+    eo_render::cc0_decals::set_road_wear(road_wear);
+    eo_render::cc0_decals::set_pavement_age(pavement_age);
     // street life (`--street-life`): its level, and the land-use survey its decals place by (read beside the load).
     crate::street_life::start(args.look.street_life, world.city.clone(), world.paths.repo_root.clone(), world.structures.clone());
     // the street's scanned sets (written once, before the first frame).
@@ -1313,7 +1331,7 @@ impl ModelRuntime {
     /// which part of `settled` is not true (for a settle that timed out).
     pub fn unsettled(&self) -> String {
         format!(
-            "kit maps ready {}, models done {}, uploads pending {}, kit settled {}, street settled {}, structures settled {}, far settled {}, far trees state {} (0 done), cc0 settled {}, {}",
+            "kit maps ready {}, models done {}, uploads pending {}, kit settled {}, street settled {}, structures settled {}, far settled {}, far trees state {} (0 done), cc0 settled {}, shop lights pending {}, {}",
             self.kit_ready,
             self.done(),
             self.uploads.pending(),
@@ -1323,6 +1341,7 @@ impl ModelRuntime {
             !self.hlod_drawn || self.hlod.as_ref().is_none_or(|h| h.settled()),
             self.hlod_trees,
             self.cc0.as_ref().map(|c| c.settled()).unwrap_or(true),
+            self.shop_rx.is_some(),
             self.hlod.as_ref().filter(|_| self.hlod_drawn).map(|h| h.unsettled()).unwrap_or_default() // hlod
         )
     }
