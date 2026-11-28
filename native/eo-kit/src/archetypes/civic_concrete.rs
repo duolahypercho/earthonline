@@ -219,13 +219,14 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
         })
         .collect();
 
+    let detail_on = crate::typology::detail_enabled();
     let front = if classical {
         let mut f = json!({
             "bays": front_bays,
             "endPier": end_pier,
             "pierMin": 0.7,
             "window": "punched",
-            "reveal": 0.22,
+            "reveal": if detail_on { 0.28 } else { 0.22 },
             "windowSpec": {
                 "sillHeight": 1.05, "headClear": 0.55, "widthRatio": 0.5,
                 "frameWidth": 0.07, "frameDepth": 0.09, "mullions": 1, "transomAt": null,
@@ -667,6 +668,62 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                         .edge(fi)
                         .meta(m("entry-architrave")),
                 );
+            }
+        }
+    }
+
+    if crate::typology::detail_enabled() {
+        let allow_f = 0.08f64.max(front.allowance - 0.05);
+        if !classical && plan.storeys.len() >= 2 {
+            // Horizontal concrete brise-soleil sunshades over upper ribbon bands + expressed bay fins
+            let shade_p = 0.34f64.min(allow_f);
+            let fin_p = 0.20f64.min(allow_f);
+            let upper_tops: Vec<f64> = plan.storeys.iter().skip(1).map(|st| st.y1).collect();
+            for st_y1 in upper_tops {
+                let sy = st_y1 + base_y - 0.50;
+                if sy < y_cap - 0.2 && sy > floor_y + 2.0 {
+                    plan.add_box(
+                        &basis,
+                        PartArgs::new("sunshade", "trim", 0.3, (front.length - 0.3).max(0.4), sy - 0.09, sy + 0.03, -0.02, shade_p)
+                            .edge(fi)
+                            .shadow(true)
+                            .receive(true)
+                            .meta(m("brise-soleil")),
+                    );
+                }
+            }
+            let shaft_y0 = plan.storeys[1].y0 + base_y;
+            let shaft_y1 = (plan.storeys.last().map(|s| s.y1 + base_y).unwrap_or(y_cap)).min(y_cap);
+            if shaft_y1 - shaft_y0 > 2.0 && fin_p > 0.06 {
+                let bay_edges: Vec<f64> = plan
+                    .edges
+                    .iter()
+                    .find(|e| e.index == fi)
+                    .map(|er| er.bays.iter().skip(1).map(|b| b.s0).collect())
+                    .unwrap_or_default();
+                for s in bay_edges {
+                    plan.add_box(
+                        &basis,
+                        PartArgs::new("fin", "trim", s - 0.11, s + 0.11, shaft_y0, shaft_y1, -0.02, fin_p)
+                            .edge(fi)
+                            .shadow(true)
+                            .receive(true)
+                            .meta(m("bay-fin")),
+                    );
+                }
+            }
+        } else if classical {
+            // Projecting cast-stone water-table belt at base_y along front (outside entry bay)
+            let wp = 0.08f64.min(allow_f);
+            for (s0, s1) in [(0.0, (bay.s0 - 0.1).max(0.0)), ((bay.s1 + 0.1).min(front.length), front.length)] {
+                if s1 - s0 > 0.35 {
+                    plan.add_profile(
+                        &basis,
+                        PartArgs::profile("water-table", "base", s0, s1, trim_profile_d("stepped", wp, 0.28, base_y - 0.02))
+                            .edge(fi)
+                            .meta(m("water-table")),
+                    );
+                }
             }
         }
     }

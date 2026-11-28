@@ -258,7 +258,16 @@ fn wx_quilt(s: ptr<function, Surface>, r: WxRun, kd: f32, fw: f32) {
         }
         let inside = smoothstep(-0.5 * fw, 0.5 * fw, e);
         let fresh = st_hash(hs + vec2<f32>(5.9, 8.3)) < WX_QUILT_FRESH;
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        if (rw_patch_gone(fresh, h2)) {
+            continue; // (`--pavement-age`, street_pbr.wgsl) paved over with the surface
+        }
+        // (`--road-wear`, street_pbr.wgsl) the tone's departure from the road kept at a share
+        let tone = rw_patch_tone(select(mix(WX_PATCH_OLD_LO, WX_PATCH_OLD_HI, h4), mix(WX_PATCH_NEW_LO, WX_PATCH_NEW_HI, h3), fresh));
+// sf:end
+// sf:ROAD_WEAR|PAVEMENT_AGE-
         let tone = select(mix(WX_PATCH_OLD_LO, WX_PATCH_OLD_HI, h4), mix(WX_PATCH_NEW_LO, WX_PATCH_NEW_HI, h3), fresh);
+// sf:end
         mul = mul * mix(1.0, tone, inside);
         rough = rough * mix(1.0, select(1.06, 0.84, fresh), inside);
         seam = max(seam, wx_band(abs(e), WX_SEAM_M, fw));
@@ -433,12 +442,32 @@ fn wx_road(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
         }
     }
     if (dist < WX_SNAKE_FAR) {
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        let before = *s;
+        let seal0 = sp_seal;
+        let crack0 = sp_crack;
+// sf:end
         if (SF_STREET_WEAR) {
             sw_cracks(s, world, g, kd, fw, dist); // (`--street-wear`, street_pbr.wgsl) the cracks by their causes
         } else if (WX_STREET_V1) {
             wx_snakes(s, world, fw, dist);
         } else {
             wx_cracks(s, world, g, fw, dist);
+// sf:ROAD_WEAR|PAVEMENT_AGE+
+        }
+        // (`--pavement-age`, street_pbr.wgsl `rw_crack_share`) none on a new surface, more on a worse one
+        let c = rw_crack_share();
+        if (c < 1.0 && cls != SC_GUTTER) {
+            (*s).albedo = mix(before.albedo, (*s).albedo, c);
+            (*s).rough = mix(before.rough, (*s).rough, c);
+            (*s).ao = mix(before.ao, (*s).ao, c);
+            (*s).n = normalize(mix(before.n, (*s).n, c));
+            sp_crack = mix(crack0, sp_crack, c);
+            if (any(sp_seal != seal0)) {
+                sp_seal.x = sp_seal.x * c;
+                sp_seal_bead = sp_seal_bead * c;
+            }
+// sf:end
         }
     }
 }

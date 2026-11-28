@@ -82,6 +82,10 @@ const PR_F_WEATHER_WIND: u32 = 32u;
 // in bits 0..15, pitch in bits 16..30, both signed (eo-props `boats::afloat_word`;
 // the pose is the physics', eo-player `harbour`). Its heave is in its height.
 const PR_F_AFLOAT: u32 = 64u;
+// (eo-app `--no-retro-viewer`) an arm name sign's face takes no glow of its own at night
+const PR_F_RETRO_VIEWER: u32 = 128u;
+// (eo-app `--no-sign-back-aged`) an arm name sign's back is dull weathered aluminium
+const PR_F_SIGN_BACK_AGED: u32 = 256u;
 const PR_AFLOAT_BIT: u32 = 0x80000000u;
 // a visible word: instance index (17 bits) | fade (8 bits) << 17.
 const PR_INDEX_MASK: u32 = 0x1ffffu;
@@ -95,6 +99,13 @@ fn pr_rot(yaw: f32, v: vec3<f32>) -> vec3<f32> {
 
 fn pr_is_veg(model: u32) -> bool {
     return model >= PR_VEG_BASE && model < PR_VEG_BASE + PR_VEG_COUNT;
+}
+
+// How much of its true distance an instance's draw distance and thinning
+// count (its levels keep the true one): PR_YARD_REACH for a yard plant (its `variant` carries
+// PR_YARD_PLANT, vegetation_models.rs `YARD_PLANT_BIT`), 1 for everything else.
+fn pr_reach(i: PrInstance) -> f32 {
+    return select(1.0, PR_YARD_REACH, pr_is_veg(i.model) && (i.variant & PR_YARD_PLANT) != 0u);
 }
 
 // the vegetation's distance thinning (props_lib2/vegetation_models.rs, whose
@@ -126,7 +137,7 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
     if (t.x <= 0.0) {
         return 1.0;
     }
-    let d = distance(i.pos, pr.cam.xyz);
+    let d = distance(i.pos, pr.cam.xyz) * pr_reach(i);
     let f = clamp((d - t.x) / max(t.y - t.x, 1.0), 0.0, 1.0);
     if (f <= 0.0) {
         return 1.0;
@@ -136,7 +147,11 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
     return s * min(inverseSqrt(keep), t.z);
 }
 fn pr_afloat_on(i: PrInstance) -> bool {
-    return (pr.mode.z & PR_F_AFLOAT) != 0u && (i.pad & PR_AFLOAT_BIT) != 0u;
+    // A boat only (`BOAT_BASE .. BOAT_BASE + PR_BOAT_COUNT`, i.e. `PR_BOAT_START..PR_BOAT_END`).
+    // Vegetation, pull boxes, and district/pole lamps store gradients or lamp seeds in `pad`
+    // whose top bit can be set and must never be turned as a hull's roll and pitch.
+    return i.model >= PR_BOAT_START && i.model < PR_BOAT_END
+        && (pr.mode.z & PR_F_AFLOAT) != 0u && (i.pad & PR_AFLOAT_BIT) != 0u;
 }
 
 // A moored boat's pose on the sea (x roll about its bow axis, local +Z; y pitch
@@ -172,7 +187,8 @@ fn pr_local(i: PrInstance, p: vec3<f32>) -> vec3<f32> {
     if (pr_afloat_on(i)) {
         return pr_afloat_turn(pr_afloat(i), l);
     }
-    if (i.model == PR_TACTILE_PAD || i.model == PR_TREE_BASIN) {
+    if (i.model == PR_TACTILE_PAD || i.model == PR_TREE_BASIN || i.model == PR_YARD_FENCE) {
+        // (a rear-yard fence piece: the ground's grade along its length, its boards plumb.)
         // The pad takes the ramp's running slope along its depth; a tree basin the street's grade along the kerb.
         l.y = l.y + l.z * i.slope;
     }
@@ -242,7 +258,20 @@ fn pr_wind(i: PrInstance, p: vec3<f32>, w_in: f32) -> vec3<f32> {
 // trees (a trunk stands plumb): grass, scrub and rock follow the slope they
 // stand on by a shear (y += gradient . horizontal offset).
 fn pr_veg_grad(i: PrInstance) -> vec2<f32> {
+    // (eo-app `--no-pull-boxes` off) the pull box's lid lies on the sidewalk the same way (its model in `extra.z`)
+    if (i.model == pr.extra.z) {
+        return unpack2x16snorm(i.pad) * 4.0;
+    }
     if (!pr_is_veg(i.model) || i.model < PR_VEG_BASE + PR_VEG_TREES) {
+        return vec2<f32>(0.0);
+    }
+    return unpack2x16snorm(i.pad) * 4.0;
+}
+
+// A tree's lean (the coastal trees; eo-app props/lidar_trees.rs `lean_of`): the
+// horizontal shear per metre of its height, in the slope's slot (a tree takes no slope).
+fn pr_tree_lean(i: PrInstance) -> vec2<f32> {
+    if (!pr_is_veg(i.model) || i.model >= PR_VEG_BASE + PR_VEG_TREES) {
         return vec2<f32>(0.0);
     }
     return unpack2x16snorm(i.pad) * 4.0;
@@ -252,6 +281,9 @@ fn pr_world(i: PrInstance, p: vec3<f32>, w: f32) -> vec3<f32> {
     let r = pr_rot(i.yaw, pr_local(i, p));
     var o = i.pos + r + pr_wind(i, p, w);
     o.y = o.y + dot(pr_veg_grad(i), r.xz);
+    let lean = pr_tree_lean(i);
+    o.x = o.x + lean.x * r.y;
+    o.z = o.z + lean.y * r.y;
     return o;
 }
 

@@ -127,7 +127,7 @@ fn shader_source_with_cove(cove_detail: bool, bits: crate::water::ShaderBits) ->
         crate::look::look_common_source(),
         include_str!("sky_light_core.wgsl"),
         crate::look::LOOK_EXT_WGSL, // group 1 bindings 12-18
-        include_str!("water.wgsl"),
+        crate::look::sf_select(include_str!("water.wgsl")),
         include_str!("water_surf.wgsl"),
         include_str!("surf.wgsl")
     ) + "\n" + crate::far_shadow::WGSL // the far sun shadow map's lookup (water.wgsl `w_shadow`, lighting)
@@ -352,6 +352,11 @@ impl SurfGpu {
         // the weather: the swell's Hs against the clear day's 1.8 m (from the sea's plan, which carries the storm; it was a fixed 2.1 x in a storm)
         let height = (swell_hs / 1.8).clamp(0.3, 2.5);
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&SurfUniform { misc: [CREST_WARP, storm, height, debug_mode()] }));
+    }
+
+    /// Whether any surf strip is visible this frame (`encode` will open a render pass).
+    pub fn has_visible(&self) -> bool {
+        !self.visible.lock().unwrap().is_empty()
     }
 
     /// The strip's pass, after the water pass (`water` holds this frame's group-0 bind group).

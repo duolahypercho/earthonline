@@ -65,7 +65,12 @@ impl StreetGround {
     /// Build the street world as eo-app/src/streets.rs does, and with
     /// `structures` the grade-separated roads over it as eo-app/src/structures.rs does.
     pub fn build_with(city: &eo_data::City, elevation: Arc<eo_data::ElevationGrid>, structures: Option<StructureOptions>) -> anyhow::Result<Self> {
-        let o = StreetOptions::load()?;
+        Self::build_with_options(city, elevation, structures, StreetOptions::load()?)
+    }
+
+    /// Build a collision world for an explicit street configuration without changing
+    /// the process-wide defaults used by other worlds.
+    pub fn build_with_options(city: &eo_data::City, elevation: Arc<eo_data::ElevationGrid>, structures: Option<StructureOptions>, o: StreetOptions) -> anyhow::Result<Self> {
         let sc = StreetCity::load()?;
         let plan = eo_street::plan::build_plan(&sc, &o);
         let rings = city.buildings.iter().map(|b| b.ring.iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
@@ -94,31 +99,52 @@ impl StreetGround {
             Some(s) => Arc::new(s),
             None => first.world,
         };
-        Ok(Self::new(world, Some(Arc::new(joined.structures))))
+        let structures = Arc::new(joined.structures);
+        // the street ground (eo-street `ground`) leaves the tunnels' cuts open, as the heightfield does.
+        if !structures.is_empty() {
+            let s = structures.clone();
+            world.set_ground_cut(Arc::new(move |x, z| s.terrain_cut_at(x, z).map(|c| c.floor)));
+        }
+        Ok(Self::new(world, Some(structures)))
     }
 
     /// The grade-separated roads, when there are any (`--structures` and a
     /// built deck).
     pub fn decks(&self) -> Option<&StructureWorld> {
-        self.structures.as_deref().filter(|s| !s.is_empty())
+        self.structures.as_deref().filter(|s| !s.is_empty() || s.has_landmark_roads())
     }
 }
 
 impl GroundProvider for StreetGround {
+    fn traffic_plan(&self) -> eo_data::sim_source::TrafficPlan {
+        self.world.traffic_plan()
+    }
+
     fn ground_y(&self, x: f64, z: f64) -> f64 {
         self.world.carpet_y(x, z)
+    }
+
+    fn arrival_road_y(&self, x: f64, z: f64, near_y: f64) -> Option<f64> {
+        self.world.carriageway_near(x, z, near_y)
     }
 
     fn multi_level(&self) -> bool {
         self.decks().is_some()
     }
 
+    fn has_landmark_roads(&self) -> bool {
+        self.structures.as_ref().is_some_and(|w| w.has_landmark_roads())
+    }
+
+    fn terrain_cuts_in(&self, min: [f64; 2], max: [f64; 2]) -> Vec<&eo_structures::TerrainCut> {
+        self.decks().map_or_else(Vec::new, |world| world.terrain_cuts_in(min, max))
+    }
     fn terrain_cut(&self, x: f64, z: f64) -> Option<f64> {
         self.decks()?.terrain_cut_at(x, z).map(|c| c.floor)
     }
 
     fn surface_tile(&self, key: TileKey) -> Option<SurfaceMesh> {
-        let m = self.world.cached_mesh((key.x, key.z));
+        let m = self.world.drawn_mesh((key.x, key.z)); // the paving and its street ground (eo-street `ground`)
         // (before the street's own early return: a tile with only a deck,
         // over the water or freeway-only, still collides.)
         let deck = self.decks().and_then(|w| w.surface_tile_shared((key.x, key.z))).filter(|d| !d.street.is_empty() || !d.barrier.is_empty());

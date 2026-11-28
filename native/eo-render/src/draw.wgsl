@@ -111,6 +111,21 @@ const CITY_LANDMARK: u32 = 3u;
 // cell, r the letters' fill, g a neon tube (sign_letters.rs; a 1 x 1 stand-in
 // without the clutter or a font).
 @group(0) @binding(28) var sgn_atlas: texture_2d_array<f32>;
+// (`--no-aerial-ground`, Docs/HILLS-PLAN.md H2) the open ground's colour from the
+// aerial survey: the hill builder's macro map, sRGB, alpha 1 on open ground
+// (aerial_ground.rs; a 1 x 1 stand-in with HM_ON false without it).
+@group(0) @binding(29) var hm_tex: texture_2d<f32>;
+
+// The aerial survey's ground colour (linear) and its open-ground weight at a
+// world point, with the fragment's world-space derivatives (no implicit ones:
+// the terrain branch is not uniform). Zero off the map.
+fn hm_ground(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> vec4<f32> {
+    let uv = (world.xz - HM_ORIGIN) / HM_SIZE;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return vec4<f32>(0.0);
+    }
+    return textureSampleGrad(hm_tex, cc0_samp, uv, dpx.xz / HM_SIZE, dpy.xz / HM_SIZE);
+}
 
 /// Offset of stress copy k: a 4-wide grid of small shifts (see scene::copy_offset).
 fn copy_offset(k: u32) -> vec3<f32> {
@@ -277,6 +292,7 @@ const SC_FOOTWAY: u32 = 5u;
 const SC_RAMP: u32 = 6u;
 const SC_PAINT: u32 = 7u;
 const SC_VERGE: u32 = 8u;
+const SC_EAST_SPAN_ROAD: u32 = 9u;
 
 fn st_hash(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -326,9 +342,106 @@ fn st_tap(uv: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, layer: i32) -> StTap {
     return t;
 }
 
+// Box-filter a periodic wire without turning subpixel strands into a solid
+// sheet. The integral over any whole number of periods is the wire fraction.
+fn lm_wire_coverage(coordinate: f32, footprint: f32, fraction: f32) -> f32 {
+    let w = max(footprint, 1e-4);
+    let x = vec2<f32>(coordinate-0.5*w, coordinate+0.5*w) + 0.5*fraction;
+    let integral = floor(x)*fraction + min(fract(x),vec2<f32>(fraction));
+    return clamp((integral.y-integral.x)/w, 0., 1.);
+}
+
+// A surveyed NAIP band in the city plan. Explicit gradients keep the image
+// stable under flight, including across mesh and terrain-LOD boundaries.
+fn marin_image(base: vec3<f32>, band: vec4<f32>, row: f32, p: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec3<f32> {
+    let uv = (p - band.xy) / band.zw;
+    if (any(uv <= vec2<f32>(0.0)) || any(uv >= vec2<f32>(1.0))) { return base; }
+    let k = vec2<f32>(1.0, 0.5) / band.zw;
+    let image = textureSampleGrad(street_albedo, street_sampler, vec2<f32>(uv.x, row + uv.y * 0.5), 2, dx * k, dy * k);
+    return mix(base, image.rgb, image.a);
+}
+
+// The clean aggregate scan shared by the steel bridge wearing courses.
+fn bridge_asphalt_scan(p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>) -> StTap {
+    if (!cc0_on(CC0_RUN_STREET)) {
+        return st_tap(p / ST_ASPHALT_TILE, gx / ST_ASPHALT_TILE, gy / ST_ASPHALT_TILE, 0);
+    }
+    let layer = CC0_L_CLEAN_ASPHALT;
+    let scale = cc0_linv(layer);
+    let clean = cc0_tap(p * scale, gx * scale, gy * scale, layer);
+    var t: StTap;
+    t.albedo = clean.alb.rgb * ST_ASPHALT_MEAN / max(cc0_lmean(layer).rgb, vec3<f32>(1e-3));
+    t.rough = clean.rough * ST_ASPHALT_MEAN_ROUGH / max(cc0_lmisc(layer).x, 0.05);
+    t.tn = vec2<f32>(clean.n.x, -clean.n.y);
+    t.ao = clean.ao;
+    return t;
+}
+
+// The two-inch epoxy asphalt covers the steel deck continuously. The MTC
+// deck photographs show exposed aggregate and local wear. The two North
+// Approach expansion joints are identified in the District's Phase 1 survey.
+// The width and pattern of abrasion around each joint are an estimate.
+fn lm_gate_pavement(p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>) -> StTap {
+    let inv = 1. / ST_ASPHALT_TILE;
+    if (!LM_GG_COURSE || !cc0_on(CC0_RUN_STREET)) {
+        return st_tap(p * inv, gx * inv, gy * inv, 0);
+    }
+    var t = bridge_asphalt_scan(p, gx, gy);
+    let c = dot(p - LM_GG_ORIGIN, LM_GG_AXIS);
+    let ends = abs(vec2<f32>(c) - LM_GG_JOINTS);
+    let nearest = min(ends.x, ends.y) * inv;
+    if (nearest < 1.) {
+        let wear = (1. - smoothstep(0., 1., nearest)) * st_noise(p * inv);
+        let worn = st_tap(p * inv, gx * inv, gy * inv, 0);
+        t.albedo = mix(t.albedo, worn.albedo, wear);
+        t.rough = mix(t.rough, worn.rough, wear);
+        t.tn = mix(t.tn, worn.tn, wear);
+        t.ao = mix(t.ao, worn.ao, wear);
+    }
+    return t;
+}
+
+// The continuous aggregate overlay on the elevated concrete roadways.
+fn bridge_polyester_concrete(s: ptr<function, Surface>, p: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, n: vec3<f32>) {
+    let scan = st_tap(p / ST_CONCRETE_TILE, gx / ST_CONCRETE_TILE, gy / ST_CONCRETE_TILE, 1);
+    let grain = clamp(scan.albedo / ST_CONCRETE_MEAN, vec3<f32>(ST_CONCRETE_ALBEDO_CLAMP.x), vec3<f32>(ST_CONCRETE_ALBEDO_CLAMP.y));
+    (*s).albedo = ST_CONCRETE_BASE * mix(vec3<f32>(1.), grain, ST_CONCRETE_CONTRAST);
+    (*s).rough = clamp(ST_CONCRETE_ROUGHNESS * scan.rough / ST_CONCRETE_MEAN_ROUGH, 0., 1.);
+    (*s).n = normalize(n + vec3<f32>(scan.tn.x, 0., scan.tn.y) * ST_CONCRETE_NORMAL);
+    (*s).metal = 0.;
+    (*s).env = ENV_SIDEWALK;
+}
+
+fn east_span_course(in: VOut, n: vec3<f32>, gx: vec2<f32>, gy: vec2<f32>, concrete: bool) -> Surface {
+    var s: Surface;
+    s.alpha = 1.;
+    s.ao = 1.;
+    if (concrete) {
+        bridge_polyester_concrete(&s, in.world.xz, gx, gy, n);
+    } else {
+        let f = bridge_asphalt_scan(in.world.xz, gx, gy);
+        let grain = clamp(f.albedo / ST_ASPHALT_MEAN, vec3<f32>(ST_ASPHALT_ALBEDO_CLAMP.x), vec3<f32>(ST_ASPHALT_ALBEDO_CLAMP.y));
+        s.albedo = CC0_ASPHALT_TINT * CC0_ASPHALT_ALBEDO * mix(vec3<f32>(1.), grain, ST_ASPHALT_CONTRAST);
+        s.rough = clamp(ST_ASPHALT_ROUGHNESS * f.rough / ST_ASPHALT_MEAN_ROUGH, 0., 1.);
+        s.n = normalize(n + vec3<f32>(f.tn.x, 0., f.tn.y) * ST_ASPHALT_NORMAL);
+        s.metal = 0.;
+        s.env = ENV_ASPHALT;
+    }
+    // Both parallel roadways are directly exposed to the weather.
+    sky_wet_street(&s, in.world, n, in.aux.y * 6.35, !concrete);
+    return s;
+}
+
 fn street_surface(in: VOut, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> Surface {
     var s: Surface;
-    let cls = u32(round(in.aux.x));
+    var cls = u32(round(in.aux.x));
+    if (SX_EAST_PAVING && cls == SC_EAST_SPAN_ROAD) {
+        let p = vec3<f32>(in.world.xz, -1.);
+        if (dot(SX_PAVING_JOINTS[0], p) >= 0. && dot(SX_PAVING_JOINTS[2], p) <= 0.) {
+            return east_span_course(in, n_geom, dpx.xz, dpy.xz, dot(SX_PAVING_JOINTS[1], p) >= 0.);
+        }
+        cls = SC_ASPHALT;
+    }
     let dist = length(frame.cam_pos.xyz - in.world);
     let concrete = cls >= SC_KERB_FACE;
     let layer = select(0, 1, concrete);
@@ -459,13 +572,13 @@ fn street_surface(in: VOut, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -
                 base = CC0_ASPHALT_TINT * CC0_ASPHALT_ALBEDO;
             }
         }
-        if (cls == SC_ASPHALT) {
+        if (cls == SC_ASPHALT || (SF_AAA_DETAIL && cls == SC_PAD)) {
             // Macro tone: two octaves of world-keyed noise.
             let m = st_noise(in.world.xz * ST_MACRO_COARSE) * 0.6 + st_noise(in.world.xz * ST_MACRO_FINE + 17.3) * 0.4;
             base = base * (1.0 + ST_MACRO_AMPLITUDE * (m - 0.5) * 2.0);
             // Cross fall toward the gutter lip, and the silt line inboard of the kerb.
             let kd = in.aux.y * 6.35;
-            if (kd >= 0.0) {
+            if (cls == SC_ASPHALT && kd >= 0.0) {
                 let lip = kd - ST_GUTTER_WIDTH;
                 base = base * (1.0 - ST_CROSS_FALL_DARKEN * clamp(1.0 - lip / ST_CROSS_FALL_REACH, 0.0, 1.0));
                 base = base * (1.0 - ST_SILT_DARKEN * (1.0 - smoothstep(0.0, ST_SILT_REACH, lip)));
@@ -497,12 +610,24 @@ fn street_surface(in: VOut, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -
             g = vec2<f32>(cc0_daux.x * ry.z - cc0_daux.y * rx.z, cc0_daux.y * rx.x - cc0_daux.x * ry.x) / det * 6.35;
         }
         if (cls == SC_FOOTWAY) {
-            cc0_scoring(&s, in.rel, n_geom, in.aux.y * 6.35, g, rx, ry);
+            if (SF_AAA_DETAIL && length(g) < 0.3 && cc0_p_plaza.w < 0.05) {
+                cc0_promenade_scoring(&s, in.world, n_geom, dpx, dpy);
+            } else {
+                cc0_scoring(&s, in.rel, n_geom, in.aux.y * 6.35, g, rx, ry);
+            }
         } else if (cls == SC_GUTTER || cls == SC_ASPHALT) {
             cc0_gutter_grime(&s, in.rel, in.aux.y * 6.35, g, rx, ry);
         } else if (cls == SC_KERB_FACE) {
             cc0_kerb_grime(&s, p, gx, gy, in.aux.y * 6.35);
         }
+    } else if (SF_AAA_DETAIL && (cls == SC_FOOTWAY || cls == SC_RAMP) && in.aux.y < 0.0 && near_scan && cc0_street && cc0_p_plaza.w < 0.05) {
+        cc0_promenade_scoring(&s, in.world, n_geom, dpx, dpy);
+    }
+    if (SF_AAA_DETAIL && cls == SC_PAD && near_scan && cc0_street) {
+        cc0_pad_detail(&s, in.world, n_geom, dpx, dpy);
+    }
+    if (SF_AAA_DETAIL && cls == SC_RAMP && in.aux.y >= 0.0 && near_scan && cc0_street && cc0_p_plaza.w < 0.05) {
+        cc0_promenade_scoring(&s, in.world, n_geom, dpx, dpy);
     }
     if (wx_level() != 0u && (objects[in.object].kind & 255u) != 11u) {
         // weathering (`--grime`, weathering.wgsl): aged walks, chipped kerbs, a patched and sealed carriageway.
@@ -849,7 +974,14 @@ fn fc_glow(albedo: vec3<f32>, code: f32, world: vec3<f32>, n_raw: vec3<f32>) -> 
     let neon = k >= 95.5;
     var g: FcGlow;
     g.roll = (k - select(64.0, 96.0, neon)) / 31.0;
-    g.emit = albedo * select(FC_BOX_GAIN, FC_NEON_GAIN, neon);
+    let neon_gain = select(FC_NEON_GAIN, FC_NEON_GAIN * 1.48, SF_AAA_DETAIL);
+    let box_gain = select(FC_BOX_GAIN, FC_BOX_GAIN * 1.16, SF_AAA_DETAIL);
+    var col = albedo;
+    if (SF_AAA_DETAIL && neon) {
+        let m = max(max(col.r, col.g), max(col.b, 1e-4));
+        col = pow(col / m, vec3<f32>(1.28)) * max(m, 0.65);
+    }
+    g.emit = col * select(box_gain, neon_gain, neon);
     g.q = world - vec3<f32>(0.0, 1.2, 0.0);
     g.n = vec3<f32>(n_raw.x, 0.0, n_raw.z);
     return g;
@@ -986,18 +1118,39 @@ fn sgn_sign(s: ptr<function, Surface>, g: SgnCode, t: vec2<f32>, du: vec2<f32>, 
     if (g.mode == SGN_NEON) {
         // glass tubes, pale by day; by night their colour at full strength
         // (the tone curve whitens the core) and a glow on the dark board.
-        let neon = pow(ink / max(max(ink.x, ink.y), max(ink.z, 1e-4)), vec3<f32>(1.3));
+        var neon = pow(ink / max(max(ink.x, ink.y), max(ink.z, 1e-4)), vec3<f32>(1.3));
+        var n_gain = FC_NEON_GAIN;
+        var h_gain = FC_HALO_GAIN;
+        if (SF_AAA_DETAIL) {
+            // Vivid multi-hue SF storefront & blade neon tubes (ruby, rose-magenta, cyan-cobalt, emerald-mint, warm amber)
+            let nh = (group * 2654435761u ^ g.cell * 2246822519u ^ g.ink * 3266489917u) % 6u;
+            if (g.ink == 5u) {
+                neon = select(vec3<f32>(0.10, 0.56, 1.0), vec3<f32>(0.08, 0.92, 0.88), (nh & 1u) != 0u);
+            } else if (g.ink == 4u) {
+                neon = select(vec3<f32>(1.0, 0.16, 0.58), vec3<f32>(0.96, 0.24, 0.92), (nh & 1u) != 0u);
+            } else if (g.ink == 3u) {
+                neon = select(vec3<f32>(1.0, 0.12, 0.10), vec3<f32>(1.0, 0.28, 0.08), (nh & 1u) != 0u);
+            } else if (g.ink == 2u) {
+                neon = select(vec3<f32>(1.0, 0.64, 0.10), vec3<f32>(0.14, 0.96, 0.44), nh == 0u || nh == 3u);
+            } else if (g.ink == 0u) {
+                neon = select(vec3<f32>(0.92, 0.97, 1.0), vec3<f32>(1.0, 0.84, 0.52), (nh & 1u) != 0u);
+            }
+            n_gain = FC_NEON_GAIN * 1.55;
+            h_gain = FC_HALO_GAIN * 1.48;
+        }
         (*s).albedo = mix((*s).albedo, mix(vec3<f32>(0.5), neon * 0.6, 0.4), tube);
         (*s).rough = mix((*s).rough, 0.15, tube);
-        o.emit = neon * (tube * FC_NEON_GAIN + halo * FC_HALO_GAIN);
+        o.emit = neon * (tube * n_gain + halo * h_gain);
     } else {
         let field = (*s).albedo;
         (*s).albedo = mix(field, ink * 0.9, letters);
         if (g.mode == SGN_LIT_LETTERS) {
-            o.emit = ink * letters * FC_LETTER_GAIN + field * FC_BACK_GAIN;
+            let l_gain = select(FC_LETTER_GAIN, FC_LETTER_GAIN * 1.38, SF_AAA_DETAIL);
+            o.emit = ink * letters * l_gain + field * FC_BACK_GAIN;
         } else {
             // lit through: brightest between the lamps, falling off toward the edges.
-            o.emit = (*s).albedo * FC_BOX_GAIN * (1.0 - 0.25 * smoothstep(0.3, 0.85, abs(y)));
+            let b_gain = select(FC_BOX_GAIN, FC_BOX_GAIN * 1.15, SF_AAA_DETAIL);
+            o.emit = (*s).albedo * b_gain * (1.0 - 0.25 * smoothstep(0.3, 0.85, abs(y)));
         }
     }
     if (g.mode == 0u) {
@@ -1517,6 +1670,20 @@ fn measured_wall_light(chart: vec3<f32>) -> vec3<f32> {
     return mix(clear,overcast,look.wall_sample.z)+wall_light_row(chart,7.);
 }
 
+// Daylight reaches continuously into an open portal (FHWA Lighting Handbook,
+// Tunnel Lighting). Use the same shadowed exterior surface at the face as
+// the neighbouring road. The aperture's solid angle falls with depth.
+fn tunnel_mouth_light(s: Surface, m: Material, v: vec3<f32>, n: vec3<f32>, in: VOut) -> vec4<f32> {
+    let kind = objects[in.object].kind;
+    let d = sx_portal_depth(in.object, in.world);
+    let interior = sx_bore_light_at(s, m, v, in.world, kind, d);
+    if (SX_MOUTH_LIGHTING && d >= 0. && d < SX_PORTAL_DAY_M && (kind & SX_LUMINAIRE_BIT) == 0u) {
+        let exterior = look_light(s, m, v, in.world, n, in.object);
+        return mix(interior, exterior, sx_portal_sky_at(d) / SX_PORTAL_SKY);
+    }
+    return interior;
+}
+
 fn shade(in: VOut) -> vec4<f32> {
     var m = materials[in.material];
     let ft_du = vec2<f32>(dpdx(in.ft.x), dpdy(in.ft.x));
@@ -1589,7 +1756,7 @@ fn shade(in: VOut) -> vec4<f32> {
     if (street_class) {
         let ss = street_surface(in, n, dpx, dpy);
         if (sx_in_bore(in.object)) {
-            return sx_bore_light(ss, m, v, in.world, in.object); // a tunnel bore's roadway (structures.wgsl)
+            return tunnel_mouth_light(ss, m, v, n, in); // a tunnel bore's roadway (structures.wgsl)
         }
         // (`--far-street-light`) past the frame's lamp lights, the street lit from its lamps' pools.
         rm_emit = ss.albedo * lk_far_street_light(in.world, frame.cam_pos.xyz);
@@ -1605,7 +1772,7 @@ fn shade(in: VOut) -> vec4<f32> {
             sl_structure(&sx, in.world, n, dpx, dpy); // street life (`--street-life`): graffiti round the columns' bases
         }
         if (sx_in_bore(in.object)) {
-            return sx_bore_light(sx, m, v, in.world, in.object); // a tunnel bore's lining and walkways
+            return tunnel_mouth_light(sx, m, v, n, in); // a tunnel bore's lining and walkways
         }
         return look_light(sx, m, v, in.world, n, in.object);
     }
@@ -1623,6 +1790,30 @@ fn shade(in: VOut) -> vec4<f32> {
     let house_finish = SF_HOUSE && (objects[in.object].kind & 255u) == 4u && in.aux.y > 0.49;
     let interior_transfer = house_finish && in.aux.y > 64.5 / 127.0;
     var vcol = select(in.color, vec3<f32>(1.0), house_finish);
+    if (LM_GG_NET && (m.flags & F_BLEND) != 0u && m.thin_absorption == -5.) {
+        let tangent = normalize(in.color.rg * 2. - 1.);
+        let across = vec2<f32>(-tangent.y, tangent.x);
+        // The installed horizontal fabric uses 4 mm wire in 120 mm diamonds.
+        let axis = (tangent+across)*0.70710678;
+        let pitch = m.params.w;
+        let fraction = m.params.z/pitch;
+        let p = in.world.xz - LM_GG_ORIGIN;
+        let incidence = max(abs(dot(face,v)),0.01);
+        // A round wire projects a wider footprint across its direction when
+        // viewed obliquely. Looking along a wire keeps its diameter unchanged.
+        let oblique = dot(v.xz,axis) / incidence;
+        let wire = min(1., fraction*sqrt(1.+oblique*oblique));
+        let span = abs(dot(dpx.xz,axis))+abs(dot(dpy.xz,axis));
+        let a = lm_wire_coverage(dot(p,axis)/pitch, span/pitch, wire);
+        let other = (tangent-across)*0.70710678;
+        let w = abs(dot(dpx.xz,other))+abs(dot(dpy.xz,other));
+        let ob = dot(v.xz,other) / incidence;
+        let second = min(1., fraction*sqrt(1.+ob*ob));
+        let b = lm_wire_coverage(dot(p,other)/pitch, w/pitch, second);
+        s.alpha = a+(1.-a)*b;
+        s.metal = 0.82;
+        vcol = vec3<f32>(0.54,0.56,0.58);
+    }
     if (kit_object) {
         vcol = pow(in.color, vec3<f32>(2.2));
     }
@@ -1681,6 +1872,9 @@ fn shade(in: VOut) -> vec4<f32> {
             } else {
                 s.rough = ST_CONCRETE_ROUGHNESS;
                 s.env = ENV_SIDEWALK;
+                if (SF_AAA_DETAIL && paint_kind == 7u) {
+                    cc0_verge_bank(&s, in.world, n, dpx, dpy);
+                }
             }
         }
     }
@@ -1689,10 +1883,26 @@ fn shade(in: VOut) -> vec4<f32> {
     let cc0_sand = cc0_terrain && (m.flags & LM_F_WET_GROUND) != 0u && in.aux.x < 253.5;
     // the terrain surface pass's ground (its vertices' alpha GG3_MATERIAL_ALPHA): cc0.wgsl gg3_terrain
     let gg3_ground = GG3_MATERIALS && cc0_terrain && abs(in.aux.x - GG3_MATERIAL_ALPHA) < 0.5;
-    let cc0_plain = cc0_terrain && !cc0_sand && !gg3_ground;
+    let surveyed_landing = LM_GG_APPROACH && cc0_terrain && in.aux.y < -0.985 && in.aux.x > 254.5;
+    // (`--yard-detail`) a rear yard's measured ground first (yards.wgsl; false off the yards or without the switch).
+    let cc0_plain = cc0_terrain && !cc0_sand && !gg3_ground && !surveyed_landing && !yd_ground(&s, in.world, n, dpx, dpy);
+    if (surveyed_landing) {
+        s.albedo = in.color;
+        s.rough = 0.9;
+    }
     if (gg3_ground) {
         gg3_terrain(&s, in.world, n, dpx, dpy, in.aux.y);
     }
+    // (`--no-aerial-ground`) the open ground's colour from the aerial survey, before the
+    // tone decides the scans, the turf and the cover: plain terrain vertices only (not the
+    // sand, the surveyed materials or the bare-ground marks, which carry their own).
+    var hm_w = 0.0;
+    if (HM_ON && cc0_plain && in.aux.x > 254.5 && in.world.y > LM_SEA_LEVEL_Y + 0.5) {
+        let hm = hm_ground(in.world, dpx, dpy);
+        hm_w = hm.a;
+        s.albedo = mix(s.albedo, hm.rgb, hm_w);
+    }
+    hm_ground_w = hm_w; // (cc0.wgsl `hm_cured`: the scans and the turf read the survey's cured grass as grass)
 // sf:BARE+
     var nb_w = vec3<f32>(0.0);
     if (cc0_plain) {
@@ -1716,6 +1926,9 @@ fn shade(in: VOut) -> vec4<f32> {
 // sf:end
 // sf:COVER&BARE+
     nc_w.x = nc_w.x * (1.0 - nb_w.x);
+// sf:end
+// sf:COVER+
+    nc_w.x = nc_w.x * (1.0 - hm_w); // (`--no-aerial-ground`) the survey's colour already carries the hills' real mosaic
 // sf:end
 // sf:BARE-
     if (cc0_plain) {
@@ -1742,8 +1955,110 @@ fn shade(in: VOut) -> vec4<f32> {
         nt_bare(&s, nb_w, in.world, n, dpx, dpy); // (`--bare-ground`) gravel, fines and weeds; a revetment's rock (landmarks_surface.wgsl)
     }
 // sf:end
+    if (LM_GG_SURFACES && cc0_terrain && textureNumLayers(street_albedo) == 3u && in.world.y > LM_SEA_LEVEL_Y) {
+        let p = in.world.xz;
+        let wide = marin_image(s.albedo, LM_MARIN_WIDE, 0., p, dpx.xz, dpy.xz);
+        s.albedo = marin_image(wide, LM_MARIN_FINE, 0.5, p, dpx.xz, dpy.xz);
+    }
     if (CITY_CLASS != CITY_GENERAL && lm_kind(m.flags) != 0u) { // (the landmark class's own pipeline, or the one pipeline)
-        lm_surface(&s, m, in.world, n, dpx, dpy); // landmark-surface.js, the seawall's concrete
+        let gate_deck = LM_GG_APPROACH && lm_kind(m.flags) == 2u && lm_is_gg(in.world);
+        if (gate_deck && n.y > 0.8 && distance(in.color, LM_GG_PAVEMENT) < 0.0001) {
+            // The steel roadway has an epoxy-asphalt wearing course. Use the
+            // city's asphalt scans, without projecting street furniture decals onto the deck.
+            let scan = lm_gate_pavement(in.world.xz, dpx.xz, dpy.xz);
+            let grain = clamp(scan.albedo / ST_ASPHALT_MEAN, vec3<f32>(ST_ASPHALT_ALBEDO_CLAMP.x), vec3<f32>(ST_ASPHALT_ALBEDO_CLAMP.y));
+            s.albedo = CC0_ASPHALT_TINT * CC0_ASPHALT_ALBEDO * mix(vec3<f32>(1.), grain, ST_ASPHALT_CONTRAST);
+            s.rough = clamp(ST_ASPHALT_ROUGHNESS * scan.rough / ST_ASPHALT_MEAN_ROUGH, 0., 1.);
+            if (LM_GG_WHEELS && SP_TRACK_M > 0.) {
+                // The MTC barrier installation photos show lighter wheel paths
+                // in each travel lane. Their spacing follows the painted lanes.
+                let across = in.aux.y * LM_GG_ROAD_HALF;
+                let lane = (abs(across) - LM_GG_MEDIAN_EDGE) / LM_GG_LANE;
+                let along = dot(in.world.xz - LM_GG_ORIGIN, LM_GG_AXIS);
+                let wander = (st_noise(vec2<f32>(along / 23., floor(lane) + sign(across))) - 0.5) * 0.5;
+                let offset = (fract(lane) - 0.5) * LM_GG_LANE + wander;
+                let track = abs(abs(offset) - SP_TRACK_M * 0.5);
+                let width = 0.3 + 0.1 * st_noise(vec2<f32>(along / 4., 1.7));
+                let resolved = 1. - smoothstep(0.5 * width, LM_GG_LANE, abs(dot(dpx.xz, vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x))) + abs(dot(dpy.xz, vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x))));
+                let polish = mix(2.7 * width / LM_GG_LANE, 1. - smoothstep(width * 0.35, width, track), resolved);
+                s.albedo *= 1. + 0.14 * polish;
+                s.rough = mix(s.rough, min(s.rough, SP_ASPHALT_ROUGH_POLISHED), 0.85 * polish);
+            }
+            s.n = normalize(n + vec3<f32>(scan.tn.x, 0., scan.tn.y) * ST_ASPHALT_NORMAL);
+            s.metal = 0.;
+            s.env = ENV_ASPHALT;
+            if (LM_GG_SURFACES) {
+                // An exposed, drained epoxy-asphalt course. Its thin film coats
+                // the scanned aggregate. Viewing angle changes Fresnel in the
+                // lighting pass, never the material roughness or water coverage.
+                if (sky_on(skyu.flags.x, SKY_WET) && skyu.wet.x >= 0.02) {
+                    var soak = skyu.wet.x;
+                    if (sky_on(skyu.flags.x, SKY_DAMP)) {
+                        soak *= sky_damp_left(in.world.xz, -1.);
+                    }
+                    let cine = SKY_CINE_FULL && sky_on(skyu.flags.x, SKY_CINEMATIC);
+                    let darken = select(0.58, SKY_CINE_WET_DARKEN.x, cine);
+                    let film = select(0.24, SKY_CINE_WET_ROUGH.x, cine);
+                    s.albedo *= mix(1., darken, soak);
+                    let film_rough = min(s.rough, film * scan.rough / ST_ASPHALT_MEAN_ROUGH);
+                    s.rough = mix(s.rough, film_rough, soak);
+                    sky_w2_water = soak;
+                }
+            } else {
+                sky_wet_street(&s, in.world, n, -1., true);
+            }
+        } else if (LM_BAY_PAVEMENT && abs(in.aux.y * 127. + 64.) < 0.1 && !lm_is_gg(in.world)) {
+            // Caltrans identifies the wearing course on both western decks as
+            // polyester concrete. Only the exposed road receives rainfall.
+            bridge_polyester_concrete(&s, in.world.xz, dpx.xz, dpy.xz, n);
+            let c = dot(in.world.xz - LM_BAY_ORIGIN, LM_BAY_AXIS);
+            if (in.world.y > lm_bay_deck_top(c) - 0.5 * LM_BAY_DECK[6]) {
+                sky_wet_street(&s, in.world, n, -1., false);
+            }
+            s.ao *= lm_bridge_sky_vis(in.world, n);
+            lm_key_vis = lm_deck_key(in.world);
+            lm_rim_vis = lm_bridge_rim();
+            rm_emit += lm_bridge_bounce(in.world, n, s.albedo, s.ao);
+        } else if (LM_BRIDGE_MARKINGS && (lm_kind(m.flags) == 1u || lm_kind(m.flags) == 2u)
+                && (!lm_is_gg(in.world) || distance(in.color, LM_GG_PAVEMENT) > 0.0001)
+                && in.aux.y >= 31.5/127. && in.aux.y <= 52.5/127.) {
+            // Authored white and yellow marking quads share the streets' scan
+            // of worn marking paint. The offset keeps unmarked vertices at zero.
+            let across = clamp((in.aux.y * 127. - 32.) / 20., 0., 1.);
+            s.albedo = in.color;
+            s.rough = ST_PAINT_ROUGHNESS;
+            s.metal = 0.;
+            s.env = ENV_PAINTED_METAL;
+            cc0_paint_wear(&s, in.world, in.rel, across, dpx, dpy, 1.);
+            let bay_c = dot(in.world.xz - LM_BAY_ORIGIN, LM_BAY_AXIS);
+            if (lm_is_gg(in.world) || in.world.y > lm_bay_deck_top(bay_c) - 0.5 * LM_BAY_DECK[6]) {
+                sp_paint_wet(&s);
+            }
+            s.ao *= lm_bridge_sky_vis(in.world, n);
+            lm_key_vis = lm_deck_key(in.world);
+            lm_rim_vis = lm_bridge_rim();
+            rm_emit += lm_bridge_bounce(in.world, n, s.albedo, s.ao);
+        } else {
+            lm_surface(&s, m, in.world, n, dpx, dpy);
+            if (gate_deck && distance(in.color, LM_GG_MEDIAN) < 0.0001) {
+                // Pinned units remain physically continuous. Fade the recessed
+                // joint before its repeating pitch is narrower than two pixels.
+                let c = dot(in.world.xz - LM_GG_ORIGIN, LM_GG_AXIS);
+                let station = c / LM_GG_MEDIAN_PITCH;
+                let px = max(abs(dot(dpx.xz, LM_GG_AXIS)), abs(dot(dpy.xz, LM_GG_AXIS))) / LM_GG_MEDIAN_PITCH;
+                let edge = abs(fract(station + 0.5) - 0.5);
+                let joint = (1. - smoothstep(0.0, 0.012 + px, edge)) * (1. - smoothstep(0.12, 0.5, px));
+                // The District's street-level photo shows the yellow side strip
+                // below the formed steel lip. Its proportions are photo estimates.
+                let height = (in.world.y - lm_gg_deck_top(c)) / LM_GG_MEDIAN_HEIGHT;
+                let blur = max(0.015, max(abs(dpx.y), abs(dpy.y)) / LM_GG_MEDIAN_HEIGHT);
+                let stripe = smoothstep(0.13-blur, 0.13+blur, height) * (1.-smoothstep(0.35-blur, 0.35+blur, height));
+                let steel = vec3<f32>(dot(LM_GG_MEDIAN, vec3<f32>(0.2126,0.7152,0.0722)));
+                s.albedo = mix(steel, LM_GG_STRIPE, stripe * (1.-abs(n.y))) * (1.-0.38*joint);
+                s.rough = mix(0.62, ST_PAINT_ROUGHNESS, stripe);
+                s.metal = 0.32 * (1.-stripe);
+            }
+        }
     } else if ((m.flags & LM_F_WET_GROUND) != 0u && (objects[in.object].kind & 255u) == 1u) {
         if (in.aux.x < 253.5) {
             // beach sand (its vertex alpha carries the shore distance): beach-surface.js's sand.
@@ -1853,64 +2168,161 @@ fn shade(in: VOut) -> vec4<f32> {
     let room = (m.flags >> 8u) & 7u;
     // the normal the light takes as the surface's own (a `--facade-glass` pane's: its bow and tilt).
     var n_light = n;
+    var glass_canyon = false;
+    var glass_ng = n;
     if ((m.flags & F_GLASS) != 0u && room != 0u && kit_object && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
         let ng_out = select(face, normalize(n_in), dot(n_in, n_in) > 0.25);
-        if (sl_level() != 0u) {
-            wx_window_life_pre(vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room); // stage W5 (`--street-life`, weathering.wgsl): the wall beside, sill plants, a vacant shop
-        }
-        let r = rm_kit_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, frame.cam_pos.xyz, room, look.rooms_env, look.rooms_work, objects[in.object].lod_group); // + the building's group: its shop fronts (stage N2, `--shop-light`)
-        // By day the room is lit through the pane and seen back through it:
-        // its share goes as the glass's Tv squared against the clear unit's
-        // (rooms.rs `pane_transmittance`; no Tv bits: as before).
-        var through = 1.0;
-        if (RM_PANE_TV) { // (`--no-pane-transmittance` compiles it out)
-            let tv = f32((m.flags >> RM_PANE_TV_SHIFT) & 15u) / 15.0;
-            through = select(1.0, min(tv * tv / (RM_PANE_TV_REFERENCE * RM_PANE_TV_REFERENCE), 1.0), tv > 0.0);
-        }
-        s.albedo = mix(s.albedo, r.day.xyz * through, r.day.w);
-        // (`--room-lit-runs`) a dark pane keeps its glass's reflection as the light fades.
-        let keep_reflection = select(0.0, look.rooms_env.x, RM_LIT_RUNS);
-        s.metal = mix(s.metal, s.metal * 0.3, r.day.w * (1.0 - keep_reflection));
-        // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
-        let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
-        rm_emit = r.night * transmission;
-        if (fg_on()) {
-            // (`--facade-glass`) the pane as glass is: a dielectric whose two
-            // faces each reflect (F0 0.04 each, Schlick: the base layer and the
-            // clearcoat layer), never the room's colour as a metal's tint; opaque
-            // over its room, which shows through what the faces do not reflect
-            // (`r.day.w`, rooms.wgsl), tinted a little by the glass (the kit's
-            // glass colour is a blended pane's look, not its transmission); each pane on its own
-            // normal (rooms.wgsl `rm_pane_normal`), so its reflection and the
-            // sun's glint break pane by pane.
-            let tint = mix(vec3<f32>(1.0), m.base.rgb / max(max(m.base.r, max(m.base.g, m.base.b)), 1e-3), FG_GLASS_TINT);
-            s.albedo = r.day.xyz * r.day.w * tint;
+        if (SF_AAA_DETAIL && abs(ng_out.y) >= 0.55) {
+            // Horizontal rooftop skylight glazing: weathered dusty wired glass (no clearcoat mirror starburst).
+            s.albedo = vec3<f32>(0.050, 0.060, 0.072);
             s.metal = 0.0;
-            s.rough = FG_ROUGH;
+            s.rough = 0.66;
             s.alpha = 1.0;
-            m.emissive.w = 1.0;
-            rm_emit = r.night * tint;
-            n_light = rm_pane_normal(vec4<f32>(in.color, in.aux.y), in.world, ng_out);
-            if (dot(n_light, v) < 0.0) {
-                n_light = -n_light;
+            m.emissive.w = 0.0;
+            rm_emit = vec3<f32>(0.0);
+        } else {
+            if (sl_level() != 0u) {
+                wx_window_life_pre(vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room); // stage W5 (`--street-life`, weathering.wgsl): the wall beside, sill plants, a vacant shop
             }
-            s.n = n_light;
+            let r = rm_kit_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, frame.cam_pos.xyz, room, look.rooms_env, look.rooms_work, objects[in.object].lod_group); // + the building's group: its shop fronts (stage N2, `--shop-light`)
+            // By day the room is lit through the pane and seen back through it:
+            // its share goes as the glass's Tv squared against the clear unit's
+            // (rooms.rs `pane_transmittance`; no Tv bits: as before).
+            var through = 1.0;
+            if (RM_PANE_TV) { // (`--no-pane-transmittance` compiles it out)
+                let tv = f32((m.flags >> RM_PANE_TV_SHIFT) & 15u) / 15.0;
+                through = select(1.0, min(tv * tv / (RM_PANE_TV_REFERENCE * RM_PANE_TV_REFERENCE), 1.0), tv > 0.0);
+            }
+            s.albedo = mix(s.albedo, r.day.xyz * through, r.day.w);
+            // (`--room-lit-runs`) a dark pane keeps its glass's reflection as the light fades.
+            let keep_reflection = select(0.0, look.rooms_env.x, RM_LIT_RUNS);
+            s.metal = mix(s.metal, s.metal * 0.3, r.day.w * (1.0 - keep_reflection));
+            // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
+            let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
+            rm_emit = r.night * transmission;
+            if (fg_on()) {
+                // (`--facade-glass`) the pane as glass is: a dielectric whose two
+                // faces each reflect (F0 0.04 each, Schlick: the base layer and the
+                // clearcoat layer), never the room's colour as a metal's tint; opaque
+                // over its room, which shows through what the faces do not reflect
+                // (`r.day.w`, rooms.wgsl), tinted a little by the glass (the kit's
+                // glass colour is a blended pane's look, not its transmission); each pane on its own
+                // normal (rooms.wgsl `rm_pane_normal`), so its reflection and the
+                // sun's glint break pane by pane.
+                n_light = rm_pane_normal(vec4<f32>(in.color, in.aux.y), in.world, ng_out);
+                if (dot(n_light, v) < 0.0) {
+                    n_light = -n_light;
+                }
+                let tint = mix(vec3<f32>(1.0), m.base.rgb / max(max(m.base.r, max(m.base.g, m.base.b)), 1e-3), FG_GLASS_TINT) * (vec3<f32>(1.0) + vec3<f32>(-0.04, 0.015, 0.045) * fg_pane_var.y);
+                s.albedo = r.day.xyz * r.day.w * tint;
+                s.metal = 0.0;
+                s.rough = fg_pane_var.x;
+                s.alpha = 1.0;
+                m.emissive.w = 1.0;
+                rm_emit = r.night * tint;
+                s.n = n_light;
+            }
+            if (SF_WINDOW_DEPTH && max(wd_depth.x, wd_depth.y) > 0.01) {
+                // (`--window-depth`) the reveal round the pane (rooms.wgsl `wd_pane`): the sun only through the
+                // opening (over the key light, look_light.wgsl `fr_sun_vis`), the sky the room behind keeps, and
+                // the reveal in the glass (`wd_refl`, read with the canyon's `cg_apply`)
+                let wd = wd_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, n_light, v, wd_depth, max(length(dpx), length(dpy)));
+                fr_sun_vis = wd.x;
+                s.albedo = s.albedo * wd.y;
+            }
+            glass_canyon = true;
+            glass_ng = ng_out;
+            if (wx_level() != 0u || sl_level() != 0u) {
+                wx_window(&s, &m, vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room, dpx, dpy); // stage W5: dirty glass (`--grime`); stickers, scratched tags (`--street-life`)
+            }
+            if (SF_AAA_DETAIL && fg_on()) {
+                // Prevent weathered dust film from turning residential windows into opaque matte chalk squares
+                // (`09_residential_rowhouses`), and shade divided-light wood sash bars as crisp painted trim.
+                s.albedo = min(s.albedo, vec3<f32>(0.048));
+                s.rough = min(s.rough, 0.095);
+                m.emissive.w = max(m.emissive.w, 0.86);
+                if (rm_sash_cov > 0.005) {
+                    let sash_col = vec3<f32>(0.38, 0.37, 0.35);
+                    s.albedo = mix(s.albedo, sash_col, rm_sash_cov);
+                    s.rough = mix(s.rough, 0.58, rm_sash_cov);
+                    m.emissive.w = mix(m.emissive.w, 0.0, rm_sash_cov);
+                    s.n = normalize(mix(s.n, ng_out, rm_sash_cov));
+                }
+                rm_sash_cov = 0.0;
+            }
         }
-        if (SF_WINDOW_DEPTH && max(wd_depth.x, wd_depth.y) > 0.01) {
-            // (`--window-depth`) the reveal round the pane (rooms.wgsl `wd_pane`): the sun only through the
-            // opening (over the key light, look_light.wgsl `fr_sun_vis`), the sky the room behind keeps, and
-            // the reveal in the glass (`wd_refl`, read with the canyon's `cg_apply`)
-            let wd = wd_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, n_light, v, wd_depth, max(length(dpx), length(dpy)));
-            fr_sun_vis = wd.x;
-            s.albedo = s.albedo * wd.y;
+    } else if ((m.flags & F_GLASS) != 0u && (m.flags & F_THIN_GLASS) == 0u && room != 0u
+        && (objects[in.object].kind & 255u) == 4u && objects[in.object].lod_role == 1u
+        && (!SF_HOUSE || (objects[in.object].kind & 0xfffffe00u) == 0u) && !house_finish
+        && rm_atlas_active() && fg_on() && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
+        // Exterior Blender GLB glazing (`kind == 4u`, `lod_role == LOD_NEAR`, never the playable house):
+        // full 3D parallax interior room atlas + physical dielectric double-pane glass + live cloud/canyon reflections.
+        var ng_out = select(face, normalize(n_in), dot(n_in, n_in) > 0.25);
+        if (dot(ng_out, v) < 0.0) {
+            ng_out = -ng_out;
         }
-        if (SF_CANYON_GLASS && cg_on()) {
-            // (`--canyon-glass`) the street canyon the pane reflects (rooms.wgsl `cg_canyon`; look_light.wgsl reads it)
-            cg_canyon(in.world, ng_out, reflect(-v, n_light), distance(frame.cam_pos.xyz, in.world));
+        if (abs(ng_out.y) < 0.55) {
+            let ob_b = objects[in.object];
+            let r = rm_blender_pane(in.world, ng_out, frame.cam_pos.xyz, room, look.rooms_env, look.rooms_work, ob_b.lod_group, ob_b.min, ob_b.max);
+            if (SF_AAA_DETAIL && rm_reveal_hit) {
+                // Ray-marched 3D recessed masonry/bronze window reveal jamb, sill, or head soffit
+                s.albedo = rm_reveal_alb;
+                s.metal = 0.0;
+                s.rough = 0.74;
+                s.alpha = 1.0;
+                m.emissive.w = 0.0;
+                rm_emit = vec3<f32>(0.0);
+                n_light = rm_reveal_n;
+                if (dot(n_light, v) < 0.0) {
+                    n_light = -n_light;
+                }
+                s.n = n_light;
+                fr_sun_vis = rm_reveal_sun;
+            } else {
+                let tint = mix(vec3<f32>(1.0), m.base.rgb / max(max(m.base.r, max(m.base.g, m.base.b)), 1e-3), FG_GLASS_TINT);
+                s.albedo = r.day.xyz * r.day.w * tint;
+                s.metal = 0.0;
+                s.rough = FG_ROUGH;
+                s.alpha = 1.0;
+                m.emissive.w = 1.0;
+                rm_emit = r.night * tint;
+                n_light = rm_blender_pane_normal(in.world, ng_out, ob_b.lod_group);
+                if (dot(n_light, v) < 0.0) {
+                    n_light = -n_light;
+                }
+                s.n = n_light;
+                if (SF_AAA_DETAIL) {
+                    fr_sun_vis = rm_reveal_sun;
+                    if (rm_sash_cov > 0.005) {
+                        let sash_col = vec3<f32>(0.38, 0.37, 0.35);
+                        s.albedo = mix(s.albedo, sash_col, rm_sash_cov);
+                        s.rough = mix(s.rough, 0.58, rm_sash_cov);
+                        m.emissive.w = mix(m.emissive.w, 0.0, rm_sash_cov);
+                        s.n = normalize(mix(s.n, ng_out, rm_sash_cov));
+                    }
+                    rm_sash_cov = 0.0;
+                }
+                glass_canyon = true;
+                glass_ng = ng_out;
+            }
+        } else if (SF_AAA_DETAIL) {
+            // Horizontal Blender GLB roof skylight/lightwell glass: dusty matte-charcoal skylight glazing (no clearcoat starburst).
+            s.albedo = vec3<f32>(0.050, 0.060, 0.072);
+            s.metal = 0.0;
+            s.rough = 0.66;
+            s.alpha = 1.0;
+            m.emissive.w = 0.0;
+            rm_emit = vec3<f32>(0.0);
         }
-        if (wx_level() != 0u || sl_level() != 0u) {
-            wx_window(&s, &m, vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room, dpx, dpy); // stage W5: dirty glass (`--grime`); stickers, scratched tags (`--street-life`)
-        }
+    } else if (fg_on() && (m.flags & F_GLASS) != 0u && room != 0u && !kit_object && (objects[in.object].kind & 255u) == 4u && (m.flags & F_THIN_GLASS) == 0u && (!SF_HOUSE || (objects[in.object].kind & 0xfffffe00u) == 0u) && !house_finish && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
+        let ng_out = select(face, normalize(n_in), dot(n_in, n_in) > 0.25);
+        n_light = rm_authored_glass(&s, &m, in.world, ng_out, v, in.object, room, max(length(dpx), length(dpy)));
+        glass_canyon = (m.flags & F_BLEND) == 0u && m.params.y < 0.35;
+        glass_ng = ng_out;
+    }
+    if (glass_canyon && SF_CANYON_GLASS && cg_on()) {
+        // (`--canyon-glass`) the street canyon the pane reflects (rooms.wgsl `cg_canyon`; look_light.wgsl reads it)
+        cg_canyon(in.world, glass_ng, reflect(-v, n_light), distance(frame.cam_pos.xyz, in.world));
     }
     // facade clutter (`--facade-clutter`): a lit sign face carries a glow code in the normal's w
     // byte (eo-kit clutter.rs, kit.rs), a lettered one (stage S1) its code; none on any other kit
@@ -2373,7 +2785,7 @@ fn shade(in: VOut) -> vec4<f32> {
 
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
     if (sx_in_bore(in.object)) {
-        return sx_bore_light(s, m, v, in.world, in.object); // a tunnel bore's paint and luminaire (structures.wgsl)
+        return tunnel_mouth_light(s, m, v, n, in); // a tunnel bore's paint and luminaire (structures.wgsl)
     }
     if SF_HOUSE && (m.flags & F_JOINERY_LIGHT) != 0u && frame.copy_step.z < .5 {
         // (the playable house) source-lit joinery: its baked finish traced through the windows

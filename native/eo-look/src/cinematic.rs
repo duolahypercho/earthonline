@@ -130,9 +130,9 @@ pub const CINEMATIC_DEVIATIONS: &[Deviation] = &[
     },
     Deviation {
         name: "props::CINE_SIGNAL_LENS_GAIN",
-        cinematic: "a lit signal lens at night 3.5 x its tone-solved radiance (over the look's bloom threshold)",
-        default: "the lens solved to a fixed display value under the bloom (SIGNAL_LENS_TONE_INPUT)",
-        reason: "red and green heads bleed into the bloom at night (reference 7.1, 7.2)",
+        cinematic: "with `--no-signal-light` only: a lit signal lens at night 3.5 x its tone-solved radiance (over the look's bloom threshold); with the signal lenses as lights (the default, eo-render props `signal_light`) the lens is its own luminance in the frame's units and this gain is not applied",
+        default: "the lens solved to a fixed display value under the bloom (SIGNAL_LENS_TONE_INPUT) with `--no-signal-light`; else its own luminance, rolled off like a camera's highlights under the default display chain",
+        reason: "red and green heads bleed into the bloom at night (reference 7.1, 7.2); the lenses as lights reach it by their own luminance",
     },
     // stage L3: wet streets, streaks, reflections, clearcoat.
     Deviation {

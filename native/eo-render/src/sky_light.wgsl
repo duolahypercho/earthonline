@@ -81,6 +81,28 @@ fn sky_cine_cobra(l: vec3<f32>, dir: vec3<f32>) -> f32 {
     return (1.0 + SKY_CINE_COBRA_GAIN * max(1.0 - c * c, 0.0) * along2) * smoothstep(hi, lo, c);
 }
 
+// ---- A low beam's stray light high over its cut-off (`--no-headlamp-stray`:
+// the glare zone's value at every height, as before; sky_reflect.rs
+// `sky_light_source`). FMVSS 108 Table XIX (every US lower-beam type): at
+// most 125 cd from 10 deg up to the zenith; compliant lamps measure 37 cd (an
+// NHTSA compliance test) to 104 cd (a retail LB2V lamp's report), so their
+// geometric mean, 62 cd, of the 20,000 cd peak (eo-sky photometry
+// `LOW_BEAM_PEAK_CD`). Up to 4 deg the glare zone's value stands (ECE R112
+// zone III, 625 cd; FMVSS 108's 4U points ask at least 64 cd), falling
+// between. A car at a stop line lit the signal head over it at 620 cd.
+const SKY_HEAD_STRAY_ON: bool = true;
+/// x..y deg over the horizontal the fall's ends; z the stray share of the peak.
+const SKY_HEAD_STRAY: vec3<f32> = vec3<f32>(4.0, 10.0, 0.0031);
+
+/// The low beam's share of its peak over the cut-off: `glare` near it, the
+/// stray share high over it (`dep` deg below the horizontal).
+fn sky_head_glare(glare: f32, dep: f32) -> f32 {
+    if (!SKY_HEAD_STRAY_ON) {
+        return glare;
+    }
+    return mix(glare, SKY_HEAD_STRAY.z, smoothstep(SKY_HEAD_STRAY.x, SKY_HEAD_STRAY.y, -dep));
+}
+
 /// The low beam's vertical and horizontal shape (eo-sky `low_beam_shape`):
 /// `dep` deg below the horizontal, `h` deg right of the axis.
 fn sky_cine_low_beam(dep: f32, h: f32) -> f32 {
@@ -89,7 +111,7 @@ fn sky_cine_low_beam(dep: f32, h: f32) -> f32 {
     let x = (h - SKY_CINE_BEAM_HOT.x) / SKY_CINE_BEAM_HOT.y;
     let hot = SKY_CINE_BEAM_SPREAD + (1.0 - SKY_CINE_BEAM_SPREAD) * exp(-x * x);
     let fall = select(1.0, (2.5 / max(dep, 1e-3)) * (2.5 / max(dep, 1e-3)), dep > 2.5);
-    return mix(SKY_CINE_BEAM_GLARE, hot * fall, under);
+    return mix(sky_head_glare(SKY_CINE_BEAM_GLARE, dep), hot * fall, under);
 }
 
 // ---- (`--weather damp` and `--look cinematic`, stage L3; eo-sky `cine_wet`,
@@ -360,7 +382,7 @@ fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: ve
             let dep = asin(clamp(l.y, -1.0, 1.0)) * 57.29578;
             var vert = 1.0;
             if (dep < 0.6) {
-                vert = 0.031;
+                vert = sky_head_glare(0.031, dep); // high over the cut-off, the stray light
             } else if (dep < 1.3) {
                 vert = mix(0.031, 1.0, (dep - 0.6) / 0.7);
             } else if (dep > 2.5) {

@@ -1,0 +1,15 @@
+sf-bikeways.json.gz - San Francisco bikeway network
+
+Source: DataSF, SFMTA: MTA Bike Network Linear Features (ygmz-vaxd), rows updated 2026-10-24
+License: Open Data Commons Public Domain Dedication and License (PDDL) 1.0
+         http://opendatacommons.org/licenses/pddl/1.0/
+Attribution (courtesy): City and County of San Francisco, SFMTA, via DataSF.
+Retrieved from: https://data.sf.gov/resource/ygmz-vaxd.json?%24select=cnn%2Cfacility_t%2Cdir%2Ccontraflow%2Cbuffered%2Craised%2Cbarrier%2Csurface_tr%2Cdouble%2Cupdate_yr%2Cshape&%24order=objectid&%24limit=50000
+Source SHA-256: 5ffa54cade7362781050e6ad75529b0f95f397dcab8aab9a89d1004a27825843
+Produced by:   scripts/world-data/build-sf-bikeways.py (sf-bikeways-v1)
+Output SHA-256: 59edf37fc420c7821ed97ae55a11998ad1c4dfa5bf6b8a4bb4db4e0c8853cd0f (sf-bikeways.json.gz)
+
+Kept: 5476 facility records (class I 370, II 1804, III 2626, IV 676); 8 rows without a class or line.
+Carried per record: CNN, class, direction, flags (contraflow, buffered, raised, green paint, other side),
+barrier bits (concrete or island, safe-hit posts, parking, sidewalk level) and the line in the city file's
+local metre frame (sf-city.json.gz meta: x east, z south).

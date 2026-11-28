@@ -398,6 +398,24 @@ pub fn stations(c0: f64, c1: f64, step: f64) -> Vec<f64> {
     (0..=n).map(|i| c0 + ((c1 - c0) * i as f64) / n as f64).collect()
 }
 
+/// Insert the exact ends of a parapet into the regular railing bays.
+pub(crate) fn railing_stations(c0: f64, c1: f64, step: f64, parapet: Option<[f64; 2]>) -> Vec<f64> {
+    let mut rows = stations(c0, c1, step);
+    if let Some(ends) = parapet {
+        rows.extend(ends);
+        rows.sort_by(f64::total_cmp);
+        rows.dedup_by(|a,b| (*a - *b).abs() < 1e-6);
+    }
+    rows
+}
+
+// Existing deck marking offsets, shared with the landing that continues them.
+pub(crate) const DECK_PLATE_DEPTH_M: f64 = 0.3;
+pub(crate) const PAINT_LIFT_M: f64 = 0.02;
+pub(crate) const MEDIAN_CLEAR_M: f64 = 0.3;
+pub(crate) const MEDIAN_LINE_OFFSET_M: f64 = 0.15;
+pub(crate) const EDGE_LINE_INSET_M: f64 = 0.3;
+
 /// A main-cable run: a parabola under the chord (c0, y0)-(c1, y1), `sag` below it at mid-run.
 #[derive(Clone, Copy, Debug)]
 pub struct Run {
@@ -590,6 +608,10 @@ pub struct TrussSpec<'a> {
     pub gap: &'a dyn Fn(f64, f64) -> bool,
     pub far_half_width: f64,
     pub far_above: f64,
+    /// Pavement and deck plate above an end diaphragm.
+    pub end_plate_cover: f64,
+    /// Survey limits of the Golden Gate's suspended floor system (S1 to N1).
+    pub floorbeam_span: Option<[f64; 2]>,
     /// The members' section sizes times this (the structure scale; 1: the JS's).
     pub member: f64,
 }
@@ -599,6 +621,30 @@ pub struct TrussSpec<'a> {
 /// centimetre, under a pixel past the near distance.
 pub const FAR_STRIP_STEP_M: f64 = 20.0;
 
+/// Keep the roadway, open side trusses and approach bracing in the far bridge model.
+pub(crate) fn distant_bridge_decks() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        let mut enabled = false;
+        for arg in std::env::args() {
+            match arg.as_str() {
+                "--distant-bridge-decks" => enabled = true,
+                "--no-distant-bridge-decks" => return false,
+                _ => {}
+            }
+        }
+        enabled
+    })
+}
+
+/// Keep the same member endpoints and section when the flying camera passes the detail boundary.
+pub(crate) fn bridge_member(near: &mut MeshArrays, far: &mut MeshArrays, a: V3, b: V3, width: f64, depth: f64, colour: Rgb) {
+    near.beam(a, b, width, depth, colour);
+    if distant_bridge_decks() {
+        far.beam(a, b, width, depth, colour);
+    }
+}
+
 /// `stiffeningTruss` (farStep 40).
 pub fn stiffening_truss(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Frame, o: &TrussSpec) {
     let h = o.half_plane;
@@ -607,17 +653,20 @@ pub fn stiffening_truss(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Fra
     let k = o.member;
     let top = 0.5 * k;
     let cs = stations(o.c_start, o.c_end, o.panel);
+    let floorbeam_nodes = o.floorbeam_span.map(|[start, end]| {
+        cs.partition_point(|&c| c < start)..cs.partition_point(|&c| c <= end)
+    });
     for i in 0..cs.len() - 1 {
         let (a, b) = (cs[i], cs[i + 1]);
         let (ta, tb) = ((o.deck_top)(a), (o.deck_top)(b));
         let cut = (o.gap)(a, b);
         if !cut {
             for s in [-h, h] {
-                near.beam(frame.P(a, s, ta - top), frame.P(b, s, tb - top), 0.9 * k, 1.0 * k, o.colour);
-                near.beam(frame.P(a, s, ta - depth), frame.P(b, s, tb - depth), 0.9 * k, 1.0 * k, o.colour);
-                near.beam(frame.P(b, s, tb - depth), frame.P(b, s, tb - top), 0.5 * k, 0.6 * k, o.colour);
+                bridge_member(near, far, frame.P(a, s, ta - top), frame.P(b, s, tb - top), 0.9 * k, 1.0 * k, o.colour);
+                bridge_member(near, far, frame.P(a, s, ta - depth), frame.P(b, s, tb - depth), 0.9 * k, 1.0 * k, o.colour);
+                bridge_member(near, far, frame.P(b, s, tb - depth), frame.P(b, s, tb - top), 0.5 * k, 0.6 * k, o.colour);
                 let up = i % 2 == 0;
-                near.beam(
+                bridge_member(near, far,
                     frame.P(a, s, if up { ta - depth } else { ta - top }),
                     frame.P(b, s, if up { tb - top } else { tb - depth }),
                     0.45 * k,
@@ -626,27 +675,36 @@ pub fn stiffening_truss(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Fra
                 );
             }
         }
-        near.beam(frame.P(b, -h, tb - 1.1 * k), frame.P(b, h, tb - 1.1 * k), 0.7 * k, 1.0 * k, o.dark);
+        if let Some(nodes) = floorbeam_nodes.as_ref().filter(|nodes| nodes.contains(&(i + 1))) {
+            // Two 25-foot truss panels to each floorbeam.
+            if (i + 1 - nodes.start) % 2 == 0 {
+                crate::golden_gate::floorbeams::draw(near, frame, b, tb, o);
+            }
+        } else {
+            near.beam(frame.P(b, -h, tb - 1.1 * k), frame.P(b, h, tb - 1.1 * k), 0.7 * k, 1.0 * k, o.dark);
+        }
         if !cut {
             near.beam(frame.P(a, -h, ta - depth), frame.P(b, h, tb - depth), 0.35 * k, 0.35 * k, o.dark);
             near.beam(frame.P(a, h, ta - depth), frame.P(b, -h, tb - depth), 0.35 * k, 0.35 * k, o.dark);
         }
     }
-    if features().members {
-        welded_strip(far, frame, o.deck_top, o.c_start, o.c_end, FAR_STRIP_STEP_M, o.far_half_width, depth, o.far_above, o.colour);
-    } else {
-        let fs = stations(o.c_start, o.c_end, far_step);
-        for i in 0..fs.len() - 1 {
-            let (a, b) = (fs[i], fs[i + 1]);
-            let (ta, tb) = ((o.deck_top)(a), (o.deck_top)(b));
-            let [mx, mz] = frame.point((a + b) / 2.0, 0.0);
-            far.box_(mx, mz, (ta + tb) / 2.0 - depth, (ta + tb) / 2.0 + o.far_above, (b - a) / 2.0, o.far_half_width, frame.yaw, o.colour, crate::geometry::ALL);
+    if !distant_bridge_decks() {
+        if features().members {
+            welded_strip(far, frame, o.deck_top, o.c_start, o.c_end, FAR_STRIP_STEP_M, o.far_half_width, depth, o.far_above, o.colour);
+        } else {
+            let fs = stations(o.c_start, o.c_end, far_step);
+            for i in 0..fs.len() - 1 {
+                let (a, b) = (fs[i], fs[i + 1]);
+                let (ta, tb) = ((o.deck_top)(a), (o.deck_top)(b));
+                let [mx, mz] = frame.point((a + b) / 2.0, 0.0);
+                far.box_(mx, mz, (ta + tb) / 2.0 - depth, (ta + tb) / 2.0 + o.far_above, (b - a) / 2.0, o.far_half_width, frame.yaw, o.colour, crate::geometry::ALL);
+            }
         }
     }
     for c in [o.c_start, o.c_end] {
         let t = (o.deck_top)(c);
         let [x, z] = frame.point(c, 0.0);
-        near.box_(x, z, t - depth, t, 0.6, o.far_half_width, frame.yaw, o.dark, crate::geometry::ALL);
+        near.box_(x, z, t - depth, t - o.end_plate_cover, 0.6, o.far_half_width, frame.yaw, o.dark, crate::geometry::ALL);
     }
 }
 
@@ -665,10 +723,12 @@ pub struct DeckColours {
 /// The California standards a deck reads (`caMetric` in suspension-bridge.js).
 #[derive(Clone, Copy, Debug)]
 pub struct DeckStandards {
-    /// 'temporary-railing-type-k-height'
+    /// Installed Golden Gate moveable barrier height (the original field name is public).
     pub k_height: f64,
-    /// 'temporary-railing-type-k-width'
+    /// Installed Golden Gate moveable barrier width.
     pub k_width: f64,
+    /// Width of the steel footplate under the Golden Gate barrier.
+    pub foot_width: f64,
     /// 'line-width-state-highway'
     pub line_w: f64,
     /// 'broken-line-pattern-ge45mph' line and gap
@@ -677,10 +737,21 @@ pub struct DeckStandards {
 }
 
 impl DeckStandards {
+    /// Inside edge of the lane layout, measured from the centre of the installed barrier.
+    pub fn median_edge(&self) -> f64 {
+        self.k_width / 2.0 + MEDIAN_CLEAR_M
+    }
+
+    /// Lane width on one side of the installed barrier, measured to the curb.
+    pub fn median_lane_width(&self, roadway: f64, lanes_per_direction: f64) -> f64 {
+        (roadway / 2.0 - self.median_edge()) / lanes_per_direction
+    }
+
     pub fn load(ca: &eo_data::CaStandards) -> anyhow::Result<Self> {
         Ok(Self {
-            k_height: ca.metric("temporary-railing-type-k-height")?,
-            k_width: ca.metric("temporary-railing-type-k-width")?,
+            k_height: ca.metric_key("golden-gate-moveable-median", "height")?,
+            k_width: ca.metric_key("golden-gate-moveable-median", "width")?,
+            foot_width: ca.metric_key("golden-gate-moveable-median", "footWidth")?,
             line_w: ca.metric("line-width-state-highway")?,
             broken_line: ca.metric_key("broken-line-pattern-ge45mph", "line")?,
             broken_gap: ca.metric_key("broken-line-pattern-ge45mph", "gap")?,
@@ -708,25 +779,56 @@ pub struct DeckSpec<'a> {
     /// The side (+1 or -1 across) whose sidewalk railing another builder
     /// draws (eo-landmarks access.rs: the Golden Gate's east sidewalk), else None.
     pub outer_railing_elsewhere: Option<f64>,
+    pub outer_parapet: Option<[f64; 2]>,
 }
 
 /// `roadDeck`: the roadway, sidewalks behind curbs, the plate's underside, a
 /// median barrier, edge lines, broken lane lines and railings.
 pub fn road_deck(deck: &mut MeshArrays, rail: &mut MeshArrays, frame: &Frame, ca: &DeckStandards, o: &DeckSpec) {
+    road_floor(deck, frame, ca, o);
+    let (y, curb, colours) = (o.y, o.roadway_m * 0.5, o.colours);
+    if !o.railings {
+        return;
+    }
+    let rs = railing_stations(o.c_start, o.c_end, o.panel / 2.0, o.outer_parapet);
+    for i in 0..rs.len() - 1 {
+        let (a, b) = (rs[i], rs[i + 1]);
+        let (ta, tb) = (y(a) + o.curb_m, y(b) + o.curb_m);
+        let cut = (o.gap)(a, b);
+        for sgn in [-1.0, 1.0] {
+            crate::bridge_roads::traffic_rail(rail, frame, [a, b], [ta - o.curb_m, tb - o.curb_m], sgn * curb, o.inner_barrier_m, !cut, colours.rail);
+            if cut {
+                continue;
+            }
+            if o.sidewalk_m <= 0.0 || o.outer_railing_elsewhere == Some(sgn)
+                || o.outer_parapet.is_some_and(|[lo,hi]| a >= lo && b <= hi) {
+                continue;
+            }
+            let s = sgn * (o.half_width - 0.15);
+            rail.beam(frame.P(a, s, ta + o.railing_m), frame.P(b, s, tb + o.railing_m), 0.12, 0.12, colours.rail);
+            rail.beam(frame.P(a, s, ta + o.railing_m * 0.5), frame.P(b, s, tb + o.railing_m * 0.5), 0.08, 0.08, colours.rail);
+            rail.beam(frame.P(b, s, tb), frame.P(b, s, tb + o.railing_m), 0.14, 0.14, colours.rail);
+        }
+    }
+}
+
+/// The same paved panels, sidewalks, median and paint in the two detail levels.
+fn road_floor(deck: &mut MeshArrays, frame: &Frame, ca: &DeckStandards, o: &DeckSpec) {
     let y = o.y;
     let curb = o.roadway_m / 2.0;
     let line_w = ca.line_w;
-    let median_half = if o.median { ca.k_width / 2.0 + 0.3 } else { 0.0 };
+    let median_half = if o.median { ca.median_edge() } else { 0.0 };
     let cs = stations(o.c_start, o.c_end, o.panel);
     let colours = o.colours;
     let stripe = |deck: &mut MeshArrays, c0: f64, c1: f64, s: f64, colour: Rgb| {
-        let (y0, y1) = (y(c0) + 0.02, y(c1) + 0.02);
-        deck.quad(frame.P(c0, s - line_w / 2.0, y0), frame.P(c0, s + line_w / 2.0, y0), frame.P(c1, s + line_w / 2.0, y1), frame.P(c1, s - line_w / 2.0, y1), colour);
+        let (y0, y1) = (y(c0) + PAINT_LIFT_M, y(c1) + PAINT_LIFT_M);
+        deck.marking_quad(frame.P(c0, s - line_w / 2.0, y0), frame.P(c0, s + line_w / 2.0, y0), frame.P(c1, s + line_w / 2.0, y1), frame.P(c1, s - line_w / 2.0, y1), colour);
     };
     for i in 0..cs.len() - 1 {
         let (a, b) = (cs[i], cs[i + 1]);
         let (ta, tb) = (y(a), y(b));
-        deck.quad(frame.P(a, -curb, ta), frame.P(a, curb, ta), frame.P(b, curb, tb), frame.P(b, -curb, tb), colours.asphalt);
+        let [p, q, r, s] = crate::bridge_roads::asphalt(frame, a, b, ta, tb, curb);
+        deck.pavement_quad(p, q, r, s, colours.asphalt);
         let cut = (o.gap)(a, b);
         if o.sidewalk_m > 0.0 && !cut {
             for sgn in [-1.0, 1.0] {
@@ -738,20 +840,19 @@ pub fn road_deck(deck: &mut MeshArrays, rail: &mut MeshArrays, frame: &Frame, ca
                 deck.quad(frame.P(c0, inner, t0), frame.P(c1, inner, t1), frame.P(c1, inner, t1 + o.curb_m), frame.P(c0, inner, t0 + o.curb_m), colours.sidewalk);
             }
         }
-        deck.quad(frame.P(b, -o.half_width, tb - 0.3), frame.P(b, o.half_width, tb - 0.3), frame.P(a, o.half_width, ta - 0.3), frame.P(a, -o.half_width, ta - 0.3), colours.soffit);
+        deck.quad(frame.P(b, -o.half_width, tb - DECK_PLATE_DEPTH_M), frame.P(b, o.half_width, tb - DECK_PLATE_DEPTH_M), frame.P(a, o.half_width, ta - DECK_PLATE_DEPTH_M), frame.P(a, -o.half_width, ta - DECK_PLATE_DEPTH_M), colours.soffit);
         if o.median {
-            let [mx, mz] = frame.point((a + b) / 2.0, 0.0);
-            deck.box_(mx, mz, (ta + tb) / 2.0, (ta + tb) / 2.0 + ca.k_height, (b - a) / 2.0, ca.k_width / 2.0, frame.yaw, colours.barrier, NO_BOTTOM);
+            crate::bridge_roads::median(deck, frame, [a,b], [ta,tb], [i==0, i+2==cs.len()], ca, colours.barrier);
         }
         if o.markings {
             if o.median {
                 for sgn in [-1.0, 1.0] {
-                    stripe(deck, a, b, sgn * (median_half + 0.15), colours.yellow);
-                    stripe(deck, a, b, sgn * (curb - 0.3), colours.white);
+                    stripe(deck, a, b, sgn * (median_half + MEDIAN_LINE_OFFSET_M), colours.yellow);
+                    stripe(deck, a, b, sgn * (curb - EDGE_LINE_INSET_M), colours.white);
                 }
             } else {
-                stripe(deck, a, b, -(curb - 0.3), colours.yellow);
-                stripe(deck, a, b, curb - 0.3, colours.white);
+                stripe(deck, a, b, -(curb - EDGE_LINE_INSET_M), colours.yellow);
+                stripe(deck, a, b, curb - EDGE_LINE_INSET_M, colours.white);
             }
         }
     }
@@ -759,7 +860,7 @@ pub fn road_deck(deck: &mut MeshArrays, rail: &mut MeshArrays, frame: &Frame, ca
         let mut lines = Vec::new();
         if o.median {
             let per = o.lanes as f64 / 2.0;
-            let lane_w = (curb - median_half) / per;
+            let lane_w = ca.median_lane_width(o.roadway_m, per);
             for sgn in [-1.0, 1.0] {
                 let mut k = 1.0;
                 while k < per {
@@ -782,28 +883,19 @@ pub fn road_deck(deck: &mut MeshArrays, rail: &mut MeshArrays, frame: &Frame, ca
             c += cycle;
         }
     }
-    if !o.railings {
-        return;
-    }
-    let rs = stations(o.c_start, o.c_end, o.panel / 2.0);
-    for i in 0..rs.len() - 1 {
-        let (a, b) = (rs[i], rs[i + 1]);
-        let (ta, tb) = (y(a) + o.curb_m, y(b) + o.curb_m);
-        let cut = (o.gap)(a, b);
-        for sgn in [-1.0, 1.0] {
-            let si = sgn * (curb + 0.15);
-            rail.beam(frame.P(a, si, ta - o.curb_m + o.inner_barrier_m), frame.P(b, si, tb - o.curb_m + o.inner_barrier_m), 0.25, 0.25, colours.rail);
-            if cut {
-                continue;
+}
+
+pub(crate) fn bridge_road_deck(deck: &mut MeshArrays, rail: &mut MeshArrays, far: &mut MeshArrays, frame: &Frame, ca: &DeckStandards, o: &DeckSpec) {
+    road_deck(deck, rail, frame, ca, o);
+    if !distant_bridge_decks() { return; }
+    road_floor(far, frame, ca, o);
+    if o.railings {
+        for pair in stations(o.c_start, o.c_end, FAR_STRIP_STEP_M).windows(2) {
+            let c = [pair[0], pair[1]];
+            let top = c.map(o.y);
+            for side in [-1.0, 1.0] {
+                crate::bridge_roads::traffic_rail(far, frame, c, top, side * o.roadway_m * 0.5, o.inner_barrier_m, false, o.colours.rail);
             }
-            rail.beam(frame.P(b, si, tb - o.curb_m), frame.P(b, si, tb - o.curb_m + o.inner_barrier_m), 0.2, 0.2, colours.rail);
-            if o.sidewalk_m <= 0.0 || o.outer_railing_elsewhere == Some(sgn) {
-                continue;
-            }
-            let s = sgn * (o.half_width - 0.15);
-            rail.beam(frame.P(a, s, ta + o.railing_m), frame.P(b, s, tb + o.railing_m), 0.12, 0.12, colours.rail);
-            rail.beam(frame.P(a, s, ta + o.railing_m * 0.5), frame.P(b, s, tb + o.railing_m * 0.5), 0.08, 0.08, colours.rail);
-            rail.beam(frame.P(b, s, tb), frame.P(b, s, tb + o.railing_m), 0.14, 0.14, colours.rail);
         }
     }
 }

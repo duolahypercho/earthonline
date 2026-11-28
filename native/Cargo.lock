@@ -302,6 +302,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
+name = "chrono"
+version = "0.4.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
+dependencies = [
+ "iana-time-zone",
+ "js-sys",
+ "num-traits",
+ "wasm-bindgen",
+ "windows-link",
+]
+
+[[package]]
 name = "codespan-reporting"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -614,6 +627,7 @@ dependencies = [
  "eo-audio",
  "eo-data",
  "eo-farshore",
+ "eo-hills",
  "eo-kit",
  "eo-landmarks",
  "eo-look",
@@ -696,6 +710,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "eo-hills"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "eo-data",
+ "eo-farshore",
+ "eo-landmarks",
+ "flate2",
+ "intel_tex_2",
+ "jpeg-decoder",
+ "las",
+ "png",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "eo-kit"
 version = "0.1.0"
 dependencies = [
@@ -703,6 +735,7 @@ dependencies = [
  "eo-data",
  "flate2",
  "jpeg-decoder",
+ "las",
  "png",
  "serde",
  "serde_json",
@@ -743,6 +776,8 @@ dependencies = [
  "eo-data",
  "eo-landmarks",
  "eo-player",
+ "eo-sky",
+ "eo-street",
  "eo-structures",
  "glam 0.34.3",
  "serde",
@@ -795,6 +830,7 @@ dependencies = [
  "eo-assets",
  "eo-data",
  "eo-farshore",
+ "eo-hills",
  "eo-kit",
  "eo-landmarks",
  "eo-look",
@@ -822,6 +858,7 @@ dependencies = [
  "eo-net",
  "eo-player",
  "eo-sim",
+ "eo-street",
  "eo-structures",
  "glam 0.34.3",
  "serde_json",
@@ -1241,6 +1278,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "iana-time-zone"
+version = "0.1.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e31bc9ad994ba00e440a8aa5c9ef0ec67d5cb5e5cb0cc7f8b744a35b389cc470"
+dependencies = [
+ "android_system_properties",
+ "core-foundation-sys",
+ "iana-time-zone-haiku",
+ "js-sys",
+ "log",
+ "wasm-bindgen",
+ "windows-core",
+]
+
+[[package]]
+name = "iana-time-zone-haiku"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "image-webp"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1394,6 +1455,31 @@ name = "khronos_api"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
+
+[[package]]
+name = "las"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8823fdc8209bf345e7ec7586f2e1f5ad0f978899ebb9e637c6d54e0f26cba0b"
+dependencies = [
+ "byteorder",
+ "chrono",
+ "laz",
+ "log",
+ "num-traits",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
+name = "laz"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a1bd8242fad6a61a7520b73d072ddf63dff1f3680e3f5c157b1dc6e8e5ab2ec"
+dependencies = [
+ "byteorder",
+ "num-traits",
+]
 
 [[package]]
 name = "lazy_static"
@@ -2922,6 +3008,16 @@ name = "unicode-width"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca718471876992059f251e33aafc334346ada08042b7661dd1fe313a9bced557"
+
+[[package]]
+name = "uuid"
+version = "1.29.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "version_check"

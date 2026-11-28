@@ -166,7 +166,14 @@ fn ao_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 if (tighter) {
                     let ch = clamp(cand, n - 0.5 * LK_PI, n + 0.5 * LK_PI);
                     let w = abs(ao_arc(h, n) - ao_arc(ch, n));
-                    var rad = min(textureLoad(ao_hdr_in, clamp(sp, vec2<i32>(0), dims - 1), 0).rgb, vec3<f32>(AO_RADIANCE_CAP));
+                    let hs = textureLoad(ao_hdr_in, clamp(sp, vec2<i32>(0), dims - 1), 0);
+                    var rad = min(hs.rgb, vec3<f32>(AO_RADIANCE_CAP));
+                    if (SL_AO_BOUND && abs(hs.a - SL_AO_MARK) < 0.004) {
+                        // (`--signal-light`, props.rs `SL_AO_MARK`) a signal's lens or lit visor: its light no
+                        // brighter than SL_AO_CAP of the display's white (a few samples of a source many times
+                        // it speckled the walls; the lens drawn as before reached them at about this)
+                        rad = min(rad, vec3<f32>(SL_AO_CAP * 0.6 / max(look.key.w, 1e-6)));
+                    }
                     if (SF_LANDMARK_ACCESS && deck_in_player(S.xyz + look.cam_pos.xyz)) {
                         rad = vec3<f32>(0.0); // the player's body on a landmark deck (landmarks_deck.wgsl)
                     }

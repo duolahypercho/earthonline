@@ -92,12 +92,13 @@ pub fn entry_basins(w: &PropsWorld, e: &Entry, props: &[Prop], out: &mut Vec<Pro
         // highest corner, and the grade along the kerb (+t) between the ends.
         let (ha, hc) = (along / 2.0, across / 2.0);
         let at = |a: f64, c: f64| w.ground(cx + f.tx * a + f.nx * c, cz + f.tz * a + f.nz * c);
-        let corners = [at(-ha, -hc), at(-ha, hc), at(ha, -hc), at(ha, hc)];
-        let top = corners.iter().copied().fold(f64::MIN, f64::max);
+        let corners = [(-ha, at(-ha, -hc)), (-ha, at(-ha, hc)), (ha, at(ha, -hc)), (ha, at(ha, hc))];
         let (back, front) = (at(-ha, 0.0), at(ha, 0.0));
         let slope = if along > 0.1 { ((front - back) / along).clamp(-0.35, 0.35) } else { 0.0 };
-        // the panel's centre at its own mid-height over the tilt: the highest corner sits on top.
-        let y = top - slope.abs() * ha + o.marking_lift;
+        // the panel's centre at its own mid-height over the tilt, no corner's
+        // ground over it (the panel at `a` along the kerb is `y + a * slope`;
+        // where the corners stand on two surfaces, the higher one's).
+        let y = corners.iter().map(|&(a, g)| g - a * slope).fold(f64::MIN, f64::max) + o.marking_lift;
         // local +Z along the kerb (the grade tilts it), local X across the walk.
         let yaw = f.tx.atan2(f.tz);
         let (sy, cy) = yaw.sin_cos();

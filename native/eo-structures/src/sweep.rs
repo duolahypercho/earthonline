@@ -51,8 +51,13 @@ pub(crate) const PRESIDIO_TINT: [u8; 3] = [200, 197, 190];
 
 /// The deck top's lateral points across a roadway `half` wide with gutters
 /// `gutter` wide (the near level's: edges, gutter lips, centreline).
-pub(crate) fn deck_offsets(half: f64, gutter: f64) -> Vec<f64> {
-    if half > 2.0 * gutter { vec![-half, -(half - gutter), 0.0, half - gutter, half] } else { vec![-half, 0.0, half] }
+pub(crate) fn deck_offsets(half: f64, gutter: f64) -> impl Iterator<Item = f64> {
+    let (offsets, count) = if half > 2.0 * gutter {
+        ([-half, -(half - gutter), 0.0, half - gutter, half], 5)
+    } else {
+        ([-half, 0.0, half, 0.0, 0.0], 3)
+    };
+    offsets.into_iter().take(count)
 }
 
 /// What a chain's meshes are.
@@ -128,6 +133,7 @@ pub(crate) struct Sweep {
     /// Each piece's section, and its carriageway tint.
     pub sections: Vec<Section>,
     pub asphalt: Vec<[u8; 3]>,
+    pub east_pavement: bool,
     pub tint: [u8; 3],
     /// `StreetOptions` cross slope, gutter width and depth.
     pub cross: [f64; 3],
@@ -265,6 +271,7 @@ fn tint_of(c: &Chain) -> [u8; 3] {
 
 /// The sweep of chain `c` drawn as `draw`.
 pub(crate) fn sweep(ctx: &Ctx, c: &Chain, draw: Draw) -> Sweep {
+    let movable = eo_data::movable_spans::is_leaf(&c.pieces[0].way);
     let len = c.length();
     let o = &ctx.streets.o;
     let dims = ctx.dims;
@@ -402,6 +409,7 @@ pub(crate) fn sweep(ctx: &Ctx, c: &Chain, draw: Draw) -> Sweep {
         .collect();
     let drains: Vec<f64> = c.supports.iter().filter(|b| b.downspout).map(|b| b.s + b.cap_width / 2.0 + DRAIN_PAST_CAP_M).collect();
     let b = dims.barrier_base;
+    let island_viaduct = draw == Draw::Deck && dims.island.is_some() && crate::island_section::east_transition(c);
     let mut st: Vec<Station> = keys
         .iter()
         .map(|&(s, vertex)| {
@@ -415,12 +423,35 @@ pub(crate) fn sweep(ctx: &Ctx, c: &Chain, draw: Draw) -> Sweep {
             let ground = [g(-edge), g(0.0), g(edge)];
             let ground_min = ground.iter().copied().fold(f64::INFINITY, f64::min);
             let ground_max = ground.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            let fill = draw != Draw::Deck || y - depth < ground_max + FILL_CLEAR_M;
+            // The terrain grid can climb a bank beside a lower traffic lane.
+            // A full-width fill wall would block a crossing whose solved
+            // profile already reserves clearance underneath the girder.
+            let on_fill = !movable && !island_viaduct && y - depth < ground_max + FILL_CLEAR_M;
+            let crosses_at = |chain: &Chain, station: f64| chain.crossings.iter().any(|crossing| {
+                (crossing.s0..=crossing.s1).contains(&station) && crossing.achieved >= crossing.clearance
+            });
+            let cleared_crossing = on_fill && draw == Draw::Deck && o.pavement_repairs
+                && (crosses_at(c, s) || gore.iter().flatten().chain(&merged).any(|neighbour| {
+                    // At a fork the adjacent deck edge can overhang the same
+                    // lane although only its neighbour's centreline crosses it.
+                    let (other_s, distance) = neighbour.project(f.x, f.z);
+                    if distance > edge + neighbour.half_at(other_s) || !crosses_at(neighbour, other_s) {
+                        return false;
+                    }
+                    let ceiling = y - depth - FILL_CLEAR_M;
+                    [-edge, -half * 0.5, 0.0, half * 0.5, edge].into_iter().any(|u| {
+                        let (x, z) = (f.x + f.nx * f.miter * u, f.z + f.nz * f.miter * u);
+                        ctx.streets.carriageway_near(x, z, ceiling).is_some_and(|road| road < ceiling)
+                    })
+                }));
+            let fill = draw != Draw::Deck || (on_fill && !cleared_crossing);
             let mut crown = [0.0; 2];
             for (e, end) in c.ends.iter().enumerate() {
                 if end.kind == EndKind::Paved {
                     let d = if e == 0 { s } else { len - s };
-                    crown[e] = (1.0 - d / CROWN_BLEND_M).clamp(0.0, 1.0);
+                    // A short approach still reaches the adjacent span's own
+                    // cross-section at the opposite end.
+                    crown[e] = (1.0 - d / CROWN_BLEND_M.min(len)).clamp(0.0, 1.0);
                 }
             }
             let mut barrier = [draw == Draw::Deck; 2];
@@ -451,7 +482,7 @@ pub(crate) fn sweep(ctx: &Ctx, c: &Chain, draw: Draw) -> Sweep {
                 let fascia = |u: f64| -> Option<f64> {
                     let p = [f.x + f.nx * f.miter * u, f.z + f.nz * f.miter * u];
                     let (sd, dist) = d.project(p[0], p[1]);
-                    (sd > 1e-6 && sd < d.length() - 1e-6 && dist <= d.half_at(sd) + b).then(|| d.y_at(sd))
+                    (sd > 1e-6 && sd < d.length() - 1e-6 && dist <= d.half_at(sd)).then(|| d.y_at(sd))
                 };
                 const N: usize = 32;
                 let covered: Vec<bool> = (0..=N).map(|k| fascia(-half + 2.0 * half * k as f64 / N as f64).is_some()).collect();
@@ -531,7 +562,7 @@ pub(crate) fn sweep(ctx: &Ctx, c: &Chain, draw: Draw) -> Sweep {
             let t = if (mb - ma).abs() > 1e-12 { (-ma / (mb - ma)).clamp(0.0, 1.0) } else { 0.5 };
             let s = a.s + (bq.s - a.s) * t;
             if s > a.s + 1e-3 && s < bq.s - 1e-3 {
-                let tmp = Sweep { draw, st: vec![*a, *bq], levels: [vec![], vec![], vec![]], sections: vec![], asphalt: vec![], tint: [0; 3], cross: [0.0; 3], surfaces: [vec![], vec![]], ends: [EndKind::Free; 2], tunnel: None, era: 0 };
+                let tmp = Sweep { draw, st: vec![*a, *bq], levels: [vec![], vec![], vec![]], sections: vec![], asphalt: vec![], east_pavement: false, tint: [0; 3], cross: [0.0; 3], surfaces: [vec![], vec![]], ends: [EndKind::Free; 2], tunnel: None, era: 0 };
                 let mut p = tmp.lerp(s);
                 p.fill = a.fill;
                 out.push(p);
@@ -547,20 +578,28 @@ pub(crate) fn sweep(ctx: &Ctx, c: &Chain, draw: Draw) -> Sweep {
         out.push(st[i]);
     }
     st = out;
+    // a tunnel's covered and open stations, on the ground as drawn.
+    let paved = [c.ends[0].kind == EndKind::Paved, c.ends[1].kind == EndKind::Paved];
+    let twins: Vec<&Chain> = ctx.chains.iter().filter(|d| d.id != c.id && d.kind == ChainKind::Tunnel && d.is_built() && d.heights.len() == d.stations.len()).collect();
+    let island = ctx.dims.island.and_then(|dims| dims.section(c).map(|shape| (dims, shape)));
+    let tunnel = (draw == Draw::Tunnel).then(|| crate::tunnel::info(&st, ctx.streets, o.curb_face_height, paved, &twins, island));
     // ---- levels -------------------------------------------------------------------
     let n = st.len();
     let forced = |i: usize| -> bool {
-        i == 0 || i + 1 == n || (i > 0 && (st[i].s - st[i - 1].s).abs() < 1e-6) || (i + 1 < n && (st[i + 1].s - st[i].s).abs() < 1e-6) || c.bents.iter().any(|&b| (b - st[i].s).abs() < 1e-6)
+        // Both sides of a portal must survive decimation. Otherwise a
+        // distant view moves the headwall or drops a short roof entirely.
+        let portal = tunnel.as_ref().is_some_and(|info| {
+            (i > 0 && info.covered[i - 1] != info.covered[i])
+                || (i + 1 < n && info.covered[i] != info.covered[i + 1])
+        });
+        i == 0 || i + 1 == n || portal || (i > 0 && (st[i].s - st[i - 1].s).abs() < 1e-6) || (i + 1 < n && (st[i + 1].s - st[i].s).abs() < 1e-6) || c.bents.iter().any(|&b| (b - st[i].s).abs() < 1e-6)
     };
     let level = |every: usize| -> Vec<usize> { (0..n).filter(|&i| i % every == 0 || forced(i)).collect() };
     let levels = [(0..n).collect(), level(2), level(4)];
     let ends = [c.ends[0].kind, c.ends[1].kind];
     let cross = [o.cross_slope, o.gutter_width, o.gutter_depth];
     let surfaces = [c.ends[0].surface.clone(), c.ends[1].surface.clone()];
-    // a tunnel's covered and open stations, on the ground as drawn.
-    let paved = [c.ends[0].kind == EndKind::Paved, c.ends[1].kind == EndKind::Paved];
-    let twins: Vec<&Chain> = ctx.chains.iter().filter(|d| d.id != c.id && d.kind == ChainKind::Tunnel && d.is_built() && d.heights.len() == d.stations.len()).collect();
-    let tunnel = (draw == Draw::Tunnel).then(|| crate::tunnel::info(&st, &|x, z| ctx.streets.carpet_y(x, z), o.curb_face_height, paved, &twins));
     let era = crate::era_of(c, ctx.chains, ctx.scale) as u8;
-    Sweep { draw, st, levels, sections, asphalt, tint: tint_of(c), cross, surfaces, ends, tunnel, era }
+    let east_pavement = crate::east_span_pavement() && crate::east_span::readings(c).is_some();
+    Sweep { draw, st, levels, sections, asphalt, east_pavement, tint: tint_of(c), cross, surfaces, ends, tunnel, era }
 }

@@ -104,16 +104,17 @@ pub mod flag {
 
 // ---------------------------------------------------------------- the sky clock
 
-/// Weather on the wire: a preset (`eo_sky::Kind` order) or the schedule.
+/// Weather on the wire: a preset in stable protocol order or the schedule.
 pub const WEATHER_SCHEDULE: u8 = 255;
 /// The preset kinds in wire order (index = wire value).
-pub const WEATHER_NAMES: [&str; 6] = ["clear", "fog", "overcast", "drizzle", "rain", "storm"];
+pub const WEATHER_NAMES: [&str; 10] = ["clear", "fog", "overcast", "drizzle", "rain", "storm", "light-rain", "sun-rain", "heavy-rain", "damp"];
 
 pub fn weather_code(name: &str) -> Option<u8> {
     if name == "schedule" {
         return Some(WEATHER_SCHEDULE);
     }
-    WEATHER_NAMES.iter().position(|n| *n == name).map(|i| i as u8)
+    let canonical = eo_sky::Kind::parse(name)?.name();
+    WEATHER_NAMES.iter().position(|n| *n == canonical).map(|i| i as u8)
 }
 
 pub fn weather_name(code: u8) -> &'static str {

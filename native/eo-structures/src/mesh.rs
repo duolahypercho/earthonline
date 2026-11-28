@@ -20,7 +20,7 @@
 //!   Alpha is wear on `Concrete`, `Joint` and `Metal` (0 clean .. 255 most
 //!   stained: column tops and bases, cap faces under deck joints, the
 //!   fascia below drains and its streak, the soffit near joints) and 255 on
-//!   `DeckSurface` and `Paint`.
+//!   `DeckSurface` and `Paint`, except the registered East Span paving tag.
 //! * `uv`: surface coordinates in metres for formwork and wear. `uv[0]` runs
 //!   along the boards: the chain's station on everything swept along it
 //!   (deck, barrier, fascia, overhang, webs, soffit, caps, paint), the
@@ -207,7 +207,14 @@ fn outline(sw: &Sweep, st: &Station, dims: &Dims, lod: u8) -> Vec<P> {
     let lean = bw - dims.barrier_top;
     let g = girder(h, bw, st.depth.max(1e-3));
     let te = EDGE_THICK_M.min(g.depth * 0.5);
-    let soffit_y = st.y - st.depth;
+    // At paved ends and merges the actual asphalt can dip below the profile
+    // datum. Keep the underside beneath the lowest drawn part of the section.
+    let pavement_min = if st.crown == [0.0; 2] && !st.meet.iter().any(|v| v.is_finite()) {
+        st.y
+    } else {
+        deck_top(sw, st, lod, sw.cross[1], bw).iter().map(|q| q.y).fold(st.y, f64::min)
+    };
+    let soffit_y = (st.y - st.depth).min(pavement_min - te);
     let below = st.ground_min - EMBED_M;
     let wear_under = 0.3 + 0.35 * st.joint;
     let mut half_side: Vec<P> = vec![];
@@ -250,7 +257,7 @@ fn outline(sw: &Sweep, st: &Station, dims: &Dims, lod: u8) -> Vec<P> {
                     pts.push(p(h + bw - DRIP_IN_M, yb + DRIP_D_M, 0.5));
                     pts.push(p(h + bw - DRIP_IN_M - DRIP_W_M, yb + DRIP_D_M, 0.5));
                     pts.push(p(h + bw - DRIP_IN_M - DRIP_W_M, yb, 0.45));
-                    pts.push(p(g.web_top, st.y - WEB_TOP_THICK_M, wear_under));
+                    pts.push(p(g.web_top, (st.y - WEB_TOP_THICK_M).min(pavement_min - te), wear_under));
                     pts.push(p(g.soffit, soffit_y, wear_under + 0.05));
                 }
                 1 => {
@@ -283,7 +290,7 @@ pub(crate) fn deck_top(sw: &Sweep, st: &Station, lod: u8, gutter: f64, barrier: 
     let h = st.half;
     let clipped = [st.clip[0] > -h + 1e-6, st.clip[1] < h - 1e-6];
     let us: Vec<f64> = match lod {
-        0 => crate::sweep::deck_offsets(h, gutter).into_iter().map(|u| sw.clamp_u(st, u)).collect(),
+        0 => crate::sweep::deck_offsets(h, gutter).map(|u| sw.clamp_u(st, u)).collect(),
         1 => vec![st.clip[0], st.clip[1]],
         _ => vec![if clipped[0] { st.clip[0] } else { -(h + barrier) }, if clipped[1] { st.clip[1] } else { h + barrier }],
     };
@@ -382,7 +389,7 @@ impl DeckGrid<'_> {
 }
 
 /// Height of triangle `t` over plan point (x, z), if it is inside it.
-fn plan_height(t: &[V3; 3], x: f64, z: f64) -> Option<f64> {
+pub(crate) fn plan_height(t: &[V3; 3], x: f64, z: f64) -> Option<f64> {
     let (a, b, c) = (t[0], t[1], t[2]);
     let det = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
     if det.abs() < 1e-12 {
@@ -393,6 +400,39 @@ fn plan_height(t: &[V3; 3], x: f64, z: f64) -> Option<f64> {
     let l3 = 1.0 - l1 - l2;
     let e = -1e-7;
     (l1 >= e && l2 >= e && l3 >= e).then(|| l1 * a[1] + l2 * b[1] + l3 * c[1])
+}
+
+/// Height on the near mesh's triangles. The projected arc selects the
+/// neighborhood, then the world point selects the strip and its diagonal.
+pub(crate) fn near_deck_height(sw: &Sweep, s: f64, x: f64, z: f64) -> Option<f64> {
+    let rows = &sw.levels[0];
+    let last_span = rows.len().checked_sub(2)?;
+    let span = rows.partition_point(|&row| sw.st[row].s <= s).saturating_sub(1).min(last_span);
+    let candidates = [Some(span), span.checked_sub(1), (span < last_span).then_some(span + 1)];
+    let row = |index| {
+        let st: &Station = &sw.st[index];
+        crate::sweep::deck_offsets(st.half, sw.cross[1]).map(move |u| {
+            let u = sw.clamp_u(st, u);
+            st.at(u, sw.top(st, u))
+        })
+    };
+    for q in candidates.into_iter().flatten() {
+        let (a, b) = (rows[q], rows[q + 1]);
+        if (sw.st[a].s - sw.st[b].s).abs() < 1e-6 {
+            continue;
+        }
+        let mut columns = row(a).zip(row(b));
+        let (mut a0, mut b0) = columns.next()?;
+        for (a1, b1) in columns {
+            if let Some(y) = plan_height(&[a0, a1, b1], x, z)
+                .or_else(|| plan_height(&[a0, b1, b0], x, z))
+            {
+                return Some(y);
+            }
+            (a0, b0) = (a1, b1);
+        }
+    }
+    None
 }
 
 /// Paint along a run (stations `idx`), each piece's lines over its own
@@ -520,7 +560,13 @@ pub(crate) fn run(b: &mut Builder, sw: &Sweep, c: &Chain, idx: &[usize], lod: u8
         while end + 1 < idx.len() && piece_index(c, (sw.st[idx[end]].s + sw.st[idx[end + 1]].s) / 2.0) == pi {
             end += 1;
         }
+        let begin = b.m.colors.len();
         strip(b, sw, &idx[start..=end], StructureClass::DeckSurface, sw.asphalt[pi], &|st| deck_top(sw, st, lod, gutter, bw));
+        if sw.east_pavement {
+            for color in &mut b.m.colors[begin..] {
+                *color = (*color & 0x00ff_ffff) | (u32::from(crate::EAST_SPAN_PAVING_ALPHA) << 24);
+            }
+        }
         start = end;
     }
     if sw.draw == Draw::Landmark {
@@ -553,7 +599,14 @@ fn end_face(b: &mut Builder, sw: &Sweep, st: &Station, dims: &Dims, lod: u8, out
     let mut poly = vec![p(h + bw, sw.top(st, h), 0.3)];
     poly.extend(body);
     poly.push(p(-(h + bw), sw.top(st, -h), 0.3));
-    let centre = p(0.0, st.y - 0.1_f64.min(st.depth * 0.5).max(0.05), 0.3);
+    let deck = deck_top(sw, st, lod, sw.cross[1], bw);
+    let lowest = deck.iter().map(|q| q.y).fold(st.y, f64::min);
+    // Close the concrete against the actual pavement, including its crown
+    // and gutters. A chord across the edges can stand above the driven lane.
+    if st.crown != [0.0; 2] || st.meet.iter().any(|v| v.is_finite()) {
+        poly.extend(deck.iter().filter(|q| q.u > -h && q.u < h).copied());
+    }
+    let centre = p(0.0, lowest - 0.1_f64.min(st.depth * 0.5).max(0.05), 0.3);
     let vc = b.v(st.at(centre.u, centre.y), out, sw.tint, 0.35, [0.0, centre.y - st.y], StructureClass::Concrete);
     let vs: Vec<u32> = poly.iter().map(|q| b.v(st.at(q.u, q.y), out, sw.tint, q.wear.max(0.35), [q.u, q.y - st.y], StructureClass::Concrete)).collect();
     for i in 0..vs.len() {

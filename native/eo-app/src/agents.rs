@@ -49,11 +49,15 @@ mod corridor;
 use crate::{Args, World};
 use anyhow::Result;
 use eo_agents::GpuAgent;
-use eo_agents::feed::{FeedThread, Feeder, Ground};
+use eo_agents::catalog::AgentsJs;
+use eo_agents::feed::{FeedThread, Feeder, Ground, car_half_base};
 use eo_agents::library::Library;
+use eo_player::traffic::{TrafficBodies, TrafficChassis, TrafficPose};
+use eo_sim::consts::{PRESENTED_LENGTH, PRESENTED_WIDTH};
 use eo_render::{GpuContext, Renderer};
 use eo_sim::region::{Focus, People, Region, RegionConfig};
-use eo_sim::{AsyncSim, Network, World as SimWorld};
+use eo_sim::vehicles::TrafficObstacle;
+use eo_sim::{AsyncSim, World as SimWorld};
 use glam::Vec3;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -66,7 +70,7 @@ pub const SIM_RADIUS_M: f64 = 600.0;
 const RESTREAM_M: f64 = 32.0;
 /// Fixed steps run before the first frame so the population has filled in.
 const WARMUP_STEPS: usize = 600;
-pub const SEED_INT: u32 = 1;
+pub const SEED_INT: u32 = eo_sim::vehicle_catalogue::RENDERED_SEED;
 /// `--crowd`: a focus jump (m, between two pumps) or a drawn-hour jump (h)
 /// this large is a cut, and the steps a cut's new simulation runs before it
 /// is shown (10 s: a walker 13 m on, a car through a signal cycle's start).
@@ -229,6 +233,16 @@ pub fn drawn_sections(sw: &eo_street::StreetWorld) -> Vec<eo_sim::native::DrawnS
         .collect()
 }
 
+/// Compare traffic using the paved cross-sections or the mapped road profile.
+pub fn traffic_street_plan_on() -> bool {
+    std::env::args().filter(|arg| matches!(arg.as_str(), "--traffic-street-plan" | "--no-traffic-street-plan"))
+        .last().is_some_and(|arg| arg == "--traffic-street-plan")
+}
+
+pub fn traffic_passing_on() -> bool {
+    !std::env::args().any(|arg| arg == "--no-traffic-passing")
+}
+
 /// `--crowd`: the paved plazas the landmarks lay (eo-landmarks `plaza::plan`
 /// over sf-lots-parks, a footprint test from the drawn buildings): each
 /// one's id and outer ring. None when the plazas do not load.
@@ -256,10 +270,130 @@ pub fn footway_decks(structures: &[eo_landmarks::set::Structure]) -> Vec<[[f32; 
     out
 }
 
+pub(super) fn bridge_walk(access: Option<&eo_landmarks::access::AccessSet>, elevation: &eo_data::ElevationGrid) -> Arc<eo_agents::feed::Decks> {
+    let drawn = match access.and_then(|set| set.deck("golden-gate-east-sidewalk")) {
+        Some(deck) => eo_agents::feed::Decks::from_world_triangles(deck.walk.iter().copied()),
+        None => {
+            // The base bridge still draws the sidewalk with landmark access off.
+            let deck = eo_net::game::base_bridge_walk(elevation);
+            eo_agents::feed::Decks::from_world_triangles(deck.walk)
+        }
+    };
+    Arc::new(drawn)
+}
+
+/// Coastal walk surfaces are part of the base world. Expanded crowds also
+/// visit the optional plaza and pier routes.
+pub(crate) fn walker_decks(world: &World, crowd: bool) -> Option<Arc<eo_agents::feed::Decks>> {
+    let mut floors = if crowd { world.footway_decks.as_ref().clone() } else { Vec::new() };
+    for promenade in &world.promenades {
+        floors.extend_from_slice(&promenade.walk);
+    }
+    (!floors.is_empty()).then(|| Arc::new(eo_agents::feed::Decks::new(floors)))
+}
+
+/// Inset a plaza outline inward by `inset_m` along each edge's inward normal
+/// so walkers on its outline and chord ends stand inside the paving and clear
+/// of bordering building walls. Falls back to a smaller inset (or the original
+/// ring) if a narrow peninsula would invert or self-intersect.
+pub fn inset_plaza_ring(ring: &[[f64; 2]], inset_m: f64) -> Vec<[f64; 2]> {
+    let mut r: Vec<[f64; 2]> = Vec::with_capacity(ring.len());
+    for &p in ring {
+        if r.last().is_none_or(|l| (l[0] - p[0]).hypot(l[1] - p[1]) > 1e-4) {
+            r.push(p);
+        }
+    }
+    if r.len() >= 2 && (r[0][0] - r[r.len() - 1][0]).hypot(r[0][1] - r[r.len() - 1][1]) <= 1e-4 {
+        r.pop();
+    }
+    if r.len() < 3 || !(inset_m > 0.0) {
+        return ring.to_vec();
+    }
+    let shoelace = |poly: &[[f64; 2]]| -> f64 {
+        let mut a = 0.0;
+        for i in 0..poly.len() {
+            let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+            a += p[0] * q[1] - q[0] * p[1];
+        }
+        a * 0.5
+    };
+    let area0 = shoelace(&r);
+    if area0.abs() < 1e-3 {
+        return ring.to_vec();
+    }
+    let sign = if area0 > 0.0 { 1.0 } else { -1.0 };
+    let inward = |a: [f64; 2], b: [f64; 2]| -> [f64; 2] {
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let l = dx.hypot(dz).max(1e-9);
+        if sign > 0.0 { [-dz / l, dx / l] } else { [dz / l, -dx / l] }
+    };
+    let segs_cross = |a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]| -> bool {
+        let orient = |p: [f64; 2], q: [f64; 2], s: [f64; 2]| (q[0] - p[0]) * (s[1] - p[1]) - (q[1] - p[1]) * (s[0] - p[0]);
+        let (o1, o2, o3, o4) = (orient(a, b, c), orient(a, b, d), orient(c, d, a), orient(c, d, b));
+        (o1 * o2 < -1e-9) && (o3 * o4 < -1e-9)
+    };
+    let n = r.len();
+    for scale in [1.0, 0.65, 0.35] {
+        let d = inset_m * scale;
+        let mut cand = Vec::with_capacity(n);
+        for i in 0..n {
+            let prev = r[(i + n - 1) % n];
+            let curr = r[i];
+            let next = r[(i + 1) % n];
+            let n0 = inward(prev, curr);
+            let n1 = inward(curr, next);
+            let denom = 1.0 + n0[0] * n1[0] + n0[1] * n1[1];
+            let mut m = if denom > 0.25 {
+                [(n0[0] + n1[0]) / denom, (n0[1] + n1[1]) / denom]
+            } else {
+                let s = [n0[0] + n1[0], n0[1] + n1[1]];
+                let sl = s[0].hypot(s[1]);
+                if sl > 1e-6 { [s[0] / sl, s[1] / sl] } else { n1 }
+            };
+            let ml = m[0].hypot(m[1]);
+            if ml > 2.5 {
+                m = [m[0] * 2.5 / ml, m[1] * 2.5 / ml];
+            }
+            cand.push([curr[0] + m[0] * d, curr[1] + m[1] * d]);
+        }
+        let area = shoelace(&cand);
+        if area * sign <= 0.0 || area.abs() < area0.abs() * 0.1 {
+            continue;
+        }
+        let inside_ok = (0..n).all(|i| {
+            let p = cand[i];
+            let q = cand[(i + 1) % n];
+            let mid = [0.5 * (p[0] + q[0]), 0.5 * (p[1] + q[1])];
+            eo_street::point_in_ring(p[0], p[1], &r) && eo_street::point_in_ring(mid[0], mid[1], &r)
+        });
+        if !inside_ok {
+            continue;
+        }
+        let mut self_hit = false;
+        'outer: for i in 0..n {
+            for j in i + 2..n {
+                if i == 0 && j == n - 1 {
+                    continue;
+                }
+                if segs_cross(cand[i], cand[(i + 1) % n], cand[j], cand[(j + 1) % n]) {
+                    self_hit = true;
+                    break 'outer;
+                }
+            }
+        }
+        if !self_hit {
+            return cand;
+        }
+    }
+    ring.to_vec()
+}
+
 /// `--crowd`: the plazas' walks (eo-sim `plaza_walks`): each crossed by
-/// straight walks between points of its outline and walked round.
-pub fn plaza_paths(rings: &[(String, Vec<[f64; 2]>)]) -> Vec<eo_sim::native::PathWay> {
-    rings.iter().flat_map(|(id, r)| eo_sim::native::plaza_walks(id, r)).collect()
+/// straight walks between points of its inset outline and walked round, set in
+/// by the street standards' frontage zone plus half a throughway so walkers
+/// stay inside the paving and clear of bordering building walls.
+pub fn plaza_paths(rings: &[(String, Vec<[f64; 2]>)], inset_m: f64) -> Vec<eo_sim::native::PathWay> {
+    rings.iter().flat_map(|(id, r)| eo_sim::native::plaza_walks(id, &inset_plaza_ring(r, inset_m))).collect()
 }
 
 /// `--crowd`: every building edge of the city file as a front the footways
@@ -352,10 +486,69 @@ pub struct AgentFrameStats {
     pub feed_ms: f64,
 }
 
+struct TrafficModels {
+    catalog: AgentsJs,
+    chassis: Vec<Option<TrafficChassis>>,
+}
+
+impl TrafficModels {
+    fn load(lib: &Library) -> Result<Self> {
+        let scale = eo_data::groundscale::vehicles() as f32;
+        let mut chassis = vec![None; lib.models.len()];
+        for &id in lib.meta.vehicle_models.values() {
+            let Some(geometry) = lib.vehicle_chassis_geometry(id, scale) else { continue };
+            chassis[id as usize] = Some(TrafficChassis::Mesh {
+                min: glam::Vec3::from_array(geometry.min_xyz_m),
+                max: glam::Vec3::from_array(geometry.max_xyz_m),
+                wheels: geometry.wheels_xz_m,
+                wheel_radius: geometry.wheel_radius_m,
+            });
+        }
+        Ok(Self { catalog: AgentsJs::load()?, chassis })
+    }
+
+    fn parked_target(&self, lib: &Library, a: &GpuAgent, props: Option<&crate::props::PropsRuntime>) -> Option<eo_player::traffic_contact::TrafficTarget> {
+        let name = lib.meta.model_names.get(a.model as usize)?;
+        // Parked instances and the cached meshes use the same vehicle scale.
+        let chassis = match self.chassis.get(a.model as usize).copied().flatten() {
+            Some(mesh) => mesh,
+            None => {
+                let spec = props?.parked_spec(name)?;
+                TrafficChassis::Class { width: spec.width as f32 * a.scale, length: spec.length as f32 * a.scale }
+            }
+        };
+        let fwd = glam::Quat::from_array(a.rot) * glam::Vec3::Z;
+        Some(eo_player::traffic_contact::TrafficTarget {
+            model: eo_player::traffic_contact::TrafficModel::from_body(name),
+            parked: true, speed: 0.0,
+            pose: TrafficPose { id: parked_id(a), datum: a.pos, yaw: fwd.x.atan2(fwd.z), pitch: fwd.y.asin(), chassis },
+        })
+    }
+
+    fn select(&self, lib: &Library, entity: u32, kind: u16) -> Option<(TrafficChassis, f64, eo_player::traffic_contact::TrafficModel)> {
+        let (body, model) = lib.traffic_model(&self.catalog, SEED_INT, entity, kind)?;
+        let chassis = match self.chassis.get(model as usize).copied().flatten() {
+            Some(chassis) => chassis,
+            None => {
+                let scale = eo_data::groundscale::vehicles() as f32;
+                TrafficChassis::Class {
+                    length: *PRESENTED_LENGTH.get(kind as usize)? * scale,
+                    width: *PRESENTED_WIDTH.get(kind as usize)? * scale,
+                }
+            }
+        };
+        let actual = lib.meta.model_names.get(model as usize).map_or(body, String::as_str);
+        Some((chassis, car_half_base(&lib.models[model as usize]), eo_player::traffic_contact::TrafficModel::from_body(actual)))
+    }
+}
+
 pub struct AgentRuntime {
     pub opts: AgentOpts,
+    traffic_obstacle: Option<TrafficObstacle>,
+    on_foot_player: Option<TrafficObstacle>,
     pub lib: Option<Arc<Library>>,
-    lib_rx: Option<Receiver<Result<(Library, Option<String>), String>>>,
+    traffic_models: Option<TrafficModels>,
+    lib_rx: Option<Receiver<Result<(Library, TrafficModels, Option<String>), String>>>,
     sim_rx: Option<Receiver<Result<(SimWorld, Arc<eo_sim::native::NativeSource>), String>>>,
     /// The corridor layer's hour (written from the look's time of day each pump).
     corridor_hour: Option<Arc<AtomicU64>>,
@@ -365,9 +558,15 @@ pub struct AgentRuntime {
     gg_ground: Option<Arc<eo_landmarks::GroundGrid>>,
     pub sim: Option<AsyncSim>,
     feed: Option<FeedThread>,
+    feed_failed: bool,
     ground: Ground,
     /// the grade-separated roads beside the ground (`--structures`), handed to the feed.
     structures: Option<Arc<eo_structures::StructureWorld>>,
+    physical_traffic: eo_agents::feed::TrafficPoses,
+    walker_slots: Vec<eo_agents::feed::WalkerSlot>,
+    physical_walkers: std::collections::HashMap<u64, eo_player::people_contact::WalkerPose>,
+    posed_agents: Vec<GpuAgent>,
+    reset_walkers: bool,
     last: Option<Arc<Vec<GpuAgent>>>,
     last_steps: u64,
     last_corridor_steps: u64,
@@ -384,6 +583,7 @@ pub struct AgentRuntime {
     pub sim_time: f64,
     /// the frame to draw this frame, posted by the online client (`--connect`) instead of a local simulation.
     pub remote: Option<eo_sim::world::Frame>,
+    pub remote_traffic: eo_agents::feed::TrafficPoses,
     /// leave the simulated people out of the upload (the people pass A/B; extras stay).
     pub hide_people: bool,
     remote_mode: bool, // net
@@ -418,6 +618,7 @@ pub struct AgentRuntime {
     plazas: Arc<std::sync::Mutex<Option<Arc<eo_agents::feed::Plazas>>>>,
     /// `--crowd`: the landmarks' walkable paving (handed to the feed).
     decks: Option<Arc<eo_agents::feed::Decks>>,
+    bridge_walk: Option<Arc<eo_agents::feed::Decks>>,
 }
 
 /// One region around `focus` at `density` times the default population;
@@ -445,6 +646,29 @@ fn region_config(density: u32, crowd: Option<f64>, traffic: Option<f64>) -> Regi
     cfg
 }
 
+// A parked slot's authored coordinates survive ring sorting and tile recooks.
+// The upper bits separate parking slots, regional traffic and corridor traffic.
+fn parked_id(instance: &GpuAgent) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    instance.pos.map(f32::to_bits).hash(&mut hash);
+    (1 << 62) | (hash.finish() & ((1 << 62) - 1))
+}
+
+fn apply_walker_poses(agents: &mut [GpuAgent], slots: &[eo_agents::feed::WalkerSlot],
+    poses: &std::collections::HashMap<u64, eo_player::people_contact::WalkerPose>, library: Option<&Library>) {
+    for slot in slots {
+        if let Some(p) = poses.get(&slot.id) {
+            let a = &mut agents[slot.index];
+            if a.model != p.model || glam::Vec3::from_array(slot.feet).distance_squared(glam::Vec3::from_array(p.route_feet)) >= 36.0 { continue; }
+            a.pos = p.feet;
+            a.rot = p.rotation;
+            a.speed = p.walking_speed;
+            a.anim = library.map_or(p.phase, |lib| lib.meta.motion.walk_anim(slot.style, p.phase.into()));
+        }
+    }
+}
+
 impl AgentRuntime {
     /// Start loading (library, simulation network) around `focus` = (x, z, yaw).
     pub fn start(world: &World, args: &Args, focus: [f64; 3]) -> Self {
@@ -464,7 +688,10 @@ impl AgentRuntime {
         };
         let mut rt = AgentRuntime {
             opts,
+            traffic_obstacle: None,
+            on_foot_player: None,
             lib: None,
+            traffic_models: None,
             lib_rx: None,
             sim_rx: None,
             corridor_hour: None,
@@ -472,8 +699,15 @@ impl AgentRuntime {
             gg_ground: None,
             sim: None,
             feed: None,
+            feed_failed: false,
             ground,
             structures: world.structures.clone(),
+            physical_traffic: Default::default(),
+            remote_traffic: Default::default(),
+            walker_slots: Vec::new(),
+            physical_walkers: Default::default(),
+            posed_agents: Vec::new(),
+            reset_walkers: false,
             last: None,
             last_steps: 0,
             last_corridor_steps: 0,
@@ -502,7 +736,8 @@ impl AgentRuntime {
             cut_post: None,
             cuts: 0,
             plazas: Default::default(),
-            decks: (opts.crowd && !world.footway_decks.is_empty()).then(|| Arc::new(eo_agents::feed::Decks::new(world.footway_decks.as_ref().clone()))),
+            decks: if opts.on { walker_decks(world, opts.crowd) } else { None },
+            bridge_walk: world.bridge_walk.clone(),
         };
         if !opts.on {
             return rt;
@@ -526,7 +761,8 @@ impl AgentRuntime {
             .spawn(move || {
                 // (`--people-contact`) the people's contact anchors, made at load (never cached);
                 // (`--people-capsules`) their body capsules in their place.
-                let loaded = Library::load_opts(&repo, cache.as_deref(), &people, cook).map(|mut lib| {
+                let loaded = Library::load_opts(&repo, cache.as_deref(), &people, cook).and_then(|mut lib| {
+                    let traffic_models = TrafficModels::load(&lib)?;
                     if eo_render::agents::people_capsules() {
                         eo_agents::people::add_capsule_anchors(&mut lib);
                     } else if eo_render::agents::people_contact() {
@@ -535,7 +771,7 @@ impl AgentRuntime {
                     let issue = test_character.as_ref().and_then(|selection| {
                         lib.install_test_player(selection).err().map(|e| format!("test character {}: {e:#}", selection.id))
                     });
-                    (lib, issue)
+                    Ok((lib, traffic_models, issue))
                 });
                 let _ = tx.send(loaded.map_err(|e| format!("{e:#}")));
             })
@@ -551,7 +787,11 @@ impl AgentRuntime {
     pub fn restart_sim(&mut self, world: &World, focus: [f64; 3], density: u32) {
         self.sim = None;
         self.feed = None;
+        self.feed_failed = false;
         self.last = None;
+        self.walker_slots.clear();
+        self.physical_walkers.clear();
+        self.reset_walkers = true;
         self.last_steps = 0;
         self.last_corridor_steps = 0;
         self.sim_ready_ms = None;
@@ -565,11 +805,11 @@ impl AgentRuntime {
         let traffic_density = car_density_on().then_some(self.traffic_hour); // (`--car-density`; None without it)
         let city = self.city.clone();
         let paths = world.paths.clone();
-        // `--crowd`: the drawn street (the walks the footways stand on, the plazas' paving).
-        let street = if self.opts.crowd { world.street.as_ref().map(|s| s.world.clone()) } else { None };
+        let street = world.street.as_ref().map(|s| s.world.clone());
         let plazas_out = self.plazas.clone();
         // The structure level of each way (`--structures`; empty otherwise, which leaves the sim as it was).
-        let levels = self.structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
+        let structures = self.structures.clone();
+        let levels = structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
         let (corridor_traffic, walkers) = corridor::switches();
         if corridor_traffic && self.gg_ground.is_none() {
             let js = eo_landmarks::LandmarksJs::get();
@@ -585,13 +825,20 @@ impl AgentRuntime {
             .name("eo-agents-sim-build".into())
             .spawn(move || {
                 let r = (|| -> Result<(SimWorld, Arc<eo_sim::native::NativeSource>)> {
-                    let mut source = eo_sim::native::load(&paths)?.with_levels(levels);
+                    let mut source = eo_server::configure_traffic_previews(eo_sim::native::load(&paths)?.with_levels(levels))?;
+                    if let Some(sw) = street.as_ref().filter(|_| traffic_street_plan_on()) {
+                        source = source.with_traffic_plan(sw.traffic_plan()).with_passing(traffic_passing_on());
+                        if let Some(decks) = &structures {
+                            source = source.with_deck_surfaces(decks.traffic_surfaces());
+                        }
+                    }
                     // the corridor layer's ways, read before the local network leaves the roads it drives alone.
+                    let connected_decks = !source.levels().is_empty();
                     let corridors = match &gg_ground {
-                        Some(gg) => Some(build_corridors(&paths, &source, gg, &ground, walkers && deck_drawn, deck_drawn, hour0)?),
+                        Some(gg) => Some(build_corridors(&paths, &source, gg, &ground, walkers && deck_drawn, deck_drawn, hour0, connected_decks)?),
                         None => None,
                     };
-                    if corridors.is_some() {
+                    if corridors.is_some() && !connected_decks {
                         source.without_roads(|r| corridor::EXCLUSIVE.contains(&r.name.as_str()));
                     }
                     if let Some(c) = &city {
@@ -602,7 +849,8 @@ impl AgentRuntime {
                         let mut zebras = vec![];
                         if let Some(sw) = &street {
                             let rings = plaza_rings(&paths.repo_root, sw);
-                            walks.extend(plaza_paths(&rings));
+                            let inset = source.dims.frontage_zone_m + 0.5 * source.dims.throughway_m;
+                            walks.extend(plaza_paths(&rings, inset));
                             *plazas_out.lock().unwrap() = Some(Arc::new(eo_agents::feed::Plazas::new(rings.into_iter().map(|(_, r)| r).collect())));
                             sections = drawn_sections(sw);
                             if people_crosswalks() {
@@ -626,14 +874,192 @@ impl AgentRuntime {
         !self.opts.on || (self.lib.is_some() && (self.sim.is_some() || self.remote_mode) && self.last.is_some()) // or remote
     }
 
-    /// Wait (pumping) until ready or `timeout_s`.
+    /// Whether startup failed terminally (`lib`, `sim`, or `feed`) so `ready()`
+    /// cannot become true without a restart.
+    pub fn startup_failed(&self) -> bool {
+        if !self.opts.on {
+            return false;
+        }
+        let lib_dead = self.lib.is_none() && self.lib_rx.is_none();
+        let sim_dead = !self.remote_mode && self.sim.is_none() && self.sim_rx.is_none();
+        lib_dead || sim_dead || self.feed_failed
+    }
+
+    /// Wait (pumping) until ready, startup fails terminally, or `timeout_s`.
     pub fn wait_ready(&mut self, ctx: &GpuContext, renderer: &Renderer, focus: [f64; 3], timeout_s: f64) -> bool {
         let t = Instant::now();
-        while !self.ready() && t.elapsed().as_secs_f64() < timeout_s {
+        while !self.ready() && !self.startup_failed() && t.elapsed().as_secs_f64() < timeout_s {
             self.pump(ctx, renderer, focus, 1.0 / 60.0);
+            if self.startup_failed() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         self.ready()
+    }
+
+    /// Drive the local physics bodies from the same fleet snapshots sent to the feed.
+    fn sync_traffic_bodies(&mut self, bodies: &mut TrafficBodies, cw: &mut eo_player::CollisionWorld, near: glam::DVec3, speed: f64, weather: eo_player::WeatherPhysics, physical: bool, props: Option<&crate::props::PropsRuntime>) {
+        use eo_player::traffic_contact::{ContactTraffic, TrafficTarget};
+        let (Some(sim), Some(lib), Some(models)) = (self.sim.as_mut().filter(|_| self.opts.on && self.last.is_some()), self.lib.as_deref(), self.traffic_models.as_ref()) else {
+            ContactTraffic::sync(cw, bodies, near, speed, weather, []);
+            return;
+        };
+        let frame = sim.latest();
+        let physical_poses = &self.physical_traffic;
+        let nearby = |id: u64, x: f64, z: f64| {
+            let in_range = |x: f64, z: f64| (x - near.x).hypot(z - near.z) < eo_player::world::STEP_RADIUS_M;
+            in_range(x, z) || physical_poses.get(&id).is_some_and(|(p, _, _)| in_range(p[0].into(), p[2].into()))
+        };
+        let ground = &self.ground;
+        let structures = self.structures.as_deref();
+        let regional = frame.regions.iter().enumerate().flat_map(|(ri, r)| {
+            r.vehicles.iter().filter_map(move |a| {
+                let (x, z) = (r.origin[0] + a.pos[0] as f64, r.origin[1] + a.pos[2] as f64);
+                let id = ((ri as u64) << 32) | u64::from(a.id);
+                if !nearby(id, x, z) {
+                    return None;
+                }
+                let (s, c) = (a.heading as f64).sin_cos();
+                let (chassis, half_base, model) = models.select(lib, a.id, a.kind)?;
+                let level = eo_sim::output::level_of_flags(a.flags);
+                let (y, pitch) = eo_agents::feed::car_ground_on_route(
+                    ground, structures, level, x, z, [s, c], half_base, a.vehicle_surface_y(),
+                );
+                Some(TrafficTarget { speed: a.speed, model, parked: false, pose: TrafficPose {
+                    id,
+                    datum: [x as f32, y as f32, z as f32],
+                    yaw: a.heading,
+                    pitch,
+                    chassis,
+                }})
+            })
+        });
+        let corridors = frame.corridor.iter().filter_map(|a| {
+            let kind = a.kind as usize;
+            let id = (1 << 63) | u64::from(a.id);
+            if kind >= PRESENTED_LENGTH.len() || !nearby(id, a.pos[0] as f64, a.pos[2] as f64) {
+                return None;
+            }
+            let (chassis, _, model) = models.select(lib, a.id, a.kind)?;
+            Some(TrafficTarget { speed: a.speed, model, parked: false, pose: TrafficPose {
+                id,
+                datum: a.pos,
+                yaw: a.heading,
+                pitch: a.pitch,
+                chassis,
+            }})
+        });
+        if physical {
+            let parked = self.parked.iter().filter_map(|a| {
+                let id = parked_id(a);
+                if !nearby(id, a.pos[0].into(), a.pos[2].into()) { return None; }
+                models.parked_target(lib, a, props)
+            });
+            ContactTraffic::sync(cw, bodies, near, speed, weather, regional.chain(corridors).chain(parked));
+        } else {
+            bodies.sync(cw, regional.chain(corridors).map(|t| t.pose));
+        }
+    }
+
+    fn make_feeder(&self, lib: Arc<Library>) -> anyhow::Result<Feeder> {
+        let mut feeder = Feeder::new(lib, self.ground.clone(), self.structures.clone(), SEED_INT)?;
+        feeder.separate = self.opts.crowd;
+        feeder.plazas = self.plazas.lock().unwrap().clone();
+        feeder.decks = self.decks.clone();
+        feeder.bridge_walk = self.bridge_walk.clone();
+        Ok(feeder)
+    }
+
+    /// Hold one authored simulation frame for a repeatable contact bench.
+    /// Use the normal feed, colliders and upload for every actor in the frame.
+    pub fn hold_bench_frame(&mut self, frame: &eo_sim::world::Frame) -> anyhow::Result<()> {
+        let lib = self.lib.clone().ok_or_else(|| anyhow::anyhow!("contact bench needs the agent library"))?;
+        self.sim = None;
+        self.feed = None;
+        let mut feeder = self.make_feeder(lib)?;
+        let mut instances = vec![];
+        feeder.build(frame, &mut instances);
+        self.walker_slots = feeder.walker_slots;
+        self.last = Some(Arc::new(instances));
+        Ok(())
+    }
+
+    fn sync_people_bodies(&mut self, people: &mut eo_player::people_contact::PeopleBodies,
+        world: &mut eo_player::CollisionWorld, near: glam::Vec3, contacts: bool, impacts: bool) {
+        use eo_player::people_contact::{WalkerTarget, WalkingBodies};
+        if self.reset_walkers {
+            WalkingBodies::sync(world, []);
+            self.reset_walkers = false;
+        }
+        let base = self.last.as_deref().map(Vec::as_slice).unwrap_or(&[]);
+        let visible = contacts && self.opts.on && !self.hide_people;
+        let targets = self.walker_slots.iter().filter_map(|slot| {
+            let a = base.get(slot.index)?;
+            let nearby = glam::Vec3::from_array(a.pos).distance_squared(near) <= 24.0 * 24.0;
+            let retained = self.physical_walkers.get(&slot.id).is_some_and(|p|
+                glam::Vec3::from_array(p.feet).distance_squared(near) <= 36.0 * 36.0);
+            if !visible || !impacts || !(nearby || retained) { return None; }
+            let forward = glam::Quat::from_array(a.rot) * glam::Vec3::Z;
+            Some(WalkerTarget { id: slot.id, feet: slot.feet, drawn: a.pos, model: a.model,
+                scale: a.scale, heading: forward.x.atan2(forward.z), speed: a.speed, phase: slot.phase, stride_m: slot.stride_m })
+        });
+        WalkingBodies::sync(world, targets);
+        let proxies = self.walker_slots.iter().filter_map(|slot| {
+            let a = base.get(slot.index)?;
+            (visible && !world.walking_bodies.contains(slot.id)
+                && glam::Vec3::from_array(a.pos).distance_squared(near) <= 24.0 * 24.0)
+                .then_some((slot.index, a.pos, a.scale))
+        }).collect::<Vec<_>>();
+        people.sync(world, proxies);
+    }
+
+    pub fn sync_local_bodies(&mut self, vehicles: &mut TrafficBodies, people: &mut eo_player::people_contact::PeopleBodies,
+        player: &eo_player::Player, cw: &mut eo_player::CollisionWorld, physical: bool, impacts: bool, props: Option<&crate::props::PropsRuntime>) {
+        let feet = player.position(cw);
+        let speed = match player.mode {
+            eo_player::Mode::Driving(i) => player.vehicles[i].forward_speed(cw),
+            eo_player::Mode::OnFoot => player.ground_speed,
+        };
+        self.sync_traffic_bodies(vehicles,cw,feet,speed,player.weather,physical,props);
+        self.sync_people_bodies(people, cw, feet.as_vec3(), physical, impacts);
+    }
+
+    pub fn publish_physical_poses(&mut self, cw: &eo_player::CollisionWorld) {
+        self.physical_traffic.clear();
+        self.physical_traffic.extend(cw.contact_traffic.poses(cw).map(|(id,p,r,v)| (id,(p,r,v))));
+        self.physical_walkers.clear();
+        self.physical_walkers.extend(cw.walking_bodies.poses(&cw.physics));
+    }
+
+    pub fn set_traffic_obstacle(&mut self, player: &eo_player::Player, cw: &eo_player::CollisionWorld) {
+        let i = match player.mode {
+            eo_player::Mode::Driving(i) => i,
+            eo_player::Mode::OnFoot => 0,
+        };
+        self.on_foot_player = None;
+        if player.mode == eo_player::Mode::OnFoot && player.character.grounded {
+            let p = player.character.feet();
+            if (p.y - self.ground.y(p.x,p.z)).abs() < 0.85 {
+                let diameter = 2.0 * eo_player::tuning::capsule::RADIUS_M;
+                self.on_foot_player = Some(TrafficObstacle {pos:[p.x,p.z],yaw:player.yaw,level:0,length:diameter,width:diameter});
+            }
+        }
+        self.traffic_obstacle = player.vehicles.get(i).map(|car| {
+            let p = car.datum(cw);
+            let mut level = 0;
+            let mut distance = (p.y - self.ground.y(p.x, p.z)).abs();
+            if let Some(structures) = &self.structures {
+                for (l, deck) in structures.decks_at(p.x, p.z) {
+                    let d = (p.y - deck.y).abs();
+                    if d < distance {
+                        level = l;
+                        distance = d;
+                    }
+                }
+            }
+            TrafficObstacle { pos: [p.x, p.z], yaw: car.yaw(cw), length: car.spec.length, width: car.spec.width, level }
+        });
     }
 
     /// Once a frame on the render thread, before `Renderer::update`.
@@ -641,68 +1067,87 @@ impl AgentRuntime {
         let t0 = Instant::now();
         let mut st = AgentFrameStats::default();
         if let Some(rx) = &self.lib_rx {
-            if let Ok(r) = rx.try_recv() {
-                self.lib_rx = None;
-                match r {
-                    Ok((lib, issue)) => {
-                        if let Some(issue) = issue {
-                            eprintln!("agents: {issue}");
-                            self.errors.push(issue);
-                        }
-                        if let Some(body) = &lib.test_player {
-                            eprintln!("agents: loaded test character {} with {} clips", lib.meta.model_names[body.model as usize], body.rig.clip_count());
-                        }
-                        if let Err(e) = renderer.attach_agents_with(ctx, &lib, self.opts.car_detail) {
-                            self.errors.push(format!("agent renderer: {e:#}"));
-                            eprintln!("agents: renderer failed: {e:#}");
-                        }
-                        // (`--tunnels`) the cars in a tunnel's bore lit by the bore: their pipelines
-                        // (`EO_AGENTS_NO_BORE_LIGHT=1`, a diagnostic: lit by the sun and sky as before, the evidence's other side).
-                        if let (Some(a), true) = (renderer.agents.get(), self.structures.as_ref().is_some_and(|s| !s.bores().is_empty())) {
-                            if std::env::var_os("EO_AGENTS_NO_BORE_LIGHT").is_none() {
-                                a.enable_bores();
+            match rx.try_recv() {
+                Ok(r) => {
+                    self.lib_rx = None;
+                    match r {
+                        Ok((lib, traffic_models, issue)) => {
+                            if let Some(issue) = issue {
+                                eprintln!("agents: {issue}");
+                                self.errors.push(issue);
                             }
+                            if let Some(body) = &lib.test_player {
+                                eprintln!("agents: loaded test character {} with {} clips", lib.meta.model_names[body.model as usize], body.rig.clip_count());
+                            }
+                            if let Err(e) = renderer.attach_agents_with(ctx, &lib, self.opts.car_detail) {
+                                self.errors.push(format!("agent renderer: {e:#}"));
+                                eprintln!("agents: renderer failed: {e:#}");
+                            }
+                            // (`--tunnels`) the cars in a tunnel's bore lit by the bore: their pipelines
+                            // (`EO_AGENTS_NO_BORE_LIGHT=1`, a diagnostic: lit by the sun and sky as before, the evidence's other side).
+                            if let (Some(a), true) = (renderer.agents.get(), self.structures.as_ref().is_some_and(|s| !s.bores().is_empty())) {
+                                if std::env::var_os("EO_AGENTS_NO_BORE_LIGHT").is_none() {
+                                    a.enable_bores();
+                                }
+                            }
+                            self.lib_ready_ms = Some(self.started.elapsed().as_secs_f64() * 1e3);
+                            self.traffic_models = Some(traffic_models);
+                            self.lib = Some(Arc::new(lib));
                         }
-                        self.lib_ready_ms = Some(self.started.elapsed().as_secs_f64() * 1e3);
-                        self.lib = Some(Arc::new(lib));
+                        Err(e) => {
+                            eprintln!("agents: library failed: {e}");
+                            self.errors.push(e);
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("agents: library failed: {e}");
-                        self.errors.push(e);
-                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.lib_rx = None;
+                    let msg = "agent library loader exited unexpectedly".to_string();
+                    eprintln!("agents: {msg}");
+                    self.errors.push(msg);
                 }
             }
         }
         if let Some(rx) = &self.sim_rx {
-            if let Ok(r) = rx.try_recv() {
-                self.sim_rx = None;
-                match r {
-                    Ok((w, src)) => {
-                        self.corridor_hour = w.corridors.as_ref().map(|c| c.hour_handle());
-                        if self.opts.crowd {
-                            self.source = Some(src.clone()); // `--crowd`: a cut builds from it
+            match rx.try_recv() {
+                Ok(r) => {
+                    self.sim_rx = None;
+                    match r {
+                        Ok((w, src)) => {
+                            self.corridor_hour = w.corridors.as_ref().map(|c| c.hour_handle());
+                            if self.opts.crowd {
+                                self.source = Some(src.clone()); // `--crowd`: a cut builds from it
+                            }
+                            self.sim = Some(start_async(w, src));
+                            self.sim_ready_ms = Some(self.started.elapsed().as_secs_f64() * 1e3);
                         }
-                        self.sim = Some(start_async(w, src));
-                        self.sim_ready_ms = Some(self.started.elapsed().as_secs_f64() * 1e3);
+                        Err(e) => {
+                            eprintln!("agents: simulation failed: {e}");
+                            self.errors.push(e);
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("agents: simulation failed: {e}");
-                        self.errors.push(e);
-                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.sim_rx = None;
+                    let msg = "agent simulation builder exited unexpectedly".to_string();
+                    eprintln!("agents: {msg}");
+                    self.errors.push(msg);
                 }
             }
         }
-        if self.feed.is_none() && (self.sim.is_some() || self.remote_mode) {
+        if self.feed.is_none() && !self.feed_failed && (self.sim.is_some() || self.remote_mode) {
             // a remote runtime starts its feed without a local simulation
             if let Some(lib) = &self.lib {
-                match Feeder::new(lib.clone(), self.ground.clone(), self.structures.clone(), SEED_INT) {
-                    Ok(mut f) => {
-                        f.separate = self.opts.crowd; // `--crowd`: the bodies kept apart
-                        f.plazas = self.plazas.lock().unwrap().clone(); // `--crowd`: on the plazas' paving
-                        f.decks = self.decks.clone(); // `--crowd`: on the landmarks' paving
-                        self.feed = Some(FeedThread::start(f));
+                match self.make_feeder(lib.clone()) {
+                    Ok(f) => self.feed = Some(FeedThread::start(f)),
+                    Err(e) => {
+                        let msg = format!("agent feed failed: {e:#}");
+                        eprintln!("agents: {msg}");
+                        self.errors.push(msg);
+                        self.feed_failed = true;
                     }
-                    Err(e) => self.errors.push(format!("{e:#}")),
                 }
             }
         }
@@ -719,7 +1164,7 @@ impl AgentRuntime {
             h.store(self.last_hour.to_bits(), Ordering::Relaxed);
         }
         if let Some(sim) = &mut self.sim {
-            sim.post(dt, &[(0, Focus { x: focus[0], z: focus[1], yaw: focus[2] })]);
+            sim.post_local(dt, &[(0, Focus { x: focus[0], z: focus[1], yaw: focus[2] })], self.traffic_obstacle, self.on_foot_player);
             let fr = sim.latest();
             self.sim_time = fr.time;
             clock_read = true;
@@ -728,7 +1173,7 @@ impl AgentRuntime {
                 self.last_steps = fr.steps;
                 self.last_corridor_steps = fr.corridor_steps;
                 if let Some(feed) = &self.feed {
-                    let seq = feed.post(fr.clone());
+                    let seq = feed.post_with_traffic(fr.clone(), self.physical_traffic.clone());
                     if self.cut_post == Some(0) {
                         self.cut_post = Some(seq); // `--crowd`: the cut's first frame
                     }
@@ -739,17 +1184,20 @@ impl AgentRuntime {
             self.sim_time = fr.time;
             clock_read = true;
             if let Some(feed) = &self.feed {
-                feed.post(fr);
+                feed.post_with_traffic(fr, std::mem::take(&mut self.remote_traffic));
             }
         }
         if clock_read {
             self.follow_clock(renderer);
         }
         if let Some(feed) = &self.feed {
-            let (out, ms) = feed.take_seq();
+            let (out, ms) = feed.take_with_walkers();
             if let Some((o, seq)) = out {
-                self.last = Some(o);
+                self.walker_slots = o.walkers;
+                self.last = Some(o.agents);
                 if self.cut_post.is_some_and(|p| p > 0 && seq >= p) {
+                    self.physical_walkers.clear();
+                    self.reset_walkers = true;
                     self.cut_post = None; // `--crowd`: the cut's street is what is drawn
                 }
             }
@@ -758,6 +1206,14 @@ impl AgentRuntime {
         if let Some(g) = gpu {
             if self.opts.on {
                 let base: &[GpuAgent] = self.last.as_deref().map(|v| v.as_slice()).unwrap_or(&[]);
+                let base = if self.physical_walkers.is_empty() {
+                    base
+                } else {
+                    self.posed_agents.clear();
+                    self.posed_agents.extend_from_slice(base);
+                    apply_walker_poses(&mut self.posed_agents, &self.walker_slots, &self.physical_walkers, self.lib.as_deref());
+                    self.posed_agents.as_slice()
+                };
                 // without the simulated people (the people pass A/B).
                 let filtered: Vec<GpuAgent>;
                 let base: &[GpuAgent] = if self.hide_people {
@@ -793,7 +1249,19 @@ impl AgentRuntime {
                         }
                     }
                     self.scratch.extend_from_slice(&self.extras);
-                    self.scratch.extend_from_slice(&self.parked); // props
+                    if self.physical_traffic.is_empty() {
+                        self.scratch.extend_from_slice(&self.parked);
+                    } else {
+                        self.scratch.extend(self.parked.iter().map(|original| {
+                            let mut car = *original;
+                            if let Some(&(pos, rot, speed)) = self.physical_traffic.get(&parked_id(original)) {
+                                car.pos = pos;
+                                car.rot = rot;
+                                car.speed = speed;
+                            }
+                            car
+                        }));
+                    }
                     &self.scratch
                 };
                 st.uploaded = g.upload(&ctx.queue, list);
@@ -925,7 +1393,9 @@ impl AgentRuntime {
 
     /// The newest simulated instances (captures pick their subjects from them).
     pub fn snapshot(&self) -> Vec<GpuAgent> {
-        self.last.as_deref().cloned().unwrap_or_default()
+        let mut agents = self.last.as_deref().cloned().unwrap_or_default();
+        apply_walker_poses(&mut agents, &self.walker_slots, &self.physical_walkers, self.lib.as_deref());
+        agents
     }
 
     /// The player's body and cars as this frame's extra instances (`--play`).
@@ -1020,11 +1490,15 @@ impl AgentRuntime {
         self.restart_sim(world, focus, self.opts.density);
         self.hide_near = vec![(eye.to_array(), WARM_CLEAR_M)];
         let t = Instant::now();
-        while t.elapsed().as_secs_f64() < WARM_WAIT_S {
+        while !self.startup_failed() && t.elapsed().as_secs_f64() < WARM_WAIT_S {
             self.pump(ctx, renderer, focus, 0.0);
             if let (Some(_), Some(last), Some(lib)) = (&self.sim, &self.last, &self.lib) {
                 let people = last.iter().filter(|a| lib.models.get(a.model as usize).is_some_and(|m| m.class == eo_agents::CLASS_PERSON)).count();
                 return Some((last.len() - people, people));
+            }
+            if self.startup_failed() {
+                eprintln!("agents: warmed traffic aborted after startup error ({:?})", self.errors);
+                return None;
             }
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
@@ -1039,7 +1513,7 @@ impl AgentRuntime {
 }
 
 /// The corridor layer on the drawn deck and streets (`corridor`), starting at `hour`.
-fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSource, gg: &eo_landmarks::GroundGrid, ground: &Ground, walkers: bool, deck_drawn: bool, hour: f64) -> Result<eo_sim::corridor::Corridors> {
+fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSource, gg: &eo_landmarks::GroundGrid, ground: &Ground, walkers: bool, deck_drawn: bool, hour: f64, connected_decks: bool) -> Result<eo_sim::corridor::Corridors> {
     let js = eo_landmarks::LandmarksJs::get();
     let ca = eo_data::CaStandards::load(paths)?;
     let k_width = eo_landmarks::suspension::DeckStandards::load(&ca)?.k_width;
@@ -1052,7 +1526,11 @@ fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSo
     };
     let carpet = |x: f64, z: f64| ground.y(x, z);
     let surfaces = corridor::Surfaces { deck: deck_drawn.then_some(&deck), street: matches!(ground, Ground::Street(_)), paved: &paved, ground: &carpet };
-    let ways = corridor::ways(source, &surfaces, walkers);
+    let ways = if connected_decks {
+        if walkers { corridor::walk_ways(&deck) } else { Vec::new() }
+    } else {
+        corridor::ways(source, &surfaces, walkers)
+    };
     let c = eo_sim::corridor::Corridors::new(ways, eo_sim::corridor::Params::with_time_gap(time_gap), SEED_INT);
     c.hour_handle().store(hour.to_bits(), Ordering::Relaxed);
     Ok(c)
@@ -1061,8 +1539,8 @@ fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSo
 /// A simulation round `focus`: the network within `SIM_RADIUS_M` from the
 /// source, one region (`region_config`), `steps` fixed steps run.
 fn build_sim(source: &eo_sim::native::NativeSource, focus: [f64; 3], density: u32, crowd: Option<f64>, traffic: Option<f64>, corridors: Option<eo_sim::corridor::Corridors>, steps: usize) -> SimWorld {
-    let tiles = eo_sim::native::tiles_around(focus[0], focus[1], SIM_RADIUS_M);
-    let mut net = Network::new(source.timing.clone());
+    let tiles = source.resident_tiles(focus[0], focus[1], SIM_RADIUS_M);
+    let mut net = source.new_network();
     net.add(source.build(&tiles));
     let mut w = SimWorld::new(net);
     w.corridors = corridors;
@@ -1139,7 +1617,7 @@ impl PlayerVisual {
             let datum = v.datum(cw);
             let steer = v.controller.wheels().first().map(|w| w.steering as f64).unwrap_or(0.0);
             let braking = v.controls.brake > 0.0 || v.controls.handbrake;
-            if let Some(mut c) = eo_agents::feed::player_car(lib, PLAYER_CAR_BODY, [datum.x, datum.y, datum.z], [rot.x, rot.y, rot.z, rot.w], self.spins[k], steer, speed, braking, PLAYER_CAR_PAINT) {
+            if let Some(mut c) = eo_agents::feed::player_car(lib, v.spec.config.model.body(), [datum.x, datum.y, datum.z], [rot.x, rot.y, rot.z, rot.w], self.spins[k], steer, speed, braking, PLAYER_CAR_PAINT) {
                 if let Some((i, fraction)) = door && i == k {
                     c.clip_phase = fraction;
                 }
@@ -1152,6 +1630,162 @@ impl PlayerVisual {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hatchback_contact_uses_the_body_drawn_by_the_fleet() {
+        use eo_player::traffic_contact::{ContactTraffic, TrafficTarget};
+        use eo_player::{BuildingSet, CollisionWorld, GroundProvider, Player, StepInput};
+        use eo_sim::output::{AgentBuffer, AgentInstance, KIND_SEDAN};
+        use glam::DVec3;
+
+        struct Flat;
+        impl GroundProvider for Flat {
+            fn ground_y(&self, _: f64, _: f64) -> f64 { 0.0 }
+        }
+
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let lib = Arc::new(Library::load_with(&paths.repo_root, None, &eo_agents::library::PeopleSource::Off).unwrap());
+        let models = TrafficModels::load(&lib).unwrap();
+        let hatch = lib.model("compactHatch").expect("shipped hatchback");
+        let id = (1..256).find(|&id| {
+            lib.traffic_model(&models.catalog, SEED_INT, id, KIND_SEDAN).is_some_and(|(_, model)| model == hatch)
+        }).expect("an ambient hatchback");
+        let route = AgentInstance { id, pos: [0.0, 0.0, 8.0], ..Default::default() };
+        let frame = eo_sim::world::Frame {
+            regions: vec![AgentBuffer { vehicles: vec![route], ..Default::default() }],
+            ..Default::default()
+        };
+        let mut feeder = Feeder::new(lib.clone(), Ground::Flat, None, SEED_INT).unwrap();
+        let mut drawn = vec![];
+        feeder.build(&frame, &mut drawn);
+        assert_eq!(drawn.len(), 1);
+        assert_eq!(drawn[0].model, hatch);
+
+        let (chassis, _, model) = models.select(&lib, route.id, route.kind).unwrap();
+        let (min, max) = lib.vehicle_chassis_bounds(drawn[0].model).unwrap();
+        assert_eq!(chassis.length(), max.z * drawn[0].scale - min.z * drawn[0].scale);
+        let expected = f64::from(drawn[0].pos[2] + min.z * drawn[0].scale)
+            - eo_player::tuning::capsule::RADIUS_M - eo_player::tuning::capsule::CONTROLLER_OFFSET_M;
+
+        for dynamic in [false, true] {
+            let mut world = CollisionWorld::new(Arc::new(Flat), Arc::new(BuildingSet::empty()), 1);
+            world.load_blocking(DVec3::ZERO, eo_player::world::STEP_RADIUS_M);
+            let mut player = Player::new(DVec3::ZERO, 0.0);
+            let mut traffic = TrafficBodies::default();
+            let walk = StepInput { move_y: 1.0, ..Default::default() };
+            for _ in 0..480 {
+                let pose = TrafficPose { id: u64::from(id), datum: drawn[0].pos, yaw: route.heading, pitch: 0.0, chassis };
+                if dynamic {
+                    ContactTraffic::sync(&mut world, &mut traffic, player.character.feet(), player.ground_speed,
+                        Default::default(), [TrafficTarget { pose, speed: 0.0, model, parked: false }]);
+                } else {
+                    traffic.sync(&mut world, [pose]);
+                }
+                player.fixed_step(&mut world, &walk);
+            }
+            let stop = player.character.feet().z;
+            if dynamic {
+                let mass = world.physics.bodies.iter().find(|(_, body)| body.is_dynamic()).unwrap().1.mass();
+                let hatchback = eo_player::vehicle::VehicleConfig { model: eo_player::vehicle::VehicleModel::Hatchback, ..Default::default() }.spec();
+                assert!((f64::from(mass) - hatchback.curb_mass_kg).abs() < 0.1,
+                    "drawn hatchback has a {mass:.1} kg rigid body; expected {:.1} kg", hatchback.curb_mass_kg);
+            }
+            assert!((stop - expected).abs() < 0.04, "dynamic={dynamic}: stops at {stop:.3} m, expected {expected:.3} m");
+            eprintln!("hatchback dynamic={dynamic}: stops at {stop:.3} m, expected {expected:.3} m");
+        }
+    }
+
+    #[test]
+    fn walker_render_pose_follows_identity_across_slot_reuse() {
+        use eo_agents::feed::WalkerSlot;
+        use eo_player::people_contact::WalkerPose;
+        let slot = |id, index| WalkerSlot { id, index, feet: [7., 0., 8.], style: 0, phase: 0., stride_m: 1.4 };
+        let pose = WalkerPose { model: 5, route_feet: [7., 0., 8.], feet: [8., 0.1, 9.],
+            rotation: glam::Quat::from_rotation_z(0.7).to_array(), walking_speed: 0.2, phase: 0.24 };
+        let poses = [(41, pose)].into_iter().collect();
+        let original = GpuAgent { model: 5, ..Default::default() };
+        let mut bodies = [original; 2];
+        apply_walker_poses(&mut bodies, &[slot(41, 0), slot(42, 1)], &poses, None);
+        let struck = bodies[0];
+        assert_eq!((struck.pos, struck.rot, struck.speed, struck.anim), (pose.feet, pose.rotation, pose.walking_speed, pose.phase));
+        bodies = [original; 2];
+        apply_walker_poses(&mut bodies, &[slot(42, 0), slot(41, 1)], &poses, None);
+        assert_eq!(bodies, [original, struck]);
+        bodies = [original; 2];
+        let distant = WalkerSlot { feet: [80., 0., 8.], ..slot(41, 0) };
+        apply_walker_poses(&mut bodies, &[distant], &poses, None);
+        assert_eq!(bodies, [original; 2]);
+    }
+
+    #[test]
+    fn the_drawn_vehicle_selects_its_mass_within_a_mixed_traffic_class() {
+        use eo_player::traffic_contact::{ContactTraffic, TrafficTarget};
+        use eo_player::vehicle::{VehicleConfig, VehicleModel};
+        use eo_player::{BuildingSet, CollisionWorld, GroundProvider};
+        use eo_sim::output::{KIND_BUS, KIND_SEDAN, KIND_TAXI, KIND_TRUCK};
+        use glam::DVec3;
+
+        struct Flat;
+        impl GroundProvider for Flat {
+            fn ground_y(&self, _: f64, _: f64) -> f64 { 0. }
+        }
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let mut lib = Library::load_with(&paths.repo_root, None, &eo_agents::library::PeopleSource::Off).unwrap();
+        let models = TrafficModels::load(&lib).unwrap();
+        let mut world = CollisionWorld::new(Arc::new(Flat), Arc::new(BuildingSet::empty()), 1);
+        world.load_blocking(DVec3::ZERO, eo_player::world::STEP_RADIUS_M);
+        let mut scripted = TrafficBodies::default();
+        let curb = |model| VehicleConfig { model, ..Default::default() }.spec().curb_mass_kg;
+        for (kind, body, expected) in [
+            (KIND_SEDAN, "compactHatch", curb(VehicleModel::Hatchback)),
+            (KIND_SEDAN, "sedan", curb(VehicleModel::Sedan)),
+            (KIND_TRUCK, "deliveryVan", curb(VehicleModel::DeliveryVan)),
+            (KIND_SEDAN, "compactHatchSport", curb(VehicleModel::Hatchback)),
+            (KIND_SEDAN, "compactHatchCross", curb(VehicleModel::Hatchback)),
+            (KIND_SEDAN, "sedanSport", curb(VehicleModel::Sedan)),
+            (KIND_SEDAN, "sedanLuxe", curb(VehicleModel::Sedan)),
+            (KIND_SEDAN, "coupe", 1276.86),
+            (KIND_SEDAN, "wagon", 1710.04),
+            (KIND_SEDAN, "compactSuv", 1606.62),
+            (KIND_SEDAN, "minivan", 1568.07),
+            (KIND_TAXI, "taxi", 1663.78),
+            (KIND_TAXI, "taxiCheckered", 1663.78),
+            (KIND_TAXI, "taxiAdBoard", 1663.78),
+            (KIND_TRUCK, "pickup", 2025.29),
+            (KIND_TRUCK, "fullSizeSuv", 2510.18),
+            (KIND_TRUCK, "boxTruck", 3991.61),
+            (KIND_BUS, "cityBus", 12578.12),
+        ] {
+            let id = (0..512).find(|&id| lib.traffic_model(&models.catalog, SEED_INT, id, kind)
+                .is_some_and(|(_, m)| lib.meta.model_names[m as usize] == body)).expect("body in the shipped fleet");
+            let (chassis, _, model) = models.select(&lib, id, kind).unwrap();
+            for parked in [false, true] {
+                let pose = TrafficPose { id: 1, datum: [0.; 3], yaw: 0., pitch: 0., chassis };
+                let target = TrafficTarget { pose, model, speed: 0., parked };
+                ContactTraffic::sync(&mut world, &mut scripted, DVec3::ZERO, 0., Default::default(), [target]);
+                let mut dynamic = world.physics.bodies.iter().filter(|(_, b)| b.is_dynamic());
+                let mass = dynamic.next().expect("active traffic body").1.mass();
+                assert!(dynamic.next().is_none(), "the reused slot retained the previous body");
+                assert!((f64::from(mass) - expected).abs() < 0.1, "{body}, parked={parked}, rigid-body mass {mass} kg, reference {expected} kg");
+                eprintln!("traffic {body}, parked={parked}: {mass:.1} kg");
+            }
+        }
+        // Include the special bodies outside the four ordinary moving traffic classes.
+        for (body, expected_kg) in [("patrolSedan", 1982.65), ("patrolSuv", 2119.18), ("exoticCoupe", 1451.04)] {
+            let index = lib.model(body).expect("shipped special body");
+            let instance = GpuAgent { model: index, scale: eo_data::groundscale::vehicles() as f32, rot: glam::Quat::IDENTITY.to_array(), ..Default::default() };
+            let target = models.parked_target(&lib, &instance, None).expect("parked mesh contact");
+            assert!(matches!(target.pose.chassis, TrafficChassis::Mesh { .. }));
+            ContactTraffic::sync(&mut world, &mut scripted, DVec3::ZERO, 0., Default::default(), [target]);
+            let mut bodies = world.physics.bodies.iter().filter(|(_, b)| b.is_dynamic());
+            let mass = bodies.next().unwrap().1.mass();
+            assert!(bodies.next().is_none());
+            assert!((mass - expected_kg).abs() < 0.1, "{body}: {mass} kg vs {expected_kg} kg");
+        }
+        lib.meta.vehicle_models.retain(|name, _| name == "sedan");
+        let (_, _, fallback) = models.select(&lib, 1, KIND_BUS).unwrap();
+        assert_eq!(fallback, eo_player::traffic_contact::TrafficModel::from_body("sedan"), "partial library draws its fallback sedan");
+    }
 
     /// `--crowd`'s population at the capture cards' places and hours (a
     /// diagnostic: `cargo test --release -p eo-app crowd_at_the_cards -- --ignored --nocapture`).
@@ -1187,5 +1821,186 @@ mod tests {
         assert!(edges.len() > city.buildings.len() * 3, "every ring's edges");
         assert!(edges.iter().any(|e| e.night) && edges.iter().any(|e| e.shops), "both uses found");
         assert!(edges.iter().all(|e| e.storeys >= 1.0 && !(e.shops && e.night)));
+    }
+
+    #[test]
+    fn startup_failed_detects_terminal_loader_and_feed_failures() {
+        let make_rt = |on: bool, remote_mode: bool| AgentRuntime {
+            opts: AgentOpts { on, ..Default::default() },
+            traffic_obstacle: None,
+            on_foot_player: None,
+            lib: None,
+            traffic_models: None,
+            lib_rx: None,
+            sim_rx: None,
+            corridor_hour: None,
+            last_hour: f64::NAN,
+            gg_ground: None,
+            sim: None,
+            feed: None,
+            feed_failed: false,
+            ground: Ground::Flat,
+            structures: None,
+            physical_traffic: Default::default(),
+            remote_traffic: Default::default(),
+            walker_slots: Vec::new(),
+            physical_walkers: Default::default(),
+            posed_agents: Vec::new(),
+            reset_walkers: false,
+            last: None,
+            last_steps: 0,
+            last_corridor_steps: 0,
+            scratch: vec![],
+            extras: vec![],
+            test_rows: vec![],
+            parked: vec![],
+            hide_near: vec![],
+            remap_people: vec![],
+            started: Instant::now(),
+            sim_ready_ms: None,
+            lib_ready_ms: None,
+            errors: vec![],
+            sim_time: 0.0,
+            remote: None,
+            remote_mode,
+            hide_people: false,
+            clock: None,
+            city: None,
+            source: None,
+            start_hour: 12.0,
+            traffic_hour: 12.0,
+            last_focus: None,
+            cut_rx: None,
+            cut_post: None,
+            cuts: 0,
+            plazas: Default::default(),
+            decks: None,
+            bridge_walk: None,
+        };
+
+        // Disabled runtime is immediately ready and never failed.
+        let off = make_rt(false, false);
+        assert!(off.ready() && !off.startup_failed());
+
+        // Active loaders in flight: not failed.
+        let mut loading = make_rt(true, false);
+        let (_lib_tx, lib_rx) = std::sync::mpsc::channel();
+        let (_sim_tx, sim_rx) = std::sync::mpsc::channel();
+        loading.lib_rx = Some(lib_rx);
+        loading.sim_rx = Some(sim_rx);
+        assert!(!loading.ready() && !loading.startup_failed());
+
+        // Sim loader failed (channel cleared with sim=None): startup_failed immediately aborts wait_ready!
+        loading.sim_rx = None;
+        assert!(loading.startup_failed());
+
+        // Remote mode has no local sim; only lib loader or feed failure is terminal.
+        let mut remote = make_rt(true, true);
+        let (_r_tx, r_rx) = std::sync::mpsc::channel();
+        remote.lib_rx = Some(r_rx);
+        assert!(!remote.startup_failed());
+        remote.feed_failed = true;
+        assert!(remote.startup_failed());
+    }
+
+    /// Full-city plaza regression check around the Bay Area Metro Center plaza
+    /// (`[3060, -1420]`, 16:15): no simulated or separated walker stands inside a
+    /// building footprint or within shoulder clearance of a bordering wall.
+    #[test]
+    #[ignore]
+    fn plaza_walkers_clear_of_bordering_buildings() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let city = eo_data::City::load(&paths).unwrap();
+        let elev = eo_data::ElevationGrid::load(&paths).unwrap();
+        let o = eo_street::StreetOptions::load().unwrap();
+        let sc = eo_street::StreetCity::load().unwrap();
+        let plan = eo_street::plan::build_plan(&sc, &o);
+        let rings: Vec<Vec<[f64; 2]>> = city.buildings.iter().map(|b| b.ring.iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
+        let lift = o.open_ground_lift;
+        let sw = Arc::new(eo_street::StreetWorld::from_plan(o, sc, plan, eo_street::Terrain { grid: Arc::new(elev), carpet_lift: lift }, eo_street::BuildingIndex::new(rings)));
+        let prings = plaza_rings(&paths.repo_root, &sw);
+        PEOPLE_GROUPS.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_CROSSWALKS.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_WINDOWS.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_STAGGER.store(true, std::sync::atomic::Ordering::Relaxed);
+        PEOPLE_EVENING.store(true, std::sync::atomic::Ordering::Relaxed);
+        eo_agents::feed::set_personal_space(true);
+        let mut walks = walk_paths(&paths, &city);
+        let base_src = eo_sim::native::load(&paths).unwrap();
+        let inset = base_src.dims.frontage_zone_m + 0.5 * base_src.dims.throughway_m;
+        walks.extend(plaza_paths(&prings, inset));
+        let sections = drawn_sections(&sw);
+        let zebras = drawn_zebras(&sw);
+        let src = base_src.with_frontage(frontage_edges(&city)).with_paths(walks).with_sections(sections).with_crossings(crossing_points(&paths)).with_zebras(zebras);
+        let focus = [3060.0, -1420.0, 1.9198621909637936];
+        let w = build_sim(&src, focus, 1, Some(16.25), Some(16.25), None, WARMUP_STEPS);
+        let r = &w.regions[0];
+        let dist_to_bldg = |x: f64, z: f64| -> (bool, f64) {
+            let inside = sw.buildings.contains(x, z);
+            let mut best = f64::INFINITY;
+            for ring in &sw.buildings.rings {
+                if ring.is_empty() || (ring[0][0] - x).hypot(ring[0][1] - z) > 150.0 {
+                    continue;
+                }
+                for k in 0..ring.len() {
+                    let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
+                    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                    let l2 = (dx * dx + dz * dz).max(1e-12);
+                    let t = (((x - a[0]) * dx + (z - a[1]) * dz) / l2).clamp(0.0, 1.0);
+                    best = best.min((x - (a[0] + dx * t)).hypot(z - (a[1] + dz * t)));
+                }
+            }
+            (inside, best)
+        };
+        let mut feed_pos: Vec<[f64; 2]> = Vec::with_capacity(r.crowd.walkers.len());
+        let mut sim_in = 0usize;
+        for i in 0..r.crowd.walkers.len() {
+            let (x, z) = (r.crowd.x[i], r.crowd.z[i]);
+            feed_pos.push([x, z]);
+            if (x - 3060.0).hypot(z + 1420.0) <= 80.0 && sw.buildings.contains(x, z) {
+                sim_in += 1;
+            }
+        }
+        assert_eq!(sim_in, 0, "no simulated walker inside a building near the plaza");
+        eo_agents::feed::keep_out_of_buildings(&mut feed_pos, &sw.buildings, eo_agents::feed::WALL_CLEARANCE_M);
+        eo_agents::feed::keep_personal_space(&mut feed_pos);
+        eo_agents::feed::separate(&mut feed_pos, &[]);
+        eo_agents::feed::keep_out_of_buildings(&mut feed_pos, &sw.buildings, eo_agents::feed::WALL_CLEARANCE_M);
+        eo_agents::feed::separate(&mut feed_pos, &[]);
+        eo_agents::feed::keep_out_of_buildings(&mut feed_pos, &sw.buildings, eo_agents::feed::WALL_CLEARANCE_M);
+        for &[x, z] in &feed_pos {
+            let (inside, d) = dist_to_bldg(x, z);
+            assert!(!inside, "fed walker at ({x:.2}, {z:.2}) stands inside a building");
+            assert!(d >= eo_agents::feed::WALL_CLEARANCE_M - 0.01, "fed walker at ({x:.2}, {z:.2}) only {d:.3} m from a building wall");
+        }
+    }
+
+    /// `inset_plaza_ring` pulls every edge inward by the setback, keeping all
+    /// corners inside the original plaza, and degrades cleanly on narrow slivers.
+    #[test]
+    fn plaza_ring_inset_stays_inside_and_clear_of_edges() {
+        // Real Bay Area Metro Center plaza rectangle (~17 x 104 m).
+        let ring = vec![[3026.125, -1405.375], [3038.0, -1392.875], [3112.25, -1466.25], [3101.25, -1477.75]];
+        let inset = 1.9;
+        let inner = inset_plaza_ring(&ring, inset);
+        assert_eq!(inner.len(), 4);
+        for &p in &inner {
+            assert!(eo_street::point_in_ring(p[0], p[1], &ring), "corner {p:?} left plaza");
+            // Distance to every outer edge is at least inset (within rounding).
+            for k in 0..ring.len() {
+                let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
+                let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                let t = (((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz)).clamp(0.0, 1.0);
+                let d = (p[0] - (a[0] + dx * t)).hypot(p[1] - (a[1] + dz * t));
+                assert!(d >= inset - 0.05, "corner {p:?} only {d:.3} m from edge {k}");
+            }
+        }
+        // Narrow 2 m strip falls back cleanly without inverting.
+        let sliver = vec![[0.0, 0.0], [20.0, 0.0], [20.0, 2.0], [0.0, 2.0]];
+        let inner_s = inset_plaza_ring(&sliver, 2.0);
+        assert_eq!(inner_s.len(), 4);
+        for &p in &inner_s {
+            assert!(eo_street::point_in_ring(p[0], p[1], &sliver), "sliver corner {p:?} left plaza");
+        }
     }
 }

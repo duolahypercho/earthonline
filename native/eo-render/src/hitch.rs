@@ -429,6 +429,23 @@ pub fn on_cpu_ms(c0: u64, c1: u64) -> f64 {
     if k > 0.0 { (c1.saturating_sub(c0)) as f64 / k } else { f64::NAN }
 }
 
+#[cfg(target_os = "macos")]
+mod mac {
+    // qos_class_t values from <sys/qos.h>.
+    // Workers use QOS_CLASS_DEFAULT with relative priority -15 (QOS_MIN_RELATIVE_PRIORITY)
+    // rather than QOS_CLASS_UTILITY (0x11): on Apple Silicon UTILITY pins threads to E-cores
+    // (4-5x slower startup/cooking), whereas DEFAULT/-15 stays P-core eligible while ranking
+    // strictly below both normal threads and the USER_INTERACTIVE render thread.
+    pub const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
+    pub const QOS_CLASS_DEFAULT: u32 = 0x15;
+    pub const QOS_MIN_RELATIVE_PRIORITY: i32 = -15;
+
+    unsafe extern "C" {
+        pub fn pthread_set_qos_class_self_np(qos_class: u32, relative_priority: i32) -> i32;
+        pub fn pthread_get_qos_class_np(pthread: libc::pthread_t, qos_class: *mut u32, relative_priority: *mut i32) -> i32;
+    }
+}
+
 /// Raise the calling thread (the render thread, which also runs the player
 /// step) above normal: the frame's CPU work is a few hundred microseconds
 /// and must not wait a scheduler quantum behind CPU-bound work.
@@ -439,7 +456,12 @@ pub fn raise_render_thread() -> bool {
         // SAFETY: plain Win32 calls on the current thread's pseudo handle.
         unsafe { win::SetThreadPriority(win::GetCurrentThread(), win::THREAD_PRIORITY_HIGHEST) != 0 }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: Darwin pthread QoS call on the current thread.
+        unsafe { mac::pthread_set_qos_class_self_np(mac::QOS_CLASS_USER_INTERACTIVE, 0) == 0 }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         false
     }
@@ -466,21 +488,58 @@ pub fn lower_worker_thread() -> bool {
         // SAFETY: as above.
         unsafe { win::SetThreadPriority(win::GetCurrentThread(), win::THREAD_PRIORITY_BELOW_NORMAL) != 0 }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: Darwin pthread QoS call on the current thread.
+        unsafe { mac::pthread_set_qos_class_self_np(mac::QOS_CLASS_DEFAULT, mac::QOS_MIN_RELATIVE_PRIORITY) == 0 }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         false
     }
 }
 
-/// The calling thread's priority (Win32 value; 0 normal), for the bench report.
+/// The calling thread's priority (Win32 value or macOS QoS class; 0 normal), for the bench report.
 pub fn thread_priority() -> i32 {
     #[cfg(windows)]
     {
         // SAFETY: as above.
         unsafe { win::GetThreadPriority(win::GetCurrentThread()) }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let mut qos = 0u32;
+        let mut rel = 0i32;
+        // SAFETY: Darwin pthread QoS query on the current thread.
+        if unsafe { mac::pthread_get_qos_class_np(libc::pthread_self(), &mut qos, &mut rel) } == 0 {
+            qos as i32
+        } else {
+            0
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         0
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod mac_tests {
+    use super::*;
+
+    #[test]
+    fn macos_worker_qos_stays_off_efficiency_cores_and_below_render() {
+        let h = std::thread::spawn(|| {
+            assert!(lower_worker_thread());
+            let mut qos = 0u32;
+            let mut rel = 0i32;
+            // SAFETY: querying the current thread's QoS class and relative priority.
+            let rc = unsafe { mac::pthread_get_qos_class_np(libc::pthread_self(), &mut qos, &mut rel) };
+            assert_eq!(rc, 0);
+            assert_eq!(qos, mac::QOS_CLASS_DEFAULT, "workers must stay P-core eligible (not QOS_CLASS_UTILITY)");
+            assert_eq!(rel, mac::QOS_MIN_RELATIVE_PRIORITY, "workers must rank below normal default threads");
+            assert!(qos < mac::QOS_CLASS_USER_INTERACTIVE);
+        });
+        h.join().unwrap();
     }
 }

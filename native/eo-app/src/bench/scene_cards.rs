@@ -237,41 +237,40 @@ fn market(world: &World, args: &Args, aspect: f32) -> Result<(Camera, String, [f
 fn crosswalk(world: &World, args: &Args, aspect: f32) -> Result<(Camera, String, [f64; 3]), String> {
     let sw = street(world).ok_or("no street world (--no-streets)")?;
     let fb = ferry();
-    let mut best: Option<(f64, usize)> = None;
+    let mut junctions = vec![];
     for (ni, node) in sw.plan.nodes.iter().enumerate() {
-        if !node.earns_paint || node.approaches.len() < 3 {
+        if !node.earns_paint || node.approaches.len() < 3 || !node.signalised() {
             continue;
         }
         let names: Vec<String> = node.approaches.iter().map(|a| name_of(&sw, &sw.plan.entries[a.entry])).collect();
-        // a street with a name crossing it (not a service road's survey label).
         let crossed = names.iter().any(|n| n != "The Embarcadero" && !n.is_empty() && !n.starts_with("SF Rd"));
-        if !names.iter().any(|n| n == "The Embarcadero") || !crossed || !node.signalised() {
-            continue;
-        }
-        let d = DVec2::from(node.position).distance(fb) - if names.iter().any(|n| n == "Market Street") { 1000.0 } else { 0.0 };
-        if best.is_none_or(|b| d < b.0) {
-            best = Some((d, ni));
+        if crossed && names.iter().any(|n| n == "The Embarcadero") {
+            let distance = DVec2::from(node.position).distance(fb);
+            junctions.push((!names.iter().any(|n| n == "Market Street"), distance, ni, names));
         }
     }
-    let (_, ni) = best.ok_or("no signalised, painted junction of The Embarcadero and a named street")?;
-    let node = &sw.plan.nodes[ni];
-    let np = DVec2::from(node.position);
-    let names: Vec<String> = node.approaches.iter().map(|a| name_of(&sw, &sw.plan.entries[a.entry])).collect();
-    for a in node.approaches.iter().filter(|a| name_of(&sw, &sw.plan.entries[a.entry]) == "The Embarcadero") {
-        let e = &sw.plan.entries[a.entry];
-        let u = DVec2::from(a.u);
-        let (s, _) = station_on(e, np + u * (node.band_depth + 1.0));
-        let (c, _, n) = frame_at(e, s);
-        // the corner on the Ferry Building's side first.
-        let mut sides = [1.0, -1.0];
-        sides.sort_by(|x, y| (c + n * *x * 10.0).distance(fb).total_cmp(&(c + n * *y * 10.0).distance(fb)));
-        for side in sides {
-            if let Some((feet, _)) = footway_feet(&sw, e, s, side, 1.2) {
-                // across the carriageway along the crosswalk, turned 10 degrees toward the junction.
-                let dir = rotate(-n * side, -u, 10.0);
-                let cam = eye_camera(feet, dir, -0.02, args, aspect);
-                let what = format!("the junction of {} at ({:.0}, {:.0}), {:.0} m from the Ferry Building, from the corner footway {:.1} m from its centre (the crossing band is {:.1} m deep), eye {EYE_HEIGHT_M} m, looking along The Embarcadero's crosswalk", names.join(", "), np.x, np.y, np.distance(fb), node.band_depth + 1.0, node.band_depth);
-                return Ok((cam, what, [np.x, np.y, focus_of(&cam)[2]]));
+    junctions.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    for (_, distance, ni, names) in junctions {
+        let node = &sw.plan.nodes[ni];
+        for a in &node.approaches {
+            let e = &sw.plan.entries[a.entry];
+            if name_of(&sw, e) != "The Embarcadero" {
+                continue;
+            }
+            let Some([start, end]) = sw.painted_crossing_band(node, a) else { continue };
+            let middle = (start + end) * 0.5;
+            let s = if a.at_start { middle } else { e.length - middle };
+            let (c, tangent, normal) = frame_at(e, s);
+            let inward = if a.at_start { -tangent } else { tangent };
+            let mut sides = [1.0, -1.0];
+            sides.sort_by(|x, y| (c + normal * *x * e.half).distance(fb).total_cmp(&(c + normal * *y * e.half).distance(fb)));
+            for side in sides {
+                if let Some((feet, _)) = footway_feet(&sw, e, s, side, 1.2) {
+                    let dir = rotate(-normal * side, inward, 10.0);
+                    let cam = eye_camera(feet, dir, -0.02, args, aspect);
+                    let what = format!("the junction of {} at ({:.0}, {:.0}), {distance:.0} m from the Ferry Building, {middle:.1} m along the approach at the midpoint of the {:.1} m painted crossing band, eye {EYE_HEIGHT_M} m", names.join(", "), node.position[0], node.position[1], end - start);
+                    return Ok((cam, what, [c.x, c.y, focus_of(&cam)[2]]));
+                }
             }
         }
     }

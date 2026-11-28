@@ -194,6 +194,20 @@ fn a_tunnel_through_a_hill_has_its_bore_portals_lights_cuts_and_collision() {
     let road = tris(&w, 0, &|c| c == StructureClass::DeckSurface);
     assert!(!concrete.is_empty() && !road.is_empty());
     assert!(!tris(&w, 0, &|c| c == StructureClass::Metal).is_empty(), "the luminaire strip");
+    // Flying away from a portal must keep the same first and last covered
+    // section as the near mesh and the collision world.
+    for lod in [1, 2] {
+        let walls = tris(&w, lod, &|class| class == StructureClass::Concrete);
+        for bore in w.bores().iter().filter(|b| b.chain == t.id) {
+            let inset = ((bore.s1 - bore.s0) * 0.25).min(0.5);
+            for station in [bore.s0 + inset, bore.s1 - inset] {
+                let f = t.frame(station);
+                let roof = t.y_at(station) + crate::BORE_CLEAR_M;
+                assert!(walls.iter().filter_map(|(tri, _)| over(tri, f.x, f.z))
+                    .any(|y| (y - roof).abs() < 0.2), "roof at station {station:.1}, LOD {lod}");
+            }
+        }
+    }
     // under the hill: the roadway on the profile, the vault at the bore's
     // clear height over it, the ground over the vault.
     let (s, _) = t.project(0.0, 0.0);

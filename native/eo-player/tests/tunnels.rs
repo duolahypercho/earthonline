@@ -91,3 +91,112 @@ fn a_car_driven_through_the_macarthur_tunnel_stays_on_its_floor() {
     assert!(deepest > 10.0, "never under the hill ({deepest:.1} m)");
     assert!(contact4 as f64 / steps as f64 > 0.95);
 }
+
+#[test]
+fn stacked_and_forked_highway_tunnels_have_room_for_a_vehicle() {
+    let paths = eo_data::DataPaths::discover().unwrap();
+    let city = eo_data::City::load(&paths).unwrap();
+    let elevation = Arc::new(eo_data::ElevationGrid::load(&paths).unwrap());
+    let ground = Arc::new(
+        StreetGround::build_joined(&city, elevation, Some(StructureOptions { tunnels: true }))
+            .unwrap(),
+    );
+    let roads = ground.decks().unwrap();
+    // Both levels on Yerba Buena Island and both arms of the Presidio
+    // Parkway split. These four openings used to contain a solid headwall,
+    // abutment, or the neighbouring bore's sidewall.
+    for way in ["11415208", "50691047", "167952616", "167952621"] {
+        let chain = roads
+            .chains()
+            .iter()
+            .find(|c| c.pieces.iter().any(|p| p.way == way))
+            .expect("mapped tunnel");
+        assert!(chain.is_built());
+        let mut world = CollisionWorld::new(ground.clone(), Arc::new(BuildingSet::empty()), 1);
+        // Check continuous segments at both front corners and the centre,
+        // inside the space occupied by the car above the pavement.
+        let mut previous: Option<[DVec3; 3]> = None;
+        let count = (chain.length() / 2.0).ceil() as usize;
+        for i in 0..=count {
+            let s = chain.length() * i as f64 / count as f64;
+            let f = chain.frame(s);
+            let y = chain.y_at(s);
+            let centre = DVec3::new(f.x, y, f.z);
+            if i == 0 || i % 30 == 0 {
+                world.load_blocking(centre, world::LOAD_RADIUS_M);
+            }
+            let points = [-0.8, 0.0, 0.8].map(|u| {
+                let (x, z) = (f.x + u * f.nx, f.z + u * f.nz);
+                DVec3::new(x, roads.deck_top(chain.id, x, z).unwrap_or(y) + 1.0, z)
+            });
+            if let Some(prev) = previous {
+                for (a, b) in prev.into_iter().zip(points) {
+                    let delta = b - a;
+                    assert!(
+                        world
+                            .raycast(
+                                a,
+                                delta.normalize(),
+                                delta.length(),
+                                world::layer::WORLD,
+                                None
+                            )
+                            .is_none(),
+                        "solid through OSM way {way} at station {s:.1}"
+                    );
+                }
+            }
+            previous = Some(points);
+        }
+    }
+    // A car can follow the floor even when its ceiling or the wall between
+    // twin tubes has been cut away. Probe the solid collision triangles.
+    let mut world = CollisionWorld::new(ground.clone(), Arc::new(BuildingSet::empty()), 1);
+    for way in ["50691047", "23874453", "59766608"] {
+        let tunnel = roads
+            .chains()
+            .iter()
+            .find(|c| c.pieces.iter().any(|piece| piece.way == way))
+            .unwrap();
+        for bore in roads.bores().iter().filter(|b| b.chain == tunnel.id) {
+            let count = ((bore.s1 - bore.s0) / 8.0).ceil() as usize;
+            for i in 0..count {
+                let s = bore.s0 + (i as f64 + 0.5) * (bore.s1 - bore.s0) / count as f64;
+                let f = tunnel.frame(s);
+                let eye = DVec3::new(f.x, tunnel.y_at(s) + 1.25, f.z);
+                if i % 6 == 0 {
+                    world.load_blocking(eye, world::LOAD_RADIUS_M);
+                }
+                assert!(
+                    world
+                        .raycast(
+                            eye,
+                            DVec3::Y,
+                            eo_structures::BORE_CLEAR_M,
+                            world::layer::WORLD,
+                            None
+                        )
+                        .is_some(),
+                    "missing ceiling above OSM way {way} at station {s:.1}"
+                );
+                if way != "50691047" {
+                    for sign in [-1.0, 1.0] {
+                        let side = sign * DVec3::new(f.nx, 0.0, f.nz);
+                        assert!(
+                            world
+                                .raycast(
+                                    eye,
+                                    side,
+                                    2.0 * tunnel.half_at(s),
+                                    world::layer::WORLD,
+                                    None
+                                )
+                                .is_some(),
+                            "missing sidewall on OSM way {way} at station {s:.1}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

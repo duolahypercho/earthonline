@@ -37,6 +37,8 @@ struct RtRefl {
     // x the fade's start (m), y its end, z the roughest surface traced, w a
     // rough sample's luminance clamp
     limits: vec4<f32>,
+    // x volumetric clouds on (1/0), y physical sky LUT on (1/0), z sun beam (0..1), w spare
+    sky_flags: vec4<f32>,
     // half-resolution size (xy), full-resolution size (zw)
     size: vec4<u32>,
 };
@@ -46,6 +48,9 @@ struct RtRefl {
 @group(1) @binding(2) var rr_gb_n: texture_2d<f32>;
 @group(1) @binding(3) var rr_gb_c: texture_2d<f32>;
 @group(1) @binding(4) var rr_gb_d: texture_2d<f32>;
+@group(1) @binding(5) var rr_cloud_refl: texture_2d<f32>;
+@group(1) @binding(6) var rr_atmo_view: texture_2d<f32>;
+@group(1) @binding(7) var rr_sky_samp: sampler;
 
 // The stage's own targets (group 2): trace 4 5; temporal 0 1 2 3 8, 4 5;
 // a-trous 0 1 2, 4 6 7.
@@ -95,6 +100,63 @@ fn rr_vndf(v: vec3<f32>, n: vec3<f32>, a: f32, u: vec2<f32>) -> vec3<f32> {
     return normalize(tb[0] * ne.x + tb[1] * ne.y + n * ne.z);
 }
 
+// Seamless hemi-octahedral UV matching sky_clouds.wgsl::vc_hemi_oct_decode.
+fn rr_hemi_oct(d: vec3<f32>) -> vec2<f32> {
+    let du = normalize(vec3<f32>(d.x, max(d.y, 0.004), d.z));
+    let p = du.xz / max(abs(du.x) + abs(du.y) + abs(du.z), 1e-5);
+    return vec2<f32>(p.x + p.y, p.x - p.y) * 0.5 + 0.5;
+}
+
+// Physical sky LUT + live volumetric cloud reflection dome + horizon/Bay fallback
+// for rays that escape the traced BVH scene.
+fn rr_miss_sky(l: vec3<f32>, rough: f32, env_i: f32) -> vec3<f32> {
+    let up = normalize(vec3<f32>(l.x, max(l.y, 0.008), l.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    let phys = clamp(look.hemi_sky.w, 0.0, 1.0) * rr.sky_flags.y;
+    var sky = lk_sky_sample(up) * env_i;
+    if (phys > 0.001) {
+        // Scale the normalized physical sky-view LUT to match `look.sh` upper-hemisphere radiance
+        // (matching `look_light.wgsl::lk_phys_sky` without needing a separate Sky uniform buffer).
+        let sun_d = look.sun.xyz;
+        let raw_dir = textureSampleLevel(rr_atmo_view, rr_sky_samp, at_view_uv(up, sun_d), 0.0).rgb;
+        let raw_zen = textureSampleLevel(rr_atmo_view, rr_sky_samp, at_view_uv(vec3<f32>(0.0, 1.0, 0.0), sun_d), 0.0).rgb;
+        let sh_hz = normalize(vec2<f32>(sun_d.x, sun_d.z) + vec2<f32>(1e-5, 0.0));
+        let raw_s = textureSampleLevel(rr_atmo_view, rr_sky_samp, at_view_uv(vec3<f32>(sh_hz.x * 0.707, 0.707, sh_hz.y * 0.707), sun_d), 0.0).rgb;
+        let raw_o = textureSampleLevel(rr_atmo_view, rr_sky_samp, at_view_uv(vec3<f32>(-sh_hz.x * 0.707, 0.707, -sh_hz.y * 0.707), sun_d), 0.0).rgb;
+        let raw_mean = max(lk_luma(raw_zen * 0.36 + (raw_s + raw_o) * 0.32), 1e-6);
+        let sh_up = lk_luma(rt_sh(vec3<f32>(0.0, 1.0, 0.0)) / LK_PI);
+        let phys_sky = at_spectral(raw_dir * (sh_up / raw_mean), 1.0) * env_i;
+        sky = mix(sky, phys_sky, phys);
+    }
+    if (rr.sky_flags.x > 0.5 && look.sun.y > -0.06) {
+        let mip = clamp((rough - 0.035) * 6.5, 0.0, 3.5);
+        let cl_up = normalize(vec3<f32>(up.x, max(up.y, 0.04) + 0.035 * (1.0 - smoothstep(0.0, 0.28, up.y)), up.z));
+        let cr = textureSampleLevel(rr_cloud_refl, rr_sky_samp, rr_hemi_oct(cl_up), mip);
+        let comp = sky * (1.0 - clamp(cr.a, 0.0, 1.0)) + max(cr.rgb, vec3<f32>(0.0)) * env_i;
+        let base_l = lk_luma(sky);
+        let comp_l = lk_luma(comp);
+        sky = comp * min(1.0, (base_l * 7.5 + 1e-4) / max(comp_l, 1e-6));
+    }
+    if (look.sun.y > -0.02) {
+        let cs = max(dot(up, look.sun.xyz), 0.0);
+        let beam = rr.sky_flags.z * smoothstep(-0.02, 0.08, look.sun.y);
+        let corona = (pow(cs, 16.0) * 0.28 + pow(cs, 84.0) * 0.90) * beam * (1.0 - clamp(rough * 2.2, 0.0, 0.85));
+        sky = sky + look.key.xyz * (corona * 0.10);
+    }
+    let night_w = 1.0 - smoothstep(-0.08, 0.02, look.sun.y);
+    if (night_w > 0.01) {
+        // Preserve deep midnight-indigo night sky reflections in RT glass/wet streets
+        // (avoiding flat grey/brown sky fallback when night sky LUT attenuates).
+        let inv_ex = 1.0 / max(look.key.w, 0.22);
+        let indigo_n = vec3<f32>(0.010, 0.023, 0.068) * (0.42 + 0.58 * smoothstep(0.0, 0.65, up.y)) * env_i * inv_ex;
+        sky = mix(sky, max(sky * vec3<f32>(0.85, 0.94, 1.18), indigo_n), night_w * 0.85);
+    }
+    if (l.y >= 0.03) {
+        return sky;
+    }
+    let below = (rt_sh(l) / LK_PI) * env_i * mix(vec3<f32>(0.62, 0.68, 0.76), vec3<f32>(0.42, 0.56, 0.88), night_w);
+    return mix(below, sky, smoothstep(-0.04, 0.03, l.y));
+}
+
 // ---------------------------------------------------------------------------
 // Stage 1: trace. Writes rr_out_a (the reflected radiance, a the hit
 // distance) and rr_out_b (normal, view depth; RR_NONE where nothing traced).
@@ -140,12 +202,14 @@ fn rr_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         rad = rt_hit_light(hit, o, l, rr.params.z, 2.0 * rr.fwd.w);
         t = hit.t;
     } else {
-        rad = lk_sky_sample(l) * gd.a;
+        rad = rr_miss_sky(l, rough, gd.a);
     }
-    if (rough >= RR_MIRROR) {
-        // a rough lobe's sample: its luminance held under the clamp (fireflies).
-        let y = lk_luma(rad);
-        rad = rad * min(1.0, rr.limits.w / max(y, 1e-6));
+    // Exposure-aware firefly suppression (tighter on rough stochastic lobes, generous safety ceiling on mirrors).
+    let exp_cap = min(rr.limits.w, 8.0 / max(look.key.w, 0.15));
+    let cap = select(exp_cap * 3.0, exp_cap, rough >= RR_MIRROR);
+    let y = lk_luma(rad);
+    if (y > cap) {
+        rad = rad * (cap / max(y, 1e-6));
     }
     textureStore(rr_out_a, hp, vec4<f32>(rad, t));
     textureStore(rr_out_b, hp, vec4<f32>(n, vd));
@@ -205,6 +269,27 @@ fn rr_temporal(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (wsum > 0.05) {
                 hist = hist / wsum;
                 mom = mom / wsum;
+                // 3x3 variance-guided neighborhood clamp on rough reflections to kill disocclusion trails & fireflies.
+                var m1 = vec3<f32>(0.0);
+                var m2 = vec3<f32>(0.0);
+                var cnt = 0.0;
+                for (var dy = -1; dy <= 1; dy++) {
+                    for (var dx = -1; dx <= 1; dx++) {
+                        let nq = clamp(hp + vec2<i32>(dx, dy), vec2<i32>(0), dims - 1);
+                        let ng = textureLoad(rr_in_b, nq, 0);
+                        if (ng.w >= 0.0 && abs(ng.w - g.w) < 0.06 * g.w + 0.25 && dot(ng.xyz, g.xyz) > 0.85) {
+                            let s = textureLoad(rr_in_a, nq, 0).rgb;
+                            m1 = m1 + s;
+                            m2 = m2 + s * s;
+                            cnt = cnt + 1.0;
+                        }
+                    }
+                }
+                if (cnt >= 3.0) {
+                    let mean = m1 / cnt;
+                    let sigma = sqrt(max(m2 / cnt - mean * mean, vec3<f32>(0.0)));
+                    hist = vec4<f32>(clamp(hist.rgb, max(mean - sigma * 2.25, vec3<f32>(0.0)), mean + sigma * 2.25), hist.a);
+                }
             } else {
                 hist = vec4<f32>(0.0);
                 mom = vec4<f32>(0.0);

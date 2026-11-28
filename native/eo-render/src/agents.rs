@@ -316,16 +316,32 @@ pub fn car_lamps_wgsl() -> String {
 /// compiled out: the full ground lobe below them, the sunlit street's bounce
 /// under a deck), brighter than a deck's shade round them.
 fn agents_city_source() -> String {
-    let mut src = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
     let f = crate::look::shader_features();
+    // Building-only `// sf:AAA_BUILDINGS+` blocks in `look_light.wgsl` (roof roughness,
+    // skyline-field shadows/reflections, facade bounce) never apply to vehicles or people;
+    // stripping them keeps `agent-opaque` below Apple Metal's MTLCompilerService IR limit
+    // under `--play` (`--quality high --structures --tunnels --car-finish`) while buildings,
+    // skyline, and HLOD keep full `AAA_ALL`.
+    let mut ag_f = f;
+    ag_f.aaa_buildings = 0;
+    let mut src = crate::look::with_shader_features(ag_f, || {
+        crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false)
+    });
     if f.car_finish && f.tunnels {
         // (round 2 integration) the cars' finish (`--car-finish`) with the bores (`--tunnels`)
         // and the light track's agents' code (the penumbra looked up first, the occluder light)
         // was more than Apple's compiler takes (agent-opaque, XPC_ERROR_CONNECTION_INTERRUPTED,
         // deterministic; aaa/vehicles alone builds it, with aaa/light merged it aborts): there
         // the cars and people keep the tent and the occluder light's stand-in, as they did
-        // before round 2 (the city keeps both).
+        // before round 2 (the city keeps both), and leave `SF_AAA_BRDF` / `SF_AAA_CLOUD_REFL`
+        // off in `agents_draw.wgsl` since `--car-materials` / `--car-finish` already shade cars.
         return src.replacen("const LK_SHADOW_SOFT: bool = true;", "const LK_SHADOW_SOFT: bool = false;", 1).replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+    }
+    if f.aaa_buildings & crate::look::AAA_BRDF != 0 {
+        src = src.replacen("const SF_AAA_BRDF: bool = false;", "const SF_AAA_BRDF: bool = true;", 1);
+    }
+    if f.aaa_buildings & crate::look::AAA_CLOUD_REFL != 0 {
+        src = src.replacen("const SF_AAA_CLOUD_REFL: bool = false;", "const SF_AAA_CLOUD_REFL: bool = true;", 1);
     }
     if f.soft_shadows {
         src = src.replacen("const LK_SUN_PRE: bool = false;", "const LK_SUN_PRE: bool = true;", 1);
@@ -1106,12 +1122,12 @@ impl AgentsGpu {
             lamp_tail: self.lamps.0,
             lamp_head: self.lamps.1,
             lamp_misc: [night, self.lamps.2, seconds.rem_euclid(3600.0) as f32, 0.0],
-            // before the shadows the cascades, and the camera only
+            // before the shadows only the cascades refreshed this frame, and the camera only
             // without an occlusion pass this frame.
             // y: (`--car-materials`) the cars' materials' level (agents_draw.wgsl `ag_car_on`; 0 as before).
             // z: (`--car-lamps`) bit 0, (`--car-wet`) bit 1, (`--car-finish`) bit 2 (agents_draw.wgsl `ag_car_lamps_on`, `ag_car_wet_on`, `ag_car_finish_on`; 0 as before).
             // w: corridor boxes to the far plane (agents_cull.wgsl).
-            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, look.options.car_materials as u32, (look.options.car_lamps > 0) as u32 | ((look.options.car_wet > 0) as u32) << 1 | ((look.options.car_finish > 0) as u32) << 2, 1],
+            misc: [((look.encoded_shadow_mask() & 0b111) << 1) | if self.camera_late.load(Ordering::Relaxed) { 0 } else { 1 }, look.options.car_materials as u32, (look.options.car_lamps > 0) as u32 | ((look.options.car_wet > 0) as u32) << 1 | ((look.options.car_finish > 0) as u32) << 2, 1],
             view_proj: vp.to_cols_array_2d(),
         };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
@@ -1140,10 +1156,20 @@ impl AgentsGpu {
             return;
         }
         let ts = self.timing.lock().unwrap().clone();
+        let mask = look.encoded_shadow_mask();
+        let list: Vec<usize> = (0..3).filter(|c| mask & (1 << c) != 0).collect();
+        let cam_late = self.camera_late.load(Ordering::Relaxed);
         enc.clear_buffer(&self.counts, 0, None);
         enc.clear_buffer(&self.hist, 0, None);
         enc.clear_buffer(&self.stats, 0, None);
-        {
+        if list.is_empty() && cam_late {
+            if let Some((q, b)) = &ts {
+                enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("agents-cull (none this frame)"),
+                    timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(*b), end_of_pass_write_index: Some(*b + 1) }),
+                });
+            }
+        } else {
             let tw = ts.as_ref().map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(*b), end_of_pass_write_index: Some(*b + 1) });
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("agents-cull"), timestamp_writes: tw });
             pass.set_bind_group(0, &self.cull_bg, &[]);
@@ -1153,9 +1179,7 @@ impl AgentsGpu {
                 pass.dispatch_workgroups(if k == 1 || k == 3 { 1 } else { groups }, 1, 1);
             }
         }
-        let mask = look.encoded_shadow_mask();
         let layers = look.shadow_layer_views();
-        let list: Vec<usize> = (0..3).filter(|c| mask & (1 << c) != 0).collect();
         let m = self.mesh_count as u64;
         if list.is_empty() {
             if let Some((q, b)) = &ts {
@@ -1515,6 +1539,16 @@ mod tests {
         assert!(soft(&city) && ol(&city), "the city keeps the penumbra and the occluder light");
         let s = src(crate::look::ShaderFeatures { tunnels: false, structures: true, ..fb });
         assert!(soft(&s) && pre(&s) && ol(&s), "without the bores the finish keeps the light track's agents' code");
+        // (`--aaa-buildings`) building-only AAA blocks are stripped from `agents_city_source`;
+        // under `car_finish && tunnels`, `SF_AAA_BRDF` / `SF_AAA_CLOUD_REFL` stay off on agents
+        // while the city keeps full `AAA_ALL`.
+        let fb_aaa = crate::look::ShaderFeatures { aaa_buildings: crate::look::AAA_ALL, ..fb };
+        let s_aaa = src(fb_aaa);
+        assert!(s_aaa.contains("const SF_AAA_BUILDINGS: bool = false;") && s_aaa.contains("const SF_AAA_BRDF: bool = false;") && s_aaa.contains("const SF_AAA_CLOUD_REFL: bool = false;"));
+        let city_aaa = crate::look::with_shader_features(fb_aaa, crate::look::city_shader_source);
+        assert!(city_aaa.contains("const SF_AAA_BUILDINGS: bool = true;") && city_aaa.contains("const SF_AAA_BRDF: bool = true;") && city_aaa.contains("const SF_AAA_SKYLINE_FIELD: bool = true;"));
+        let s_no_bore = src(crate::look::ShaderFeatures { tunnels: false, ..fb_aaa });
+        assert!(s_no_bore.contains("const SF_AAA_BRDF: bool = true;") && s_no_bore.contains("const SF_AAA_CLOUD_REFL: bool = true;") && s_no_bore.contains("const SF_AAA_SKYLINE_FIELD: bool = false;"));
     }
 
     /// (`--people-capsules`) the shader's joints are eo-agents' capsule joints, in order.

@@ -5,9 +5,11 @@
 //!
 //! WHAT IT BUILDS, AND FROM WHICH RULES
 //!
-//!   lanes      Every vehicle way split at the vertices it shares with another
-//!              way. Lane count from the `lanes` tag (one each way, or one, when
-//!              untagged); right-hand traffic; lane width the class model the
+//!   lanes      Every vehicle way split at shared surveyed vertices and at
+//!              drawn junctions that the simplified survey omits. Use the
+//!              paved through lanes where a section fits, or the
+//!              `lanes` tag (one each way, or one, when untagged); right-hand
+//!              traffic; fallback lane width the class model the
 //!              renderer slice already uses (`classLaneWidthOf`: the 10 ft SF
 //!              lane, the HDM State-route lanes) through `caMetric`; driven
 //!              polylines offset through the node as `junctionLanePoints` draws
@@ -32,21 +34,25 @@
 //!
 //! WHAT IT DOES NOT HAVE that the JS window has: the surveyed kerb-to-kerb
 //! widths and lane layouts of `sf-data.js` (bike lanes, parking lanes, turn
-//! bays, centre turn lanes), painted lane-use arrows, the drawn junction pads
-//! and corner fillets the JS stop bars and kerb trims are measured on, and the
-//! at-grade junction normalisation of the source connectivity. Those belong to
-//! the streets worker's geometry; when it lands, this builder should read its
-//! cross sections instead of the class model.
+//! bays, centre turn lanes) and lane-use arrows throughout the city. When
+//! supplied, the street plan provides paved cross sections and junction pads.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::Result;
-use eo_data::sim_source::{Oneway, SimRoad, SimSource};
+use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficDeckLane, TrafficDeckSurface, TrafficPlan, TrafficSection, TrafficStop};
 
+use crate::consts::{PERSON_CAPSULE_R_M, WALKER_LATERAL_LIMIT_M};
 use crate::geom::{self, LaneRole, P2};
 use crate::network::*;
 use crate::signals::{AxisInput, JunctionInput, MemberInput, cluster_axes};
 use crate::standards::{SignalTiming, StreetDims};
+
+mod junctions;
+mod stops;
+mod surveyed_routes;
+mod walk_gaps;
 
 /// `SIGNAL_TIMING.JUNCTION_NODE_MAX_M`, `SPLIT_JUNCTION_M`, `APPROACH_MIN_CLOSURE_M`.
 const JUNCTION_NODE_MAX_M: f64 = 25.0;
@@ -55,11 +61,14 @@ const APPROACH_MIN_CLOSURE_M: f64 = 5.5;
 
 pub struct NativeSource {
     roads: Vec<SimRoad>,
+    collapsed_roads: HashMap<String, SimRoad>,
+    surveyed_routes: Option<surveyed_routes::Routes>,
     signals: Vec<P2>,
     road_tiles: HashMap<TileKey, Vec<u32>>,
     signal_tiles: HashMap<TileKey, Vec<u32>>,
     pub dims: StreetDims,
     pub timing: SignalTiming,
+    model_footprints: Option<std::sync::Arc<crate::vehicle_catalogue::ScaleReport>>,
     /// Structure level by OSM way id (`SimRoad::id`), from whoever builds the
     /// grade-separated roads (eo-app's `--structures`: the structures'
     /// `StructureWorld::way_levels`). Empty (every lane at grade, the
@@ -76,6 +85,18 @@ pub struct NativeSource {
     /// footways stand on the drawn walks and stop at the drawn kerbs. None:
     /// the class model's, as before.
     sections: Option<std::sync::Arc<SectionIndex>>,
+    /// Paved cross-sections keyed by the source OSM way, for traffic and walks.
+    traffic_sections: HashMap<String, Vec<TrafficSection>>,
+    walk_gaps: HashMap<String, Vec<walk_gaps::WalkGap>>,
+    walk_lane_clearance: Option<walk_gaps::WalkLaneClearance>,
+    junctions: junctions::DrawnJunctions,
+    stops: stops::StopIndex,
+    /// Neighboring one-way carriageways that may cut into a median walk.
+    divided_pavement: HashMap<String, DividedPavement>,
+    deck_surfaces: HashMap<String, Vec<Vec<[f64; 3]>>>,
+    deck_lanes: HashMap<String, Vec<TrafficDeckLane>>,
+    passing: bool,
+    bend_braking: bool,
     /// The mapped crosswalks (`--crowd`; `with_crossings`): an unsignalled
     /// street is crossed only where one is mapped. None: wherever the JS
     /// crosses (every junction), as before.
@@ -105,19 +126,112 @@ struct SectionIndex {
     cells: HashMap<(i32, i32), Vec<u32>>,
 }
 
+struct DividedPavement {
+    strips: SectionIndex,
+    /// Source way of each indexed strip.
+    ways: Vec<String>,
+}
+
 /// How far a drawn centreline may stand from the simulation's (the same OSM
 /// line, merged and re-split by the street planner), and how parallel it
 /// must run (cos of 20 degrees), to stand for it.
 const SECTION_MATCH_M: f64 = 3.0;
+/// Registration tolerance at the built structure's mouth, whose asphalt
+/// fan uses f32 vertices and a separate crown from the deck profile.
+const STRUCTURE_MOUTH_MATCH_M: f64 = 0.05;
 const SECTION_MATCH_COS: f64 = 0.94;
+/// Maximum change in lateral registration across the samples for a match.
+const SECTION_REGISTER_VARIATION_M: f64 = 0.15;
 /// A walk's sample spacing against the drawn carriageways (m).
 const PATH_SAMPLE_M: f64 = 1.0;
+const WALK_CLEARANCE_M: f64 = WALKER_LATERAL_LIMIT_M + PERSON_CAPSULE_R_M;
+
+struct PavedMatch<'a> {
+    section: &'a TrafficSection,
+    /// Displacement from the mapped centreline along its (dz, -dx) normal.
+    lateral: f64,
+    reversed: bool,
+    drawn_chord: Option<[P2; 2]>,
+}
+
+#[derive(Default)]
+struct PavedRegistration<'a> {
+    profile: Option<PavedMatch<'a>>,
+    uses_shared_lane: bool,
+}
+
+impl PavedMatch<'_> {
+    fn walks(&self) -> [f64; 2] {
+        let [left, right] = self.section.walks;
+        if self.reversed { [left, right] } else { [right, left] }
+    }
+
+    fn direction(&self, decreasing: bool) -> i8 {
+        let orientation = if self.reversed { -1 } else { 1 };
+        if decreasing { -orientation } else { orientation }
+    }
+
+    fn lane_counts(&self, mapped_forward: u32, mapped_backward: u32) -> Option<(u32, u32)> {
+        let forward = self.section.lanes.iter()
+            .filter(|lane| lane.direction == self.direction(false))
+            .count();
+        let backward = self.section.lanes.len() - forward;
+        // Use the through lanes that actually fit on the paved cross-section.
+        // The mapped direction still owns which way traffic can legally travel.
+        ((forward > 0) == (mapped_forward > 0) && (backward > 0) == (mapped_backward > 0))
+            .then_some((forward as u32, backward as u32))
+    }
+
+    fn lane(&self, decreasing: bool, index: u32) -> Option<(f64, f64)> {
+        let direction = self.direction(decreasing);
+        let mut lanes = self.section.lanes.iter().filter(|lane| lane.direction == direction);
+        // Keep the native lane key ordering, using the authored point order.
+        let lane = if direction > 0 {
+            lanes.rev().nth(index as usize)?
+        } else {
+            lanes.nth(index as usize)?
+        };
+        Some((self.lateral + lane.lateral * f64::from(self.direction(false)), lane.width))
+    }
+
+    fn passing_span(&self, pts: &[P2], decreasing: bool) -> Option<[f64; 2]> {
+        let [lo, hi] = self.section.paint_span?;
+        let painted = &self.section.points;
+        let painted_cum = geom::cumulative(painted);
+        let painted_len = *painted_cum.last()?;
+        let [a, b] = if decreasing { [*pts.last()?, pts[0]] } else { [pts[0], *pts.last()?] };
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let len = dx.hypot(dz);
+        // A lane change on this chord stays in the two painted lane ribbons.
+        if self.section.crosses_road || pts.len() != 2 || painted.len() != 2
+            || !(0.0 <= lo && lo < hi && hi <= painted_len && len > 0.0)
+        {
+            return None;
+        }
+        let mut span = [lo, hi].map(|s| {
+            let (x, z, _, _, _) = geom::at_arc(painted, &painted_cum, s);
+            (((x - a[0]) * dx + (z - a[1]) * dz) / len).clamp(0.0, len)
+        });
+        span.sort_by(f64::total_cmp);
+        (span[0] < span[1]).then_some(span)
+    }
+
+    fn broken_divider(&self, decreasing: bool, a: f64, b: f64) -> bool {
+        let middle = ((a + b) / 2.0 - self.lateral) * f64::from(self.direction(false));
+        self.section.paint.iter().any(|mark| mark.divider == self.direction(decreasing)
+            && mark.broken && !mark.yellow && (mark.lateral - middle).abs() <= mark.width / 2.0)
+    }
+}
 
 impl SectionIndex {
     fn new(pieces: Vec<DrawnSection>) -> Self {
+        Self::with_margin(pieces, 0.0)
+    }
+
+    fn with_margin(pieces: Vec<DrawnSection>, margin: f64) -> Self {
         let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
         for (i, p) in pieces.iter().enumerate() {
-            let r = SECTION_MATCH_M.max(p.half);
+            let r = SECTION_MATCH_M.max(p.half + margin);
             let lo = front_cell(p.a[0].min(p.b[0]) - r, p.a[1].min(p.b[1]) - r);
             let hi = front_cell(p.a[0].max(p.b[0]) + r, p.a[1].max(p.b[1]) + r);
             for cx in lo.0..=hi.0 {
@@ -179,16 +293,7 @@ impl SectionIndex {
     /// Whether (x, z) lies on a drawn carriageway (within a piece's half width).
     fn on_carriageway(&self, x: f64, z: f64) -> bool {
         self.cells.get(&front_cell(x, z)).is_some_and(|list| {
-            list.iter().any(|&k| {
-                let p = &self.pieces[k as usize];
-                let (dx, dz) = (p.b[0] - p.a[0], p.b[1] - p.a[1]);
-                let l2 = dx * dx + dz * dz;
-                if l2 < 1e-12 {
-                    return false;
-                }
-                let t = ((x - p.a[0]) * dx + (z - p.a[1]) * dz) / l2;
-                (0.0..=1.0).contains(&t) && geom::hypot(p.a[0] + dx * t - x, p.a[1] + dz * t - z) < p.half
-            })
+            list.iter().any(|&k| self.pieces[k as usize].covers([x, z], 0.0))
         })
     }
 
@@ -196,39 +301,121 @@ impl SectionIndex {
     /// `PATH_SAMPLE_M`: each run keeps the polyline's vertices off them and
     /// ends at its last sample before one).
     fn off_carriageway(&self, pts: &[P2]) -> Vec<Vec<P2>> {
-        let mut runs: Vec<Vec<P2>> = vec![];
-        let mut cur: Vec<P2> = vec![];
-        for w in pts.windows(2) {
-            let (a, b) = (w[0], w[1]);
-            let l = geom::hypot(b[0] - a[0], b[1] - a[1]);
-            let n = (l / PATH_SAMPLE_M).ceil().max(1.0) as usize;
-            let at = |k: usize| {
-                let t = k as f64 / n as f64;
-                [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
-            };
-            for k in 0..=n {
-                let q = at(k);
-                if self.on_carriageway(q[0], q[1]) {
-                    if cur.len() >= 2 {
-                        runs.push(std::mem::take(&mut cur));
-                    } else {
-                        cur.clear();
-                    }
-                    continue;
+        walk_runs(pts, |p, _, _, _| self.on_carriageway(p[0], p[1]))
+            .into_iter().map(|run| run.points).collect()
+    }
+}
+
+impl DrawnSection {
+    fn covers(&self, [x, z]: P2, margin: f64) -> bool {
+        let (dx, dz) = (self.b[0] - self.a[0], self.b[1] - self.a[1]);
+        let l2 = dx * dx + dz * dz;
+        if l2 < 1e-12 {
+            return false;
+        }
+        let t = ((x - self.a[0]) * dx + (z - self.a[1]) * dz) / l2;
+        (0.0..=1.0).contains(&t)
+            && geom::hypot(self.a[0] + dx * t - x, self.a[1] + dz * t - z) < self.half + margin
+    }
+}
+
+struct WalkRun {
+    points: Vec<P2>,
+    start: f64,
+    end: f64,
+}
+
+fn walk_runs(pts: &[P2], blocked: impl Fn(P2, P2, usize, f64) -> bool) -> Vec<WalkRun> {
+    let mut runs = Vec::new();
+    let mut cur = Vec::<P2>::new();
+    let mut start = 0.0;
+    let mut end = 0.0;
+    let mut arc = 0.0;
+    for (piece, w) in pts.windows(2).enumerate() {
+        let (a, b) = (w[0], w[1]);
+        let heading = [b[0] - a[0], b[1] - a[1]];
+        let l = geom::hypot(heading[0], heading[1]);
+        let n = (l / PATH_SAMPLE_M).ceil().max(1.0) as usize;
+        let at = |k: usize| {
+            let t = k as f64 / n as f64;
+            ([a[0] + heading[0] * t, a[1] + heading[1] * t], t)
+        };
+        let blocked = |(p, t)| blocked(p, heading, piece, t);
+        for k in 0..=n {
+            let (q, t) = at(k);
+            if blocked((q, t)) {
+                if cur.len() >= 2 {
+                    runs.push(WalkRun { points: std::mem::take(&mut cur), start, end });
+                } else {
+                    cur.clear();
                 }
-                let last = cur.last().copied();
-                let fresh = last.is_none_or(|p| geom::hypot(p[0] - q[0], p[1] - q[1]) > 1e-6);
-                let edge = k == 0 || k == n || cur.is_empty() || (k < n && { let r = at(k + 1); self.on_carriageway(r[0], r[1]) });
-                if fresh && edge {
-                    cur.push(q);
+                continue;
+            }
+            let fresh = cur.last().is_none_or(|p| geom::hypot(p[0] - q[0], p[1] - q[1]) > 1e-6);
+            let edge = k == 0 || k == n || cur.is_empty() || blocked(at(k + 1));
+            if fresh && edge {
+                end = arc + l * (k as f64 / n as f64);
+                if cur.is_empty() {
+                    start = end;
                 }
+                cur.push(q);
             }
         }
-        if cur.len() >= 2 {
-            runs.push(cur);
-        }
-        runs
+        arc += l;
     }
+    if cur.len() >= 2 {
+        runs.push(WalkRun { points: cur, start, end });
+    }
+    runs
+}
+
+impl DividedPavement {
+    fn covers_sidewalk(&self, road: &SimRoad, levels: &HashMap<String, i8>, p: P2, [dx, dz]: P2) -> bool {
+        let direction = if road.oneway == Oneway::Reverse { -1.0 } else { 1.0 };
+        self.strips.cells.get(&front_cell(p[0], p[1])).is_some_and(|indices| {
+            indices.iter().any(|&i| {
+                let other = &self.ways[i as usize];
+                let strip = &self.strips.pieces[i as usize];
+                let dot = dx * (strip.b[0] - strip.a[0]) + dz * (strip.b[1] - strip.a[1]);
+                other != &road.id && dot * direction < 0.0
+                    && levels.get(other).copied().unwrap_or_default() == 0
+                    && strip.covers(p, WALK_CLEARANCE_M)
+            })
+        })
+    }
+}
+
+/// Keep the original junction connection wherever the sidewalk still reaches
+/// its kerb or the eligible crossing band beside it.
+fn sidewalk_parts(footway: FootwayBuild, runs: Vec<WalkRun>) -> Vec<(FootwayBuild, [bool; 2])> {
+    let length = geom::cumulative(&footway.points).last().copied().unwrap_or_default();
+    let trim = footway.ends[0].kerb_trim + footway.ends[1].kerb_trim;
+    if runs.len() == 1 && runs[0].start == 0.0 && runs[0].end == length {
+        return if length > trim { vec![(footway, [true; 2])] } else { Vec::new() };
+    }
+    runs.into_iter().enumerate().filter_map(|(i, run)| {
+        let mut part = FootwayBuild { points: run.points, original_arc_start: Some(run.start), ..footway.clone() };
+        let removed = [run.start, length - run.end];
+        let retain = std::array::from_fn(|e| {
+            let end = &part.ends[e];
+            let band = if e == 0 { end.crossing_arc } else { length - end.crossing_arc };
+            removed[e] <= end.kerb_trim || (!end.no_crossing && (run.start..=run.end).contains(&band))
+        });
+        for e in 0..2 {
+            let end = &mut part.ends[e];
+            if retain[e] {
+                end.kerb_trim = (end.kerb_trim - removed[e]).max(0.0);
+                end.crossing_arc = (end.crossing_arc - removed[e]).max(0.0);
+            } else {
+                // An interior cut is a dead end. Its key cannot join a
+                // neighboring sidewalk or a coincident crossing node.
+                *end = FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: true, zebra_only: false };
+                part.node_keys.as_mut().unwrap()[e] = format!("{}:walk:{}:{i}:{e}", part.segment, part.road_side);
+            }
+        }
+        let trims = part.ends[0].kerb_trim + part.ends[1].kerb_trim;
+        (run.end - run.start > trims).then_some((part, retain))
+    }).collect()
 }
 
 /// The mapped crosswalks' middles on a grid of `FRONT_CELL_M` cells.
@@ -535,16 +722,52 @@ struct Seg {
     road: u32,
     key: String,
     pts: Vec<P2>,
+    nodes: [P2; 2],
     half: f64,
     lane_w: f64,
     forward: u32,
     backward: u32,
 }
 
+struct LaneMeta {
+    seg: usize,
+    end: P2,
+    reverse: bool,
+}
+
+fn is_divided_candidate(road: &SimRoad) -> bool {
+    !road.name.is_empty() && road.oneway != Oneway::Both && !road.bridge && !road.tunnel && road.layer == 0
+}
+
+/// The street planner may orient a merged strip against its source way.
+fn along_traffic([a, b]: [P2; 2], road: &SimRoad) -> [P2; 2] {
+    let mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+    let source = road.points.windows(2).min_by(|p, q| {
+        seg_nearest(p[0], p[1], mid[0], mid[1]).0.total_cmp(&seg_nearest(q[0], q[1], mid[0], mid[1]).0)
+    }).unwrap();
+    let dot = (b[0] - a[0]) * (source[1][0] - source[0][0]) + (b[1] - a[1]) * (source[1][1] - source[0][1]);
+    if (dot < 0.0) == (road.oneway == Oneway::Reverse) { [a, b] } else { [b, a] }
+}
+
 impl NativeSource {
     pub fn new(source: SimSource, dims: StreetDims, timing: SignalTiming) -> Self {
-        let roads: Vec<SimRoad> =
-            source.roads.into_iter().filter(|r| vehicle_way(&r.highway) && r.points.len() >= 2).collect();
+        let mut roads = Vec::new();
+        let mut collapsed_roads = HashMap::new();
+        for road in source.roads {
+            if !vehicle_way(&road.highway) || road.points.len() < 2 {
+                continue;
+            }
+            // Simplification can collapse a one-way circuit into a chord
+            // traversed twice. Its line cannot determine either carriageway
+            // or kerb, and joining it would create phantom movements.
+            let collapsed_loop = road.oneway != Oneway::Both
+                && matches!(road.points.as_slice(), [start, _, end] if start == end);
+            if collapsed_loop {
+                collapsed_roads.insert(road.id.clone(), road);
+            } else {
+                roads.push(road);
+            }
+        }
         let mut road_tiles: HashMap<TileKey, Vec<u32>> = HashMap::new();
         for (i, r) in roads.iter().enumerate() {
             for t in tiles_of_polyline(&r.points) {
@@ -555,7 +778,297 @@ impl NativeSource {
         for (i, s) in source.signals.iter().enumerate() {
             signal_tiles.entry(TileKey::of(s[0], s[1])).or_default().push(i as u32);
         }
-        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new(), frontage: None, paths: vec![], path_tiles: HashMap::new(), sections: None, crossings: None, zebras: None }
+        NativeSource { roads, collapsed_roads, surveyed_routes: None, signals: source.signals, road_tiles, signal_tiles, dims, timing, model_footprints: None, levels: HashMap::new(), frontage: None, paths: vec![], path_tiles: HashMap::new(), sections: None, traffic_sections: HashMap::new(), walk_gaps: HashMap::new(), walk_lane_clearance: None, junctions: Default::default(), stops: Default::default(), divided_pavement: HashMap::new(), deck_surfaces: HashMap::new(), deck_lanes: HashMap::new(), passing: true, bend_braking: false, crossings: None, zebras: None }
+    }
+
+    pub fn with_model_footprints(mut self, report: std::sync::Arc<crate::vehicle_catalogue::ScaleReport>) -> Self {
+        self.model_footprints = Some(report);
+        self
+    }
+
+    /// Build a network whose vehicle IDs select the same models as the game feed.
+    pub fn new_network(&self) -> crate::Network {
+        let net = crate::Network::new(self.timing.clone());
+        match &self.model_footprints {
+            Some(report) => net.with_model_footprints(report.clone(), Some(crate::vehicle_catalogue::RENDERED_SEED)),
+            None => net,
+        }
+    }
+
+    pub fn with_bend_braking(mut self, enabled: bool) -> Self {
+        self.bend_braking = enabled;
+        self
+    }
+
+    pub fn with_passing(mut self, passing: bool) -> Self {
+        self.passing = passing;
+        self
+    }
+
+    pub fn with_stops(mut self, stops: Vec<TrafficStop>) -> Self {
+        self.stops = stops::StopIndex::new(stops);
+        self
+    }
+
+    /// Heights of the drawn structures, keyed like their traffic level table.
+    pub fn with_deck_surfaces(mut self, surfaces: Vec<TrafficDeckSurface>) -> Self {
+        self.deck_surfaces.clear();
+        self.deck_lanes.clear();
+        for surface in surfaces {
+            if !surface.lanes.is_empty() && surface.lanes.iter().all(|lane| {
+                lane.width.is_finite() && lane.width > 0.0 && lane.points.len() >= 2
+                    && lane.points.iter().flatten().all(|v| v.is_finite())
+            }) {
+                self.deck_lanes.insert(surface.way.clone(), surface.lanes);
+            }
+            if surface.points.len() >= 2 && surface.points.iter().flatten().all(|v| v.is_finite()) {
+                self.deck_surfaces.entry(surface.way).or_default().push(surface.points);
+            }
+        }
+        self
+    }
+
+    /// Register survey samples to the drive arc for this portion of their
+    /// own source way. At a shared end keep the nearest sample from that way.
+    fn lane_surface(
+        &self, road: &SimRoad, points: &[P2], reach: f64, pads: &[Option<Arc<JunctionSurface>>; 2],
+    ) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
+        let deck = self.deck_surfaces.get(&road.id).filter(|_| self.level_of(road) != 0);
+        let street = self.traffic_sections.get(&road.id).filter(|_| self.level_of(road) == 0);
+        if deck.is_none() && street.is_none() {
+            return Default::default();
+        }
+        let cum = geom::cumulative(points);
+        let mut heights = Vec::new();
+        let mut register = |&[x, y, z]: &[f64; 3]| {
+            if ![x, y, z].iter().all(|p| p.is_finite()) {
+                return None;
+            }
+            let best = points.windows(2).zip(&cum).map(|(segment, &start)| {
+                let (dist, p) = seg_nearest(segment[0], segment[1], x, z);
+                let arc = start + (p[0] - segment[0][0]).hypot(p[1] - segment[0][1]);
+                (dist, arc)
+            }).min_by(|a, b| a.0.total_cmp(&b.0));
+            let (dist, arc) = best.filter(|(dist, _)| *dist <= reach)?;
+            heights.push((arc, dist, y));
+            Some(arc)
+        };
+        for sample in deck.into_iter().flatten().flatten() {
+            register(sample);
+        }
+        let mut carriageway = Vec::new();
+        let use_carriageway = pads.iter().any(Option::is_some);
+        for section in street.into_iter().flatten() {
+            if !use_carriageway || section.carriageway_spans.is_empty() {
+                for sample in &section.surface {
+                    register(sample);
+                }
+                continue;
+            }
+            let arcs: Vec<_> = section.surface.iter().map(&mut register).collect();
+            for &[lo, hi] in &section.carriageway_spans {
+                let Some(span) = arcs.get(lo..=hi) else { continue };
+                for run in span.split(|arc| arc.is_none()) {
+                    let range = run.iter().flatten().fold([f64::INFINITY, f64::NEG_INFINITY], |[lo, hi], &arc| {
+                        [lo.min(arc), hi.max(arc)]
+                    });
+                    if range[0] < range[1] {
+                        carriageway.push(range);
+                    }
+                }
+            }
+        }
+        heights.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        heights.dedup_by(|a, b| a.0 == b.0);
+        if heights.len() < 2 {
+            return Default::default();
+        }
+        let length = cum[cum.len() - 1];
+        let ends = [heights[0].0, heights[heights.len() - 1].0];
+        for (i, end) in [0.0, length].into_iter().enumerate() {
+            if (end - ends[i]).abs() <= reach {
+                continue;
+            }
+            // A deck or trimmed street can end at the drawn mouth while
+            // its lane continues into the pad. Require a single pad interval
+            // to reach both the end and the support samples on a street.
+            let joins_end = |[lo, hi]: [f64; 2]| (lo..=hi).contains(&end) && (lo - reach..=hi + reach).contains(&ends[i]);
+            let joined = pads[i].as_ref().is_some_and(|pad| {
+                if deck.is_some() {
+                    return pad.lane_span(points, &cum).is_some_and(joins_end);
+                }
+                !carriageway.is_empty() && pad.lane_intervals(points, &cum).into_iter().any(joins_end)
+            });
+            if !joined {
+                return Default::default();
+            }
+        }
+        (heights.into_iter().map(|(arc, _, y)| [arc, y]).collect(), carriageway)
+    }
+
+    /// Use the paved cross-sections of the same source ways.
+    pub fn with_traffic_sections(self, sections: Vec<TrafficSection>) -> Self {
+        self.with_traffic_plan(TrafficPlan { sections, ..Default::default() })
+    }
+
+    pub fn with_traffic_plan(mut self, plan: TrafficPlan) -> Self {
+        self.surveyed_routes = None;
+        self.traffic_sections.clear();
+        self.walk_gaps.clear();
+        let had_pads = self.junctions.has_pads();
+        self.junctions = junctions::DrawnJunctions::new(plan.junctions);
+        for mut section in plan.sections {
+            section.lanes.sort_by(|a, b| a.lateral.total_cmp(&b.lateral));
+            if section.half.is_finite() && section.half > 0.0
+                && section.lanes.iter().all(|lane| {
+                    matches!(lane.direction, -1 | 1) && lane.width.is_finite()
+                        && lane.width > 0.0 && lane.lateral.is_finite()
+                })
+            {
+                if section.walk_gaps.iter().any(|spans| !spans.is_empty()) {
+                    walk_gaps::WalkGap::extend(self.walk_gaps.entry(section.way.clone()).or_default(), &section);
+                }
+                self.traffic_sections.entry(section.way.clone()).or_default().push(section);
+            }
+        }
+        self.walk_lane_clearance = walk_gaps::WalkLaneClearance::from_plan(&self.roads, &self.traffic_sections);
+        let mut named: HashMap<&str, (Vec<DrawnSection>, Vec<String>)> = HashMap::new();
+        for road in self.roads.iter().filter(|r| is_divided_candidate(r)) {
+            let Some(sections) = self.traffic_sections.get(&road.id) else { continue };
+            let (strips, ways) = named.entry(&road.name).or_default();
+            for section in sections {
+                for edge in section.points.windows(2) {
+                    let [a, b] = along_traffic([edge[0], edge[1]], road);
+                    strips.push(DrawnSection { a, b, half: section.half, walks: section.walks });
+                    ways.push(road.id.clone());
+                }
+            }
+        }
+        self.divided_pavement = named.into_iter().filter_map(|(name, (strips, ways))| {
+            let multiple_ways = ways.first().is_some_and(|first| ways.iter().any(|way| way != first));
+            multiple_ways.then(|| (name.to_owned(), DividedPavement {
+                strips: SectionIndex::with_margin(strips, WALK_CLEARANCE_M), ways,
+            }))
+        }).collect();
+        if had_pads || self.junctions.has_pads() {
+            self.index_lane_roads();
+        }
+        if let Some(routes) = plan.surveyed_routes {
+            match surveyed_routes::Routes::compile(&self, routes) {
+                Ok(routes) => self.surveyed_routes = Some(routes),
+                Err(err) => eprintln!("surveyed traffic routes disabled: {err:#}"),
+            }
+        }
+        self
+    }
+
+    /// Compare the same paved graph using only its older divided-road cuts.
+    pub fn without_drawn_walk_gaps(mut self) -> Self {
+        self.walk_gaps.clear();
+        self.walk_lane_clearance = None;
+        self
+    }
+
+    fn junction_pad(&self, road: &SimRoad, node: P2, lane_end: P2) -> Option<Arc<JunctionSurface>> {
+        let structure = self.level_of(road) != 0 || road.bridge || road.tunnel;
+        let deck = self.deck_surfaces.get(&road.id);
+        let joins_deck = |pad: &JunctionSurface| {
+            deck.into_iter().flatten().any(|line| {
+                [line[0], line[line.len() - 1]].into_iter().any(|[x, y, z]| {
+                    pad.height_at_mouth([x, z], y).is_some_and(|h| (h - y).abs() <= STRUCTURE_MOUTH_MATCH_M)
+                })
+            })
+        };
+        let distance = |pad: &JunctionSurface| geom::hypot(node[0] - pad.position[0], node[1] - pad.position[1]);
+        self.junctions.pads(&road.id)?.iter()
+            .filter(|pad| pad.height_near(node, 0.0).is_some() || pad.height_near(lane_end, 0.0).is_some())
+            .filter(|pad| !structure || joins_deck(pad))
+            .min_by(|a, b| distance(a).total_cmp(&distance(b)))
+            .cloned()
+    }
+
+    fn paved_registration(&self, sim: &Seg) -> PavedRegistration<'_> {
+        let road = &self.roads[sim.road as usize];
+        // Freeway and ramp connectors belong to the structure alignment,
+        // including their at-grade ends.
+        if geom::freeway(&road.highway) || road.bridge || road.tunnel || road.layer != 0 || self.level_of(road) != 0 {
+            return PavedRegistration::default();
+        }
+        let Some(candidates) = self.traffic_sections.get(&road.id) else { return PavedRegistration::default() };
+        let cum = geom::cumulative(&sim.pts);
+        let mut samples: Vec<_> = [0.25, 0.5, 0.75].into_iter().filter_map(|fraction| {
+            let (x, z, dx, dz, _) = geom::at_arc(&sim.pts, &cum, fraction * cum.last()?);
+            let mut closest = None;
+            for section in candidates {
+                for edge in section.points.windows(2) {
+                    let [a, b] = [edge[0], edge[1]];
+                    let ux = b[0] - a[0];
+                    let uz = b[1] - a[1];
+                    let len = geom::hypot(ux, uz);
+                    if len < 1e-6 {
+                        continue;
+                    }
+                    let heading = (ux * dx + uz * dz) / len;
+                    let (distance, p) = seg_nearest(a, b, x, z);
+                    if heading.abs() < SECTION_MATCH_COS || distance > sim.half + section.half
+                        || closest.as_ref().is_some_and(|(d, _, _)| *d <= distance)
+                    {
+                        continue;
+                    }
+                    let along = ((x - a[0]) * ux + (z - a[1]) * uz) / len;
+                    closest = Some((distance, (0.0..=len).contains(&along), PavedMatch {
+                        section,
+                        lateral: (p[0] - x) * dz - (p[1] - z) * dx,
+                        reversed: heading < 0.0,
+                        drawn_chord: None,
+                    }));
+                }
+            }
+            closest.map(|(_, inside, sample)| (inside, sample))
+        }).collect();
+        // A registered shared lane remains shared when the segment also has
+        // a different cross-section or needs more than one lateral offset.
+        // Use samples inside the drawn run, without extending its ends.
+        let uses_shared_lane = samples.iter().any(|(inside, m)| *inside && m.section.shared_bidirectional);
+        let mut registration = PavedRegistration { profile: None, uses_shared_lane };
+        let [(_, first), ..] = samples.as_slice() else { return registration };
+        // A mapped segment may span a change in the paved cross-section.
+        // Keep its existing profile until the graph can represent that change.
+        if samples.len() != 3 || samples.iter().any(|(_, m)| m.reversed != first.reversed
+            || m.section.half != first.section.half || m.section.walks != first.section.walks
+            || m.section.shared_bidirectional != first.section.shared_bidirectional
+            || m.section.lanes != first.section.lanes)
+        {
+            return registration;
+        }
+        if samples.iter().any(|(_, m)| (m.lateral - first.lateral).abs() > SECTION_REGISTER_VARIATION_M) {
+            // A constant offset cannot register diverging chords. When
+            // the mapped lanes would reintroduce a lane that the pavement
+            // cannot fit, use the complete drawn one-way lane and keep its
+            // existing routing nodes.
+            if road.oneway == Oneway::Both
+                || first.section.lanes.len() != 1
+                || sim.forward + sim.backward <= 1
+                || first.lane_counts(sim.forward, sim.backward).is_none()
+                || !samples.iter().all(|(inside, m)| *inside && std::ptr::eq(first.section, m.section))
+            {
+                return registration;
+            }
+            let ([a, b], [p, q]) = (sim.pts.as_slice(), first.section.points.as_slice()) else {
+                return registration;
+            };
+            let [p, q] = if first.reversed { [q, p] } else { [p, q] };
+            let matching_end = |a: &P2, b: &P2| geom::hypot(a[0] - b[0], a[1] - b[1]) <= SECTION_MATCH_M;
+            if matching_end(a, p) && matching_end(b, q) {
+                registration.profile = Some(PavedMatch {
+                    section: first.section, lateral: 0.0, reversed: first.reversed, drawn_chord: Some([*p, *q]),
+                });
+            }
+            return registration;
+        }
+        samples.sort_by(|(_, a), (_, b)| a.lateral.total_cmp(&b.lateral));
+        registration.profile = Some(samples.swap_remove(1).1);
+        registration
     }
 
     /// The same source with the drawn street's cross-sections (`--crowd`):
@@ -627,7 +1140,26 @@ impl NativeSource {
     /// no footway. An empty table leaves everything as before.
     pub fn with_levels(mut self, levels: HashMap<String, i8>) -> Self {
         self.levels = levels;
+        if self.junctions.has_pads() {
+            self.index_lane_roads();
+        }
         self
+    }
+
+    fn index_lane_roads(&mut self) {
+        self.junctions.align_roads(&self.roads, &self.levels);
+        self.road_tiles.clear();
+        for (i, road) in self.roads.iter().enumerate() {
+            let mut tiles = tiles_of_polyline(&road.points);
+            if let Some(aligned) = self.junctions.road(&road.id) {
+                tiles.extend(aligned.nodes.iter().map(|p| TileKey::of(p[0], p[1])));
+                tiles.sort_unstable();
+                tiles.dedup();
+            }
+            for tile in tiles {
+                self.road_tiles.entry(tile).or_default().push(i as u32);
+            }
+        }
     }
 
     /// The level table (`with_levels`).
@@ -642,6 +1174,53 @@ impl NativeSource {
 
     pub fn road_count(&self) -> usize {
         self.roads.len()
+    }
+
+    /// Tiles indexed by the vehicle-road source, in reproducible sweep order.
+    pub fn vehicle_road_tiles(&self) -> Vec<TileKey> {
+        let mut tiles: Vec<_> = self.road_tiles.keys().copied().collect();
+        tiles.sort_unstable();
+        tiles
+    }
+
+    /// A lane is delivered with its downstream tile. Keep both ends of a
+    /// bridge resident wherever its span intersects the requested window.
+    pub fn resident_tiles(&self, x: f64, z: f64, radius: f64) -> Vec<TileKey> {
+        let mut tiles = tiles_around(x, z, radius);
+        let mut ends = Vec::new();
+        for tile in &tiles {
+            if let Some(roads) = self.road_tiles.get(tile) {
+                for &id in roads {
+                    let road = &self.roads[id as usize];
+                    if road.bridge && self.level_of(road) != 0 {
+                        let [a, b] = [road.points[0], road.points[road.points.len() - 1]];
+                        ends.extend([TileKey::of(a[0], a[1]), TileKey::of(b[0], b[1])]);
+                    }
+                }
+            }
+        }
+        tiles.extend(ends);
+        if let Some(routes) = self.active_surveyed_routes()
+            && tiles.iter().any(|tile| routes.tiles.contains(tile))
+        {
+            tiles.extend_from_slice(&routes.tiles);
+        }
+        tiles.sort_unstable();
+        tiles.dedup();
+        tiles
+    }
+
+    /// Surveyed connections spanning tile ownership arrive as one delivery.
+    pub fn delivery_tiles(&self, tile: TileKey) -> Vec<TileKey> {
+        if let Some(routes) = self.active_surveyed_routes().filter(|r| r.tiles.contains(&tile)) {
+            return routes.tiles.clone();
+        }
+        vec![tile]
+    }
+
+    fn active_surveyed_routes(&self) -> Option<&surveyed_routes::Routes> {
+        self.model_footprints.as_ref()?;
+        self.surveyed_routes.as_ref()
     }
 
     /// `classLaneWidthOf` (sf-data.js) through caMetric.
@@ -689,21 +1268,29 @@ impl NativeSource {
         }
         road_ids.sort_unstable();
         road_ids.dedup();
-        // Vertex degree over those roads.
-        let mut degree: HashMap<(i64, i64), u16> = HashMap::new();
-        for &r in &road_ids {
-            let pts = &self.roads[r as usize].points;
-            let mut seen: Vec<(i64, i64)> = pts.iter().map(|p| qkey(*p)).collect();
-            seen.sort_unstable();
-            seen.dedup();
-            for k in seen {
-                *degree.entry(k).or_default() += 1;
+        let splits = self.junctions.split_nodes();
+        let mut local_degree: HashMap<(i64, i64), u16> = HashMap::new();
+        if splits.is_none() {
+            // The raw-source mode uses degree over the delivered roads.
+            for &r in &road_ids {
+                let mut seen: Vec<_> = self.roads[r as usize].points.iter().map(|p| qkey(*p)).collect();
+                seen.sort_unstable();
+                seen.dedup();
+                for key in seen {
+                    *local_degree.entry(key).or_default() += 1;
+                }
             }
         }
+        let splits_at = |p| {
+            let key = qkey(p);
+            splits.map_or_else(|| local_degree.get(&key).copied().unwrap_or(0) >= 2, |nodes| nodes.contains(&key))
+        };
         // Split at shared vertices.
         let mut segs: Vec<Seg> = vec![];
         for &r in &road_ids {
             let road = &self.roads[r as usize];
+            let (points, nodes) = self.junctions.road(&road.id)
+                .map_or((&road.points, &road.points), |a| (&a.points, &a.nodes));
             let lane_w = self.lane_width(road);
             let n = road.lanes.unwrap_or(if road.oneway == Oneway::Both { 2 } else { 1 }).max(1);
             let (forward, backward) = match road.oneway {
@@ -714,29 +1301,59 @@ impl NativeSource {
             let half = (forward + backward) as f64 * lane_w / 2.0;
             let mut start = 0;
             let mut k = 0;
-            for i in 1..road.points.len() {
-                let last = i == road.points.len() - 1;
-                if last || degree.get(&qkey(road.points[i])).copied().unwrap_or(0) >= 2 {
-                    let pts: Vec<P2> = road.points[start..=i].to_vec();
+            for i in 1..points.len() {
+                let last = i == points.len() - 1;
+                if last || splits_at(nodes[i]) {
+                    let pts: Vec<P2> = points[start..=i].to_vec();
                     let len: f64 = pts.windows(2).map(|w| geom::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
-                    if len > 0.5 {
-                        segs.push(Seg { road: r, key: format!("n{}:{}", road.id, k), pts, half, lane_w, forward, backward });
+                    if len > junctions::MIN_SEGMENT_M {
+                        segs.push(Seg { road: r, key: format!("n{}:{}", road.id, k), pts, nodes: [nodes[start], nodes[i]], half, lane_w, forward, backward });
                         k += 1;
                     }
                     start = i;
                 }
             }
         }
-        let mut build = NetworkBuild { tiles: tiles.to_vec(), merge_max_lateral_m: self.dims.city_lane_m, ..Default::default() };
+        let mut build = NetworkBuild {
+            tiles: tiles.to_vec(),
+            merge_max_lateral_m: self.dims.city_lane_m,
+            following_time_gap_s: Some(self.dims.following_time_gap_s),
+            continuous_lane_heading: true,
+            bend_braking: self.bend_braking,
+            contain_walk_corners: !self.traffic_sections.is_empty(),
+            ..Default::default()
+        };
+        let paved: Vec<_> = segs.iter().map(|s| self.paved_registration(s)).collect();
         // Lanes, kept when their end node lies in the delivered tiles.
-        struct LaneMeta {
-            seg: usize,
-            end: P2,
-        }
         let mut metas: Vec<LaneMeta> = vec![];
         for (si, s) in segs.iter().enumerate() {
             let road = &self.roads[s.road as usize];
-            for (dir_decreasing, count) in [(false, s.forward), (true, s.backward)] {
+            // A single shared lane needs alternating traffic even where the
+            // raw road extract reports two lanes. Keep the narrower tagged
+            // case for plans exported before the shared role was recorded.
+            if paved[si].uses_shared_lane || paved[si].profile.as_ref().is_some_and(|p| {
+                p.section.shared_bidirectional
+                    || (road.oneway == Oneway::Both && road.lanes == Some(1)
+                        && p.section.lanes.is_empty() && p.section.half < s.half)
+            }) {
+                continue;
+            }
+            let (paved_lanes, forward, backward) = paved[si].profile.as_ref()
+                .and_then(|p| p.lane_counts(s.forward, s.backward).map(|(f, b)| (Some(p), f, b)))
+                .unwrap_or((None, s.forward, s.backward));
+            let centreline = paved_lanes.and_then(|p| p.drawn_chord.as_ref()).map_or(s.pts.as_slice(), |p| p.as_slice());
+            // Painted bridge tracks register to an entire one-way way. Keep
+            // the mapped endpoints for routing and tile ownership.
+            let road_nodes = self.junctions.road(&road.id).map_or(&road.points, |p| &p.nodes);
+            let deck_lanes = self.deck_lanes.get(&road.id).filter(|lanes| {
+                self.level_of(road) != 0 && road.oneway != Oneway::Both
+                    && lanes.len() == (forward + backward) as usize
+                    && s.nodes == [road_nodes[0], *road_nodes.last().unwrap()]
+            });
+            for (dir_decreasing, count) in [(false, forward), (true, backward)] {
+                let passing = paved_lanes.filter(|_| self.passing && count > 1)
+                    .and_then(|p| p.passing_span(centreline, dir_decreasing).map(|span| (p, span)));
+                let mut adjacent = None;
                 for k in 0..count {
                     let offset = if s.forward > 0 && s.backward > 0 {
                         (k as f64 + 0.5) * s.lane_w * if dir_decreasing { 1.0 } else { -1.0 }
@@ -745,15 +1362,53 @@ impl NativeSource {
                         let centred = (k as f64 - (count as f64 - 1.0) / 2.0) * s.lane_w;
                         if dir_decreasing { centred } else { -centred }
                     };
-                    let points = geom::junction_lane_points(&s.pts, offset, dir_decreasing);
+                    let (offset, mut width) = paved_lanes.and_then(|p| p.lane(dir_decreasing, k)).unwrap_or((offset, s.lane_w));
                     let (start_node, end_node) = if dir_decreasing {
-                        (s.pts[s.pts.len() - 1], s.pts[0])
+                        (s.nodes[1], s.nodes[0])
                     } else {
-                        (s.pts[0], s.pts[s.pts.len() - 1])
+                        (s.nodes[0], s.nodes[1])
                     };
                     let tile = TileKey::of(end_node[0], end_node[1]);
                     if !want.contains(&tile) {
                         continue;
+                    }
+                    let mut deck_surface = None;
+                    let points = if let Some(lane) = deck_lanes.and_then(|lanes| lanes.get(k as usize)) {
+                        width = lane.width;
+                        let mut points: Vec<_> = lane.points.iter().map(|&[x, _, z]| [x, z]).collect();
+                        let mut heights: Vec<_> = lane.points.iter().map(|p| p[1]).collect();
+                        if dir_decreasing {
+                            points.reverse();
+                            heights.reverse();
+                        }
+                        deck_surface = Some(geom::cumulative(&points).into_iter().zip(heights).map(|(s, y)| [s, y]).collect());
+                        points
+                    } else {
+                        geom::junction_lane_points(centreline, offset, dir_decreasing)
+                    };
+                    let index = build.lanes.len() as LaneId;
+                    let pads = [self.junction_pad(road, start_node, points[0]),
+                        self.junction_pad(road, end_node, points[points.len() - 1])];
+                    let (surface, carriageway) = deck_surface.map_or_else(
+                        || self.lane_surface(road, &points, s.half + SECTION_MATCH_M, &pads),
+                        |surface| (surface, Vec::new()),
+                    );
+                    if !surface.is_empty() {
+                        build.lane_surfaces.push((index, surface));
+                    }
+                    if !carriageway.is_empty() {
+                        build.lane_carriageway_spans.push((index, carriageway));
+                    }
+                    if pads.iter().any(Option::is_some) {
+                        build.lane_junctions.push((index, pads));
+                    }
+                    if let Some((p, span)) = passing {
+                        if let Some((left, left_offset)) = adjacent {
+                            if p.broken_divider(dir_decreasing, offset, left_offset) {
+                                build.passing.push((index, LanePass { to: left, span }));
+                            }
+                        }
+                        adjacent = Some((index, offset));
                     }
                     build.lanes.push(LaneBuild {
                         key: format!("{}-{}-{}", s.key, if dir_decreasing { "reverse" } else { "forward" }, k + 1),
@@ -762,7 +1417,7 @@ impl NativeSource {
                         highway: road.highway.clone(),
                         role: LaneRole::Through,
                         painted_through_mapped: false,
-                        width: s.lane_w,
+                        width,
                         points,
                         start_node,
                         end_node,
@@ -773,7 +1428,7 @@ impl NativeSource {
                         tile: Some(tile),
                         level: self.level_of(road),
                     });
-                    metas.push(LaneMeta { seg: si, end: end_node });
+                    metas.push(LaneMeta { seg: si, end: end_node, reverse: dir_decreasing });
                 }
             }
         }
@@ -937,11 +1592,16 @@ impl NativeSource {
             Some(ix) => segs.iter().map(|s| ix.of(&s.pts)).collect(),
             None => vec![None; segs.len()],
         };
-        let kerb_half = |si: usize| drawn[si].map_or(segs[si].half, |d| d.0);
+        let kerb_half = |si: usize| paved[si].profile.as_ref().map(|p| p.section.half)
+            .or_else(|| drawn[si].map(|d| d.0)).unwrap_or(segs[si].half);
         let mut node_half: HashMap<(i64, i64), Vec<(usize, f64)>> = HashMap::new();
         for (si, s) in segs.iter().enumerate() {
-            node_half.entry(qkey(s.pts[0])).or_default().push((si, kerb_half(si)));
-            node_half.entry(qkey(s.pts[s.pts.len() - 1])).or_default().push((si, kerb_half(si)));
+            for p in s.nodes {
+                node_half.entry(qkey(p)).or_default().push((si, kerb_half(si)));
+            }
+        }
+        if self.junctions.has_pads() {
+            self.apply_stops(&segs, &metas, &node_half, &claimed_nodes, &mut build);
         }
         let mut foot_nodes: HashMap<String, FootNodeBuild> = HashMap::new();
         for (si, s) in segs.iter().enumerate() {
@@ -956,8 +1616,14 @@ impl NativeSource {
                 continue;
             }
             let level = self.level_of(road);
+            let centreline = paved[si].profile.as_ref().and_then(|p| p.drawn_chord.as_ref())
+                .map_or(s.pts.as_slice(), |p| p.as_slice());
             if !(road.bridge || road.tunnel) {
-                build.segments.push(SegmentBuild { half: s.half, points: s.pts.clone(), level });
+                let (half, points) = match &paved[si].profile {
+                    Some(p) => (p.section.half, geom::junction_lane_points(centreline, p.lateral, false)),
+                    None => (s.half, s.pts.clone()),
+                };
+                build.segments.push(SegmentBuild { half, points, level });
             }
             // (no walkers on a structure level: footways stay at grade.)
             if matches!(hw, "motorway" | "motorway_link" | "trunk" | "trunk_link")
@@ -971,10 +1637,11 @@ impl NativeSource {
             let walk_line =
                 s.half + self.sidewalk_width(hw) - self.dims.frontage_zone_m - self.dims.throughway_m / 2.0;
             // (`--crowd`) on the drawn walk: half a throughway in from its
-            // frontage zone, or its middle where it is narrower than that; a
-            // side drawn without a walk keeps the class model's line.
+            // frontage zone, or its middle where it is narrower than that.
+            let prepared_section = paved[si].profile.as_ref().map(|p| (p.section.half, p.walks()));
             let line_on = |side: i8| -> f64 {
-                match drawn[si] {
+                let section = prepared_section.or(drawn[si]);
+                match section {
                     Some((h, w)) => {
                         let walk = w[if side > 0 { 0 } else { 1 }];
                         if walk >= self.dims.throughway_m / 2.0 {
@@ -986,19 +1653,50 @@ impl NativeSource {
                     None => walk_line,
                 }
             };
-            let ends_info = |p: P2| -> (f64, bool) {
-                let others = node_half.get(&qkey(p)).map(|v| v.iter().filter(|(k, _)| *k != si).map(|(_, h)| *h).fold(0.0f64, f64::max));
-                let degree = node_half.get(&qkey(p)).map_or(1, |v| v.len());
-                (others.unwrap_or(0.0), degree > 2)
+            let ends_info = |neighbors: Option<&[(usize, f64)]>| {
+                let neighbors = neighbors.unwrap_or_default();
+                let half = neighbors.iter().filter(|(k, _)| *k != si).map(|(_, h)| *h).fold(0.0f64, f64::max);
+                (half, neighbors.len() > 2)
             };
-            let a = s.pts[0];
-            let b = s.pts[s.pts.len() - 1];
-            let (ha, ja) = ends_info(a);
-            let (hb, jb) = ends_info(b);
-            let base = build.footways.len() as u32;
+            let a = centreline[0];
+            let b = centreline[centreline.len() - 1];
+            let adjoining = s.nodes.map(|p| node_half.get(&qkey(p)).map(Vec::as_slice));
+            let [(ha, ja), (hb, jb)] = adjoining.map(ends_info);
+            // The drawn junction can cover a short segment between two
+            // traffic nodes. Its lanes still cross this sidewalk.
+            let joins = |other: usize| {
+                adjoining.iter().flatten().any(|neighbors| {
+                    neighbors.iter().any(|&(near, _)| near != si && segs[near].road as usize == other)
+                }) || self.junctions.share_pad_at(&road.id, &self.roads[other].id, s.nodes)
+            };
+            let divided = is_divided_candidate(road).then(|| self.divided_pavement.get(&road.name)).flatten();
+            let looped_way = road.points.first() == road.points.last();
+            let shared_crosses = paved[si].profile.as_ref()
+                .is_some_and(|p| p.section.shared_bidirectional && p.section.crosses_road);
+            let gaps = self.walk_gaps.get(&road.id);
+            let clipped_bend = gaps.is_some() && paved[si].profile.is_some() && centreline.windows(3).any(|points| {
+                let [a, b, c] = [points[0], points[1], points[2]];
+                let [dx, dz] = [b[0] - a[0], b[1] - a[1]];
+                let [ux, uz] = [c[0] - b[0], c[1] - b[1]];
+                dx * ux + dz * uz < SECTION_MATCH_COS * dx.hypot(dz) * ux.hypot(uz)
+            });
+            let same_way_margin = if looped_way {
+                Some(0.0)
+            } else {
+                clipped_bend.then_some(-PERSON_CAPSULE_R_M)
+            };
+            let lateral = paved[si].profile.as_ref().map_or(0.0, |p| p.lateral);
+            let centres = (gaps.is_some() || lateral != 0.0).then(|| geom::junction_lane_points(centreline, lateral, false));
+            let centre = centres.as_deref().unwrap_or(centreline);
+            let mut crossing_ends = [[None; 2]; 2];
             for (k, side) in [1i8, -1i8].iter().enumerate() {
-                let offset = line_on(*side) * *side as f64;
-                let points = geom::junction_lane_points(&s.pts, offset, false);
+                // The matched source way explicitly has no sidewalk on this side.
+                if prepared_section.is_some_and(|(_, walks)| walks[k] == 0.0) {
+                    continue;
+                }
+                let walk_offset = line_on(*side);
+                let offset = walk_offset * *side as f64 + lateral;
+                let points = geom::junction_lane_points(centreline, offset, false);
                 let d = [b[0] - a[0], b[1] - a[1]];
                 let dl = geom::hypot(d[0], d[1]).max(1e-9);
                 // Same normal convention as the lane offsets: +offset moves along (dz, -dx).
@@ -1042,19 +1740,85 @@ impl NativeSource {
                         None => FootEndBuild { kerb_trim: trim(h, junction), crossing_arc: arc, no_crossing: !mapped(p, toward, arc), zebra_only: false },
                     }
                 };
-                build.footways.push(FootwayBuild {
+                let footway = FootwayBuild {
                     points,
                     highway: road.highway.clone(),
                     segment: s.key.clone(),
                     road_side: *side,
-                    node_keys: Some([node_text(a), node_text(b)]),
+                    node_keys: Some(s.nodes.map(node_text)),
                     normal,
-                    cross_index: Some(base + 1 - k as u32),
-                    ends: [end(ha, ja, a, s.pts[1]), end(hb, jb, b, s.pts[s.pts.len() - 2])],
+                    cross_index: [None; 2],
+                    original_arc_start: None,
+                    ends: [end(ha, ja, a, centreline[1]), end(hb, jb, b, centreline[centreline.len() - 2])],
                     tile: Some(seg_tile),
-                });
+                };
+                let at_grade = |r: usize| self.level_of(&self.roads[r]) == 0;
+                let overlap_margin = |other: usize| {
+                    if other == s.road as usize {
+                        // A bent, clipped sidewalk can run along its own
+                        // motor lane. Remove the part well inside the lane.
+                        return same_way_margin;
+                    }
+                    if joins(other) {
+                        return Some(WALK_CLEARANCE_M);
+                    }
+                    // A shared road yielding to another street can have a
+                    // sidewalk continuation inside its live lanes.
+                    if shared_crosses {
+                        return Some(0.0);
+                    }
+                    // A road that ends inside the walking corridor can
+                    // occupy the sidewalk with no common junction node.
+                    // Through crossings still use the route's kerb rules.
+                    let points = &self.roads[other].points;
+                    let (first, last) = points.first().zip(points.last())?;
+                    (first != last && [first, last].into_iter().any(|p| {
+                        geom::dist_to_polyline(centre, p[0], p[1]) <= walk_offset
+                    })).then_some(0.0)
+                };
+                let lane_clearance = self.walk_lane_clearance.as_ref()
+                    .filter(|lanes| lanes.may_block(&footway.points, s.road as usize, at_grade, &overlap_margin));
+                if divided.is_some() || gaps.is_some() || lane_clearance.is_some() {
+                    let runs = walk_runs(&footway.points, |p, heading, piece, fraction| {
+                        let blocked_by_gap = if let (Some(gaps), Some(centres)) = (gaps, &centres) {
+                            let [a, b] = [centres[piece], centres[piece + 1]];
+                            let d = [b[0] - a[0], b[1] - a[1]];
+                            let middle = [a[0] + d[0] * fraction, a[1] + d[1] * fraction];
+                            gaps.iter().any(|gap| gap.covers(middle, d, *side))
+                        } else {
+                            false
+                        };
+                        blocked_by_gap || divided.is_some_and(|pavement| pavement.covers_sidewalk(road, &self.levels, p, heading))
+                            || lane_clearance.is_some_and(|lanes| lanes.blocks(p, heading, s.road as usize, at_grade, &overlap_margin))
+                    });
+                    for (part, retain) in sidewalk_parts(footway, runs) {
+                        for (e, kept) in retain.into_iter().enumerate() {
+                            if kept {
+                                crossing_ends[k][e] = Some(build.footways.len() as u32);
+                            }
+                        }
+                        build.footways.push(part);
+                    }
+                } else {
+                    if !self.traffic_sections.is_empty() {
+                        let length: f64 = footway.points.windows(2).map(|p| geom::hypot(p[1][0] - p[0][0], p[1][1] - p[0][1])).sum();
+                        // Both kerbs can consume a short street connector.
+                        // There is no sidewalk between them to spawn or route on.
+                        if length <= footway.ends[0].kerb_trim + footway.ends[1].kerb_trim {
+                            continue;
+                        }
+                    }
+                    crossing_ends[k] = [Some(build.footways.len() as u32); 2];
+                    build.footways.push(footway);
+                }
             }
-            for p in [a, b] {
+            for e in 0..2 {
+                if let [Some(left), Some(right)] = [crossing_ends[0][e], crossing_ends[1][e]] {
+                    build.footways[left as usize].cross_index[e] = Some(right);
+                    build.footways[right as usize].cross_index[e] = Some(left);
+                }
+            }
+            for p in s.nodes {
                 let key = node_text(p);
                 let signal = node_junction.get(&qkey(p)).copied();
                 foot_nodes.entry(key.clone()).or_insert(FootNodeBuild { key, pos: p, signal });
@@ -1090,7 +1854,8 @@ impl NativeSource {
                     road_side: 1,
                     node_keys: Some([node_text(a), node_text(b)]),
                     normal: [d[1] / dl, -d[0] / dl],
-                    cross_index: None,
+                    cross_index: [None; 2],
+                    original_arc_start: None,
                     ends: [FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false, zebra_only: false }, FootEndBuild { kerb_trim: 0.0, crossing_arc: 0.0, no_crossing: false, zebra_only: false }],
                     tile: Some(TileKey::of(mid[0], mid[1])),
                 });
@@ -1119,6 +1884,12 @@ impl NativeSource {
         for (k, place) in path_place.into_iter().enumerate() {
             build.footway_activity[first_path + k].place = place;
         }
+        if let Some(routes) = self.active_surveyed_routes() {
+            routes.apply(&mut build, &want);
+        }
+        if !build.lane_surfaces.is_empty() || !build.lane_junctions.is_empty() {
+            build.surface_clearance_m = Some(self.dims.surface_clearance_m);
+        }
         build
     }
 }
@@ -1137,7 +1908,17 @@ pub fn load(paths: &eo_data::DataPaths) -> Result<NativeSource> {
         }
     }
     let timing = SignalTiming::from_standards(&standards)?;
-    Ok(NativeSource::new(SimSource::load(paths)?, dims, timing))
+    let stops = match TrafficStop::load() {
+        Ok(stops) => stops,
+        Err(e) => {
+            static WARNED: std::sync::Once = std::sync::Once::new();
+            WARNED.call_once(|| {
+                eprintln!("eo-sim: sf-traffic-stops.json unavailable ({e:#}); continuing with sf-city.json.gz roads and signals only");
+            });
+            Vec::new()
+        }
+    };
+    Ok(NativeSource::new(SimSource::load(paths)?, dims, timing).with_stops(stops))
 }
 
 /// Keep the resident network to the tiles around the world's foci: build the
@@ -1147,16 +1928,12 @@ pub fn load(paths: &eo_data::DataPaths) -> Result<NativeSource> {
 /// first, so no agent ever reads a slot that was reused. Returns (added, removed).
 pub fn stream(world: &mut crate::World, source: &NativeSource, radius: f64) -> (usize, usize) {
     let foci: Vec<[f64; 2]> = world.regions.iter().map(|r| [r.focus.x, r.focus.z]).collect();
-    let mut wanted: Vec<TileKey> = foci.iter().flat_map(|f| tiles_around(f[0], f[1], radius)).collect();
+    let mut wanted: Vec<TileKey> = foci.iter().flat_map(|f| source.resident_tiles(f[0], f[1], radius)).collect();
     wanted.sort();
     wanted.dedup();
-    let keep = radius + TILE_M;
-    let near = |t: &TileKey| {
-        let o = t.origin();
-        let c = [o[0] + TILE_M / 2.0, o[1] + TILE_M / 2.0];
-        foci.iter().any(|f| (f[0] - c[0]).abs() <= keep + TILE_M / 2.0 && (f[1] - c[1]).abs() <= keep + TILE_M / 2.0)
-    };
-    let mut drop: Vec<TileKey> = world.net.tiles.keys().copied().filter(|t| !near(t)).collect();
+    let keep: std::collections::HashSet<_> =
+        foci.iter().flat_map(|f| source.resident_tiles(f[0], f[1], radius + TILE_M)).collect();
+    let mut drop: Vec<TileKey> = world.net.tiles.keys().copied().filter(|t| !keep.contains(t)).collect();
     drop.sort();
     for t in &drop {
         world.net.remove_tile(*t);
@@ -1210,12 +1987,7 @@ impl NativeSource {
     pub fn without_roads(&mut self, pred: impl Fn(&SimRoad) -> bool) -> usize {
         let before = self.roads.len();
         self.roads.retain(|r| !pred(r));
-        self.road_tiles.clear();
-        for (i, r) in self.roads.iter().enumerate() {
-            for t in tiles_of_polyline(&r.points) {
-                self.road_tiles.entry(t).or_default().push(i as u32);
-            }
-        }
+        self.index_lane_roads();
         before - self.roads.len()
     }
 

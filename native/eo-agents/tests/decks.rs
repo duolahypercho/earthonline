@@ -7,7 +7,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use eo_agents::feed::{Feeder, Ground, car_ground};
+use eo_agents::feed::{Feeder, Ground, car_ground, car_ground_on_route};
 use eo_agents::library::Library;
 use eo_agents::{GpuAgent, GpuModel};
 use eo_sim::native::{self, NativeSource};
@@ -112,6 +112,10 @@ fn a_car_on_a_deck_lane_stands_on_the_deck_and_a_car_under_it_on_the_street() {
     let yb = 0.5 * (ground.y(x + heading[0] * 1.4, z + heading[1] * 1.4) + ground.y(x - heading[0] * 1.4, z - heading[1] * 1.4));
     assert_eq!(y0.to_bits(), yb.to_bits());
     assert!((y0 - street).abs() < 0.05);
+    let (on_route, _) = car_ground_on_route(&ground, Some(sw), level, x, z, heading, 1.4, Some(deck.y));
+    let (under_route, _) = car_ground_on_route(&ground, Some(sw), 0, x, z, heading, 1.4, Some(street));
+    assert!((on_route - y).abs() < 0.05);
+    assert!((under_route - y0).abs() < 0.05);
     // and without structures, whatever the level: the street.
     assert_eq!(car_ground(&ground, None, level, x, z, heading, 1.4).0.to_bits(), y0.to_bits());
 

@@ -148,19 +148,22 @@ pub fn ferry_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: f64) 
 }
 
 /// The Ferry Plaza's gate sheds drawn as built pieces (`features::pier_sheds`;
-/// off: the JS's boxes, `ferry_sheds`): at the JS's anchors and plan sizes, a
-/// single-storey steel-framed terminal shed, INFERRED (no survey of the
-/// gates): columns at the corners and every `GATE_BAY_M`, a glazed lower
-/// storey with mullions behind a sill, a painted panel band to the eave, and a
-/// low gabled roof overhanging every side as a canopy, with a fascia.
+/// off: the JS's boxes, `ferry_sheds`): at the JS's anchors and plan sizes, an
+/// open-air maritime steel-and-glass ferry terminal boarding canopy, INFERRED
+/// (no survey of the gates): slender charcoal-slate steel columns on weathered
+/// sandstone plinths with 45-degree structural knee-braces, recessed smoked
+/// passenger windscreens below an open sunlit clerestory gap and louvered
+/// transit frieze, cantilevered steel outrigger rafters supporting a low-pitched
+/// dark standing-seam zinc-slate canopy roof, and a raised central glazed
+/// skylight monitor echoing the Ferry Building's nave.
 pub const GATE_BAY_M: f64 = 4.0;
-pub const GATE_EAVE_M: f64 = 5.2;
-pub const GATE_GLAZING_TOP_M: f64 = 3.3;
-pub const GATE_RIDGE_RISE_M: f64 = 1.6;
-pub const GATE_OVERHANG_M: f64 = 1.8;
-pub const GATE_COLUMN_M: f64 = 0.32;
-/// The glazing's tone (a dim waiting hall behind clear glass, linear) and its roughness.
-pub const GATE_GLASS_LINEAR: Rgb = [0.035, 0.04, 0.045];
+pub const GATE_EAVE_M: f64 = 4.15;
+pub const GATE_GLAZING_TOP_M: f64 = 2.50;
+pub const GATE_RIDGE_RISE_M: f64 = 1.05;
+pub const GATE_OVERHANG_M: f64 = 2.05;
+pub const GATE_COLUMN_M: f64 = 0.22;
+/// Recessed smoked architectural windscreen glass (warm-neutral dark charcoal, linear; avoids sky-blue flash).
+pub const GATE_GLASS_LINEAR: Rgb = [0.016, 0.017, 0.018];
 
 /// The gate sheds' meshes: frames and panels (in `SHED_WALL_KIT`), roofs (`SHED_ROOF_KIT`), glazing (vertex colour).
 pub struct GateSheds {
@@ -179,7 +182,15 @@ pub fn ferry_gate_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: 
     let mut frames = MeshArrays::new("ferry-gate-sheds:frames");
     let mut roofs = MeshArrays::new("ferry-gate-sheds:roofs");
     let mut glass = MeshArrays::new("ferry-gate-sheds:glass");
-    let white = [1.0; 3];
+    // Vertex tints multiply `painted-steel-light` (frames) and `membrane-roof` (roofs), so
+    // realistic weathered maritime steel, sandstone plinths and dark zinc-slate stay well below 1.0.
+    let steel_dark: Rgb = [0.19, 0.22, 0.25];
+    let steel_mid: Rgb = [0.33, 0.34, 0.33];
+    let bronze_trim: Rgb = [0.36, 0.34, 0.30];
+    let plinth_col: Rgb = [0.44, 0.41, 0.36];
+    let roof_deck: Rgb = [0.24, 0.27, 0.30];
+    let roof_rib: Rgb = [0.17, 0.19, 0.22];
+    let soffit_col: Rgb = [0.22, 0.18, 0.14];
     for (p, yaw) in &picked {
         // the box's frame: local x (its width) turned by -yaw as `ferry_sheds` turns it.
         let (c, s) = ((-yaw).cos(), (-yaw).sin());
@@ -202,49 +213,189 @@ pub fn ferry_gate_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: 
             face(m, [v(0, 1, 0), v(1, 1, 0), v(1, 1, 1), v(0, 1, 1)], [0.0, 1.0, 0.0], col);
             face(m, [v(0, 0, 0), v(1, 0, 0), v(1, 0, 1), v(0, 0, 1)], [0.0, -1.0, 0.0], scale_rgb(col, 0.6));
         };
+        // Slanted structural member (rafter or knee-brace) in local shed coords.
+        let lbeam = |m: &mut MeshArrays, a: [f64; 3], b: [f64; 3], bw: f64, bh: f64, col: Rgb| {
+            m.beam(at(a[0], a[2], a[1]), at(b[0], b[2], b[1]), bw, bh, col);
+        };
+
         let cw = GATE_COLUMN_M / 2.0;
-        // the four walls: (start, end) in the frame, outward normal
-        let walls = [([-hx, hz], [hx, hz], (0.0, 1.0)), ([hx, -hz], [-hx, -hz], (0.0, -1.0)), ([hx, hz], [hx, -hz], (1.0, 0.0)), ([-hx, -hz], [-hx, hz], (-1.0, 0.0))];
-        for (a, b, (nx, nz)) in walls {
-            let len = (b[0] - a[0]).hypot(b[1] - a[1]);
-            let bays = (len / GATE_BAY_M).round().max(1.0) as usize;
-            let t = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
-            let pt = |s: f64, o: f64| [a[0] + t[0] * s + nx * o, a[1] + t[1] * s + nz * o];
-            // glazing set 0.15 m in behind the frame line, the panel band flush
-            let g0 = pt(0.0, -0.15);
-            let g1 = pt(len, -0.15);
-            face(&mut glass, [at(g0[0], g0[1], 0.0), at(g1[0], g1[1], 0.0), at(g1[0], g1[1], GATE_GLAZING_TOP_M), at(g0[0], g0[1], GATE_GLAZING_TOP_M)], dir(nx, nz), GATE_GLASS_LINEAR);
-            let (q0, q1) = (pt(0.0, 0.0), pt(len, 0.0));
-            face(&mut frames, [at(q0[0], q0[1], GATE_GLAZING_TOP_M), at(q1[0], q1[1], GATE_GLAZING_TOP_M), at(q1[0], q1[1], GATE_EAVE_M), at(q0[0], q0[1], GATE_EAVE_M)], dir(nx, nz), white);
-            // the sill kerb and the transom under the band
-            let (k0, k1) = (pt(0.0, -0.2), pt(len, 0.05));
-            lbox(&mut frames, [k0[0].min(k1[0]), k0[0].max(k1[0])], [k0[1].min(k1[1]), k0[1].max(k1[1])], [0.0, 0.25], white);
-            for k in 0..=bays {
-                let sc = len * k as f64 / bays as f64;
-                let cpt = pt(sc, 0.0);
-                lbox(&mut frames, [cpt[0] - cw, cpt[0] + cw], [cpt[1] - cw, cpt[1] + cw], [0.0, GATE_EAVE_M], white);
-                // two mullions a bay
-                if k < bays {
-                    for f in [1.0 / 3.0, 2.0 / 3.0] {
-                        let mp = pt(sc + len / bays as f64 * f, -0.12);
-                        lbox(&mut frames, [mp[0] - 0.05, mp[0] + 0.05], [mp[1] - 0.05, mp[1] + 0.05], [0.25, GATE_GLAZING_TOP_M], white);
-                    }
+        let bays_x = (w / GATE_BAY_M).round().max(2.0) as usize;
+        let ox = hx + GATE_OVERHANG_M * 0.90;
+        let oz = hz + GATE_OVERHANG_M;
+        let eave = GATE_EAVE_M;
+        let ridge = eave + GATE_RIDGE_RISE_M;
+        let slope_y = |abs_z: f64| ridge - (abs_z / oz) * GATE_RIDGE_RISE_M;
+        let header_bot = eave - 0.30;
+        let plinth_top = 0.46;
+        let glass_top = GATE_GLAZING_TOP_M;
+
+        // 1. Structural steel columns along both long facades, seated on sandstone plinths,
+        //    carrying transverse outrigger rafters and 45-degree diagonal knee-braces.
+        for k in 0..=bays_x {
+            let lx = -hx + w * k as f64 / bays_x as f64;
+            for side in [-1.0, 1.0] {
+                let lz = side * hz;
+                let col_top = slope_y(hz) - 0.14;
+                // Weathered sandstone/concrete base plinth + dark steel anchor flange + slender steel column.
+                lbox(&mut frames, [lx - 0.19, lx + 0.19], [lz - 0.19, lz + 0.19], [-0.08, plinth_top], plinth_col);
+                lbox(&mut frames, [lx - 0.14, lx + 0.14], [lz - 0.14, lz + 0.14], [plinth_top, plinth_top + 0.08], steel_dark);
+                lbox(&mut frames, [lx - cw, lx + cw], [lz - cw, lz + cw], [plinth_top, col_top], steel_dark);
+                // Diagonal structural knee-brace out into cantilevered eave beam + inward into roof rafter.
+                lbeam(&mut frames, [lx, 3.05, lz], [lx, slope_y(hz + 1.05) - 0.18, side * (hz + 1.05)], 0.08, 0.10, steel_dark);
+                lbeam(&mut frames, [lx, 3.05, lz], [lx, slope_y(hz - 1.15) - 0.18, side * (hz - 1.15)], 0.08, 0.10, steel_dark);
+                // Longitudinal knee-braces along the eaves portal beam.
+                if k < bays_x {
+                    lbeam(&mut frames, [lx + cw, 3.15, lz], [lx + 0.95, header_bot, lz], 0.075, 0.09, steel_dark);
+                }
+                if k > 0 {
+                    lbeam(&mut frames, [lx - cw, 3.15, lz], [lx - 0.95, header_bot, lz], 0.075, 0.09, steel_dark);
+                }
+            }
+            // Exposed transverse steel roof rafter spanning full cantilevered width (-oz..+oz) on both slopes,
+            // plus a slender horizontal tension tie-rod spanning between opposing column tops.
+            let y_eave_rafter = eave - 0.14;
+            let y_ridge_rafter = ridge - 0.16;
+            lbeam(&mut frames, [lx, y_eave_rafter, -oz + 0.15], [lx, y_ridge_rafter, 0.0], 0.12, 0.18, steel_dark);
+            lbeam(&mut frames, [lx, y_eave_rafter, oz - 0.15], [lx, y_ridge_rafter, 0.0], 0.12, 0.18, steel_dark);
+            lbeam(&mut frames, [lx, header_bot + 0.10, -hz], [lx, header_bot + 0.10, hz], 0.06, 0.06, steel_mid);
+        }
+
+        // 2. Longitudinal eaves portal beams, cantilevered overhang purlins, and slim louvered frieze
+        //    (open sunlit clerestory gap between glass_top = 2.50 m and frieze = 3.38 m).
+        for side in [-1.0, 1.0] {
+            let lz = side * hz;
+            // Primary eaves header beam + lower cantilevered purlin catching the overhang rafters.
+            lbox(&mut frames, [-ox + 0.1, ox - 0.1], [lz - 0.10, lz + 0.10], [header_bot, eave + 0.04], steel_dark);
+            let pz = side * (hz + GATE_OVERHANG_M * 0.58);
+            let py = slope_y(pz.abs()) - 0.16;
+            lbox(&mut frames, [-ox + 0.1, ox - 0.1], [pz - 0.07, pz + 0.07], [py - 0.08, py + 0.06], steel_dark);
+            // Two slender horizontal bronze-pewter louver slats below the eaves header (open transit valence).
+            for ly in [header_bot - 0.22, header_bot - 0.42] {
+                lbox(&mut frames, [-hx + cw, hx - cw], [lz - 0.05, lz + 0.05], [ly - 0.035, ly + 0.035], bronze_trim);
+            }
+            // End-portal transverse header beams across the open 9 m ends (no solid barn walls!).
+            let ex = side * hx;
+            lbox(&mut frames, [ex - 0.10, ex + 0.10], [-hz, hz], [header_bot, header_bot + 0.24], steel_dark);
+            // Open-louvered steel sun-screen in the upper gable triangle on each end (3 crisp horizontal louvers).
+            for (ly, half_span) in [(header_bot + 0.44, hz * 0.82), (header_bot + 0.68, hz * 0.56), (header_bot + 0.92, hz * 0.30)] {
+                if ly < ridge - 0.25 {
+                    lbox(&mut frames, [ex - 0.05, ex + 0.05], [-half_span, half_span], [ly - 0.04, ly + 0.04], bronze_trim);
                 }
             }
         }
-        // the roof: a low gable along the shed's width, overhanging every side; its fascia and soffit
-        let (ox, oz) = (hx + GATE_OVERHANG_M, hz + GATE_OVERHANG_M);
-        let (e, r) = (GATE_EAVE_M + 0.15, GATE_EAVE_M + 0.15 + GATE_RIDGE_RISE_M);
-        for side in [1.0, -1.0] {
-            let q = [at(-ox, side * oz, e), at(ox, side * oz, e), at(ox, 0.0, r), at(-ox, 0.0, r)];
-            face(&mut roofs, q, [dir(0.0, side)[0] * 0.3, 1.0, dir(0.0, side)[2] * 0.3], white);
-            face(&mut frames, [at(-ox, side * oz, e - 0.35), at(ox, side * oz, e - 0.35), at(ox, side * oz, e), at(-ox, side * oz, e)], dir(0.0, side), white);
-            face(&mut frames, [at(-ox, side * oz, e - 0.35), at(ox, side * oz, e - 0.35), at(ox, 0.0, r - 0.35), at(-ox, 0.0, r - 0.35)], [0.0, -1.0, 0.0], scale_rgb(white, 0.55));
+
+        // 3. Recessed passenger windscreens along the long facades: leave a wide open central boarding
+        //    entry (`|x| < 1.5 m`) and open 9 m ends so the shelter reads as an airy transit canopy.
+        let bay_w = w / bays_x as f64;
+        for side in [-1.0, 1.0] {
+            let lz_curb = side * hz;
+            let lz_glass = side * (hz - 0.22);
+            for k in 0..bays_x {
+                let x0 = -hx + bay_w * k as f64 + cw;
+                let x1 = -hx + bay_w * (k + 1) as f64 - cw;
+                // Trim bays touching x = 0 to open a 3.0 m central boarding portal.
+                let segs: [(f64, f64); 2] = if x0 < 1.5 && x1 > -1.5 {
+                    [(x0, (-1.5_f64).min(x1)), ((1.5_f64).max(x0), x1)]
+                } else {
+                    [(x0, x1), (0.0, 0.0)]
+                };
+                for (sa, sb) in segs {
+                    if sb - sa < 0.6 {
+                        continue;
+                    }
+                    // Low weathered sandstone kick-curb + dark-steel bottom/mid/top windscreen transoms.
+                    lbox(&mut frames, [sa, sb], [lz_curb - 0.24, lz_curb + 0.08], [-0.04, plinth_top], plinth_col);
+                    lbox(&mut frames, [sa, sb], [lz_glass - 0.045, lz_glass + 0.045], [plinth_top, plinth_top + 0.07], steel_dark);
+                    lbox(&mut frames, [sa, sb], [lz_glass - 0.04, lz_glass + 0.04], [1.38, 1.44], steel_mid);
+                    lbox(&mut frames, [sa, sb], [lz_glass - 0.055, lz_glass + 0.055], [glass_top - 0.06, glass_top + 0.04], steel_dark);
+                    // Crisp intermediate mullions (~1.2 m rhythm) framing the recessed smoked glass panes.
+                    let panes = ((sb - sa) / 1.25).round().max(1.0) as usize;
+                    for m in 1..panes {
+                        let mx = sa + (sb - sa) * m as f64 / panes as f64;
+                        lbox(&mut frames, [mx - 0.032, mx + 0.032], [lz_glass - 0.04, lz_glass + 0.04], [plinth_top, glass_top], steel_dark);
+                    }
+                    // Two-sided recessed neutral-smoked architectural windscreen glazing.
+                    let gq = [at(sa, lz_glass, plinth_top + 0.05), at(sb, lz_glass, plinth_top + 0.05), at(sb, lz_glass, glass_top - 0.04), at(sa, lz_glass, glass_top - 0.04)];
+                    face(&mut glass, gq, dir(0.0, side), GATE_GLASS_LINEAR);
+                    face(&mut glass, gq, dir(0.0, -side), scale_rgb(GATE_GLASS_LINEAR, 0.8));
+                }
+            }
         }
-        for side in [1.0, -1.0] {
-            // the gable ends, panelled
-            face(&mut frames, [at(side * hx, -hz, GATE_EAVE_M), at(side * hx, hz, GATE_EAVE_M), at(side * hx, 0.0, r - 0.1)].iter().chain([at(side * hx, 0.0, r - 0.1)].iter()).copied().collect::<Vec<_>>().try_into().unwrap(), dir(side, 0.0), white);
-            face(&mut frames, [at(side * ox, -oz, e - 0.35), at(side * ox, oz, e - 0.35), at(side * ox, oz, e), at(side * ox, -oz, e)], dir(side, 0.0), white);
+
+        // 4. Interior central passenger wind-baffle spine & waiting benches (gives real architectural depth).
+        let spine_hx = hx - 2.6;
+        if spine_hx > 1.0 {
+            lbox(&mut frames, [-spine_hx, spine_hx], [-0.14, 0.14], [0.0, 2.25], steel_dark);
+            lbox(&mut frames, [-spine_hx - 0.06, spine_hx + 0.06], [-0.20, 0.20], [2.22, 2.34], bronze_trim);
+            // Warm bench seats flanking the central spine.
+            lbox(&mut frames, [-spine_hx + 0.4, spine_hx - 0.4], [-0.62, -0.14], [0.42, 0.50], plinth_col);
+            lbox(&mut frames, [-spine_hx + 0.4, spine_hx - 0.4], [0.14, 0.62], [0.42, 0.50], plinth_col);
+        }
+
+        // 5. Low-pitched cantilevered dark standing-seam zinc-slate canopy roof, shadowed warm soffit,
+        //    slim dark-steel eave fascia, and raised 3D standing-seam ribs.
+        let fascia_h = 0.22;
+        let seam_count = ((2.0 * ox) / 1.45).round().max(6.0) as usize;
+        for side in [-1.0, 1.0] {
+            let e_out = eave;
+            let r_out = ridge;
+            let q_top = [at(-ox, side * oz, e_out), at(ox, side * oz, e_out), at(ox, 0.0, r_out), at(-ox, 0.0, r_out)];
+            face(&mut roofs, q_top, [dir(0.0, side)[0] * 0.25, 1.0, dir(0.0, side)[2] * 0.25], roof_deck);
+            // Shadowed warm-bronze canopy soffit underside.
+            let q_bot = [at(-ox, side * oz, e_out - fascia_h), at(ox, side * oz, e_out - fascia_h), at(ox, 0.0, r_out - fascia_h), at(-ox, 0.0, r_out - fascia_h)];
+            face(&mut frames, q_bot, [0.0, -1.0, 0.0], soffit_col);
+            // Slim dark-steel outer eave fascia + subtle overhanging drip lip.
+            face(&mut frames, [at(-ox, side * oz, e_out - fascia_h), at(ox, side * oz, e_out - fascia_h), at(ox, side * oz, e_out + 0.04), at(-ox, side * oz, e_out + 0.04)], dir(0.0, side), steel_dark);
+            // Raised standing-seam roof ribs running eave-to-ridge.
+            for k in 0..=seam_count {
+                let sx = -ox + 2.0 * ox * k as f64 / seam_count as f64;
+                lbeam(&mut roofs, [sx, e_out + 0.03, side * (oz - 0.06)], [sx, r_out + 0.03, side * 0.08], 0.055, 0.065, roof_rib);
+            }
+            // Slim slanted gable end verge fascia (matches roof thickness only — no chunky solid box!).
+            let ex = side * ox;
+            for rside in [-1.0, 1.0] {
+                face(
+                    &mut frames,
+                    [at(ex, rside * oz, e_out - fascia_h), at(ex, 0.0, r_out - fascia_h), at(ex, 0.0, r_out + 0.04), at(ex, rside * oz, e_out + 0.04)],
+                    dir(side, 0.0),
+                    steel_dark,
+                );
+            }
+        }
+
+        // 6. Raised central glazed clerestory skylight monitor along the ridge (echoes Ferry Building nave).
+        let mon_hx = hx - 0.9;
+        let mon_hz = 1.05;
+        let mon_base = slope_y(mon_hz) - 0.04;
+        let mon_eave = ridge + 0.56;
+        let mon_ridge = mon_eave + 0.28;
+        let mon_ox = mon_hx + 0.48;
+        let mon_oz = mon_hz + 0.45;
+        if mon_hx > 1.5 {
+            // Monitor base curb + dark-steel posts at bay lines + slim smoked clerestory glazing.
+            lbox(&mut frames, [-mon_hx, mon_hx], [-mon_hz, mon_hz], [mon_base, ridge + 0.08], steel_dark);
+            for side in [-1.0, 1.0] {
+                let gz = side * (mon_hz - 0.05);
+                face(&mut glass, [at(-mon_hx, gz, ridge + 0.08), at(mon_hx, gz, ridge + 0.08), at(mon_hx, gz, mon_eave - 0.08), at(-mon_hx, gz, mon_eave - 0.08)], dir(0.0, side), GATE_GLASS_LINEAR);
+                lbox(&mut frames, [-mon_hx, mon_hx], [side * mon_hz - 0.05, side * mon_hz + 0.05], [mon_eave - 0.12, mon_eave], steel_dark);
+            }
+            for k in 0..=bays_x {
+                let px = (-hx + bay_w * k as f64).clamp(-mon_hx, mon_hx);
+                for side in [-1.0, 1.0] {
+                    lbox(&mut frames, [px - 0.055, px + 0.055], [side * mon_hz - 0.055, side * mon_hz + 0.055], [ridge + 0.04, mon_eave], steel_dark);
+                }
+            }
+            // Monitor end panels & overhanging standing-seam cap roof.
+            for side in [-1.0, 1.0] {
+                let ex = side * mon_hx;
+                face(&mut frames, [at(ex, -mon_hz, ridge + 0.06), at(ex, mon_hz, ridge + 0.06), at(ex, mon_hz, mon_eave), at(ex, -mon_hz, mon_eave)], dir(side, 0.0), steel_dark);
+                face(&mut roofs, [at(-mon_ox, side * mon_oz, mon_eave), at(mon_ox, side * mon_oz, mon_eave), at(mon_ox, 0.0, mon_ridge), at(-mon_ox, 0.0, mon_ridge)], [dir(0.0, side)[0] * 0.25, 1.0, dir(0.0, side)[2] * 0.25], roof_rib);
+                face(&mut frames, [at(-mon_ox, side * mon_oz, mon_eave - 0.12), at(mon_ox, side * mon_oz, mon_eave - 0.12), at(mon_ox, side * mon_oz, mon_eave + 0.02), at(-mon_ox, side * mon_oz, mon_eave + 0.02)], dir(0.0, side), steel_dark);
+                let mex = side * mon_ox;
+                for rside in [-1.0, 1.0] {
+                    face(&mut frames, [at(mex, rside * mon_oz, mon_eave - 0.12), at(mex, 0.0, mon_ridge - 0.12), at(mex, 0.0, mon_ridge + 0.02), at(mex, rside * mon_oz, mon_eave + 0.02)], dir(side, 0.0), steel_dark);
+                }
+            }
         }
     }
     Some(GateSheds { frames: frames.freeze(), roofs: roofs.freeze(), glass: glass.freeze() })
@@ -792,6 +943,16 @@ pub struct ShorePress {
     pier_cells: HashMap<(i64, i64), Vec<u32>>,
 }
 
+/// Demolished or submerged non-pier boundary fingers (such as Pier 24 Annex beneath Bay Bridge
+/// Tower W2, where 3DEP LiDAR measures open-bay seabed at -2.59 m while the older DataSF shoreline
+/// ring still outlines the former pier wider than `eo-water`'s 15 m pier probe) get artificially
+/// lifted to `sea + 0.10 m` within `LAND_LIFT_REACH_M` (24 m) by `eo-water::field::press_ground_rings`.
+/// Pressing vertices that arrive at or below `sea + SUNKEN_LAND_CEILING_M` within
+/// `SUNKEN_LAND_REACH_M` of a non-pier shore edge back to seabed depth (`sea - 2.0 m`) lets the
+/// bay water pass draw cleanly over the submerged footprint without touching real dry quays.
+pub const SUNKEN_LAND_REACH_M: f64 = 26.0;
+pub const SUNKEN_LAND_CEILING_M: f64 = 0.15;
+
 impl ShorePress {
     /// The walled and pier edges the press stands behind.
     pub fn edges(&self) -> &[ShoreEdge] {
@@ -801,9 +962,10 @@ impl ShorePress {
 
     pub fn new(sea: f64, edges: &[ShoreEdge], piers: &[Pier]) -> Self {
         let cell = 32.0;
-        let reach = CAP_W_M + 2.0;
+        let quay_reach = CAP_W_M + 2.0;
         let mut edge_cells: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
         for (i, e) in edges.iter().enumerate() {
+            let reach = if e.pier.is_none() { SUNKEN_LAND_REACH_M } else { quay_reach };
             let (x0, x1) = (e.a[0].min(e.b[0]) - reach, e.a[0].max(e.b[0]) + reach);
             let (z0, z1) = (e.a[1].min(e.b[1]) - reach, e.a[1].max(e.b[1]) + reach);
             for r in (z0 / cell).floor() as i64..=(z1 / cell).floor() as i64 {
@@ -856,6 +1018,7 @@ impl ShorePress {
                 }
             }
         }
+        let sunken_shelf = y <= self.sea + SUNKEN_LAND_CEILING_M;
         if let Some(list) = self.edge_cells.get(&key) {
             for &i in list {
                 let e = &self.edges[i as usize];
@@ -865,11 +1028,13 @@ impl ShorePress {
                     continue;
                 }
                 let (d, _) = seg_distance(x, z, e.a, e.b);
-                if d > CAP_W_M + 2.0 {
-                    continue;
+                if d <= CAP_W_M + 2.0 {
+                    let limit = if e.pier.is_some() { press_pier_edge(self.sea, d) } else { press_quay(self.sea, d) };
+                    out = out.min(limit);
                 }
-                let limit = if e.pier.is_some() { press_pier_edge(self.sea, d) } else { press_quay(self.sea, d) };
-                out = out.min(limit);
+                if sunken_shelf && e.pier.is_none() && d <= SUNKEN_LAND_REACH_M {
+                    out = out.min(self.sea - 2.0);
+                }
             }
         }
         out
@@ -966,6 +1131,11 @@ pub fn build_meshes_with(
             None => (crest_at(a[0], a[1]), crest_at(b[0], b[1]), coping_land, apron),
             Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck_of(i)),
         };
+        // Skip submerged ghost quay edges (e.g. demolished Pier 24 Annex beneath Bay Bridge W2)
+        // where surveyed LiDAR sits underwater: prevents concrete aprons ramping down into the bay.
+        if e.pier.is_none() && ya.min(yb) < sea + SUNKEN_LAND_CEILING_M {
+            continue;
+        }
         // The strip: from the coping (or the waterline) to CAP_W_M inland, facing up.
         let w = CAP_W_M + coping_land;
         let up = |p: [f64; 3], q: [f64; 3], r: [f64; 3], s: [f64; 3], m: &mut MeshArrays| {
@@ -980,7 +1150,8 @@ pub fn build_meshes_with(
         ends.entry(key(b)).or_default().push(([n[0], n[1]], yb, inner, tone));
         if let Some(i) = e.pier {
             let deck = piers[i].deck_y;
-            pier_fascia(&mut conc, &mut under, a, b, n, deck, sea, concrete, dark, &mut piles, (municipal == Some(i)).then_some(&mut municipal_feet));
+            let is_municipal = municipal == Some(i);
+            pier_fascia(&mut conc, &mut under, a, b, n, deck, sea, concrete, dark, &mut piles, is_municipal.then_some(&mut municipal_feet));
         }
     }
     // Joint fans: the strip's wedge between two edges meeting at a point.
@@ -1003,23 +1174,22 @@ pub fn build_meshes_with(
         if cr < 0.0 { paving.tri(a, b, c, tone) } else { paving.tri(a, c, b, tone) }
     }
     // Pier slabs over their outlines, and fascias on outline edges over open water.
+    let fb_c = eo_data::groundscale::plan(crate::ferry_building::spec().tower.centre_surveyed);
+    let gs = eo_data::groundscale::scale();
+    let fender_reach = 2200.0 * gs;
+    let bollard_reach = 1200.0 * gs;
+    let prom_reach = 560.0 * gs;
     let mut decks = 0usize;
     for (index, p) in piers.iter().enumerate() {
         let deck = deck_of(index);
-        let mut ear = earcut::Earcut::<f64>::new();
-        let mut tri: Vec<u32> = Vec::new();
-        ear.earcut(p.ring.iter().copied(), &[] as &[u32], &mut tri);
-        if tri.is_empty() {
-            continue;
-        }
+        if !pier_top(p, |[a,b,c]| paving.tri(a, b, c, deck)) { continue; }
         decks += 1;
-        for t in tri.chunks_exact(3) {
-            let v = |i: u32| [p.ring[i as usize][0], p.deck_y, p.ring[i as usize][1]];
-            let (a, b, c) = (v(t[0]), v(t[1]), v(t[2]));
-            let cr = (b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0]);
-            if cr < 0.0 { paving.tri(a, b, c, deck) } else { paving.tri(a, c, b, deck) }
-        }
-        let inward =if signed_area(&p.ring) > 0.0 { 1.0 } else { -1.0 };
+        let is_municipal = municipal == Some(index);
+        let p_mid = [(p.min[0] + p.max[0]) * 0.5, (p.min[1] + p.max[1]) * 0.5];
+        let fb_dist = (p_mid[0] - fb_c[0]).hypot(p_mid[1] - fb_c[1]);
+        // Narrow public Embarcadero promenade piers (e.g. Pier 14, Gate floats) get maritime railings & lamp stanchions.
+        let is_prom_pier = !is_municipal && fb_dist < prom_reach && p.area_m2 < 3_000.0 * gs * gs;
+        let inward = if signed_area(&p.ring) > 0.0 { 1.0 } else { -1.0 };
         for i in 0..p.ring.len() {
             let (a, b) = (p.ring[i], p.ring[(i + 1) % p.ring.len()]);
             let l = (b[0] - a[0]).hypot(b[1] - a[1]);
@@ -1034,10 +1204,45 @@ pub fn build_meshes_with(
             }
             // The outline's interior side: a point a metre in must be inside.
             let n = if point_in_ring(&p.ring, mx + n[0], mz + n[1]) { n } else { [-n[0], -n[1]] };
-            pier_fascia(&mut conc, &mut under, a, b, n, p.deck_y, sea, concrete, dark, &mut piles, (municipal == Some(index)).then_some(&mut municipal_feet));
+            pier_fascia(&mut conc, &mut under, a, b, n, p.deck_y, sea, concrete, dark, &mut piles, is_municipal.then_some(&mut municipal_feet));
+            let edge_fb = (mx - fb_c[0]).hypot(mz - fb_c[1]);
+            if !is_municipal {
+                pier_edge_hardware(&mut conc, a, b, n, p.deck_y, sea, concrete, edge_fb < fender_reach, edge_fb < bollard_reach, is_prom_pier);
+            }
         }
     }
     WaterfrontMeshes { paving: paving.freeze(), concrete: conc.freeze(), under_deck: under.freeze(), piles, decks, municipal_feet }
+}
+
+/// The upward-facing pier slab shared by the waterfront mesh and the headless world.
+pub fn pier_top(p: &Pier, mut emit: impl FnMut([[f64;3];3])) -> bool {
+    let mut ear = earcut::Earcut::<f64>::new();
+    let mut indices = Vec::<u32>::new();
+    ear.earcut(p.ring.iter().copied(), &[] as &[u32], &mut indices);
+    for t in indices.chunks_exact(3) {
+        let v = |i: u32| [p.ring[i as usize][0], p.deck_y, p.ring[i as usize][1]];
+        let (a,b,c) = (v(t[0]),v(t[1]),v(t[2]));
+        let cr = (b[0]-a[0])*(c[2]-a[2]) - (b[2]-a[2])*(c[0]-a[0]);
+        emit(if cr < 0.0 { [a,b,c] } else { [a,c,b] });
+    }
+    !indices.is_empty()
+}
+
+/// Pier and dock floors for clients and dedicated servers without a render scene.
+pub fn harbour_floors(root: &std::path::Path, elevation: &eo_data::ElevationGrid) -> Result<Vec<[[f32;3];3]>> {
+    let boundary = eo_water::load_boundary(root)?;
+    let shore = eo_water::shoreline::Oracle::citywide(&boundary).ok_or_else(|| anyhow::anyhow!("missing city coastline"))?;
+    let js = crate::LandmarksJs::get();
+    let mut rings = load_pier_rings(root)?;
+    let line_rings = load_pier_line_rings(root, &rings)?;
+    rings.extend(line_rings);
+    let piers = plan_piers(&rings, &shore, &|x,z| elevation.sample(x,z), js.sea_level_y, js.shore.road_lift);
+    let mut triangles = Vec::new();
+    for p in &piers { pier_top(p, |t| triangles.push(t.map(|v| v.map(|f| f as f32)))); }
+    let lines = crate::floating_docks::load_pier_lines(root)?;
+    let docks = crate::floating_docks::plan_docks(&lines, &shore, &piers);
+    triangles.extend(crate::floating_docks::walkable(&docks, js.sea_level_y));
+    Ok(triangles)
 }
 
 /// A pier deck's edge on the segment a-b (`n` into the deck): the fascia beam,
@@ -1077,6 +1282,124 @@ fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f
             row.boxes.push(start..conc.positions.len());
         }
         *piles += 1;
+    }
+}
+
+/// Maritime pier-edge hardware along a water-facing pier segment `a..b` (`n` inward):
+/// weathered concrete bull-rail curb (all piers), creosoted timber fender pilings &
+/// horizontal timber rub-rails (Embarcadero), cast-iron double-bitt mooring bollards,
+/// and perimeter railings + historic maritime lamp stanchions on public promenade piers (Pier 14 / Ferry Plaza).
+#[allow(clippy::too_many_arguments)]
+fn pier_edge_hardware(
+    conc: &mut MeshArrays,
+    a: [f64; 2],
+    b: [f64; 2],
+    n: [f64; 2],
+    deck: f64,
+    sea: f64,
+    concrete: Rgb,
+    fenders: bool,
+    bollards: bool,
+    promenade: bool,
+) {
+    let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+    if l < 1.2 {
+        return;
+    }
+    let u = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+    let yaw = u[1].atan2(u[0]);
+    let mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+    let pt = |s: f64, inward: f64| [a[0] + u[0] * s + n[0] * inward, a[1] + u[1] * s + n[1] * inward];
+
+    // Subtle deterministic weathered tone variation per edge so pier curbs never look uniform CAD grey.
+    let h = ((mid[0] * 0.13 + mid[1] * 0.19).sin() * 43758.5453).fract().abs();
+    let bull_c = [
+        (concrete[0] * (1.14 + 0.10 * h)).min(0.62),
+        (concrete[1] * (1.12 + 0.10 * h)).min(0.60),
+        (concrete[2] * (1.06 + 0.08 * h)).min(0.55),
+    ];
+
+    // 1. Weathered concrete bull-rail / perimeter curb along the deck edge (breaks up flat black pier slabs).
+    let bull_w = 0.36;
+    let bull_h = 0.24;
+    let bc = pt(l * 0.5, bull_w * 0.5);
+    conc.box_(bc[0], bc[1], deck - 0.02, deck + bull_h, l * 0.5, bull_w * 0.5, yaw, bull_c, crate::geometry::NO_BOTTOM);
+
+    // 2. Embarcadero creosoted timber fender pilings & horizontal timber waler rub-rails along the seaward face.
+    if fenders && l >= 2.4 {
+        let timber_top = crate::geometry::srgb_hex(0x4b3e32);
+        let timber_wet = crate::geometry::srgb_hex(0x232922);
+        let waler_c = crate::geometry::srgb_hex(0x524539);
+        // Two horizontal timber rub-rails bolted across the seaward face of the pier fascia.
+        for wy in [deck - 0.24, deck - 0.66] {
+            let wc = pt(l * 0.5, -0.14);
+            conc.box_(wc[0], wc[1], wy - 0.10, wy + 0.10, l * 0.5, 0.09, yaw, waler_c, crate::geometry::ALL);
+        }
+        // Creosoted timber fender pilings standing proud of the concrete fascia (wet algae band at waterline).
+        let pitch = 7.4;
+        let count = (l / pitch).floor().max(1.0) as usize;
+        let wet_top = (sea + 0.72).min(deck - 0.35);
+        for k in 0..count {
+            let s = (k as f64 + 0.5) * l / count as f64;
+            let fc = pt(s, -0.26);
+            // Slight organic piling top height variation (typical historic SF timber fender clusters).
+            let ph = 0.28 + 0.18 * (((s * 0.73 + mid[0] * 0.11).sin()).abs());
+            conc.box_(fc[0], fc[1], sea - 0.85, wet_top, 0.18, 0.18, yaw, timber_wet, crate::geometry::Faces { top: false, bottom: false });
+            conc.box_(fc[0], fc[1], wet_top, deck + ph, 0.18, 0.18, yaw, timber_top, crate::geometry::NO_BOTTOM);
+        }
+    }
+
+    // 3. Heavy cast-iron mooring bollards seated on the bull-rail curb.
+    if bollards && l >= 12.0 {
+        let iron = crate::geometry::srgb_hex(0x2b3035);
+        let iron_top = crate::geometry::srgb_hex(0x3a4046);
+        let pitch = 24.0;
+        let count = (l / pitch).floor().max(1.0) as usize;
+        for k in 0..count {
+            let s = (k as f64 + 0.5) * l / count as f64;
+            let pc = pt(s, 0.22);
+            let y0 = deck + bull_h;
+            // Base plate + bollard barrel + overhanging mooring horn cap.
+            conc.box_(pc[0], pc[1], y0, y0 + 0.07, 0.34, 0.20, yaw, iron, crate::geometry::NO_BOTTOM);
+            conc.box_(pc[0], pc[1], y0 + 0.07, y0 + 0.52, 0.14, 0.14, yaw, iron, crate::geometry::NO_BOTTOM);
+            conc.box_(pc[0], pc[1], y0 + 0.50, y0 + 0.62, 0.24, 0.17, yaw, iron_top, crate::geometry::NO_BOTTOM);
+        }
+    }
+
+    // 4. Public promenade piers (Pier 14 & Ferry Plaza outer walkways): maritime safety railing + historic lamp stanchions.
+    if promenade && l >= 4.0 {
+        let rail_iron = crate::geometry::srgb_hex(0x2e3736);
+        let lantern_glow = crate::geometry::srgb_hex(0xd8ccb4);
+        let y_rail0 = deck + bull_h;
+        let y_rail1 = y_rail0 + 1.02;
+        // Top handrail + two intermediate maritime cable/pipe rails.
+        let rc = pt(l * 0.5, 0.18);
+        conc.box_(rc[0], rc[1], y_rail1 - 0.05, y_rail1 + 0.02, l * 0.5, 0.045, yaw, rail_iron, crate::geometry::ALL);
+        for ry in [y_rail0 + 0.34, y_rail0 + 0.68] {
+            conc.box_(rc[0], rc[1], ry - 0.022, ry + 0.022, l * 0.5, 0.028, yaw, rail_iron, crate::geometry::ALL);
+        }
+        // Railing posts every 3.4 m along the bull-rail.
+        let posts = (l / 3.4).ceil().max(2.0) as usize;
+        for k in 0..=posts {
+            let s = (k as f64 / posts as f64) * l;
+            let pc = pt(s, 0.18);
+            conc.box_(pc[0], pc[1], y_rail0, y_rail1, 0.04, 0.04, yaw, rail_iron, crate::geometry::NO_BOTTOM);
+        }
+        // Historic SF Embarcadero fluted maritime lamp stanchions every ~26 m on long promenade piers (Pier 14).
+        if l >= 18.0 {
+            let lamps = (l / 26.0).floor().max(1.0) as usize;
+            for k in 0..lamps {
+                let s = (k as f64 + 0.5) * l / lamps as f64;
+                let lc = pt(s, 0.24);
+                let y0 = deck + bull_h;
+                // Stepped cast-iron pedestal + fluted column + cross-arm + frosted maritime globe lantern.
+                conc.box_(lc[0], lc[1], y0, y0 + 0.72, 0.19, 0.19, yaw, rail_iron, crate::geometry::NO_BOTTOM);
+                conc.box_(lc[0], lc[1], y0 + 0.72, y0 + 3.85, 0.075, 0.075, yaw, rail_iron, crate::geometry::NO_BOTTOM);
+                conc.box_(lc[0], lc[1], y0 + 3.45, y0 + 3.55, 0.34, 0.05, yaw, rail_iron, crate::geometry::ALL);
+                conc.box_(lc[0], lc[1], y0 + 3.85, y0 + 4.30, 0.17, 0.17, yaw, lantern_glow, crate::geometry::ALL);
+                conc.box_(lc[0], lc[1], y0 + 4.30, y0 + 4.44, 0.11, 0.11, yaw, rail_iron, crate::geometry::NO_BOTTOM);
+            }
+        }
     }
 }
 
@@ -1235,9 +1558,12 @@ pub fn quay_railing_with(edges: &[ShoreEdge], crest_at: &dyn Fn(f64, f64) -> f64
         if l < 0.2 {
             continue;
         }
-        pieces += 1;
         let u = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
         let (ya, yb) = (crest_at(e.a[0], e.a[1]), crest_at(e.b[0], e.b[1]));
+        if ya.min(yb) < eo_water::SEA_LEVEL_Y + SUNKEN_LAND_CEILING_M {
+            continue;
+        }
+        pieces += 1;
         let at = |t: f64| ([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ya + (yb - ya) * t);
         let (tw, th) = (RAILING_TOP_RAIL_M[0], RAILING_TOP_RAIL_M[1]);
         let from = m.positions.len() / 3;
@@ -1299,5 +1625,32 @@ mod pier_line_tests {
         // a short open stub is no pier
         assert!(close_pier_lines(vec![vec![[0.0, 0.0], [3.0, 0.0]]]).is_empty());
         assert!((PIER_GUARD_M - 42.0 * 0.0254).abs() < 1e-3);
+    }
+
+    #[test]
+    fn sunken_non_pier_shelf_is_pressed_to_seabed_while_dry_quay_stays() {
+        let sea = -0.55;
+        let edge = ShoreEdge { a: [0.0, 0.0], b: [60.0, 0.0], land: [0.0, 1.0], pier: None };
+        let press = ShorePress::new(sea, &[edge], &[]);
+        // Artificially lifted underwater ghost pier shelf (sea + 0.10 m) at 16 m inland -> pressed to seabed.
+        assert!(press.press(30.0, 16.0, sea + 0.10) <= sea - 2.0 + 1e-9);
+        // Real dry quay land (+2.0 m) at 16 m inland -> untouched.
+        assert!((press.press(30.0, 16.0, 2.0) - 2.0).abs() < 1e-9);
+        // Beyond 30 m inland -> untouched even at sea + 0.10 m.
+        assert!((press.press(30.0, 30.0, sea + 0.10) - (sea + 0.10)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ferry_gate_sheds_build_dark_steel_canopies_with_neutral_glass() {
+        let js = crate::LandmarksJs::get();
+        let fp = &js.shore.ferry_pier;
+        let g = ferry_gate_sheds(&fp.outline, &fp.sheds, 2.0).expect("ferry gate sheds");
+        assert!(g.frames.triangles() > 400 && g.frames.triangles() < 8_000, "frames={}", g.frames.triangles());
+        assert!(g.roofs.triangles() > 100 && g.roofs.triangles() < 4_000, "roofs={}", g.roofs.triangles());
+        assert!(g.glass.triangles() > 20 && g.glass.triangles() < 1_000, "glass={}", g.glass.triangles());
+        // No blinding pure-white vertex tints on frames or roofs, and neutral dark smoked glazing.
+        assert!(g.frames.colors.iter().all(|&c| c <= 0.50), "bright white frame tint found");
+        assert!(g.roofs.colors.iter().all(|&c| c <= 0.40), "bright white roof tint found");
+        assert!(g.glass.colors.iter().all(|&c| c <= 0.025), "bright blue glass tint found");
     }
 }

@@ -17,7 +17,7 @@ use crate::manifest::AssetRef;
 
 pub const MAGIC: &[u8; 4] = b"EOMC";
 /// Bump when the cooked layout or the cook itself changes.
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 5;
 const HEADER: usize = 4 + 4 + 32 + 8 + 32;
 
 pub fn model_path(cache_dir: &Path, sha256: &str) -> PathBuf {

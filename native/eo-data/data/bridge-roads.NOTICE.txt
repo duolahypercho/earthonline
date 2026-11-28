@@ -1,0 +1,617 @@
+USGS 3D Elevation Program, CA_SanFrancisco_1_B23. Public domain (United States Government work).
+Source root: https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CA_SanFrancisco_1_B23/
+XY EPSG:3857, Z NAVD88 metres. Level 8 LAS bridge deck within 5 m; class 2 on exposed pavement.
+East span pier chainages digitized from Caltrans, SFOBB Self-Anchored Suspension Bridge,
+Evaluation of the ASTM A354 Grade BD Rods (2014), fig. 1.1-1 and pp. 1-2 to 1-3.
+https://files.mtc.ca.gov/library/pub/28860.pdf
+Skyway box depth (midspan): https://rosap.ntl.bts.gov/view/dot/27621/dot_27621_DS1.pdf
+SAS main cable, approximately 2.6 ft diameter: SJSU College of Engineering, Spring 2012, p. 6,
+https://www.sjsu.edu/engineering/docs/magazines/spring-2012.pdf
+Transition structures: https://files.mtc.ca.gov/library/pub/30903.pdf
+Plan coordinates: city road ways (OpenStreetMap contributors, ODbL) and landmarks-js.json endpoints.
+Adopted deck elevations are medians. At Rincon the covered lower road is inferred from the upper
+deck minus the west span register's 6.42 m separation, except the exposed west end of the on-ramp.
+Treasure Island Road uses visible class 2 inside a 2 m disc, levels 0-8; pavement hidden
+by bridge decks is interpolated between exposed returns.
+Saint Charles Avenue and its service drive use class 2 medians in 1 m discs at up to 3 m spacing,
+levels 0-8. The southernmost street sample is class 17 on the deck, continuous with the exposed pavement.
+Mariposa Street over the Caltrain tracks and its southbound on-ramp use levels 0-8 in 4 m discs.
+Follow the lower roadway band between exposed stations; prefer class 17, then 2, then 1.
+Use at least five returns in the band; interpolate covered stations between measured ends.
+Behind the southwest curb use a 2 m grid of class 2 and 17 medians in 1 m discs, levels 0-8.
+Retain five or more returns in the observed lower apron band (12.0-13.4 m NAVD88). Omit missing cells.
+Crossing identification: Caltrain bridge inventory, https://www.caltrain.com/media/36811
+At Yerba Buena Island the covered eastbound centreline continues the grade between its first
+two exposed 3DEP deck discs. The island street blends into its existing tunnel approach.
+Output src/bridge_readings.rs SHA-256 ae8fe3a3dcb494f3ec18cdd2107ea60c79ad7d90bb8f17d6eb362cc25992e4a3
+
+BAY_SF (2807.90, -1241.80): 318 class 17 returns, adopted 58.10 m
+BAY_ISLAND (4559.00, -3295.50): 341 class 17 returns, adopted 55.35 m
+GATE_SOUTH (-5026.15, -3327.80): 242 class 17 returns, adopted 56.65 m
+GATE_NORTH (-5392.35, -5995.75): 304 class 17 returns, adopted 73.45 m
+SAINT_CHARLES (-4389.80, 7665.90): 15 class 2 returns, adopted 76.59 m
+SAINT_CHARLES (-4389.43, 7668.64): 13 class 2 returns, adopted 76.64 m
+SAINT_CHARLES (-4389.05, 7671.37): 14 class 2 returns, adopted 76.74 m
+SAINT_CHARLES (-4388.68, 7674.11): 14 class 2 returns, adopted 76.88 m
+SAINT_CHARLES (-4388.31, 7676.85): 15 class 2 returns, adopted 77.06 m
+SAINT_CHARLES (-4387.94, 7679.58): 16 class 2 returns, adopted 77.24 m
+SAINT_CHARLES (-4387.56, 7682.32): 16 class 2 returns, adopted 77.40 m
+SAINT_CHARLES (-4387.19, 7685.05): 14 class 2 returns, adopted 77.55 m
+SAINT_CHARLES (-4386.82, 7687.79): 13 class 2 returns, adopted 77.69 m
+SAINT_CHARLES (-4386.45, 7690.53): 16 class 2 returns, adopted 77.81 m
+SAINT_CHARLES (-4386.07, 7693.26): 19 class 2 returns, adopted 77.89 m
+SAINT_CHARLES (-4385.70, 7696.00): 16 class 17 returns, adopted 78.00 m
+PLAZA_26968357 (-5030.60, -3324.00): 253 class 17 returns, adopted 56.73 m
+PLAZA_26968357 (-5021.60, -3312.70): 247 class 2 returns, adopted 56.11 m
+PLAZA_26968357 (-5012.60, -3301.40): 239 class 2 returns, adopted 55.68 m
+PLAZA_26968357 (-5003.60, -3290.10): 289 class 2 returns, adopted 55.34 m
+RINCON_LOWER (2507.40, -886.50): 301 class 17 returns, adopted 37.71 m
+RINCON_LOWER (2519.10, -899.25): 294 class 17 returns, adopted 38.25 m
+RINCON_LOWER (2530.80, -912.00): 9189 class 17 returns, adopted 38.76 m
+RINCON_LOWER (2542.50, -924.75): 351 class 17 returns, adopted 39.30 m
+RINCON_LOWER (2554.20, -937.50): 315 class 17 returns, adopted 39.81 m
+FEEDER_123741452 (2341.90, -756.80): 327 class 17 returns, adopted 31.09 m
+FEEDER_123741452 (2355.14, -766.99): 336 class 17 returns, adopted 31.64 m
+FEEDER_123741452 (2368.38, -777.17): 334 class 17 returns, adopted 32.25 m
+FEEDER_123741452 (2381.61, -787.36): 340 class 17 returns, adopted 32.87 m
+FEEDER_123741452 (2394.85, -797.55): 340 class 17 returns, adopted 33.43 m
+FEEDER_123741452 (2408.09, -807.74): 306 class 17 returns, adopted 33.95 m
+FEEDER_123741452 (2421.33, -817.92): 299 class 17 returns, adopted 34.45 m
+FEEDER_123741452 (2434.56, -828.11): 316 class 17 returns, adopted 34.92 m
+FEEDER_123741452 (2447.80, -838.30): 330 class 17 returns, adopted 35.42 m
+EAST_WESTBOUND (8063.30, -4886.20): 177 class 17 returns, adopted 7.50 m
+EAST_WESTBOUND (8015.50, -4880.86): 334 class 17 returns, adopted 8.45 m
+EAST_WESTBOUND (7967.70, -4875.52): 297 class 17 returns, adopted 9.41 m
+EAST_WESTBOUND (7919.90, -4870.18): 327 class 17 returns, adopted 10.36 m
+EAST_WESTBOUND (7872.10, -4864.84): 304 class 17 returns, adopted 11.29 m
+EAST_WESTBOUND (7824.30, -4859.50): 712 class 17 returns, adopted 12.13 m
+EAST_WESTBOUND (7766.98, -4850.85): 302 class 17 returns, adopted 13.34 m
+EAST_WESTBOUND (7709.65, -4842.20): 304 class 17 returns, adopted 14.51 m
+EAST_WESTBOUND (7652.32, -4833.55): 300 class 17 returns, adopted 15.68 m
+EAST_WESTBOUND (7595.00, -4824.90): 318 class 17 returns, adopted 16.73 m
+EAST_WESTBOUND (7536.17, -4814.10): 348 class 17 returns, adopted 18.01 m
+EAST_WESTBOUND (7477.34, -4803.31): 299 class 17 returns, adopted 19.06 m
+EAST_WESTBOUND (7418.50, -4792.51): 296 class 17 returns, adopted 20.24 m
+EAST_WESTBOUND (7359.67, -4781.72): 303 class 17 returns, adopted 21.41 m
+EAST_WESTBOUND (7300.84, -4770.92): 348 class 17 returns, adopted 22.56 m
+EAST_WESTBOUND (7242.01, -4760.12): 4340 class 17 returns, adopted 23.73 m
+EAST_WESTBOUND (7183.18, -4749.33): 304 class 17 returns, adopted 24.90 m
+EAST_WESTBOUND (7124.34, -4738.53): 4657 class 17 returns, adopted 26.07 m
+EAST_WESTBOUND (7065.51, -4727.74): 320 class 17 returns, adopted 27.16 m
+EAST_WESTBOUND (7006.68, -4716.94): 343 class 17 returns, adopted 28.27 m
+EAST_WESTBOUND (6947.85, -4706.14): 4548 class 17 returns, adopted 29.36 m
+EAST_WESTBOUND (6889.02, -4695.35): 294 class 17 returns, adopted 30.43 m
+EAST_WESTBOUND (6830.18, -4684.55): 335 class 17 returns, adopted 31.54 m
+EAST_WESTBOUND (6771.35, -4673.76): 300 class 17 returns, adopted 32.58 m
+EAST_WESTBOUND (6712.52, -4662.96): 304 class 17 returns, adopted 33.63 m
+EAST_WESTBOUND (6653.69, -4652.16): 337 class 17 returns, adopted 34.71 m
+EAST_WESTBOUND (6594.86, -4641.37): 4717 class 17 returns, adopted 35.70 m
+EAST_WESTBOUND (6536.02, -4630.57): 4779 class 17 returns, adopted 36.67 m
+EAST_WESTBOUND (6477.19, -4619.78): 297 class 17 returns, adopted 37.63 m
+EAST_WESTBOUND (6418.36, -4608.98): 3165 class 17 returns, adopted 38.69 m
+EAST_WESTBOUND (6359.53, -4598.18): 299 class 17 returns, adopted 39.70 m
+EAST_WESTBOUND (6300.70, -4587.39): 334 class 17 returns, adopted 40.64 m
+EAST_WESTBOUND (6241.86, -4576.59): 301 class 17 returns, adopted 41.56 m
+EAST_WESTBOUND (6183.03, -4565.80): 347 class 17 returns, adopted 42.52 m
+EAST_WESTBOUND (6124.20, -4555.00): 301 class 17 returns, adopted 43.46 m
+EAST_WESTBOUND (6077.17, -4544.03): 301 class 17 returns, adopted 44.14 m
+EAST_WESTBOUND (6030.13, -4533.07): 261 class 17 returns, adopted 44.89 m
+EAST_WESTBOUND (5983.10, -4522.10): 323 class 17 returns, adopted 45.70 m
+EAST_WESTBOUND (5937.73, -4505.10): 257 class 17 returns, adopted 46.28 m
+EAST_WESTBOUND (5892.37, -4488.10): 337 class 17 returns, adopted 47.03 m
+EAST_WESTBOUND (5847.00, -4471.10): 293 class 17 returns, adopted 47.86 m
+EAST_WESTBOUND (5800.17, -4445.70): 303 class 17 returns, adopted 48.50 m
+EAST_WESTBOUND (5753.33, -4420.30): 305 class 17 returns, adopted 49.24 m
+EAST_WESTBOUND (5706.50, -4394.90): 335 class 17 returns, adopted 50.16 m
+EAST_WESTBOUND (5659.28, -4361.14): 362 class 17 returns, adopted 50.83 m
+EAST_WESTBOUND (5612.06, -4327.37): 299 class 17 returns, adopted 51.72 m
+EAST_WESTBOUND (5564.85, -4293.61): 299 class 17 returns, adopted 52.62 m
+EAST_WESTBOUND (5517.63, -4259.85): 343 class 17 returns, adopted 53.47 m
+EAST_WESTBOUND (5470.41, -4226.08): 285 class 17 returns, adopted 54.27 m
+EAST_WESTBOUND (5423.19, -4192.32): 299 class 17 returns, adopted 54.94 m
+EAST_WESTBOUND (5375.97, -4158.55): 298 class 17 returns, adopted 55.58 m
+EAST_WESTBOUND (5328.75, -4124.79): 299 class 17 returns, adopted 56.23 m
+EAST_WESTBOUND (5281.54, -4091.03): 293 class 17 returns, adopted 56.92 m
+EAST_WESTBOUND (5234.32, -4057.26): 293 class 17 returns, adopted 57.59 m
+EAST_WESTBOUND (5187.10, -4023.50): 298 class 17 returns, adopted 58.28 m
+EAST_EASTBOUND (4893.90, -3683.40): 300 class 17 returns, adopted 51.78 m (inferred beneath upper roadway)
+EAST_EASTBOUND (4929.10, -3725.55): 373 class 17 returns, adopted 52.13 m (inferred beneath upper roadway)
+EAST_EASTBOUND (4964.30, -3767.70): 299 class 17 returns, adopted 52.48 m (inferred beneath upper roadway)
+EAST_EASTBOUND (5000.65, -3805.80): 345 class 17 returns, adopted 52.84 m
+EAST_EASTBOUND (5037.00, -3843.90): 302 class 17 returns, adopted 53.20 m
+EAST_EASTBOUND (5068.95, -3873.30): 303 class 17 returns, adopted 53.74 m
+EAST_EASTBOUND (5100.90, -3902.70): 303 class 17 returns, adopted 54.37 m
+EAST_EASTBOUND (5110.60, -3911.10): 302 class 17 returns, adopted 54.55 m
+EAST_EASTBOUND (5149.50, -3942.15): 347 class 17 returns, adopted 55.34 m
+EAST_EASTBOUND (5188.40, -3973.20): 301 class 17 returns, adopted 55.89 m
+EAST_EASTBOUND (5233.69, -4005.55): 296 class 17 returns, adopted 56.22 m
+EAST_EASTBOUND (5278.98, -4037.90): 293 class 17 returns, adopted 56.18 m
+EAST_EASTBOUND (5324.27, -4070.25): 290 class 17 returns, adopted 55.76 m
+EAST_EASTBOUND (5369.57, -4102.60): 293 class 17 returns, adopted 55.14 m
+EAST_EASTBOUND (5414.86, -4134.95): 284 class 17 returns, adopted 54.51 m
+EAST_EASTBOUND (5460.15, -4167.30): 282 class 17 returns, adopted 53.87 m
+EAST_EASTBOUND (5505.44, -4199.65): 301 class 17 returns, adopted 53.20 m
+EAST_EASTBOUND (5550.73, -4232.00): 303 class 17 returns, adopted 52.45 m
+EAST_EASTBOUND (5596.02, -4264.35): 331 class 17 returns, adopted 51.62 m
+EAST_EASTBOUND (5641.32, -4296.70): 339 class 17 returns, adopted 50.78 m
+EAST_EASTBOUND (5686.61, -4329.05): 301 class 17 returns, adopted 49.93 m
+EAST_EASTBOUND (5731.90, -4361.40): 293 class 17 returns, adopted 49.35 m
+EAST_EASTBOUND (5783.20, -4390.20): 323 class 17 returns, adopted 48.35 m
+EAST_EASTBOUND (5834.50, -4419.00): 337 class 17 returns, adopted 47.62 m
+EAST_EASTBOUND (5887.90, -4441.60): 2781 class 17 returns, adopted 46.78 m
+EAST_EASTBOUND (5941.30, -4464.20): 298 class 17 returns, adopted 45.97 m
+EAST_EASTBOUND (5982.80, -4477.30): 1234 class 17 returns, adopted 45.26 m
+EAST_EASTBOUND (6024.30, -4490.40): 303 class 17 returns, adopted 44.78 m
+EAST_EASTBOUND (6065.70, -4499.90): 302 class 17 returns, adopted 44.15 m
+EAST_EASTBOUND (6107.10, -4509.40): 302 class 17 returns, adopted 43.59 m
+EAST_EASTBOUND (6164.78, -4520.00): 303 class 17 returns, adopted 42.76 m
+EAST_EASTBOUND (6222.46, -4530.60): 354 class 17 returns, adopted 41.89 m
+EAST_EASTBOUND (6280.14, -4541.20): 1667 class 17 returns, adopted 40.97 m
+EAST_EASTBOUND (6337.82, -4551.80): 302 class 17 returns, adopted 40.19 m
+EAST_EASTBOUND (6395.50, -4562.40): 336 class 17 returns, adopted 39.19 m
+EAST_EASTBOUND (6453.18, -4573.00): 2431 class 17 returns, adopted 38.23 m
+EAST_EASTBOUND (6510.86, -4583.60): 340 class 17 returns, adopted 37.30 m
+EAST_EASTBOUND (6568.54, -4594.20): 305 class 17 returns, adopted 36.30 m
+EAST_EASTBOUND (6626.22, -4604.80): 326 class 17 returns, adopted 35.31 m
+EAST_EASTBOUND (6683.90, -4615.40): 301 class 17 returns, adopted 34.28 m
+EAST_EASTBOUND (6741.58, -4626.00): 302 class 17 returns, adopted 33.25 m
+EAST_EASTBOUND (6799.26, -4636.60): 4907 class 17 returns, adopted 32.25 m
+EAST_EASTBOUND (6856.94, -4647.20): 4711 class 17 returns, adopted 31.19 m
+EAST_EASTBOUND (6914.62, -4657.80): 311 class 17 returns, adopted 30.12 m
+EAST_EASTBOUND (6972.30, -4668.40): 1191 class 17 returns, adopted 28.99 m
+EAST_EASTBOUND (7029.98, -4679.00): 299 class 17 returns, adopted 27.97 m
+EAST_EASTBOUND (7087.66, -4689.60): 327 class 17 returns, adopted 26.93 m
+EAST_EASTBOUND (7145.34, -4700.20): 1879 class 17 returns, adopted 25.89 m
+EAST_EASTBOUND (7203.02, -4710.80): 304 class 17 returns, adopted 24.68 m
+EAST_EASTBOUND (7260.70, -4721.40): 302 class 17 returns, adopted 23.50 m
+EAST_EASTBOUND (7318.38, -4732.00): 302 class 17 returns, adopted 22.39 m
+EAST_EASTBOUND (7376.06, -4742.60): 355 class 17 returns, adopted 21.26 m
+EAST_EASTBOUND (7433.74, -4753.20): 274 class 17 returns, adopted 20.14 m
+EAST_EASTBOUND (7491.42, -4763.80): 744 class 17 returns, adopted 18.91 m
+EAST_EASTBOUND (7549.10, -4774.40): 4621 class 17 returns, adopted 17.92 m
+EAST_EASTBOUND (7601.40, -4782.86): 347 class 17 returns, adopted 16.76 m
+EAST_EASTBOUND (7653.70, -4791.32): 305 class 17 returns, adopted 15.76 m
+EAST_EASTBOUND (7706.00, -4799.78): 1819 class 17 returns, adopted 14.66 m
+EAST_EASTBOUND (7758.30, -4808.24): 296 class 17 returns, adopted 13.68 m
+EAST_EASTBOUND (7810.60, -4816.70): 304 class 17 returns, adopted 12.64 m
+EAST_EASTBOUND (7861.88, -4822.68): 332 class 17 returns, adopted 11.65 m
+EAST_EASTBOUND (7913.16, -4828.66): 1347 class 17 returns, adopted 10.72 m
+EAST_EASTBOUND (7964.44, -4834.64): 4198 class 17 returns, adopted 9.58 m
+EAST_EASTBOUND (8015.72, -4840.62): 306 class 17 returns, adopted 8.62 m
+EAST_EASTBOUND (8067.00, -4846.60): 218 class 17 returns, adopted 7.65 m
+MARIPOSA_STREET (2256.20, 1544.20): 247 class 2 returns, adopted 12.04 m
+MARIPOSA_STREET (2261.83, 1543.77): 232 class 2 returns, adopted 12.09 m
+MARIPOSA_STREET (2267.47, 1543.33): 249 class 2 returns, adopted 12.10 m
+MARIPOSA_STREET (2273.10, 1542.90): 259 class 2 returns, adopted 12.19 m
+MARIPOSA_STREET (2278.73, 1542.47): 226 class 2 returns, adopted 12.37 m
+MARIPOSA_STREET (2284.37, 1542.03): 239 class 2 returns, adopted 12.55 m
+MARIPOSA_STREET (2290.00, 1541.60): 252 class 2 returns, adopted 12.72 m
+MARIPOSA_STREET (2295.63, 1541.17): 78 class 17 returns, adopted 12.93 m
+MARIPOSA_STREET (2301.27, 1540.73): 134 class 17 returns, adopted 12.97 m
+MARIPOSA_STREET (2306.90, 1540.30): 138 class 17 returns, adopted 12.97 m
+MARIPOSA_STREET (2310.30, 1540.00): 246 class 17 returns, adopted 12.97 m
+MARIPOSA_STREET (2313.70, 1539.70): 160 class 17 returns, adopted 12.97 m
+MARIPOSA_STREET (2319.00, 1539.26): occluded; interpolate between visible stations
+MARIPOSA_STREET (2324.30, 1538.83): occluded; interpolate between visible stations
+MARIPOSA_STREET (2329.60, 1538.39): occluded; interpolate between visible stations
+MARIPOSA_STREET (2334.90, 1537.95): occluded; interpolate between visible stations
+MARIPOSA_STREET (2340.20, 1537.51): occluded; interpolate between visible stations
+MARIPOSA_STREET (2345.50, 1537.08): occluded; interpolate between visible stations
+MARIPOSA_STREET (2350.80, 1536.64): occluded; interpolate between visible stations
+MARIPOSA_STREET (2356.10, 1536.20): 193 class 1 returns, adopted 12.09 m
+MARIPOSA_STREET (2362.00, 1535.65): 191 class 2 returns, adopted 11.70 m
+MARIPOSA_STREET (2367.90, 1535.10): 222 class 2 returns, adopted 11.36 m
+SAINT_CHARLES_DRIVE (-4430.60, 7712.50): 15 class 2 returns, adopted 75.74 m
+SAINT_CHARLES_DRIVE (-4427.83, 7712.25): 14 class 2 returns, adopted 75.88 m
+SAINT_CHARLES_DRIVE (-4425.05, 7712.00): 20 class 2 returns, adopted 76.00 m
+SAINT_CHARLES_DRIVE (-4422.27, 7711.75): 15 class 2 returns, adopted 76.15 m
+SAINT_CHARLES_DRIVE (-4419.50, 7711.50): 12 class 2 returns, adopted 76.31 m
+SAINT_CHARLES_DRIVE (-4417.08, 7709.96): 14 class 2 returns, adopted 76.44 m
+SAINT_CHARLES_DRIVE (-4414.65, 7708.42): 20 class 2 returns, adopted 76.62 m
+SAINT_CHARLES_DRIVE (-4412.23, 7706.88): 13 class 2 returns, adopted 76.80 m
+SAINT_CHARLES_DRIVE (-4409.81, 7705.35): 11 class 2 returns, adopted 76.91 m
+SAINT_CHARLES_DRIVE (-4407.38, 7703.81): 15 class 2 returns, adopted 77.03 m
+SAINT_CHARLES_DRIVE (-4404.96, 7702.27): 19 class 2 returns, adopted 77.12 m
+SAINT_CHARLES_DRIVE (-4402.54, 7700.73): 17 class 2 returns, adopted 77.21 m
+SAINT_CHARLES_DRIVE (-4400.12, 7699.19): 17 class 2 returns, adopted 77.29 m
+SAINT_CHARLES_DRIVE (-4397.69, 7697.65): 12 class 2 returns, adopted 77.49 m
+SAINT_CHARLES_DRIVE (-4395.27, 7696.12): 15 class 2 returns, adopted 77.68 m
+SAINT_CHARLES_DRIVE (-4392.85, 7694.58): 15 class 2 returns, adopted 77.78 m
+SAINT_CHARLES_DRIVE (-4390.42, 7693.04): 17 class 2 returns, adopted 77.77 m
+SAINT_CHARLES_DRIVE (-4388.00, 7691.50): 16 class 2 returns, adopted 77.81 m
+RINCON_MAIN (2469.40, -853.40): 301 class 17 returns, adopted 36.23 m
+RINCON_MAIN (2482.07, -864.43): 313 class 17 returns, adopted 36.70 m
+RINCON_MAIN (2494.73, -875.47): 320 class 17 returns, adopted 37.20 m
+RINCON_MAIN (2507.40, -886.50): 301 class 17 returns, adopted 37.71 m
+PLAZA_920648684 (-5030.60, -3324.00): 253 class 17 returns, adopted 56.73 m
+PLAZA_920648684 (-5022.48, -3308.38): 269 class 2 returns, adopted 56.02 m
+PLAZA_920648684 (-5014.35, -3292.75): 240 class 2 returns, adopted 55.49 m
+PLAZA_920648684 (-5006.23, -3277.12): 230 class 2 returns, adopted 55.15 m
+PLAZA_920648684 (-4998.10, -3261.50): 210 class 2 returns, adopted 54.96 m
+PLAZA_920648684 (-4988.18, -3248.12): 217 class 2 returns, adopted 54.83 m
+PLAZA_920648684 (-4978.25, -3234.75): 310 class 2 returns, adopted 54.76 m
+PLAZA_920648684 (-4968.32, -3221.38): 182 class 2 returns, adopted 54.83 m
+PLAZA_920648684 (-4958.40, -3208.00): 165 class 2 returns, adopted 54.95 m
+PLAZA_920648685 (-5030.60, -3324.00): 253 class 17 returns, adopted 56.73 m
+PLAZA_920648685 (-5019.09, -3311.69): 275 class 2 returns, adopted 56.03 m
+PLAZA_920648685 (-5007.58, -3299.38): 228 class 2 returns, adopted 55.57 m
+PLAZA_920648685 (-4996.06, -3287.06): 267 class 2 returns, adopted 55.24 m
+PLAZA_920648685 (-4984.55, -3274.75): 276 class 2 returns, adopted 55.07 m
+PLAZA_920648685 (-4973.04, -3262.44): 251 class 2 returns, adopted 55.01 m
+PLAZA_920648685 (-4961.52, -3250.12): 238 class 2 returns, adopted 55.00 m
+PLAZA_920648685 (-4950.01, -3237.81): 240 class 2 returns, adopted 55.02 m
+PLAZA_920648685 (-4938.50, -3225.50): 224 class 2 returns, adopted 55.13 m
+PLAZA_920648685 (-4927.44, -3212.24): 253 class 2 returns, adopted 55.09 m
+PLAZA_920648685 (-4916.38, -3198.98): 263 class 2 returns, adopted 55.11 m
+PLAZA_920648685 (-4905.32, -3185.72): 238 class 2 returns, adopted 55.10 m
+PLAZA_920648685 (-4894.26, -3172.46): 253 class 2 returns, adopted 55.09 m
+PLAZA_920648685 (-4883.20, -3159.20): 241 class 2 returns, adopted 55.10 m
+PLAZA_920648685 (-4875.95, -3145.45): 237 class 2 returns, adopted 55.05 m
+PLAZA_920648685 (-4868.70, -3131.70): 11 class 17 returns, adopted 54.96 m
+PLAZA_920648686 (-5030.60, -3324.00): 253 class 17 returns, adopted 56.73 m
+PLAZA_920648686 (-5019.42, -3310.87): 281 class 2 returns, adopted 56.02 m
+PLAZA_920648686 (-5008.24, -3297.75): 218 class 2 returns, adopted 55.54 m
+PLAZA_920648686 (-4997.05, -3284.62): 270 class 2 returns, adopted 55.20 m
+PLAZA_920648686 (-4985.87, -3271.49): 270 class 2 returns, adopted 55.03 m
+PLAZA_920648686 (-4974.69, -3258.36): 261 class 2 returns, adopted 54.95 m
+PLAZA_920648686 (-4963.51, -3245.24): 240 class 2 returns, adopted 54.96 m
+PLAZA_920648686 (-4952.33, -3232.11): 225 class 2 returns, adopted 55.03 m
+PLAZA_920648686 (-4941.15, -3218.98): 273 class 2 returns, adopted 55.08 m
+PLAZA_920648686 (-4929.96, -3205.85): 260 class 2 returns, adopted 55.09 m
+PLAZA_920648686 (-4918.78, -3192.73): 248 class 2 returns, adopted 55.06 m
+PLAZA_920648686 (-4907.60, -3179.60): 244 class 2 returns, adopted 55.07 m
+PLAZA_920648689 (-5030.60, -3324.00): 253 class 17 returns, adopted 56.73 m
+PLAZA_920648689 (-5019.35, -3313.63): 266 class 2 returns, adopted 56.09 m
+PLAZA_920648689 (-5008.10, -3303.27): 244 class 2 returns, adopted 55.67 m
+PLAZA_920648689 (-4996.85, -3292.90): 289 class 2 returns, adopted 55.36 m
+PLAZA_920648689 (-4985.60, -3282.53): 279 class 2 returns, adopted 55.12 m
+PLAZA_920648689 (-4974.35, -3272.17): 270 class 2 returns, adopted 55.06 m
+PLAZA_920648689 (-4963.10, -3261.80): 242 class 2 returns, adopted 55.01 m
+PLAZA_920648689 (-4953.62, -3250.72): 243 class 2 returns, adopted 54.99 m
+PLAZA_920648689 (-4944.14, -3239.64): 237 class 2 returns, adopted 55.03 m
+PLAZA_920648689 (-4934.66, -3228.56): 227 class 2 returns, adopted 55.13 m
+PLAZA_920648689 (-4925.18, -3217.48): 260 class 2 returns, adopted 55.09 m
+PLAZA_920648689 (-4915.70, -3206.40): 251 class 2 returns, adopted 55.12 m
+PLAZA_920648689 (-4907.57, -3194.60): 251 class 2 returns, adopted 55.11 m
+PLAZA_920648689 (-4899.45, -3182.80): 258 class 2 returns, adopted 55.10 m
+PLAZA_920648689 (-4891.32, -3171.00): 263 class 2 returns, adopted 55.10 m
+PLAZA_920648689 (-4883.20, -3159.20): 241 class 2 returns, adopted 55.10 m
+ISLAND_LANDING (4813.80, -3588.90): 221 class 2 returns, adopted 50.99 m (inferred beneath upper roadway)
+ISLAND_LANDING (4825.24, -3602.40): 289 class 17 returns, adopted 51.10 m (inferred beneath upper roadway)
+ISLAND_LANDING (4836.69, -3615.90): 292 class 17 returns, adopted 51.22 m (inferred beneath upper roadway)
+ISLAND_LANDING (4848.13, -3629.40): 305 class 17 returns, adopted 51.33 m (inferred beneath upper roadway)
+ISLAND_LANDING (4859.57, -3642.90): 304 class 17 returns, adopted 51.44 m (inferred beneath upper roadway)
+ISLAND_LANDING (4871.01, -3656.40): 301 class 17 returns, adopted 51.56 m (inferred beneath upper roadway)
+ISLAND_LANDING (4882.46, -3669.90): 284 class 17 returns, adopted 51.67 m (inferred beneath upper roadway)
+ISLAND_LANDING (4893.90, -3683.40): 300 class 17 returns, adopted 51.78 m (inferred beneath upper roadway)
+MARIPOSA_RAMP (2306.90, 1540.30): 138 class 17 returns, adopted 12.97 m
+MARIPOSA_RAMP (2307.61, 1546.21): 119 class 17 returns, adopted 12.93 m
+MARIPOSA_RAMP (2308.32, 1552.12): 91 class 17 returns, adopted 12.90 m
+MARIPOSA_RAMP (2309.03, 1558.03): 33 class 17 returns, adopted 12.91 m
+MARIPOSA_RAMP (2309.74, 1563.94): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2310.45, 1569.85): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2311.16, 1575.76): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2311.87, 1581.67): 50 class 1 returns, adopted 14.15 m
+MARIPOSA_RAMP (2312.58, 1587.58): 68 class 1 returns, adopted 14.52 m
+MARIPOSA_RAMP (2313.29, 1593.49): 72 class 1 returns, adopted 14.83 m
+MARIPOSA_RAMP (2314.00, 1599.40): 37 class 1 returns, adopted 15.10 m
+MARIPOSA_RAMP (2314.63, 1604.80): 48 class 1 returns, adopted 15.50 m
+MARIPOSA_RAMP (2315.27, 1610.20): 38 class 1 returns, adopted 15.80 m
+MARIPOSA_RAMP (2315.90, 1615.60): 34 class 1 returns, adopted 16.09 m
+MARIPOSA_RAMP (2316.58, 1621.42): 7 class 2 returns, adopted 16.35 m
+MARIPOSA_RAMP (2317.27, 1627.25): 27 class 2 returns, adopted 16.72 m
+MARIPOSA_RAMP (2317.95, 1633.07): 18 class 2 returns, adopted 17.05 m
+MARIPOSA_RAMP (2318.64, 1638.89): 6 class 2 returns, adopted 17.62 m
+MARIPOSA_RAMP (2319.32, 1644.72): 10 class 2 returns, adopted 17.91 m
+MARIPOSA_RAMP (2320.01, 1650.54): 6 class 2 returns, adopted 18.18 m
+MARIPOSA_RAMP (2320.69, 1656.36): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2321.38, 1662.18): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2322.06, 1668.01): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2322.75, 1673.83): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2323.43, 1679.65): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2324.12, 1685.48): occluded; interpolate between visible stations
+MARIPOSA_RAMP (2324.80, 1691.30): 118 class 2 returns, adopted 19.53 m
+MARIPOSA_RAMP (2325.76, 1697.08): 216 class 2 returns, adopted 19.65 m
+MARIPOSA_RAMP (2326.72, 1702.87): 245 class 2 returns, adopted 19.76 m
+MARIPOSA_RAMP (2327.68, 1708.65): 257 class 2 returns, adopted 19.89 m
+MARIPOSA_RAMP (2328.63, 1714.43): 253 class 2 returns, adopted 19.95 m
+MARIPOSA_RAMP (2329.59, 1720.22): 240 class 2 returns, adopted 20.02 m
+MARIPOSA_RAMP (2330.55, 1726.00): 221 class 2 returns, adopted 20.12 m
+MARIPOSA_RAMP (2331.51, 1731.78): 216 class 2 returns, adopted 20.18 m
+MARIPOSA_RAMP (2332.47, 1737.57): 219 class 2 returns, adopted 20.26 m
+MARIPOSA_RAMP (2333.43, 1743.35): 235 class 2 returns, adopted 20.35 m
+MARIPOSA_RAMP (2334.38, 1749.13): 259 class 2 returns, adopted 20.45 m
+MARIPOSA_RAMP (2335.34, 1754.92): 272 class 2 returns, adopted 20.54 m
+MARIPOSA_RAMP (2336.30, 1760.70): 261 class 2 returns, adopted 20.61 m
+FEEDER_27772070 (2327.00, -792.80): 180 class 17 returns, adopted 30.65 m
+FEEDER_27772070 (2343.55, -795.70): 275 class 17 returns, adopted 31.63 m
+FEEDER_27772070 (2360.10, -798.60): 304 class 17 returns, adopted 32.50 m
+FEEDER_27772070 (2373.65, -802.80): 324 class 17 returns, adopted 32.96 m
+FEEDER_27772070 (2387.20, -807.00): 314 class 17 returns, adopted 33.36 m
+FEEDER_27772070 (2399.93, -812.90): 303 class 17 returns, adopted 33.76 m
+FEEDER_27772070 (2412.67, -818.80): 336 class 17 returns, adopted 34.15 m
+FEEDER_27772070 (2425.40, -824.70): 307 class 17 returns, adopted 34.58 m
+FEEDER_27772070 (2436.60, -831.50): 312 class 17 returns, adopted 34.97 m
+FEEDER_27772070 (2447.80, -838.30): 330 class 17 returns, adopted 35.42 m
+RINCON_UNDERPASS (2440.20, -754.90): 251 class 2 returns, adopted 28.12 m
+RINCON_UNDERPASS (2449.00, -766.95): 228 class 2 returns, adopted 27.52 m
+RINCON_UNDERPASS (2457.80, -779.00): 233 class 2 returns, adopted 26.97 m
+RINCON_UNDERPASS (2462.70, -792.40): 255 class 2 returns, adopted 26.38 m
+RINCON_UNDERPASS (2464.30, -802.85): 243 class 2 returns, adopted 26.05 m
+RINCON_UNDERPASS (2465.90, -813.30): 275 class 2 returns, adopted 25.72 m
+RINCON_UNDERPASS (2464.80, -824.20): 142 class 2 returns, adopted 25.61 m
+RINCON_UNDERPASS (2453.30, -860.70): 215 class 2 returns, adopted 24.37 m
+RINCON_UNDERPASS (2448.10, -873.50): 237 class 2 returns, adopted 24.09 m
+RINCON_UNDERPASS (2444.80, -888.17): 272 class 2 returns, adopted 23.73 m
+RINCON_UNDERPASS (2441.50, -902.83): 209 class 2 returns, adopted 23.40 m
+RINCON_UNDERPASS (2438.20, -917.50): 278 class 2 returns, adopted 23.01 m
+RINCON_RAMP (2468.80, -837.00): 294 class 17 returns, adopted 33.66 m
+RINCON_RAMP (2507.40, -886.50): 301 class 17 returns, adopted 37.71 m
+FEEDER_397094807 (2385.90, -763.60): 267 class 2 returns, adopted 30.25 m
+FEEDER_397094807 (2396.93, -771.60): 287 class 2 returns, adopted 30.77 m
+FEEDER_397094807 (2407.97, -779.60): 236 class 2 returns, adopted 31.18 m
+FEEDER_397094807 (2419.00, -787.60): 275 class 2 returns, adopted 31.55 m
+FEEDER_397094807 (2428.57, -796.20): 267 class 2 returns, adopted 31.96 m
+FEEDER_397094807 (2438.13, -804.80): 257 class 17 returns, adopted 32.41 m
+FEEDER_397094807 (2447.70, -813.40): 335 class 17 returns, adopted 32.76 m
+FEEDER_468201421 (2336.30, -858.90): 185 class 2 returns, adopted 28.42 m
+FEEDER_468201421 (2344.00, -845.10): 203 class 2 returns, adopted 28.48 m
+FEEDER_468201421 (2354.20, -832.80): 248 class 2 returns, adopted 28.71 m
+FEEDER_468201421 (2362.20, -826.95): 262 class 2 returns, adopted 28.97 m
+FEEDER_468201421 (2370.20, -821.10): 258 class 2 returns, adopted 29.38 m
+FEEDER_468201421 (2382.20, -817.60): 206 class 17 returns, adopted 33.36 m
+FEEDER_468201421 (2395.10, -817.10): 286 class 17 returns, adopted 33.67 m
+FEEDER_468201421 (2408.70, -820.20): 329 class 17 returns, adopted 34.05 m
+FEEDER_468201421 (2421.73, -826.23): 303 class 17 returns, adopted 34.45 m
+FEEDER_468201421 (2434.77, -832.27): 317 class 17 returns, adopted 34.88 m
+FEEDER_468201421 (2447.80, -838.30): 330 class 17 returns, adopted 35.42 m
+FEEDER_839972871 (2447.70, -813.40): 335 class 17 returns, adopted 32.76 m
+FEEDER_839972871 (2454.80, -820.90): 301 class 17 returns, adopted 33.03 m
+ISLAND_UNDERPASS (4883.90, -3628.50): 50 class 2 returns, adopted 45.29 m
+ISLAND_UNDERPASS (4892.17, -3638.93): 607 class 2 returns, adopted 44.72 m
+ISLAND_UNDERPASS (4908.70, -3659.80): 615 class 2 returns, adopted 43.64 m
+ISLAND_UNDERPASS (4915.10, -3675.00): 545 class 2 returns, adopted 43.90 m
+ISLAND_UNDERPASS (4917.50, -3687.50): 919 class 2 returns, adopted 44.55 m
+ISLAND_UNDERPASS (4892.40, -3729.00): 66 class 2 returns, adopted 47.65 m
+ISLAIS_667768321 (2830.70, 3400.80): 614 class 17 returns, adopted 4.61 m
+ISLAIS_667768321 (2829.45, 3385.00): 348 class 17 returns, adopted 4.72 m
+ISLAIS_667768321 (2828.20, 3369.20): 302 class 17 returns, adopted 4.62 m
+ISLAIS_667768323 (2812.60, 3370.50): 264 class 17 returns, adopted 4.61 m
+ISLAIS_667768323 (2813.75, 3386.20): 265 class 17 returns, adopted 4.72 m
+ISLAIS_667768323 (2814.90, 3401.90): 245 class 17 returns, adopted 4.62 m
+ISLAIS_675892536 (2916.20, 3359.20): 2551 class 17 returns, adopted 4.47 m
+ISLAIS_675892536 (2917.10, 3372.25): 3948 class 17 returns, adopted 4.41 m
+ISLAIS_675892536 (2918.00, 3385.30): 3946 class 17 returns, adopted 4.46 m
+
+bce1c1f825402afa6a35f2f3d4d9276c4e1bd5979ff17a2991a03f9b2e2d2969  ept-data/0-0-0-0.laz
+331f58529ab6ecb70f60191ddb02436559f74c31f880fc045ddaa611de240550  ept-data/1-0-0-0.laz
+3c810594fac3ff8db40903ead64949a83f2b7391ce37eec3b9d8d5721ee50bc2  ept-data/1-1-0-0.laz
+4a7e0002bdc0e6faed1ac188aac80c8e16898ee6bcc4775e2e60c54c7753c216  ept-data/1-1-1-0.laz
+9e76b252fc0bfffaff3198855f568c507fb5dbc2fff2fecd5390dac486058ea1  ept-data/2-0-0-1.laz
+b38d098bfab51d272a3567610dea3e751ebb5b4225529c57d5bc4934204ddb26  ept-data/2-2-1-1.laz
+3aa9acad0b61e29a5504134fbd9a3d11a1b453d82836f12ada0d7922e3ac1241  ept-data/2-3-3-1.laz
+8820e3ab529cd094c9061e79a4bcdff5e5b16a870c0e7292e08b5f9e5467d9f6  ept-data/3-1-0-3.laz
+f1850acd885eff995ad4db6b327ee4dc5939dc54a64cb8ec66ebfb964ef2e1be  ept-data/3-5-3-3.laz
+591b2fa2ee7263f008630bee6476a060d0b5cea62230b1b822b30f4b14578842  ept-data/3-6-6-3.laz
+7a42e579b2a7de54737c2cbe67e3887f62a826b4b604249850e0407436b5e929  ept-data/4-10-7-7.laz
+b1e45c37220fbc3c1825d7f262a7a4f257c7c5f4cac106103fd6da37f11ff743  ept-data/4-12-12-7.laz
+81b7f52c30495cc9015953ba422abdd910f9ed0d30cf145f1ce0c63996f1b819  ept-data/4-3-1-7.laz
+d212a5729ea44621704d07b9e93c29fb7be2398e9b7508914df5fa625bcc53f9  ept-data/5-20-14-15.laz
+75022a7fc6cde20452d434ef17d6c40fa61d017b9fcf7fb3d6829e7d594df8ed  ept-data/5-20-15-15.laz
+c34a09ff7a8bcd90279a690be302350b387248618a8c9ed87030997cda2f41f3  ept-data/5-25-25-15.laz
+64e0b6c5a67764973b5f3221c27dd734cf665c466f2e254e619428fe111b8bac  ept-data/5-7-3-15.laz
+97094ef3593a6ab260f2d387870dd527eba33b4006688759af031fa0ddedf6b9  ept-data/6-15-6-31.laz
+de9814a92b8256c7fbfb4a6ad95bd2ccaed667c056119b0b56110746ac9ed847  ept-data/6-15-7-31.laz
+c8077327d237c6192321b43794d516c57dde4ac0291fd474edc2b317d911d5ea  ept-data/6-41-29-31.laz
+69c2060d82c03e6b08047ec02820289161a26739fd0a35b5d040afc8615e1f37  ept-data/6-41-30-31.laz
+760e1ca5c45ab2fb03e300fae42767580b20255dace0668d80e15ca63d72a79f  ept-data/6-51-50-31.laz
+67196cb70e2a16978e808d1762c535bdc8239e5300f754991222efb207038a74  ept-data/6-51-51-31.laz
+00bbf92acb547662b710651f5b6ade3e5ad8bec04333a5bfe6d8332136a1cb95  ept-data/7-102-101-62.laz
+9f8dfac45686752d3ec566decc8f8617fa5f001f82282556e829d15e6bec5ad1  ept-data/7-102-101-63.laz
+1e272f9a7b57ab33c90674c2d176c4315c9af6d601caa3f9babf6c79ec2186ef  ept-data/7-102-102-62.laz
+032b37e4d540df76a92e5d253443182976645368290df4ede79fb780ba7d0ecd  ept-data/7-102-102-63.laz
+112363439f77037cc1155385a9bb237539da29b6cf7d6446ddc59e7ee8dea927  ept-data/7-31-13-63.laz
+bdb2502f466ad1997a466cb76cf4f461998d50570bd11328f40d16d6a227183f  ept-data/7-31-14-63.laz
+4cc6ca2668c6a066c5a4de96f09ace894a53ef27c82bcdb506770920b2d9a48f  ept-data/7-82-60-62.laz
+f36696b1f85d2eae885bfbdce9f0293f28fd0af810ceb4f9ae01ecef3f763b20  ept-data/7-82-61-62.laz
+e0ec173bc77dadfb497ac914355c85ea3a69c28a384628564889b58919f26cd9  ept-data/7-83-59-62.laz
+a5c8bbe76631cbfed91d0b2503839268258ca58cd2fb277c361d5bf11b6813d4  ept-data/7-83-60-62.laz
+3e77c1b6a8f3def8b152bd512513c53c82fc0e1941b5b3ea1a9b324b6e6709f4  ept-data/7-83-61-62.laz
+7faa9f19e28e10526effb398164418781e3f5deb7d470149e8e1399879fec3cf  ept-data/8-165-121-125.laz
+fc1830432932e4f84aa5d32c8682dd0003d98957425200ed08cfcbff06550f39  ept-data/8-165-122-125.laz
+61dde96268ecfda26409ad4d80a3a43829b4f28a9acb94e22bb31bd52649ae8d  ept-data/8-166-119-125.laz
+3a12a5b39a80359abdaaf153e7e7bc0f6eb1eaca47a0e8d52b027d2f4fd45852  ept-data/8-166-120-125.laz
+c47cbc5038f59c4bcdae27f0eeb6aa376fb68e1cd8d1b4f4b0e1a21316c9d1b6  ept-data/8-166-121-125.laz
+4e56ca03744c2a137bb8ba38325b7b186306496d26e9ecd6bf8d927b43ce2457  ept-data/8-166-122-125.laz
+1300051a2401907b396c98da3549e75abb4b2f1da6b4701008a8b010f7fb8896  ept-data/8-166-157-125.laz
+672a662dd45d1bd744402ed64410dd1e7250bfbd78b3a73325aa19fe37f63d3e  ept-data/8-166-158-125.laz
+08009c5edeaf999875d7d4b6f1c194dfadd1bdaa90f55c83e5855b46b617df20  ept-data/8-166-159-125.laz
+63a0717a0f4a392285eff4e751d06723a400f010862e572583a5f10bdbcc7acc  ept-data/8-167-157-125.laz
+ad4a7af762ce2fd3672d1f3a8a7724af1efd0e7ab5f3f9f76897be514ae8261b  ept-data/8-167-158-125.laz
+a140199a1bbdd30b99c0dca1f5d31abd5cb78bf8f672b93fd63a78c7dca72b92  ept-data/8-167-159-125.laz
+7d33d02f4fb814f4b1cad228c21bbf1c4ef714949fdcd570963199f4974fa0f9  ept-data/8-167-159-126.laz
+60740a07599525cfefa2f771eec475e0e00ce9649477bba94ef7808c3d8e9e4f  ept-data/8-167-160-125.laz
+fe83169f8884d49c372b0c355c8c155b0635782591bf98a7a15685b52abd44bc  ept-data/8-167-160-126.laz
+1c4a58ed2caa90e7518b39d1e036a99e3a98cc0035cb4be509b9074c717051f5  ept-data/8-168-157-125.laz
+6a1e8683ecdbb6720bb4a11a239a3e2eb82af43ba5b37fd246550c7d680f52eb  ept-data/8-168-158-125.laz
+562e7b2432a6d1355ac900e16bb8e4b38cd9dc8f6691a70c7269ec4cb92ef97b  ept-data/8-168-159-125.laz
+4fd5641f5a00e5b6b2e4173aa5f89e6f0cb8db95e3e65efbefd878591ae51735  ept-data/8-168-160-125.laz
+45b7a462574bafa2835670e5e3bf6e35af45a74dec16eddc1f8ffb42b9b44aa5  ept-data/8-169-159-125.laz
+818c94076f2d1697530dd4e19d50bb3e3400973f008c89351a2ccdc4be9343bb  ept-data/8-169-160-125.laz
+5d055f2e23ed7a87e95ca9f109fdfb2b84b0b1ddff16f5101396940c341caf5c  ept-data/8-169-160-126.laz
+5a1f992955503ec73b64c3565b994701b7c9582e7cd11e25b3bcc9cf1192f1c5  ept-data/8-173-165-125.laz
+ad3ce6541953076c60ac6af54cfe51672e52f822d711a304da547aa7e749671b  ept-data/8-173-165-126.laz
+40dde1c6a15bdae586f3f92d32e545b07de0fda08597d4d293b9a440bc8ef7a3  ept-data/8-173-93-125.laz
+a164e08fdc68a8538aeb28c6d07d3790e9ad65bacdbae2ea0d2d849857a23e0c  ept-data/8-173-94-125.laz
+7644a458da6c013eaaeab23b119f9d11bbd2c75c6c680a8ebe91e717aa757c98  ept-data/8-174-93-125.laz
+7ff5fa159b91de5ce13258b1fb914d7d0d8e46c9e9d8d268cb2676319e5339b0  ept-data/8-175-94-125.laz
+f140eecdbc63555b03f48c8cbb098ab7d6094078ed77e0c8d89b29fd85e972e7  ept-data/8-200-197-125.laz
+3da90ba2eca6d98af6ef0ea8881a2940f30a054d7240e517468a36c526bcdba0  ept-data/8-200-197-126.laz
+14c09b3fb5ae91a5befacb3c03884e3d1fad3fa815e74784db6caf8f2fb362df  ept-data/8-204-201-126.laz
+1f16f182ee8b081a679f02bb4d800ca6bb7b6cc1dd7e6ed2653bf06cd7fd0f7c  ept-data/8-204-202-126.laz
+cfa531fd55abf51f63e3e196084e665f70a3ed4274038cf6e2abc62c593953ee  ept-data/8-205-202-125.laz
+0f2ba74669e71e6d164cf46a6de709c4225b266854e1314cb0f2eb33dd351b20  ept-data/8-205-202-126.laz
+c36464e25a81849ae52c0b297ede547ef20c5e9faca6ac58f5a515afbc296b49  ept-data/8-205-203-126.laz
+bae9eba32890d0484b5f0f3f1fedae6d0314453e0ad4da764a584364503fcc2b  ept-data/8-205-204-125.laz
+e4078db46fc39e78b9a565615894ebc8cae87f144673c321d89edb210277f86a  ept-data/8-205-204-126.laz
+8e81760d49eae221163ad197752a99eafcf419fac6d6515728cb7f2a6108fb08  ept-data/8-206-203-125.laz
+910f3b70f470d1d3ca39d1ba0e53d9e054ce5dbb112038ceba09e8b5c6682184  ept-data/8-206-203-126.laz
+0c80d46ea8d997113429638de87db00c5d63e3cebc3e298b5dafb2a86cb4d135  ept-data/8-206-204-125.laz
+b7ab07798ae3d969976270e4812a3602854afe49bc172be6215dba2f3c562a6b  ept-data/8-206-204-126.laz
+af7d2280c427b4fd39db975d6fdec345875b3329579d69e5a84b866f219e3452  ept-data/8-207-205-125.laz
+537785e85458198ab5c3f1d1f46f26f4b78b68f9137e53babc7808bf466d8b5e  ept-data/8-207-205-126.laz
+bafad2a8f8d9c988e010d11cac391ba6254222cecb2bf3dac53b7534bbb2ab4c  ept-data/8-208-206-125.laz
+ec3dd36f2790818e63204b1c114f0e321140935e86c5ab985681b449aac8be78  ept-data/8-208-206-126.laz
+0b26fb6b9e50bc7479d644d66974baee532d93fc3f39420a432841925dbb14e1  ept-data/8-209-207-125.laz
+b522346923cc7ae1f5e99b1bbdb7e91bace3ff1cb0dfd5fa6417acadebbbfb59  ept-data/8-209-207-126.laz
+a8e3041a0bedfc26443db4d6978f6e1287003a33a5be8988225be419ee6a9366  ept-data/8-210-207-125.laz
+945fe08495fa36add9e6a7554f2e3a986b7f40f387e60ec170341366fe75e3b8  ept-data/8-210-207-126.laz
+eb63111dcc703ddb5538fb45061d98cacd9ea56bd0a8af60bd006f92a10f823c  ept-data/8-210-208-125.laz
+7d98cf6c30b6fd5f44e3e08208dd836b8b94f2caa0f644d9ad9fc4f11a8214a5  ept-data/8-210-208-126.laz
+33b0fcab377c7b892ad1d82d5c7e27a2924fb20d0857f14a54ca6b90b02cf81e  ept-data/8-210-209-125.laz
+a436bbcef242dc3a1288da285d8fd863194c4261d95235da569161fa37dc3a5c  ept-data/8-210-209-126.laz
+7ddf2077c8a72d1cc8b5a0095978f881a60bea832186cf956f4d6ad0a9c72dbf  ept-data/8-211-208-125.laz
+c708ebe46736547c107d9c0aa6e5ca8a65aa3835b29bbfbb2dd8bd696165a9f0  ept-data/8-211-208-126.laz
+720360e364665d6c80921ed5ecc4c3a9bafa4f00e82307c52c7db2e18727582e  ept-data/8-211-209-125.laz
+1c8b664e16ef7100389dfff6c21a686b72ee57eb8fc35dfecc2069aa6e4d1b4f  ept-data/8-211-209-126.laz
+debedb6487ed1704fbd15620ddcb1322f516e64554a183cd0059d7a2f1010f3e  ept-data/8-212-209-125.laz
+c99e92b8b8078f62cb30b59389d3a932e260b455f9334cc083868df70657a5f0  ept-data/8-212-209-126.laz
+46f3415ab6f9c419aa2b4a6ed4cece0fe3cde1d51ee1421a68520028dd4d3957  ept-data/8-212-210-125.laz
+20037f4e5d74006160b7756f011b2b50dd0fe1496c6f066bcd7a5a2565e8610b  ept-data/8-212-210-126.laz
+468ecfd76c583badde9e62b46074aca7050ea669bd94df7d1784f42273cd74e8  ept-data/8-213-210-126.laz
+ed433d910632cf284fb775304bc41b74d07891b4cf0a369ef8824566b79eed82  ept-data/8-213-211-125.laz
+bfbd832c7e4a44aa7ad479bcbcd13ec63cddd61c2bc308da779b76ce3d382363  ept-data/8-213-211-126.laz
+fef8d52faa7e321ab9ef3696a815d35a4caf1691aefa1f8ea4833e5b0bd05a88  ept-data/8-214-210-125.laz
+e9a2196e89dfb3dbda4884cf9de77d69f6c7d594d115ce218180959c43aea0de  ept-data/8-214-210-126.laz
+bd79ca0d5f61732ee2621f3ed6c622d4dcb6fe62af1147c309d21a407e647340  ept-data/8-214-211-125.laz
+94c1531ad10fd011e9410d28b5b93d87735e036b6df83f62cfea673ad7292478  ept-data/8-214-211-126.laz
+695b38512e105a97cecfda31b72cf754721408600da6d29356fb4fcbaaf417b5  ept-data/8-215-211-125.laz
+50396265cfdc645f98d04e45e34ace99e66e750dd65c8e804de5d105d09ba72e  ept-data/8-215-211-126.laz
+d3692fbf98af06cecd3737f4660b740d984b0692bc5555ed9bb2c67582a5b5c6  ept-data/8-215-212-126.laz
+1067d4988cc351e3a530a31404a440a04b24bf6cc4cd99b68da5dce7a6084504  ept-data/8-216-212-126.laz
+23245216a1340fa0622a4d3165bd720df44695d9f71cefe0d26281319e5bccb1  ept-data/8-216-213-125.laz
+0ca507a0202a9521798b8835e836462bfd7033e6c244aaf6032887ae92e809b3  ept-data/8-216-213-126.laz
+d32f48b787368fc4cc91a23ab024e2a11eec3725fa20acdeaeb365ec7cc7072b  ept-data/8-217-212-125.laz
+ad5ef811ea30915dcb33c1526e1cf114fd85e81199cb3d7e64ee2f6b6a2a7ad1  ept-data/8-217-212-126.laz
+47b5b007748c1a9488aa4a5f7ee9e2e7f41baf83d9d8c9f43d994f039c9eb4ff  ept-data/8-217-213-125.laz
+cb688d25a6eeba4135b786671b788e6815f8fbd5ad5af53547994551708ab761  ept-data/8-217-213-126.laz
+36e4dd5e97958e18862cc366792f9ffb7e7f6778002537e2ee47e63b3accea88  ept-data/8-217-214-126.laz
+3c63f8807efe28490c16cd0adce907d32a9ebed77cb78d4fba051f4455376607  ept-data/8-218-213-125.laz
+f239784c7bf5518d6a54dd1a85d2a5666c4d9f12fd0ca6ebd735be6d98c6c3b5  ept-data/8-218-213-126.laz
+21e941e73be208ab08df33be921cce4e93fc90546f548b012755028249e646c9  ept-data/8-218-214-126.laz
+e54d10da0f68a1c8631e756ac33b1b380a683a9ccfd5168873707f9e14759bf8  ept-data/8-219-214-125.laz
+6dc58e18c4c98e3b63b72aa8641ebcd6ef7a85a2dbf89c2ddae04a69c884fcac  ept-data/8-219-214-126.laz
+5613c1760c27b65f72b578227496a090acc158ea4ac381a7bda48713c332455e  ept-data/8-219-215-126.laz
+44ce5ae457e813b95bd8bbc190c2deac16094555196c35962f779fe0313e7880  ept-data/8-220-214-126.laz
+179d3c58f82b6b90af474835e5a7f87cbb19a8a9bd659bef1433980edd00bf2f  ept-data/8-220-215-126.laz
+867e6c25d93fa20ddfa8f8e3aa7579f7a51cf8b182ef4916ee2153d9bdbfedc7  ept-data/8-221-215-125.laz
+52ceab72c85c8bca76cdc5385f07e5ac3c4024356b6aa0ed35c77705f28d029c  ept-data/8-221-215-126.laz
+54026db9f74cdcf67a68847ef326b0f4f594f5f0facdc8eff193d74335b381b5  ept-data/8-222-215-125.laz
+5260b48c10512802ad0ee27f2d12ad533d32f9f23ce742d39cc7c6dd9b6aa5c0  ept-data/8-222-215-126.laz
+e7414d2fa609e1c70f0c92cec624c9c9f369b52e15a9be9af2d0bc78585ae79e  ept-data/8-222-216-126.laz
+2c1266b137acaf60415a496dc8aa0c29bf153db46938498299598e4561809120  ept-data/8-223-215-125.laz
+2c98254835a9c6253c1674506859397ec98e9cde2ed7c305d3418cbfdade0fa2  ept-data/8-223-216-125.laz
+a56f43e55b81027c96cce6f093ddb1cfccae3375034a121de2c33ebc5a7f27ce  ept-data/8-224-215-125.laz
+48c179374ebcb16bb2fd34a3a5c3ca831cb494c338d1c6878b46b38584c4ca2e  ept-data/8-224-216-125.laz
+a156a663b9f9813e38152b1c3db5f97cb78b71d9ee33bc6e1f51f27685c67afe  ept-data/8-225-216-125.laz
+f43e1e7736e777eb609ac64eb54ded31ef19e93b77ceb9e0420feba9220b083c  ept-data/8-226-216-125.laz
+2cea760568c62aec8e6734ab902ba692d1220c3d0b52014b24d5b984bb5bb0f2  ept-data/8-226-217-125.laz
+77256e10b66e0dd5bbd532a1eb282a71cd0dde989010490c28253b133cf36de7  ept-data/8-227-216-125.laz
+8330501eee4b52bd14267fc911a4f4fe28477e1afbe99df332e7b8b6c66832a4  ept-data/8-227-217-125.laz
+1d23e7e6322c82bf2f97216381fffe982db09cef23300f376b58b7598e08f261  ept-data/8-228-216-125.laz
+40601f3dce2827dea02825d2f927f18df61eaf8bf00a0d69b4031dca4a56c342  ept-data/8-228-217-125.laz
+40361fca95e32d5247e4a3651e7f539032742b6219ef9eb3f1eea33791c6c704  ept-data/8-229-216-125.laz
+d12ca2a761c28cc7eed76dd71d80f6f616c172fc15002293504a83f11e62d3b8  ept-data/8-229-217-125.laz
+fa6efd0bd9fb4b3a274d6e0d90af7621b5c49b317874367ec458a167a487b808  ept-data/8-230-217-125.laz
+eace8faa455fc62f89260c5747108030f7cf1b0aa89c7325b3643dcebdc14e38  ept-data/8-231-217-125.laz
+a304f0dfcab08f74b60ed2550ed75066d25793fb02165d289d88cdf36a9b835d  ept-data/8-231-218-125.laz
+d54e81fa72a5710d14a9d633f27be55dae70ba1c137a4c5ddf19ee7b72aa0416  ept-data/8-232-217-125.laz
+aa8bae66611f16fb2a0c8440d5f4814066db40378495d6d0adf67044a202393c  ept-data/8-232-218-125.laz
+231a114a295a879c6f1ba7fa617e06917c0671d1a003397103becb1569732355  ept-data/8-233-217-125.laz
+4df90a3c64736a20c524d3b0fcc70590bb797c176e984828a52ee01d2ec81fbb  ept-data/8-233-218-125.laz
+d6dd2a8518e1781268278dcf629590303cbb2f69e2cf4175fc32e80e56bda294  ept-data/8-234-217-125.laz
+11bd7020d08995992f0789634836ac736e4da76a48660f643e7ec1d9ab7c7f40  ept-data/8-234-218-125.laz
+9b21448beded2c10ee6b618f520e0632e7a03b32de2839dd957ca986adf657aa  ept-data/8-235-218-125.laz
+7f447cd4d833f8b70feca366d1b4629d4f94d05752f0612ca7032b19714bd65b  ept-data/8-236-218-125.laz
+fc63c41b3a149810bc1e321ed0831d3f40b7c583f6c2ae8a2471c37e33ef1bc0  ept-data/8-237-218-125.laz
+46b2dfb37dd2a3763e29e471a9990b6bc2f216fbd1c39862eaa2ad2ceac15a69  ept-data/8-237-219-125.laz
+3df8abfd7b41cff4c54993dfefc0ae41671e692f8d0affa9da220bb12e4d5ebb  ept-data/8-238-218-125.laz
+09ec6b9d729a1880e83769a0cd9a6b5871bd7588c22eda2303230c6a49da220d  ept-data/8-238-219-125.laz
+b15140146b3186cecf14f1fc1c61fb39cb0c118161eb22dece20d07f487e41ea  ept-data/8-239-218-125.laz
+1c7c5e93134dbc2ffccd38f014dd65d842ce10191d27cb1bae5d2286ad1f0d86  ept-data/8-239-219-125.laz
+d0b5604b1ff003060fe5c30ac55943e7af566f23842b57bd9400951ccf4f311a  ept-data/8-240-218-125.laz
+ef23a0fa7ed13f3c5966caf927061dfaec5aa0b92ca24dddacd4a10592f990fc  ept-data/8-240-219-125.laz
+a897f1917a4346480abc58e3c7abfee78d7a7417c4fc9afbd5786f1b0e23eeaa  ept-data/8-241-219-125.laz
+3548f200044ab512f0c3898efe7279cb5e486bea86bbd4e54466e7e0d6729510  ept-data/8-242-219-125.laz
+81b8137b30f3337f336eb6a5c428d2e1673d33084876bdca920ee46764f6bea5  ept-data/8-242-220-125.laz
+0ce25ff11d6320c245f88008fbddea17a35990e6209838ca510edd1865f4a70f  ept-data/8-243-219-125.laz
+c2a226fd623f13ac3833259e4119d8bbac7fa1af42305d9a4fa829c3e8ff8249  ept-data/8-243-220-125.laz
+b3743ee5b8714c5a9f323d242f76ea06cb614287a59299ed22750a676a0afebd  ept-data/8-244-219-125.laz
+49b716a8044e29445bfd7723bf8f64c143dd3330678af0715cb082f34ec3417e  ept-data/8-244-220-125.laz
+4dd190e14c5aee2c27a965768fe3f8922b32b60b6a38c4cc963abe0bbef1d2cf  ept-data/8-245-219-125.laz
+06b39464001af7fc3dccd4d3238dc6e6760c64afbd1bd0544860e96b3466df1a  ept-data/8-245-220-125.laz
+34c1b3331aa33892e1b76caf212d6150744c8f19db9c26a8303e8972d1b637fc  ept-data/8-246-220-125.laz
+19eb00be852465f2a8ba2ee481367b93656d4c1bc0a35464ff8e27870bb5b0ed  ept-data/8-247-220-125.laz
+a7fa579595463fab377613129d158d6fc9b27f159f0367442fd055d903c29fb4  ept-data/8-247-221-125.laz
+2273c90340c9b674b061b568264be1d56ff34a2d0bf29e702d2a2cda1209997f  ept-data/8-248-220-125.laz
+d197f2e53b267738b5bfa6ce3546b8681dbaac5be08fe89f88febcea48be476c  ept-data/8-248-221-125.laz
+0af07d17ffaa4f0c266570611d8106985197078ae37e33e92f925980f0a08d4b  ept-data/8-249-220-125.laz
+03bb344b7c82f2c5e336efc5fc63f8a589aa3e96dc26e7ec8dddc474cb31e0fc  ept-data/8-249-221-125.laz
+1f20ff68878bdc8a586fbda70296b58dbe492e6838e1ab27f5010ebc70a68257  ept-data/8-250-220-125.laz
+354aa30a9ca9f612c87ef3354d7f478907dc8f58d34043570af27aa7a0330fc0  ept-data/8-250-221-125.laz
+5612a8918a1ac94f02737a7a18d489d3076981961005040db6f2cb5a9f7f4902  ept-data/8-251-220-125.laz
+973b3ac84f749103b758bdbe2cf776a638aaa41f7ea2b0eb83024489c27aa711  ept-data/8-251-221-125.laz
+c5bbb68b29aa7c9a85398cd2c9c6aed36ee65cd5430c3e9f37cfa6c3ffb0fab1  ept-data/8-252-220-125.laz
+4e93cdc407f8635b1e57b76ebb4d806832f8068036662080344b438e5d74bf05  ept-data/8-252-221-125.laz
+9ac6f12d18dc834e1cf8d97f901977611c5079e3e322b3db796d67c19d6468c2  ept-data/8-253-221-125.laz
+35921ae51f2b0e372aa4e7f1b5bfcd8dc333a1a65bf0ebea2fb832a27f35681b  ept-data/8-254-221-125.laz
+9cec25d0c6747ef3e60679c2374e97d51991fd83d8f021bd183b11871d9ec3b1  ept-data/8-47-238-125.laz
+539c17000dabfb804188b0a93c6888e5f06d372b1cfd404aed61653d7df1c4b8  ept-data/8-47-238-126.laz
+73478d26f8cafe8f5f60dda5ac3f86ae13242efc62bbbd3678af3ac5588eb013  ept-data/8-47-239-126.laz
+e96c1bb7ae01ab4084d2e6373140b5365edfa574e681f2efd041ed6a1e3738fc  ept-data/8-53-196-126.laz
+c325a079a059d7653893794c156ac1ca9c88085e47a46277f46cee2dc3cb8afe  ept-data/8-53-197-126.laz
+ed7d893516133abaf872adbd78a5c435f3ef76d8d611b98f82b9d28640c037fe  ept-data/8-54-195-126.laz
+e48b3a14f876b8baf43d4afba1fe65374053652a4ff9170307c83fc0a6fce91b  ept-data/8-54-196-126.laz
+1901f39ff1a6cce42242e1a596908fde02d9a8ad77a12f442e6c66e97b813aed  ept-data/8-54-197-126.laz
+2e2dfdc1ac428f8c9916fc8ea114c630462fdb82db3179dd5735412062905b82  ept-data/8-55-194-126.laz
+e2f3611d0ee2caf269e415d22db6124edc7915c4afebbec74e11206fd5172b2e  ept-data/8-55-195-126.laz
+4a9d65d00d891be5d049478bf54c935b3a91a976200b971d6ff14c0ad7b6f6ca  ept-data/8-55-196-126.laz
+266459227ada2b872728c6787670d8b25e11c4494b3946dfb75a25b12f111292  ept-data/8-62-27-126.laz
+f7e6504d9553d7b838e13b668762c7cf5afd407a7026d7541512a73dc8db429a  ept-data/8-63-27-126.laz
+a8f234ac797bb58fcbb26d19e9b39e3e20be64bf2186718b7585a097bfa87e46  ept-data/8-63-28-126.laz
+205862c82516034a2d469e68d3e7cf6eb700a68926a55e743fc940f58294d9f9  ept-hierarchy/0-0-0-0.json
+bbcf68c53a27ea95de02d89e99e384a0bf4afed9326c57047545050713609b6d  ept-hierarchy/6-11-59-31.json
+520f08f54a20e878551c2a81b52452fbab0ec94edca70b3e9d5a4f4c56ab4107  ept-hierarchy/6-13-48-31.json
+f2e20450274290bbc5a0520a050e3ed482a9360394d17a9269a35b9fdd0e627d  ept-hierarchy/6-13-49-31.json
+360c60e47ced57f0b9a14b42a23656ee5b69344058115b5598974fd05de279d0  ept-hierarchy/6-15-6-31.json
+eacc4a7730e118441ba4b07e59f62fa03b35c8ab0e333476fc88b67feebcad12  ept-hierarchy/6-15-7-31.json
+35357f6f00246d3982b5d9a9cfbdb3943abf840b728183f38487b27d63874aff  ept-hierarchy/6-41-29-31.json
+513fe2f1e3e2f1a43e764dcf3d0b764d14defdb937f723e823d359575e73ad85  ept-hierarchy/6-41-30-31.json
+c5cbfd8e6dd043eb695d07911a2f883c85ef4a8391ba3c8babeff5ca30987a1a  ept-hierarchy/6-41-39-31.json
+6e4ff2b23ad5135ff77014f1f89d09a4320fd3bdf6c38f5535a7ae0bd4e91214  ept-hierarchy/6-41-40-31.json
+f2d2e106f3aa7851b1f04892ae440d51bfea5921542f1330ce6b211805a4d237  ept-hierarchy/6-42-39-31.json
+4b3e5cd45542fa4082508c7d0edfc2f2710763689001d0677c7ca326e6fc6097  ept-hierarchy/6-42-40-31.json
+6207f07169afb359c05cf5d38c9307812079ff639fc9a87fa3b47317d7562963  ept-hierarchy/6-43-23-31.json
+538b36a0f2f68b0b96fffbd934db7a9d2df50acbca527b59439f6704e2aca754  ept-hierarchy/6-43-41-31.json
+0c8a28fb1b3eedf46a57bc096dfd7c542d4cd84f5222afabd5f95120cb732306  ept-hierarchy/6-50-49-31.json
+c9b273742f31dd457ce8f7035deca3828b4c728b799c0ba3bd8d260d9b5c1d02  ept-hierarchy/6-51-50-31.json
+ccf00ea468e10b2bee9aba3fe1dd1d86826ba412816e11108fe9deb0d2ec0309  ept-hierarchy/6-51-51-31.json
+0b1b7fb47b5f730ed530020c1791d69fbd2a66eebe6b0bca6ccaaf14acfbfc9c  ept-hierarchy/6-52-51-31.json
+302f779bcce28ae4d5b73676dcc4221e118ebe529f05ab1ee0674cc858482dca  ept-hierarchy/6-52-52-31.json
+74f4a39e3df74ac4d9d78754ed54e725d6eb48c3b99cb9a8b572aeaa39d4b0c5  ept-hierarchy/6-53-52-31.json
+62ee24b7566e23d7118e6386ffbb5fd1e1fd70e677ec239db6992ea7485ea067  ept-hierarchy/6-53-53-31.json
+9a4c2e04912bc87893baf978824b34cc27fcec32fa044e704fc22d434283e1a0  ept-hierarchy/6-54-53-31.json
+bee0c6d0da562fb510ce95fe068ee5a7eeb20a23e997842712b1d411caab9e43  ept-hierarchy/6-55-53-31.json
+a00464aedb16296ac4d775f1669e06599ddc0218fe7dff380568dd0804f174d6  ept-hierarchy/6-55-54-31.json
+e7fd3401c6e8ed5462a1411b459503b8ce5f92f3d952245145005de2787660bf  ept-hierarchy/6-56-53-31.json
+5f81d23f7619c557740b66f7414791fb895a179bd0c9851e02ad72949a23f7b2  ept-hierarchy/6-56-54-31.json
+8da90ba2360e920b0e7d41db0ce4beb2b5e0ba62bb151f356ccdbdcd9c9ce4e1  ept-hierarchy/6-57-54-31.json
+568888ef9456deae8ddfe6406b9a02d152d9ef113fb37ae497b654aef27bd982  ept-hierarchy/6-58-54-31.json
+dc8dede0e4f19248d44f7b3662a7de3c4a51b22ec88ed7a2e78a9d62648a9e54  ept-hierarchy/6-59-54-31.json
+f882455be61696b66f07375b978a7428097dc477deab1708f862bbe384549ea4  ept-hierarchy/6-60-54-31.json
+2167c212fc2cf943b752d927db143d95dc254bc32a173cf1a37c015bd2271dbf  ept-hierarchy/6-60-55-31.json
+f97c56f55d5ed443c7987ebcf32f89569a7cf6366ac50f7eed1646b6a0e7cd90  ept-hierarchy/6-61-54-31.json
+decb3346b630952503394c5322ea1ffb23cab7798be90a7eedf8f814a0b3cd99  ept-hierarchy/6-61-55-31.json
+d0425bd844c539375925b09acdc45b5e7c993cba343a4551fcb078f3262bd2bf  ept-hierarchy/6-62-55-31.json
+c8b8e481b7626b8239377bbcbd828afade319349e36d36a2859548a0a6998c30  ept-hierarchy/6-63-55-31.json
+85c7c5879cef7ef65155776c41c583acd1c6d3bb450041732dbf00877c6a5c29  ept.json

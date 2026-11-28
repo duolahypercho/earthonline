@@ -77,12 +77,17 @@ pub enum Cover {
     Cliff,
 }
 
-/// The rock a slope is cut in (its colour).
+/// The rock a slope is cut in (its colour). The app reads it from the city's bedrock
+/// map where a bedrock unit is mapped (`--no-city-lithology`: the boxes alone; eo-data
+/// `lithology`, Docs/HILLS-PLAN.md H7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lithology {
     Chert,
     Serpentinite,
     Sandstone,
+    /// Franciscan greenstone (altered pillow basalt), as the bedrock map has it on the
+    /// city's hills.
+    Greenstone,
 }
 
 /// The drawn ground at a point, as the app samples it.
@@ -125,7 +130,10 @@ impl Site {
 /// What a plant is (the app maps it to a render model).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    /// `eo_props::eztree::COASTAL_TREES[i]`: 0 cypress, 1 pine, 2 blue gum.
+    /// `eo_props::eztree::COASTAL_TREES[i]`: 0 cypress, 1 pine, 2 blue gum, then the hill
+    /// parks' own ([`TREE_SPECIES`]: 3 blue gum of a stand, 4 wind-shorn cypress, 5 old pine,
+    /// 6 windbreak cypress, 7 coast live oak, 8 multi-stem live oak, 9 blackwood acacia,
+    /// 10 arroyo willow).
     Tree(u8),
     /// `COASTAL_SHRUBS[i]`: 0 coyote brush, 1 California sagebrush.
     Shrub(u8),
@@ -286,7 +294,7 @@ pub fn grass2() -> Grass2 {
 /// them, [`Grass3::from_args`] reads them. `--no-grass3` restores the second
 /// pass's output. Every feature acts inside the second pass's meadow cover
 /// (`--no-meadow-cover` or `--no-grass2` leave nothing for it to change).
-pub const GRASS3_SWITCHES: &[&str] = &["--no-grass3", "--no-scrub-mounds", "--no-scrub-bloom", "--no-bare-ground", "--no-meadow-breakup"];
+pub const GRASS3_SWITCHES: &[&str] = &["--no-grass3", "--no-scrub-mounds", "--no-scrub-bloom", "--no-bare-ground", "--no-meadow-breakup", "--no-mat-free-meadow"];
 
 /// The third grass pass's features, each with its `--no-` switch ([`GRASS3_SWITCHES`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -308,18 +316,26 @@ pub struct Grass3 {
     /// jittered per patch (no level band across the view) and the mats' rims
     /// lobed so the terrain's tone shows between them.
     pub breakup: bool,
+    /// `--no-mat-free-meadow`: the meadow and bare-soil patches draw no ground
+    /// disc ("mat") under their blades; the terrain under them is the meadow's
+    /// floor. Each mat was an opaque disc about 1.9 m across in its own
+    /// colour, darkened to 0.6 within 5-26 m of the eye: on a slope the mats
+    /// overlapped as dark plates with hard rims (the hills loop's A/B,
+    /// Docs/HILLS-PLAN.md stage H1). The bluff patches'
+    /// (buckwheat, bluff herbs) mats go too.
+    pub mats_free: bool,
 }
 
 impl Grass3 {
-    pub const ALL: Grass3 = Grass3 { scrub: true, bloom: true, bare: true, breakup: true };
-    pub const NONE: Grass3 = Grass3 { scrub: false, bloom: false, bare: false, breakup: false };
+    pub const ALL: Grass3 = Grass3 { scrub: true, bloom: true, bare: true, breakup: true, mats_free: true };
+    pub const NONE: Grass3 = Grass3 { scrub: false, bloom: false, bare: false, breakup: false, mats_free: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
         if has("--no-grass3") {
             return Self::NONE;
         }
-        Grass3 { scrub: !has("--no-scrub-mounds"), bloom: !has("--no-scrub-bloom"), bare: !has("--no-bare-ground"), breakup: !has("--no-meadow-breakup") }
+        Grass3 { scrub: !has("--no-scrub-mounds"), bloom: !has("--no-scrub-bloom"), bare: !has("--no-bare-ground"), breakup: !has("--no-meadow-breakup"), mats_free: !has("--no-mat-free-meadow") }
     }
 }
 
@@ -331,6 +347,19 @@ pub fn grass3() -> Grass3 {
         let g = Grass3::from_args(&std::env::args().collect::<Vec<_>>());
         if grass2().cover { g } else { Grass3::NONE }
     })
+}
+
+/// (Docs/HILLS-PLAN.md stage H6b) The switch that keeps the city's hill parks on the
+/// third pass's short meadow patches instead of the annual grassland's standing canopy
+/// ([`MEADOW_ANNUAL`]); eo-app accepts it, [`city_grass`] reads it.
+pub const CITY_GRASS_SWITCH: &str = "--no-city-grass";
+
+/// Whether this process plants the city's annual grassland ([`CITY_GRASS_SWITCH`] not
+/// given; read once from the command line). The app's planting context passes it on
+/// ([`Extra::annual`]).
+pub fn city_grass() -> bool {
+    static S: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *S.get_or_init(|| !std::env::args().any(|a| a == CITY_GRASS_SWITCH))
 }
 
 /// The round-3 switches of this process (read once from the command line).
@@ -553,12 +582,17 @@ pub struct Extra<'a> {
     pub fl: crate::flora::Flora,
     /// The shares round a point in a box of about the given side (m).
     pub naip: Box<dyn Fn(f64, f64, f64) -> Option<Naip> + 'a>,
+    /// (`--no-city-grass`: never) Whether a point is the city's open ground, where the
+    /// meadow's grass patches stand as the annual grassland's canopy ([`MEADOW_ANNUAL`])
+    /// while the grasses stand: eo-app answers outside the survey's image box, where the
+    /// hill builder's planting map is read. The Golden Gate's tuned meadow is never here.
+    pub annual: Box<dyn Fn(f64, f64) -> bool + 'a>,
 }
 
 impl Extra<'_> {
     /// Round 2's planting (no NAIP, every round-3 switch off).
     pub fn none() -> Extra<'static> {
-        Extra { g3: Gg3::NONE, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| None) }
+        Extra { g3: Gg3::NONE, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| None), annual: Box::new(|_, _| false) }
     }
     fn at(&self, x: f64, z: f64, side: f64) -> Option<Naip> {
         if self.g3.naip_planting { (self.naip)(x, z, side) } else { None }
@@ -613,7 +647,55 @@ pub const GRASS_GAIN: f32 = 5.6;
 /// channel's gain is scaled by target ratio over drawn ratio (green kept), so
 /// blue gain over green gain falls from 3.3 to 1.9 for coyote brush and from 2.4
 /// to 1.1 for the sage (see the test `shrub_leaves_are_green_not_blue`).
-pub const TREE_LEAF_TINT: [[f32; 3]; 3] = [[1.19, 1.08, 3.31], [1.13, 1.04, 2.88], [1.58, 1.00, 2.96]];
+///
+/// The hill parks' species (3-10) by the same rule, each measured the same way (the
+/// cooked near tier's mean leaf vertex colour times its atlas cell's mean: pine
+/// 0.118/0.181/0.030, ash 0.102/0.204/0.045, oak 0.126/0.225/0.044, aspen
+/// 0.083/0.214/0.030), to targets: the stand gum the blue gum's; the wind-shorn
+/// and windbreak cypress the cypress's; the old pine the pine's; coast live oak
+/// 0.030/0.050/0.022 (dark, glossy, olive: INFERRED); blackwood acacia
+/// 0.032/0.052/0.030 (dark, dull: INFERRED); arroyo willow 0.055/0.085/0.040
+/// (light, grey-backed: INFERRED).
+pub const TREE_LEAF_TINT: [[f32; 3]; TREE_SPECIES] = tree_table([
+    [1.19, 1.08, 3.31],
+    [1.13, 1.04, 2.88],
+    [1.58, 1.00, 2.96],
+    [1.57, 1.00, 3.05],
+    [1.22, 1.09, 3.41],
+    [1.27, 1.16, 3.51],
+    [1.22, 1.10, 3.43],
+    [1.06, 0.82, 3.05],
+    [1.05, 0.82, 3.13],
+    [1.27, 0.89, 3.69],
+    [1.95, 0.97, 4.97],
+]);
+/// The coastal tree species (`Kind::Tree`; eo-props `COASTAL_TREES`): the eleven
+/// species, then the second builds of six of them (eo-props coastal.rs `VARIANTS`).
+pub const TREE_SPECIES: usize = 17;
+/// The eleven species before their second builds.
+pub const TREE_BASE_SPECIES: usize = 11;
+/// Each tree model's species (a second build's is the species it builds again).
+pub const TREE_BASE_OF: [u8; TREE_SPECIES] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 2, 3, 0, 1, 7, 9];
+
+/// A per-species table over every model: the species' row for its second builds too.
+pub const fn tree_table<T: Copy, const N: usize>(base: [T; N]) -> [T; TREE_SPECIES] {
+    let mut out = [base[0]; TREE_SPECIES];
+    let mut i = 0;
+    while i < TREE_SPECIES {
+        out[i] = base[TREE_BASE_OF[i] as usize];
+        i += 1;
+    }
+    out
+}
+
+/// The model a tree of species `sp` (0-10) is drawn as: a second build for half
+/// the trees of the six species that have one (`draw` its own hash).
+pub fn tree_model(sp: u8, draw: f64) -> u8 {
+    if draw < 0.5 {
+        return sp;
+    }
+    (TREE_BASE_SPECIES..TREE_SPECIES).find(|&m| TREE_BASE_OF[m] == sp).map(|m| m as u8).unwrap_or(sp)
+}
 pub const SHRUB_LEAF_TINT: [[f32; 3]; 2] = [[1.27, 0.98, 1.89], [1.30, 1.15, 1.24]];
 /// The shrubs' measured mean leaf albedo before their tint (`Kind::Shrub`
 /// order): the cooked leaf vertex colour (`eo-props --example coastal_preview`,
@@ -713,10 +795,34 @@ pub fn shore_distance(x: f64, z: f64) -> Option<f64> {
 /// crown, m; `Kind::Tree` order): eo-props eztree/coastal.rs (cypress 16 m and
 /// 10 m, pine 24 m and 7 m, blue gum 34 m and 7.5 m), so a far card is the
 /// tree the near tier draws.
-pub const FAR_TREE_SIZE: [(f32, f32); 3] = [(16.0, 10.0), (24.0, 7.0), (34.0, 7.5)];
+pub const FAR_TREE_SIZE: [(f32, f32); TREE_SPECIES] = tree_table([(16.0, 10.0), (24.0, 7.0), (34.0, 7.5), (38.0, 6.5), (11.0, 9.0), (26.0, 9.0), (20.0, 5.5), (12.0, 8.0), (10.0, 6.5), (13.0, 4.5), (7.0, 4.0)]);
 /// The species' leaf albedo targets (linear; [`TREE_LEAF_TINT`]'s notes): the
 /// far card's crown colour.
-pub const FAR_TREE_ALBEDO: [[f32; 3]; 3] = [[0.035, 0.060, 0.030], [0.040, 0.065, 0.030], [0.050, 0.075, 0.060]];
+pub const FAR_TREE_ALBEDO: [[f32; 3]; TREE_SPECIES] = tree_table([
+    [0.035, 0.060, 0.030],
+    [0.040, 0.065, 0.030],
+    [0.050, 0.075, 0.060],
+    [0.050, 0.075, 0.060],
+    [0.035, 0.060, 0.030],
+    [0.040, 0.065, 0.030],
+    [0.035, 0.060, 0.030],
+    [0.030, 0.050, 0.022],
+    [0.030, 0.050, 0.022],
+    [0.032, 0.052, 0.030],
+    [0.055, 0.085, 0.040],
+]);
+
+/// A tree species' far card form (hlod_trees.wgsl `FT_FORM_MASK`): 1 cypress,
+/// 2 pine, 3 blue gum (the shader's silhouettes), 0 the round crown (the oaks,
+/// the acacia, the willow).
+pub fn far_card_form(sp: u8) -> u32 {
+    match TREE_BASE_OF[sp as usize] {
+        0 | 4 | 6 => 1,
+        1 | 5 => 2,
+        2 | 3 => 3,
+        _ => 0,
+    }
+}
 
 /// A far card's form for a coastal tree (`--no-far-species`: not used): the
 /// species ([`coastal_tree`], the near tier's own draw), its size and crown
@@ -724,14 +830,36 @@ pub const FAR_TREE_ALBEDO: [[f32; 3]; 3] = [[0.035, 0.060, 0.030], [0.040, 0.065
 pub fn far_form(x: f64, z: f64, shore_m: f64, draw: f64) -> (u8, f32, f32, [u8; 3]) {
     let (sp, s, hf) = coastal_tree(x, z, shore_m, draw);
     let (h, c) = FAR_TREE_SIZE[sp as usize];
-    let v = 0.85 + 0.3 * hash((x * 8.0) as i64, (z * 8.0) as i64, 92) as f32;
-    let enc = |l: f32| {
-        let l = l.clamp(0.0, 1.0);
-        let e = if l <= 0.0031308 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
-        (e * 255.0).round() as u8
-    };
+    (sp, h * s * hf, c * s, far_tint(sp, x, z))
+}
+
+/// A tree's own hue (game x, z): a gain on each leaf channel about 1, red and
+/// blue within +-6 %, so neighbours of one species differ in their green as
+/// well as in their light (INFERRED: a stand's crowns differ by age, vigour
+/// and light; the near tier and the far card take the same).
+pub fn tree_hue(x: f64, z: f64) -> [f32; 3] {
+    let (ix, iz) = ((x * 8.0) as i64, (z * 8.0) as i64);
+    [1.0 + 0.12 * (hash(ix, iz, 98) as f32 - 0.5), 1.0, 1.0 + 0.12 * (hash(ix, iz, 99) as f32 - 0.5)]
+}
+
+/// A far card's crown colour (sRGB bytes) for coastal species `sp` at (x, z):
+/// its leaf albedo target varied as the near tier's tint is (`far_form`'s).
+pub fn far_tint(sp: u8, x: f64, z: f64) -> [u8; 3] {
     let a = FAR_TREE_ALBEDO[sp as usize];
-    (sp, h * s * hf, c * s, [enc(a[0] * v), enc(a[1] * v), enc(a[2] * v)])
+    let v = far_tint_gain(x, z);
+    [a[0] * v, a[1] * v, a[2] * v].map(srgb_byte)
+}
+
+/// A far card's light gain at (x, z): the near tier's 0.85 + 0.3 draw.
+pub fn far_tint_gain(x: f64, z: f64) -> f32 {
+    0.85 + 0.3 * hash((x * 8.0) as i64, (z * 8.0) as i64, 92) as f32
+}
+
+/// A linear value as an sRGB byte.
+pub fn srgb_byte(l: f32) -> u8 {
+    let l = l.clamp(0.0, 1.0);
+    let e = if l <= 0.0031308 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
+    (e * 255.0).round() as u8
 }
 
 /// The coarse layer over [x0, x1) x [z0, z1): coastal trees on unmapped tree
@@ -900,7 +1028,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
         let steep = 1.0 - 0.6 * smoothstep(40.0, 60.0, slope);
         let r = hash(ix, iz, 3);
         let flowers = f * bloom * smoothstep(0.35, 0.8, field(x, z, 14.0, 43));
-        if ex.fl.bluff && ex.g2.cover && s.lithology == Lithology::Serpentinite && z > marin_z() && matches!(cover, Cover::Cliff | Cover::Bare | Cover::Rock) {
+        if ex.fl.bluff && ex.g2.cover && serpentine_bluff(&s, z) && matches!(cover, Cover::Cliff | Cover::Bare | Cover::Rock) {
             // the flora pass: the serpentine bluff faces' sparse low scrub over the rock
             // (20-50 % plant cover, field guide 1.4, estimate), none on the steepest faces.
             let share = 0.45 * (1.0 - outcrop_patch(x, z, cover)) * (1.0 - smoothstep(48.0, 62.0, slope)) + 0.1;
@@ -996,7 +1124,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 let sc = 0.75 + 0.55 * hash(ix, iz, 4) as f32;
                 out.push(Plant { kind: Kind::Flower(if field(x, z, 25.0, 47) < 0.6 { 0 } else { 1 }), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad(), tip: TIP_NONE });
             }
-            if ex.fl.bluff && s.lithology == Lithology::Serpentinite && z > marin_z() {
+            if ex.fl.bluff && serpentine_bluff(&s, z) {
                 // the flora pass: the serpentine bluff's low scrub in place of the meadow.
                 let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
                 let kind = crate::flora::bluff_kind(x, z, ix, iz);
@@ -1010,15 +1138,27 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
             }
             let n0 = out.len();
             plant_meadow(x, z, ix, iz, &s, cover, naip, season, ex.g2, ex.g3x.breakup, out);
+            // (`--no-city-grass`) the city's open grassland: its grass patches stand as the
+            // annual grassland's canopy while the grasses stand (before the ramp's bleach).
+            let mut annual = false;
+            if naip.is_some() && ex.g2.types {
+                let stand = annual_stand(day_of_year);
+                if stand > ANNUAL_STAND_MIN && (ex.annual)(x, z) {
+                    annual = annual_patch(out.get_mut(n0), x, z, ix, iz, &s, season, stand, ex.g3x.breakup);
+                }
+            }
             if ex.fl.ramp {
-                // September and October's bleached grey-tan on the patch.
+                // September and October's bleached grey-tan on the patch (the city's annual
+                // canopy: after the first rains, [`annual_bleach`]).
                 if let Some(Plant { kind: Kind::Meadow(k), tint, .. }) = out.get_mut(n0) {
-                    *tint = crate::flora::bleached_tint(*tint, MEADOW_LIVE[*k as usize], crate::flora::grass_bleach(day_of_year));
+                    let bleach = if *k == MEADOW_ANNUAL { annual_bleach(day_of_year) } else { crate::flora::grass_bleach(day_of_year) };
+                    *tint = crate::flora::bleached_tint(*tint, MEADOW_LIVE[*k as usize], bleach);
                 }
                 // the annual grasses' seed stalks over the open grassland (not the scrub's
                 // cells: those returned above), in stands, cured with the season.
+                // (the city's annual canopy carries its own heads: no stalks over it.)
                 let share = crate::flora::seed_stalks(day_of_year) * smoothstep(0.3, 0.65, warped(x, z, 6.0, 144)) * (1.0 - smoothstep(30.0, 45.0, slope));
-                if hash(ix, iz, 145) < share {
+                if !annual && hash(ix, iz, 145) < share {
                     let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
                     let k = crate::flora::MEADOW_SEED_STALKS;
                     let sc = 0.8 + 0.45 * hash(ix, iz, 146) as f32;
@@ -1101,8 +1241,24 @@ pub const MEADOW_LUPINE: u8 = 8;
 /// Bare eroded soil (`Grass3::bare`): a ragged mat of red-brown soil (the
 /// Tamalpais series' eroded horizon) with a few sparse tufts of short grass.
 pub const MEADOW_BARE: u8 = 9;
-/// The flora pass's scrub species follow (`crate::flora::MEADOW_POISON_OAK` .. `MEADOW_TOYON`).
-pub const MEADOW_TYPES: u8 = 19;
+/// The flora pass's scrub species follow (`crate::flora::MEADOW_POISON_OAK` .. `MEADOW_TOYON`),
+/// then the flora pass's grassland, bluff and flower types (`crate::flora::MEADOW_SEED_STALKS`
+/// .. `MEADOW_BLOOM`), then:
+///
+/// The city's annual grassland (`--no-city-grass`, Docs/HILLS-PLAN.md stage H6b): a
+/// standing canopy of wild oats and the other annual grasses over their own cured
+/// leaves, about 0.4-0.9 m tall, with nodding panicles and spikes, darker down in the
+/// canopy (eo-render `vegetation_models::annual`). It replaces the short sward, oats,
+/// thatch and fescue patches on the open grassland of the city's hill parks (Bernal Heights,
+/// McLaren Park, Twin Peaks, Corona Heights), outside the survey's image, while the
+/// grasses stand ([`annual_stand`]). Slender and common wild oats (Avena barbata,
+/// A. fatua) grow in nearly every grassland of the state, on poor and sandy soils
+/// as well (Cal-IPC "Avena barbata" profile, read 25 Nov 2026); wild oat grows to
+/// about 1.2 m, its spikelets hanging "like pendants from the flowering branches"
+/// (UC IPM Weed Gallery, "Wild oat", read 25 Nov 2026). The hills' thin-soiled,
+/// windy slopes stand lower: 0.4-0.9 m (INFERRED).
+pub const MEADOW_ANNUAL: u8 = 19;
+pub const MEADOW_TYPES: u8 = 20;
 
 /// Each type's living tissue in its green state (linear albedo, the mean of its
 /// blades' vertex colours, eo-render) and cured (or, for ice plant, drought-
@@ -1142,6 +1298,8 @@ pub const MEADOW_LIVE: [[f32; 3]; MEADOW_TYPES as usize] = [
     // the mustard's leaves (the measured near-field green (90,103,43) [P:spencer]), the bloom's white.
     [0.102, 0.136, 0.024],
     [0.8, 0.8, 0.8],
+    // the city's annual grassland: the wild oats' green.
+    [0.072, 0.104, 0.036],
 ];
 pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.215, 0.178, 0.100],
@@ -1163,9 +1321,12 @@ pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.150, 0.170, 0.100],
     [0.102, 0.136, 0.024],
     [0.8, 0.8, 0.8],
+    // the city's annual grassland: the wild oats' straw (the canopy's lit top; its
+    // depth is in the model's vertex colours).
+    [0.280, 0.228, 0.112],
 ];
 /// The scrub is evergreen (its summer dullness is the dust and the older leaves: not drawn).
-pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.2, 0.3, 0.0, 0.0];
+pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.2, 0.3, 0.0, 0.0, 1.0];
 /// Dead thatch, weathered pale straw (linear albedo; dry grass litter 0.15-0.25
 /// in the visible, USGS v7 "dry grass" and litter spectra; INFERRED): the mat's
 /// and the lying blades' colour (eo-render bakes it in the dead material).
@@ -1258,7 +1419,7 @@ pub fn meadow_kind(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, nai
 /// earliest, the annuals' seed set; INFERRED), a little value spread per patch.
 pub fn meadow_patch_tint(kind: u8, cured: f64, w: f32) -> [f32; 3] {
     let k = kind.min(MEADOW_TYPES - 1) as usize;
-    let lead = if kind == MEADOW_OATS { 0.15 } else { 0.0 };
+    let lead = if kind == MEADOW_OATS || kind == MEADOW_ANNUAL { 0.15 } else { 0.0 };
     let d = ((cured + lead).clamp(0.0, 1.0) as f32) * MEADOW_CURE[k];
     let c = mix3(MEADOW_LIVE[k], MEADOW_CURED[k], d);
     [0, 1, 2].map(|i| (c[i] / MEADOW_LIVE[k][i] * w).min(3.9))
@@ -1297,6 +1458,68 @@ pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, na
     }
 }
 
+/// How far the annual grasses stand on a day of the year (0 .. 1): heading from
+/// March, at full height from May through the summer (standing dead straw once
+/// cured), flattened by the autumn rains before the November flush (the field
+/// guide's month table, [`crate::flora::grass_cure`]'s source: March "grass
+/// heading", April "seed heads up", October "flattened"; the ramps' days INFERRED
+/// from those words).
+pub fn annual_stand(day_of_year: f64) -> f64 {
+    let d = day_of_year.rem_euclid(365.0);
+    smoothstep(60.0, 120.0, d) * (1.0 - smoothstep(285.0, 320.0, d))
+}
+
+/// How bleached the city's annual canopy is on a day (0 .. 1): the grey of weathered
+/// standing straw once the first rains have wetted it, October into November (as the
+/// stand is flattened, [`annual_stand`]), not from September. The field guide's month
+/// table, as recorded at [`crate::flora::grass_cure`] and [`crate::flora::grass_bleach`],
+/// gives the Marin headlands "September-October bleached, grey-tan" and October
+/// "flattened"; for the city's hill parks September stays the summer's golden-tan and
+/// the grey follows the rains (Docs/HILLS-PLAN.md H6b round 2, the owner's reading of
+/// the city's grassland; the days INFERRED from the table's October rains).
+pub fn annual_bleach(day_of_year: f64) -> f64 {
+    let d = day_of_year.rem_euclid(365.0);
+    smoothstep(275.0, 305.0, d) * (1.0 - smoothstep(320.0, 340.0, d))
+}
+
+/// The stand below which the city's grassland keeps the short meadow patches (the
+/// winter's new flush under last year's flattened thatch; INFERRED).
+pub const ANNUAL_STAND_MIN: f64 = 0.2;
+/// The canopy's height at the start of heading, a share of its summer height (INFERRED).
+pub const ANNUAL_STAND_LOW: f64 = 0.5;
+/// The annual canopy's height factor over its model (culms 0.42-0.78 m, eo-render
+/// `vegetation_models::annual`) in clumps: 0.85 .. 1.2, so the culms stand 0.36-0.94 m
+/// ([`MEADOW_ANNUAL`]'s 0.4-0.9 m, INFERRED).
+pub const ANNUAL_TALL: (f64, f64) = (0.85, 1.2);
+
+/// (`--no-city-grass`) A meadow patch of the city's open grassland as the annual
+/// grassland's canopy ([`MEADOW_ANNUAL`]): a sward, wild oats, thatch or fescue patch
+/// (the headlands' blue-green red fescue tussocks on the fog-side slopes are the Golden
+/// Gate's; the city's hill parks are annual grassland, INFERRED from [`MEADOW_ANNUAL`]'s
+/// sources); the clover and forbs of the swales, ice plant and the scrub keep theirs. Its height
+/// in clumps (a 4 m field and the patch), lower on steep slopes and ridge crests
+/// (thin, dry soil; INFERRED a quarter and a tenth), and by the season's stand.
+/// Whether the patch became the canopy (its own heads: the flora pass's seed stalks
+/// then stand elsewhere only).
+#[allow(clippy::too_many_arguments)]
+fn annual_patch(p: Option<&mut Plant>, x: f64, z: f64, ix: i64, iz: i64, s: &Site, season: f64, stand: f64, breakup: bool) -> bool {
+    let Some(p) = p else { return false };
+    if !matches!(p.kind, Kind::Meadow(MEADOW_SWARD | MEADOW_OATS | MEADOW_THATCH | MEADOW_FESCUE)) {
+        return false;
+    }
+    let cured = meadow_cured(x, z, s, season, breakup);
+    let w = 0.93 + 0.14 * hash(ix, iz, 20) as f32;
+    let (lo, hi) = ANNUAL_TALL;
+    let tall = lo + (hi - lo) * (0.75 * field(x, z, 4.0, 211) + 0.25 * hash(ix, iz, 212));
+    let soil = 1.0 - 0.25 * smoothstep(25.0, 40.0, s.slope_deg()) - 0.1 * smoothstep(0.5, 2.0, -s.hollow_m);
+    let h = (tall * soil * (ANNUAL_STAND_LOW + (1.0 - ANNUAL_STAND_LOW) * stand)) as f32;
+    let sc = p.scale[0];
+    p.kind = Kind::Meadow(MEADOW_ANNUAL);
+    p.scale = [sc, sc * h, sc];
+    p.tint = meadow_patch_tint(MEADOW_ANNUAL, cured, w);
+    true
+}
+
 /// One annual mustard clump (the flora pass's flowers, `crate::flora::MEADOW_MUSTARD`), 0.55-1.05 m.
 fn push_mustard(x: f64, z: f64, ix: i64, iz: i64, s: &Site, out: &mut Vec<Plant>) {
     let h = (0.55 + 0.5 * hash(ix, iz, 163)) as f32;
@@ -1329,7 +1552,15 @@ fn push_bloom(host: &Plant, kind: u8, host_h: f32, day_of_year: f64, female: boo
 fn scrub_terrain(s: &Site, fl: crate::flora::Flora) -> f64 {
     let w = if fl.species { crate::flora::terrain_weight(s) } else { 1.0 };
     // the serpentine bluff's coyote brush is sparse (`Flora::bluff`; guide 6: "sparse coyote brush").
-    if fl.bluff && s.lithology == Lithology::Serpentinite { w * 0.35 } else { w }
+    if fl.bluff && s.lithology == Lithology::Serpentinite && s.shore_m < crate::flora::BLUFF_SHORE_M { w * 0.35 } else { w }
+}
+
+/// The serpentine bluff's ground (`Flora::bluff`): serpentinite south of the strait within
+/// [`crate::flora::BLUFF_SHORE_M`] of the shore. Its low coast bluff scrub is the sea
+/// bluffs'; the city's inland serpentinite the bedrock map adds (Potrero Hill, the Hunters
+/// Point ridge) keeps its grassland and its own rock.
+pub fn serpentine_bluff(s: &Site, z: f64) -> bool {
+    s.lithology == Lithology::Serpentinite && z > marin_z() && s.shore_m < crate::flora::BLUFF_SHORE_M
 }
 
 /// Mounds a 1 m cell carries where the scrub is closed: a mound is 1.3-2.2 m
@@ -1673,6 +1904,21 @@ mod tests {
         assert!(lawn.is_empty());
     }
 
+    /// The coast bluff flora keeps to the bluff band (H7): the bedrock map's inland
+    /// serpentinite (Potrero Hill) is serpentinite rock, not the sea bluff's scrub.
+    #[test]
+    fn the_bluff_flora_keeps_to_the_shore() {
+        let z = marin_z() + 3000.0;
+        let site = |lithology: Lithology, shore_m: f64| Site { y: 30.0, normal: [0.0, 1.0, 0.0], ground: [0.1; 3], cover: Some(Cover::WildGrass), lithology, shore_m, hollow_m: 0.0 };
+        assert!(serpentine_bluff(&site(Lithology::Serpentinite, 50.0), z));
+        assert!(!serpentine_bluff(&site(Lithology::Serpentinite, crate::flora::BLUFF_SHORE_M + 1.0), z));
+        assert!(!serpentine_bluff(&site(Lithology::Serpentinite, 50.0), marin_z() - 10.0));
+        assert!(!serpentine_bluff(&site(Lithology::Greenstone, 50.0), z));
+        let fl = crate::flora::Flora::ALL;
+        assert_eq!(scrub_terrain(&site(Lithology::Serpentinite, 900.0), fl), scrub_terrain(&site(Lithology::Sandstone, 900.0), fl));
+        assert!(scrub_terrain(&site(Lithology::Serpentinite, 50.0), fl) < scrub_terrain(&site(Lithology::Sandstone, 50.0), fl));
+    }
+
     #[test]
     fn woods_by_the_shore_are_mostly_cypress() {
         let mut n = [0usize; 3];
@@ -1811,7 +2057,7 @@ mod tests {
         // a cliff over a beach and mapped bare rock: rock only (hill_rock), no plant.
         for cover in [Cover::Cliff, Cover::Rock] {
             let mut out = vec![];
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(none) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(none), annual: Box::new(|_, _| false) };
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(cover), all, &ex, &mut out);
             plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(cover), 100.0, all, &ex, &mut out);
             assert!(out.iter().all(|p| matches!(p.kind, Kind::Rock(_))), "{cover:?}");
@@ -1822,7 +2068,7 @@ mod tests {
         }
         // the image's canopy: closed scrub; its open grass: none.
         let count = |n: Naip| {
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(move |_, _, _| Some(n)) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(move |_, _, _| Some(n)), annual: Box::new(|_, _| false) };
             let mut out = vec![];
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(Cover::TallScrub), all, &ex, &mut out);
             out.iter().filter(|p| matches!(p.kind, Kind::Shrub(_))).count()
@@ -1831,7 +2077,7 @@ mod tests {
         assert!(count(Naip { canopy: 1.0, low: 0.0, bare: 0.0, ..Default::default() }) > cells * 9 / 10);
         assert!(count(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() }) < cells / 20);
         // and the sward on the open grass.
-        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() })) };
+        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() })), annual: Box::new(|_, _| false) };
         let mut out = vec![];
         plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(Cover::WildGrass), 265.0, all, &ex, &mut out);
         assert!(out.iter().filter(|p| p.kind == Kind::Grass).count() > 32 * 32 * 8 / 10);
@@ -1872,6 +2118,64 @@ mod tests {
         assert_eq!(a(&["--no-grass3"]), Grass3::NONE);
         assert_eq!(a(&["--no-bare-ground"]), Grass3 { bare: false, ..Grass3::ALL });
         assert_eq!(a(&["--no-scrub-mounds", "--no-meadow-breakup"]), Grass3 { scrub: false, breakup: false, ..Grass3::ALL });
+        assert_eq!(a(&["--no-mat-free-meadow"]), Grass3 { mats_free: false, ..Grass3::ALL });
+    }
+
+    #[test]
+    fn the_city_grassland_stands_as_the_annual_canopy_only_where_gated() {
+        // flat open grassland the image shows cured (the city planting map's shares).
+        let n = Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() };
+        let site = |_x: f64, _z: f64| Some(Site { y: 10.0, normal: [0.0, 1.0, 0.0], ground: [0.2, 0.16, 0.09], cover: Some(Cover::WildGrass), lithology: Lithology::Sandstone, shore_m: 800.0, hollow_m: 0.0 });
+        let run = |gate: bool, day: f64| {
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::ALL, g3x: Grass3::ALL, fl: crate::flora::Flora::ALL, naip: Box::new(move |_, _, _| Some(n)), annual: Box::new(move |_, _| gate) };
+            let mut out = vec![];
+            plant_fine_with(0.0, 0.0, 32.0, 32.0, &site, day, Switches::ALL, &ex, &mut out);
+            out
+        };
+        let (off, on) = (run(false, 200.0), run(true, 200.0));
+        // the same plants in the same places (the gate off is the third pass's output):
+        // only the grass patches' type, height and tint change, and the flora pass's seed
+        // stalks leave the canopy's cells (it carries its own heads).
+        let stalk = |p: &&Plant| p.kind == Kind::Meadow(crate::flora::MEADOW_SEED_STALKS);
+        let (s0, s1) = (off.iter().filter(stalk).count(), on.iter().filter(stalk).count());
+        assert!(s1 < s0 / 4, "{s1} of {s0} stalks");
+        let off: Vec<Plant> = off.iter().filter(|p| !stalk(p)).copied().collect();
+        let on: Vec<Plant> = on.iter().filter(|p| !stalk(p)).copied().collect();
+        assert_eq!(off.len(), on.len());
+        let mut annual = 0;
+        for (a, b) in off.iter().zip(&on) {
+            assert_eq!(a.pos, b.pos);
+            match (a.kind, b.kind) {
+                (Kind::Meadow(k), Kind::Meadow(MEADOW_ANNUAL)) => {
+                    assert!(matches!(k, MEADOW_SWARD | MEADOW_OATS | MEADOW_THATCH | MEADOW_FESCUE), "{k}");
+                    let h = b.scale[1] / b.scale[0];
+                    assert!(h >= ANNUAL_TALL.0 as f32 - 1e-3 && h <= ANNUAL_TALL.1 as f32 + 1e-3, "{h}");
+                    annual += 1;
+                }
+                (x, y) => assert_eq!(x, y),
+            }
+        }
+        let patches = on.iter().filter(|p| matches!(p.kind, Kind::Meadow(_))).count();
+        assert!(annual as f64 > 0.6 * patches as f64, "{annual} of {patches}");
+        assert!(!off.iter().any(|p| p.kind == Kind::Meadow(MEADOW_ANNUAL)));
+        // in the winter's flush (the grasses flattened) the city keeps the short patches.
+        assert!(!run(true, 10.0).iter().any(|p| p.kind == Kind::Meadow(MEADOW_ANNUAL)));
+        assert_eq!(annual_stand(10.0), 0.0);
+        assert_eq!(annual_stand(200.0), 1.0);
+        assert!(annual_stand(340.0) < ANNUAL_STAND_MIN && annual_stand(100.0) > 0.5);
+        // fully cured, the canopy's top is the wild oats' straw (the tint is over its green).
+        let t = meadow_patch_tint(MEADOW_ANNUAL, 1.0, 1.0);
+        for i in 0..3 {
+            assert!((t[i] * MEADOW_LIVE[MEADOW_ANNUAL as usize][i] - MEADOW_CURED[MEADOW_OATS as usize][i]).abs() < 1e-4);
+        }
+        assert!(CITY_GRASS_SWITCH.starts_with("--no-"));
+        // late September: the city's canopy still golden (unbleached), the headlands' grey-tan.
+        assert_eq!(annual_bleach(265.0), 0.0);
+        assert!(crate::flora::grass_bleach(265.0) > 0.5 && annual_bleach(300.0) > 0.5);
+        let sept = run(true, 265.0);
+        let t = sept.iter().find(|p| p.kind == Kind::Meadow(MEADOW_ANNUAL)).map(|p| p.tint).unwrap();
+        let c = [0, 1, 2].map(|i| t[i] * MEADOW_LIVE[MEADOW_ANNUAL as usize][i]);
+        assert!(c[2] / c[0] < 0.5, "{c:?}");
     }
 
     #[test]

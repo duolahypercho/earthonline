@@ -77,6 +77,7 @@ pub struct LandmarkSet {
     /// The seawall material (renderer.js: 0x928d84, roughness 0.93, metalness 0).
     pub wall_material: Option<Material>,
     pub structures: Vec<Structure>,
+    pub promenade_surfaces: Vec<crate::promenade::Surfaces>,
     pub build_ms: f64,
     pub walls_ms: f64,
     /// the terrain press of the built waterfront (None with the waterfront off).
@@ -282,8 +283,12 @@ fn shore_rocks(
     let t = Instant::now();
     let field = if boulders || lib.is_some() { eo_water::load(repo_root, crate::features::cache_dir().as_deref()).ok() } else { None };
     let field_ms = t.elapsed().as_secs_f64() * 1e3;
-    // the scans are placed only with both the library and the field: without either, round 2's meshes
-    let scans_on = lib.is_some() && field.is_some();
+    // the scans are placed only with both the library and the field: without either, round 2's meshes.
+    // The Golden Gate's survey features only with `EO_SURVEY_ROOT` (the library alone may come
+    // from `external/survey`, for the hills' rock: rocks/hills.rs, `--no-hill-outcrops`).
+    let gg_survey = eo_farshore::survey::Root::discover().is_some();
+    let scans_on = lib.is_some() && field.is_some() && gg_survey;
+    let hills_on = lib.is_some() && field.is_some() && rocks::hills::switch_on();
     // the armour: quarried granite.
     let t = Instant::now();
     let mut armour_stones: Vec<rocks::Stone> = vec![];
@@ -374,7 +379,7 @@ fn shore_rocks(
     let t = Instant::now();
     let mut scan_report = None;
     let mut boulder_stones = stones;
-    if let (Some(lib), Some(w), true) = (&lib, &field, scans_on) {
+    if let (Some(lib), Some(w), true) = (&lib, &field, scans_on || hills_on) {
         use rocks::{place, scan};
         let f = &w.field;
         // the drawn ground: the detail ground where one is set, else the terrain as the scene
@@ -388,24 +393,38 @@ fn shore_rocks(
         let signed = |x: f64, z: f64| f.signed_at(x, z);
         let world = place::World { ground: &ground, signed: &signed, sea, tide, plan, hs };
         let mut pieces = vec![];
-        if let Some(st) = boulder_stones.take() {
-            pieces.extend(place::from_stones(lib, &world, &st, scan::Source::Boulder, sw.geology, sw.cliff));
-        }
-        pieces.extend(place::from_stones(lib, &world, &armour_stones, scan::Source::Armour, sw.geology, false));
         let mut shifts = vec![];
-        if let Some(sv) = place::Survey::open() {
-            if sw.surf {
-                pieces.extend(place::surf_field_with(lib, &world, &sv, sw.geology, &mut shifts));
+        if scans_on {
+            if let Some(st) = boulder_stones.take() {
+                pieces.extend(place::from_stones(lib, &world, &st, scan::Source::Boulder, sw.geology, sw.cliff));
             }
-            pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
+            pieces.extend(place::from_stones(lib, &world, &armour_stones, scan::Source::Armour, sw.geology, false));
+            if let Some(sv) = place::Survey::open() {
+                if sw.surf {
+                    pieces.extend(place::surf_field_with(lib, &world, &sv, sw.geology, &mut shifts));
+                }
+                pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
+            }
+            if crate::flora2::flora2().boulders {
+                // the second flora pass: the earlier rounds' Baker stones into its boulder clusters.
+                place::cluster_shore_stones(lib, &world, &mut pieces);
+            }
+            if crate::flora::flora().serpentinite {
+                // the flora pass: Baker's and Marshall's serpentinite boulders (rocks/place.rs).
+                pieces.extend(place::serpentinite_boulders(lib, &world));
+            }
         }
-        if crate::flora2::flora2().boulders {
-            // the second flora pass: the earlier rounds' Baker stones into its boulder clusters.
-            place::cluster_shore_stones(lib, &world, &mut pieces);
-        }
-        if crate::flora::flora().serpentinite {
-            // the flora pass: Baker's and Marshall's serpentinite boulders (rocks/place.rs).
-            pieces.extend(place::serpentinite_boulders(lib, &world));
+        if hills_on {
+            // (`--no-hill-outcrops`) the city's hills' rock: faces, stones and cliffs where the bedrock
+            // map has bedrock, the image bare ground and the 1 m DEM a steep slope (rocks/hills.rs),
+            // here on the 8 m grid for their claims; eo-app places them again on the drawn ground
+            let mapped = |x: f64, z: f64| cover.as_ref().is_some_and(|c| c.tone_name_at(x, z) == Some("bareRock"));
+            if let Some(hp) = rocks::hills::place_all(lib, &world, repo_root, &mapped) {
+                if !hp.is_empty() {
+                    scan::set_hills_pending(true);
+                }
+                pieces.extend(hp);
+            }
         }
         let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
         for p in &pieces {
@@ -478,6 +497,8 @@ pub fn merge(name: &str, list: &[&Frozen]) -> Frozen {
         out.normals.extend_from_slice(&r.normals);
         out.colors.extend_from_slice(&r.colors);
         out.indices.extend(r.indices.iter().map(|i| i + base));
+        out.pavement_quads.extend(r.pavement_quads.iter().map(|i| i + base));
+        out.marking_quads.extend(r.marking_quads.iter().map(|i| i + base));
         if wire {
             out.axes.as_mut().unwrap().extend_from_slice(r.axes.as_ref().unwrap());
             out.dirs.as_mut().unwrap().extend_from_slice(r.dirs.as_ref().unwrap());
@@ -554,12 +575,16 @@ pub fn build_landmark_with(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: 
 /// towers3.rs `build_opened`, whichever generator `opts.towers2` and the
 /// passes' switches pick).
 pub fn build_landmark_opened(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options, open: bool) -> Result<(Landmark, Vec<LandmarkLight>)> {
+    build_landmark_at(js, id, ground, ca, opts, open, &|x,z| ground.at(x,z))
+}
+
+fn build_landmark_at(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options, open: bool, contact: &dyn Fn(f64,f64)->f64) -> Result<(Landmark, Vec<LandmarkLight>)> {
     let t0 = Instant::now();
     // the materials a second generator gives its own groups (in place of the registry's).
     let mut own: Vec<(String, Material)> = Vec::new();
     let mut lights: Vec<LandmarkLight> = Vec::new();
     let built: Built = match id {
-        "golden-gate-bridge" => golden_gate::build_opened(js, ground, ca, opts.bridge_detail, open),
+        "golden-gate-bridge" => golden_gate::build_at(js, ground, ca, opts.bridge_detail, open, contact),
         "bay-bridge-west" => bay_bridge::build_opened(js, ground, ca, open),
         // the landmark buildings (towers.rs; towers2.rs), opened for the decks with `open`.
         other => match if opts.towers2 { crate::towers2::build_opened(other, &js.buildings[other], ground, open) } else { crate::towers::build_opened(other, &js.buildings[other], ground, open) } {
@@ -661,7 +686,7 @@ impl LandmarkSet {
                         let d = ground_scale_shift(js, id);
                         let shifted = |x: f64, z: f64| height_at(x + d[0], z + d[1]);
                         let ground = if d == [0.0, 0.0] { ground_of(js, id, height_at) } else { ground_of(js, id, &shifted) };
-                        let (mut l, mut lights) = build_landmark_opened(js, id, &ground, std, opts, opts.access && opts.buildings)?;
+                        let (mut l, mut lights) = build_landmark_at(js, id, &ground, std, opts, opts.access && opts.buildings, &|x,z| shifted(x,z).unwrap_or_else(||ground.at(x,z)))?;
                         l.translate(d);
                         for k in &mut lights {
                             k.pos[0] += d[0];
@@ -715,6 +740,15 @@ impl LandmarkSet {
         let thick = crate::data::num(&fp.presentation, "deckThicknessM");
         let elev = |x: f64, z: f64| height_at(x, z).unwrap_or(0.0) + sh.road_lift;
         let mut structures = Vec::new();
+        if let Some(gate) = landmarks.iter_mut().find(|l| l.id == "golden-gate-bridge") {
+            let key = golden_gate::safety_net::DRAW;
+            if let Some(index) = gate.draws.iter().position(|d| d.key == key) {
+                let fabric = gate.draws.remove(index);
+                let mut material = plain_material(0.42, 0.82, "facade-metal");
+                material.draw = Some(key.into());
+                structures.push(Structure { cast: false, footway: false, kit: None, name: key.into(), material, mesh: fabric.mesh });
+            }
+        }
         let mut municipal_feet = Vec::new();
 
         let mut railing_landmark: Option<Landmark> = None;
@@ -897,6 +931,7 @@ impl LandmarkSet {
             walls,
             wall_material: Some(Material { surface: Some("seawall".into()), ..plain_material(0.93, 0.0, "sidewalk") }),
             structures,
+            promenade_surfaces: Vec::new(),
             build_ms,
             walls_ms: t1.elapsed().as_secs_f64() * 1e3,
             press,
@@ -1187,6 +1222,7 @@ impl LandmarkSet {
         let mut out = [(0, 0); 2];
         if let Some(ob) = crate::promenade::ocean_beach(p, albedo, land_at, sand_at) {
             out[0] = (ob.stations, ob.stairs);
+            self.promenade_surfaces.push(ob.surfaces);
             // ocean-beach-seawall.js: concrete 0.88 (casts), planting 0.95, sand 1.0 (receive only).
             self.structures.push(Structure { cast: true, footway: false, kit: None, name: "ocean-beach-seawall:concrete".into(), material: plain_material(0.88, 0.0, "sidewalk"), mesh: ob.concrete });
             self.structures.push(Structure { cast: false, footway: false, kit: None, name: "ocean-beach-seawall:planting".into(), material: plain_material(0.95, 0.0, "sidewalk"), mesh: ob.planting });
@@ -1194,6 +1230,7 @@ impl LandmarkSet {
         }
         if let Some(sd) = crate::promenade::sunset_dunes(p, albedo, land_at, sand_at) {
             out[1] = (sd.stations, sd.stairs);
+            self.promenade_surfaces.push(sd.surfaces);
             // sunset-dunes-seawall.js: structure concrete at roughness 0.9, casts.
             self.structures.push(Structure { cast: true, footway: false, kit: None, name: "sunset-dunes-seawall".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: sd.concrete });
         }

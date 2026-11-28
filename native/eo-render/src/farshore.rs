@@ -284,8 +284,11 @@ fn shader_source() -> String {
 }
 
 fn shader_parts() -> String {
+    let survey = crate::scene::terrain_detail::marin_ground::overview();
+    let (x,z,w,h) = survey.map_or((0.,0.,1.,1.), |im| (im.origin[0],im.origin[1],im.extent[0],im.extent[1]));
     format!(
-        "const FS_DEPTH_K: f32 = {:e};\n{}\n{}\n{}\n{}",
+        "const FS_MARIN: bool = {};\nconst FS_MARIN_IMAGE: vec4<f32> = vec4<f32>({x:.3}, {z:.3}, {w:.3}, {h:.3});\nconst FS_DEPTH_K: f32 = {:e};\n{}\n{}\n{}\n{}",
+        survey.is_some(),
         eo_farshore::DEPTH_K,
         crate::look::look_common_source(),
         include_str!("sky_light_core.wgsl"),
@@ -352,6 +355,15 @@ impl FarShoreGpu {
         let (hv, cv, sv, mut bytes) = upload_terrain(device, queue, t);
         // the outer ring's textures (stage L5), when it was cooked
         let outer_views = init.outer.map(|o| upload_terrain(device, queue, o));
+        let overview = crate::scene::terrain_detail::marin_ground::overview().map(|im| {
+            use wgpu::util::DeviceExt;
+            bytes += im.rgba.len() as u64;
+            device.create_texture_with_data(queue, &wgpu::TextureDescriptor {
+                label: Some("Marin distant albedo"), size: wgpu::Extent3d { width: im.width as u32, height: im.height as u32, depth_or_array_layers: 1 },
+                mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
+            }, wgpu::util::TextureDataOrder::LayerMajor, &im.rgba).create_view(&Default::default())
+        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("farshore-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -380,6 +392,7 @@ impl FarShoreGpu {
                 tex_entry(1),
                 tex_entry(2),
                 tex_entry(4), // the shape plane
+                tex_entry(6), // opt-in Marin aerial albedo
                 tex_entry(5), // the outer ring's heights under the rim (stage L5; this layer's own heights when there is no ring)
                 wgpu::BindGroupLayoutEntry { binding: 3, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
             ],
@@ -395,6 +408,7 @@ impl FarShoreGpu {
                     wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&sampler) },
                     wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(sh) },
                     wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(o) },
+                    wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(overview.as_ref().unwrap_or(c)) },
                 ],
             })
         };

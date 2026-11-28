@@ -62,6 +62,108 @@ pub const DK_KERB_PAINT: u32 = 12;
 /// Weathering only: dirt along the building line at the walk's back edge.
 pub const DK_WALK_EDGE: u32 = 13;
 
+/// `--pavement-age` only: the street's pavement, one per straight stretch of a
+/// run across its asphalt (kerb to kerb), its parameters the pavement's age
+/// and condition from the city's survey (`RW_*` bits; cc0.wgsl `rw_surface`).
+/// Kinds 14 and 15 are the street life's (street_life.rs).
+pub const DK_SURFACE: u32 = 16;
+/// `--road-wear` only: one travel lane's traffic wear, one per lane per
+/// straight stretch, the lane's full width (in place of `DK_WHEEL` and
+/// `DK_OIL_LINE`): soft overlapping tyre tracks and the drips between them
+/// (cc0.wgsl `rw_lane`), its parameters the pavement's age and condition, its
+/// stop ends and a transit stop beside it (`RW_*` bits).
+pub const DK_LANE: u32 = 17;
+
+/// The parameters a `DK_SURFACE` or `DK_LANE` record carries above its kind's
+/// low byte. The record's kind is a float the shader rounds back with
+/// `u32(kind + 0.5)`, exact only under 2^23 (past it an f32 cannot hold the
+/// half), so every parameter stays in bits 8-22.
+/// Pavement age in half years, 0..62 (`RW_AGE_UNKNOWN`: no resurfacing on record or no survey).
+pub const RW_AGE_SHIFT: u32 = 8;
+pub const RW_AGE_UNKNOWN: u32 = 63;
+/// The Pavement Condition Index in steps of 2, 0..50 (`RW_PCI_UNKNOWN`: no survey here).
+pub const RW_PCI_SHIFT: u32 = 14;
+pub const RW_PCI_UNKNOWN: u32 = 63;
+/// The decal's +along end is where its lane's traffic stops (a junction it approaches).
+pub const RW_STOP_POS: u32 = 1 << 20;
+/// The decal's -along end is where its lane's traffic stops.
+pub const RW_STOP_NEG: u32 = 1 << 21;
+/// A kerb lane beside a surveyed transit stop: buses pull in and stand here.
+pub const RW_BUS: u32 = 1 << 22;
+
+/// The pavement parameters of a record: (age in years or None, PCI or None).
+pub fn rw_unpack(kind: u32) -> (Option<f32>, Option<u8>) {
+    let a = (kind >> RW_AGE_SHIFT) & 63;
+    let p = (kind >> RW_PCI_SHIFT) & 63;
+    ((a != RW_AGE_UNKNOWN).then_some(a as f32 * 0.5), (p != RW_PCI_UNKNOWN).then_some((p * 2) as u8))
+}
+
+/// `kind` with the pavement's age (years) and condition packed above it.
+pub fn rw_pack(kind: u32, age_years: Option<f32>, pci: Option<u8>) -> u32 {
+    let a = age_years.map(|y| ((y * 2.0).round() as i64).clamp(0, 62) as u32).unwrap_or(RW_AGE_UNKNOWN);
+    let p = pci.map(|v| (v.min(100) as u32 + 1) / 2).unwrap_or(RW_PCI_UNKNOWN);
+    kind | a << RW_AGE_SHIFT | p << RW_PCI_SHIFT
+}
+
+/// Whether street tiles place the lanes' traffic wear (`DK_LANE`) in place of
+/// the wheel strips and drip lines (`--road-wear`): off by default, so every
+/// tile's records are as before.
+static ROAD_WEAR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Whether street tiles place the pavement's age (`DK_SURFACE`, `--pavement-age`): off by default.
+static PAVEMENT_AGE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn the lanes' traffic wear on or off (eo-app, with `--road-wear`, before the street streams).
+pub fn set_road_wear(on: bool) {
+    ROAD_WEAR.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn road_wear() -> bool {
+    ROAD_WEAR.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Turn the pavement's age on or off (eo-app, with `--pavement-age`, before the street streams).
+pub fn set_pavement_age(on: bool) {
+    PAVEMENT_AGE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn pavement_age() -> bool {
+    PAVEMENT_AGE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The city's pavement survey (eo-data `pavement`, DataSF PCI), loaded on first
+/// use; None without the file (every stretch then reads as unknown).
+fn pavement() -> Option<&'static eo_data::pavement::Pavement> {
+    static P: OnceLock<Option<eo_data::pavement::Pavement>> = OnceLock::new();
+    P.get_or_init(|| {
+        let paths = eo_data::DataPaths::discover().ok()?;
+        match eo_data::pavement::Pavement::load(&paths) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("road wear: no pavement survey ({e:#}); every street reads as of unknown age");
+                None
+            }
+        }
+    })
+    .as_ref()
+}
+
+/// A stretch's pavement from the survey: the segment along it (within 12 m of
+/// its middle in the surveyed plan, heading within 25 degrees). `mid` and
+/// `dir` are world metres (the scaled ground plan).
+pub fn pavement_at(mid: [f64; 2], dir: [f64; 2]) -> (Option<f32>, Option<u8>) {
+    let Some(p) = pavement() else { return (None, None) };
+    let s = eo_data::groundscale::scale();
+    match p.segment_at([mid[0] / s, mid[1] / s], Some(dir), 12.0, 25.0) {
+        Some((seg, _)) => (seg.age_years, Some(seg.pci)),
+        None => (None, None),
+    }
+}
+
+/// A run's interior joins between stretches: each lane or surface record
+/// reaches this far past its stretch's end into the next (m), so the
+/// neighbours overlap and the shader's strongest-wins leaves no gap.
+const RW_OVERLAP_M: f64 = 0.75;
+
 /// Whether street tiles place the weathering decals (`DK_KERB_PAINT`,
 /// `DK_WALK_EDGE`): off by default, so every tile's records are as before.
 static WEATHERING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -115,6 +217,10 @@ impl Decal {
         match self.kind & 255 {
             crate::street_life::DK_COLUMN => return 8,
             crate::street_life::DK_LIFE => return 9,
+            // (`--pavement-age`) the pavement's age under every other decal: never dropped from a full cell
+            DK_SURFACE => return 0,
+            // (`--road-wear`) the lanes' wear: as the wheel strips it replaces
+            DK_LANE => return 3,
             _ => {}
         }
         match self.kind {
@@ -347,6 +453,89 @@ fn lanes(world: &StreetWorld, ei: usize) -> (Vec<(f64, f64)>, f64) {
     (out, moving)
 }
 
+/// (`--road-wear`, `--pavement-age`) A run's lanes' wear (`DK_LANE`) and its
+/// pavement (`DK_SURFACE`) over the stretches that touch its spans
+/// `first..last`. The stretches are laid along the whole run from its first
+/// station (heading change under 2 degrees, at most 36 m, and broken where a
+/// span yields to a junction), so every tile that sees a run lays the same
+/// ones; a stretch reaches `RW_OVERLAP_M` into its neighbour at an interior
+/// join. A lane's stop end is a run end at a junction approach, or a junction
+/// span the stretch stops at, toward which its traffic travels (right-hand
+/// traffic: the -n lanes toward the run's end, the +n lanes toward its start;
+/// a one-way run's every lane toward its end).
+#[allow(clippy::too_many_arguments)]
+fn place_lanes(out: &mut Vec<Decal>, world: &StreetWorld, ei: usize, run: u32, lns: &[(f64, f64)], first: usize, last: usize, hot: &Hotspots) {
+    let e = &world.plan.entries[ei];
+    let g = &world.geoms[ei];
+    let n = g.stations.len();
+    if n < 2 {
+        return;
+    }
+    let kept = |i: usize| g.keep.get(i).copied().unwrap_or(true);
+    let (wear, age_on) = (road_wear(), pavement_age());
+    let mut s0 = 0usize;
+    while s0 + 1 < n {
+        let mut s1 = s0 + 1;
+        if kept(s0) {
+            let a0 = &g.stations[s0];
+            while s1 + 1 < n {
+                let b = &g.stations[s1];
+                if a0.tx * b.tx + a0.tz * b.tz < 0.9994 || b.s - a0.s > 36.0 || !kept(s1) {
+                    break;
+                }
+                s1 += 1;
+            }
+        }
+        let (lo, hi) = (s0, s1);
+        s0 = s1;
+        if hi <= first || lo >= last || !kept(lo) {
+            continue;
+        }
+        let (a, b) = (&g.stations[lo], &g.stations[hi]);
+        let len = b.s - a.s;
+        if len < 0.5 {
+            continue;
+        }
+        // the run's ends at a junction approach, or a junction span the stretch stops at
+        let start_stop = (lo == 0 && e.approach_start.is_some()) || (lo > 0 && !kept(lo - 1));
+        let end_stop = (hi + 1 == n && e.approach_end.is_some()) || (hi + 1 < n && !kept(hi));
+        // interior joins reach into the neighbour
+        let s_lo = if lo > 0 && kept(lo - 1) { a.s - RW_OVERLAP_M } else { a.s };
+        let s_hi = if hi + 1 < n && kept(hi) { b.s + RW_OVERLAP_M } else { b.s };
+        let (pa, pb) = (a.at(0.0), b.at(0.0));
+        let dir = [(pb[0] - pa[0]) / len, (pb[1] - pa[1]) / len];
+        let (age, pci) = pavement_at([(pa[0] + pb[0]) * 0.5, (pa[1] + pb[1]) * 0.5], dir);
+        let seed = hash(run ^ 0x51a7, lo as u32);
+        if age_on {
+            if let (Some(p), Some(q)) = (at_s(g, s_lo, 0.0), at_s(g, s_hi, 0.0)) {
+                push_strip(out, p, q, e.half as f32, rw_pack(DK_SURFACE, age, pci), seed);
+            }
+        }
+        if !wear {
+            continue;
+        }
+        let last_lane = lns.len().saturating_sub(1);
+        for (li, &(uc, w)) in lns.iter().enumerate() {
+            let toward_end = e.oneway || uc < 0.0;
+            let toward_start = !e.oneway && uc > 0.0;
+            let mut kind = rw_pack(DK_LANE, age, pci);
+            if end_stop && toward_end {
+                kind |= RW_STOP_POS;
+            }
+            if start_stop && toward_start {
+                kind |= RW_STOP_NEG;
+            }
+            let (Some(p), Some(q)) = (at_s(g, s_lo, uc), at_s(g, s_hi, uc)) else { continue };
+            // a kerb lane on its traffic's right (where buses pull in) beside a surveyed transit stop
+            let kerb = (li == 0 && toward_end) || (li == last_lane && toward_start);
+            if kerb && !hot.stops_along(p, q, w * 0.5 + 9.0).is_empty() {
+                kind |= RW_BUS;
+            }
+            push_strip(out, p, q, (w * 0.5) as f32, kind, hash(run ^ 0x1a2e, (lo as u32) << 4 | li as u32));
+        }
+    }
+}
+
 fn push_strip(out: &mut Vec<Decal>, p0: [f64; 2], p1: [f64; 2], half_w: f32, kind: u32, seed: f32) {
     let (dx, dz) = (p1[0] - p0[0], p1[1] - p0[1]);
     let len = (dx * dx + dz * dz).sqrt();
@@ -427,9 +616,13 @@ pub fn place_with(world: &StreetWorld, key: (i32, i32), weather: bool) -> Vec<De
             "tertiary" | "tertiary_link" => 0.6,
             _ => 0.4,
         };
+        // (`--road-wear`, `--pavement-age`) the lanes' wear and the pavement's age, in place of the strips below.
+        if road_wear() || pavement_age() {
+            place_lanes(&mut out, world, ei as usize, run, &lns, spans[k].1 as usize, spans[j].1 as usize + 1, &hot);
+        }
         // Wheel paths and drip lines: one strip per straight stretch (heading change under 2 degrees, at most 36 m).
         let mut s0 = spans[k].1 as usize;
-        let last = spans[j].1 as usize + 1;
+        let last = if road_wear() { s0 } else { spans[j].1 as usize + 1 };
         while s0 < last {
             let mut s1 = s0 + 1;
             let a0 = &g.stations[s0];
@@ -741,6 +934,52 @@ mod tests {
         // The wheel strip crosses cells 0..7 of row 2 (z = 10 m), not row 5.
         assert_ne!(t.cells[2 * CELLS + 7][0], 0xffff_ffff);
         assert_eq!(t.cells[5 * CELLS + 3][0], 0xffff_ffff);
+    }
+
+    /// (`--road-wear`, `--pavement-age`) a record's pavement and flags survive
+    /// the float the GPU record carries, and the surface sorts before every
+    /// other decal while the lanes sort as the wheel strips they replace.
+    #[test]
+    fn lane_and_surface_records_pack_their_parameters() {
+        for (age, pci) in [(Some(0.33f32), Some(100u8)), (Some(31.0), Some(0)), (None, Some(64)), (Some(11.2), None), (None, None), (Some(80.0), Some(100))] {
+            let k = rw_pack(DK_LANE, age, pci) | RW_STOP_POS | RW_STOP_NEG | RW_BUS;
+            // the shader's decode, `u32(kind + 0.5)` in f32, gives the record back exactly
+            assert!(k < 1 << 23, "{k:#x}: past 2^23 an f32 cannot hold the half");
+            let back = (k as f32 + 0.5f32) as u32;
+            assert_eq!(back, k);
+            assert_eq!(back & 255, DK_LANE);
+            let (a, p) = rw_unpack(back);
+            match (pci, p) {
+                (Some(x), Some(y)) => assert!((x.min(100) as i32 - y as i32).abs() <= 1, "{x} -> {y}"),
+                (None, None) => {}
+                other => panic!("{other:?}"),
+            }
+            match (age, a) {
+                (Some(x), Some(y)) => assert!((x.min(31.0) - y).abs() <= 0.25, "{x} -> {y}"),
+                (None, None) => {}
+                other => panic!("{other:?}"),
+            }
+        }
+        let surf = Decal { c: [0.0, 0.0], a: [1.0, 0.0], half: [10.0, 8.0], kind: rw_pack(DK_SURFACE, Some(2.0), Some(90)), seed: 0.0 };
+        let lane = Decal { c: [0.0, 0.0], a: [1.0, 0.0], half: [10.0, 1.6], kind: rw_pack(DK_LANE, Some(2.0), Some(90)) | RW_BUS, seed: 0.0 };
+        let wheel = Decal { c: [0.0, 0.0], a: [1.0, 0.0], half: [10.0, 0.3], kind: DK_WHEEL, seed: 0.0 };
+        assert_eq!(surf.priority(), 0);
+        assert_eq!(lane.priority(), wheel.priority());
+        // the kinds stay clear of the street life's (14, 15)
+        assert!(![crate::street_life::DK_LIFE, crate::street_life::DK_COLUMN].contains(&DK_SURFACE));
+        assert!(![crate::street_life::DK_LIFE, crate::street_life::DK_COLUMN].contains(&DK_LANE));
+    }
+
+    /// The pavement survey at the Folsom Street 800 block (5th to 4th), in
+    /// world metres: the 2026 resurfacing, PCI 100.
+    #[test]
+    fn pavement_at_reads_the_survey_in_world_metres() {
+        let s = eo_data::groundscale::scale();
+        let (age, pci) = pavement_at([1503.1 * s, -350.2 * s], [0.7099, -0.7041]);
+        assert_eq!(pci, Some(100));
+        assert!(age.is_some_and(|a| a < 1.0), "{age:?}");
+        // far from any street: unknown
+        assert_eq!(pavement_at([1.0e6, 1.0e6], [1.0, 0.0]), (None, None));
     }
 
     #[test]

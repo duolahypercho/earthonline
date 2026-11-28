@@ -20,11 +20,11 @@ use crate::character::Character;
 use crate::input::{Action, InputFrame};
 use crate::momentum::{self, Momentum};
 use crate::tuning::{self, speed};
-use crate::vehicle::{Vehicle, VehicleSpec};
-use crate::world::{CollisionWorld, LEVEL_REACH_M, layer};
+use crate::vehicle::{Vehicle, VehicleConfig};
+use crate::world::{CollisionWorld, layer};
 
 /// One fixed step's commands (what a network peer would send).
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default)]
 pub struct StepInput {
     /// x right, y forward; keyboard gives -1/0/1 per axis, a stick its curve.
     pub move_x: f64,
@@ -34,6 +34,8 @@ pub struct StepInput {
     pub jump: bool,
     pub aim: bool,
     pub vehicle_toggle: bool,
+    #[serde(default)]
+    pub shift_direction: bool,
     pub throttle: f64,
     pub brake: f64,
     /// Positive left.
@@ -55,10 +57,11 @@ impl StepInput {
             jump: f.tapped(Action::Jump),
             aim: f.held(Action::Aim),
             vehicle_toggle: f.tapped(Action::VehicleToggle),
+            shift_direction: f.tapped(Action::ShiftDirection),
             throttle: f.throttle,
             brake: f.brake,
             steer: f.steer,
-            analog_steer: f.steer.abs() > 0.0 && f.steer.abs() < 0.999,
+            analog_steer: f.analog_steer || (f.steer.abs() > 0.0 && f.steer.abs() < 0.999),
             handbrake: f.held(Action::Handbrake),
             look_behind: f.held(Action::LookBehind),
             interact: f.tapped(Action::Interact),
@@ -137,6 +140,7 @@ pub struct Player {
     pub on_foot_cam: OnFootCamera,
     pub drive_cam: DriveCamera,
     pub vehicles: Vec<Vehicle>,
+    pub spawn_config: VehicleConfig,
     pub mode: Mode,
     pub ticks: u64,
     /// A landmark lift ride in progress (lift.rs).
@@ -144,6 +148,7 @@ pub struct Player {
     /// Active weather physics conditions (default dry & calm).
     pub weather: crate::weather::WeatherPhysics,
     accumulator: f64,
+    pending_direction_shift: bool,
     last_camera_distance: f64,
 }
 
@@ -161,11 +166,13 @@ impl Player {
             on_foot_cam: OnFootCamera::default(),
             drive_cam: DriveCamera::default(),
             vehicles: vec![],
+            spawn_config: VehicleConfig::default(),
             mode: Mode::OnFoot,
             ticks: 0,
             lift: None,
             weather: crate::weather::WeatherPhysics::default(),
             accumulator: 0.0,
+            pending_direction_shift: false,
             last_camera_distance: camera::on_foot::walk_distance(), // walk_distance()
         }
     }
@@ -176,13 +183,9 @@ impl Player {
         self.weather = weather;
     }
 
-    /// Place a sedan with its road datum on the ground at (x, z): on the
-    /// street surface there (`surface_y`); where the ground has several
-    /// levels (decks), on the surface nearest below the player's own level
-    /// (its feet plus `LEVEL_REACH_M`), so a car put beside a player on a
-    /// deck stands on the deck and one beside a player under it on the street.
+    /// Park beside the walker, following the supporting floor to the requested spot.
     pub fn spawn_vehicle(&mut self, world: &mut CollisionWorld, x: f64, z: f64, yaw: f64) -> usize {
-        let y = if world.multi_level() { world.surface_below(x, z, self.character.feet().y + LEVEL_REACH_M) } else { world.surface_y(x, z) };
+        let y = world.surface_beside(self.character.feet(), x, z);
         self.spawn_vehicle_on(world, DVec3::new(x, y, z), yaw)
     }
 
@@ -194,7 +197,7 @@ impl Player {
     }
 
     fn spawn_vehicle_on(&mut self, world: &mut CollisionWorld, datum: DVec3, yaw: f64) -> usize {
-        let v = Vehicle::spawn(world, VehicleSpec::sedan(), datum, yaw);
+        let v = Vehicle::spawn(world, self.spawn_config.spec(), datum, yaw);
         self.vehicles.push(v);
         self.vehicles.len() - 1
     }
@@ -223,9 +226,11 @@ impl Player {
     pub fn advance(&mut self, world: &mut CollisionWorld, input: &StepInput, frame_dt: f64) -> usize {
         self.accumulator += frame_dt.clamp(0.0, 0.25);
         let mut n = 0;
+        self.pending_direction_shift |= input.shift_direction && matches!(self.mode, Mode::Driving(_));
         let mut i = *input;
         while self.accumulator >= tuning::FIXED_STEP_S - 1e-9 {
             self.accumulator -= tuning::FIXED_STEP_S;
+            i.shift_direction = std::mem::take(&mut self.pending_direction_shift);
             self.fixed_step(world, &i);
             if !self.is_swimming(world) { i.jump = false; }
             i.vehicle_toggle = false;
@@ -238,6 +243,18 @@ impl Player {
     /// One 1/60 s step of the player and the physics world.
     pub fn fixed_step(&mut self, world: &mut CollisionWorld, input: &StepInput) {
         let dt = tuning::FIXED_STEP_S;
+        if !world.lockstep {
+            let start = self.position(world);
+            let (end, radius) = match self.mode {
+                Mode::OnFoot => (start + self.character.support_velocity * dt, tuning::capsule::RADIUS_M + speed::SPRINT_MPS * dt),
+                Mode::Driving(i) => {
+                    let car = &self.vehicles[i];
+                    let velocity = world.physics.bodies[car.body].linvel().to_array().map(f64::from);
+                    (start + DVec3::from_array(velocity) * dt, car.spec.length.hypot(car.spec.width) * 0.5)
+                }
+            };
+            world.prepare_support(start, end, radius);
+        }
         // A landmark lift: the ride holds the body still; it changes stops in the dark.
         if self.lift.is_none() && input.interact && self.mode == Mode::OnFoot {
             if let Some((i, up)) = crate::lift::stop_near(&world.buildings.decks.lifts, self.character.feet()) {
@@ -262,9 +279,9 @@ impl Player {
             self.ground_speed = 0.0;
             self.lift = (r.step < crate::lift::RIDE_STEPS).then_some(r);
             for v in &mut self.vehicles {
-                v.park(world);
+                v.park_with_weather(world, &self.weather);
             }
-            world.physics.step();
+            world.step_physics();
             self.ticks += 1;
             return;
         }
@@ -278,29 +295,32 @@ impl Player {
                 }
             }
         }
+        let mut floor = None;
         match self.mode {
             Mode::OnFoot => {
                 if self.is_swimming(world) {
                     self.swim_step(world, input, dt);
                 } else {
-                    self.walk_step(world, input, dt);
+                    floor = self.walk_step(world, input, dt);
                 }
                 for v in &mut self.vehicles {
-                    v.park(world);
+                    v.park_with_weather(world, &self.weather);
                 }
             }
             Mode::Driving(i) => {
                 let wx = self.weather;
                 for (k, v) in self.vehicles.iter_mut().enumerate() {
                     if k == i {
+                        if input.shift_direction && !input.vehicle_toggle { v.toggle_drive_direction(world); }
                         v.pre_step_with_weather(world, input.steer, input.throttle, input.brake, input.handbrake, input.analog_steer, &wx);
                     } else {
-                        v.park(world);
+                        v.park_with_weather(world, &wx);
                     }
                 }
             }
         }
         world.step_physics();
+        if let Some(floor) = floor { floor.finish(&mut self.character, world); }
         if let Mode::Driving(i) = self.mode {
             // The body rides in the seat.
             let d = self.vehicles[i].datum(world);
@@ -334,7 +354,7 @@ impl Player {
         self.facing_yaw = self.yaw;
     }
 
-    fn walk_step(&mut self, world: &CollisionWorld, input: &StepInput, dt: f64) {
+    fn walk_step(&mut self, world: &CollisionWorld, input: &StepInput, dt: f64) -> Option<crate::character::FloorStep> {
         let (mut lx, mut lz) = momentum::stick_world(input.move_x, input.move_y, self.yaw);
         let m = lx.hypot(lz);
         if m > 1.0 {
@@ -362,12 +382,13 @@ impl Player {
         if input.jump && !crouched {
             self.character.jump(speed::JUMP_MPS);
         }
-        self.character.step(world, dx, dz, true);
+        let (result, floor) = self.character.step_before_physics(world, dx, dz, true);
         let after = self.character.feet();
-        self.momentum.settle(after.x - before.x, after.z - before.z, dt, after.x, after.z);
-        let moved = (after.x - before.x).hypot(after.z - before.z);
+        let relative = after - before - result.support_motion;
+        self.momentum.settle(relative.x, relative.z, dt, after.x, after.z);
+        let moved = relative.x.hypot(relative.z);
         self.ground_speed = moved / dt;
-        let travel = if dx.hypot(dz) > 1e-5 { Some(dx.atan2(dz)) } else if moved > 1e-4 { Some((after.x - before.x).atan2(after.z - before.z)) } else { None };
+        let travel = if dx.hypot(dz) > 1e-5 { Some(dx.atan2(dz)) } else if moved > 1e-4 { Some(relative.x.atan2(relative.z)) } else { None };
         let travel = self.momentum.plant_yaw.or(travel);
         let max_rate = if travel.is_none() && !input.aim {
             speed::STANDING_TURN_RATE_RAD_PER_S
@@ -377,6 +398,7 @@ impl Player {
             f64::INFINITY
         };
         self.facing_yaw = momentum::facing_yaw(self.facing_yaw, self.yaw, travel, input.aim, dt, max_rate);
+        floor
     }
 
     /// everything a fixed step reads and writes (not the cameras): a
@@ -407,6 +429,7 @@ impl Player {
     /// put the player back in a state `state` returned (the vehicles
     /// must be the same cars, spawned in the same order).
     pub fn set_state(&mut self, world: &mut CollisionWorld, s: &PlayerState) {
+        self.pending_direction_shift = false;
         self.character.set_state(&s.character);
         self.momentum = Momentum { vx: s.momentum[0], vz: s.momentum[1], ax: s.momentum[2], az: s.momentum[3], last: s.momentum_last, plant_yaw: s.plant_yaw };
         self.yaw = s.yaw;
@@ -447,22 +470,42 @@ impl Player {
         crate::lift::fade(self.lift)
     }
 
-    /// The nearest car within the interaction range.
-    pub fn nearby_vehicle(&self, world: &CollisionWorld) -> Option<usize> {
+    /// Test shoulder clearance between the cabin and the walker or exit station.
+    fn vehicle_path_clear(world: &CollisionWorld, v: &Vehicle, center: DVec3) -> bool {
+        let cabin = v.pose(world).0;
+        let path = center - cabin;
+        let length = path.length();
+        length <= f64::EPSILON || world.sphere_cast(cabin, path / length, length,
+            tuning::capsule::RADIUS_M, Character::filter(), Some(v.body)).is_none()
+    }
+
+    /// Distance to a car the walker can reach from their current position.
+    fn entry_distance(&self, world: &CollisionWorld, v: &Vehicle) -> Option<f64> {
         let feet = self.character.feet();
-        let mut best: Option<(usize, f64)> = None;
-        for (i, v) in self.vehicles.iter().enumerate() {
-            let (p, r) = v.pose(world);
-            let local = r.inverse() * (feet - p);
-            let dx = (local.x.abs() - v.spec.width / 2.0).max(0.0);
-            let dz = (local.z.abs() - v.spec.length / 2.0).max(0.0);
-            let d = dx.hypot(dz);
-            let vertical = (feet.y - v.datum(world).y).abs();
-            if d <= tuning::VEHICLE_INTERACT_RANGE_M && vertical <= 3.0 && best.map(|b| d < b.1).unwrap_or(true) {
-                best = Some((i, d));
-            }
+        let (p, r) = v.pose(world);
+        let local = r.inverse() * (feet - p);
+        let dx = (local.x.abs() - v.spec.width / 2.0).max(0.0);
+        let dz = (local.z.abs() - v.spec.length / 2.0).max(0.0);
+        let distance = dx.hypot(dz);
+        let vertical = (feet.y - v.datum(world).y).abs();
+        (distance <= tuning::VEHICLE_INTERACT_RANGE_M && vertical <= 3.0
+            && Self::vehicle_path_clear(world, v, self.character.position)).then_some(distance)
+    }
+
+    /// The nearest car with a clear path to the walker.
+    pub fn nearby_vehicle(&self, world: &CollisionWorld) -> Option<usize> {
+        self.vehicles.iter().enumerate()
+            .filter_map(|(i, v)| self.entry_distance(world, v).map(|d| (i, d)))
+            .min_by(|a, b| a.1.total_cmp(&b.1)).map(|(i, _)| i)
+    }
+
+    /// At the end of an entry animation the walker and the selected car may have moved.
+    pub fn finish_entry(&mut self, world: &CollisionWorld, i: usize) -> bool {
+        if self.mode != Mode::OnFoot || self.vehicles.get(i).and_then(|v| self.entry_distance(world, v)).is_none() {
+            return false;
         }
-        best.map(|(i, _)| i)
+        self.enter_vehicle(i);
+        true
     }
 
     /// Enter the nearest car within the interaction range.
@@ -482,27 +525,32 @@ impl Player {
     /// Find clear standing room at a vehicle door station, on the actual walkable surface.
     pub fn vehicle_footing(&self, world: &CollisionWorld, i: usize, at: DVec3) -> Option<DVec3> {
         let v = self.vehicles.get(i)?;
-        let (p, _) = v.pose(world);
-        let y = if world.multi_level() {
-            // several levels: the surface nearest below the car's own level
-            // at the door; one more than a level's reach under the car (past
-            // a deck's edge) is not a way out.
-            let datum = v.datum(world);
-            let y = world.surface_below(at.x, at.z, datum.y + LEVEL_REACH_M);
-            if y < datum.y - LEVEL_REACH_M {
-                return None;
-            }
-            y
-        } else {
-            let top = world.raycast(DVec3::new(at.x, p.y + 3.0, at.z), DVec3::NEG_Y, 8.0, layer::WORLD | layer::STREET, Some(v.body));
-            let floor = world.floor_y(at.x, at.z);
-            top.map(|h| h.point.y).unwrap_or(floor).max(floor)
-        };
-        let feet = DVec3::new(at.x, y, at.z);
+        let up = v.pose(world).1 * DVec3::Y;
+        let walkable = tuning::capsule::MAX_SLOPE_DEGREES.to_radians().cos();
+        if up.y < walkable {
+            return None;
+        }
+        // Extend the sill plane to the door on a pitched or banked road.
+        let sill = v.datum(world) + up * v.spec.sill_y;
+        let sill_y = sill.y - (up.x * (at.x - sill.x) + up.z * (at.z - sill.z)) / up.y;
+        let step = tuning::capsule::MAX_STEP_HEIGHT_M;
+        let origin = DVec3::new(at.x, sill_y + step, at.z);
+        let reach = 2.0 * step + v.spec.sill_y / up.y + tuning::kerb::GROUND_CONTACT_TOLERANCE_M;
+        let hit = world.raycast(origin, DVec3::NEG_Y, reach, layer::WORLD | layer::STREET | layer::BOAT, Some(v.body))?;
+        let floor = &world.physics.colliders[hit.collider];
+        if hit.normal.y < walkable || !(floor.collision_groups().memberships.intersects(layer::STREET | layer::BOAT)
+            || floor.shape().as_heightfield().is_some()) {
+            return None;
+        }
+        // The side of the rounded sole reaches a slope before its lowest point does.
+        let feet = hit.point + DVec3::Y * tuning::capsule::RADIUS_M * (1.0 / hit.normal.y - 1.0);
         let center = Character::new(feet).position;
+        if !Self::vehicle_path_clear(world, v, center) {
+            return None;
+        }
         let shape = Capsule::new_y(tuning::capsule::HALF_HEIGHT_M as f32, tuning::capsule::RADIUS_M as f32);
-        let pose = Pose::from_translation(Vector::new(center.x as f32, center.y as f32 + 0.02, center.z as f32));
-        let f = QueryFilter::default().groups(InteractionGroups::new(Group::ALL, layer::WORLD | layer::STREET | layer::VEHICLE, InteractionTestMode::And));
+        let pose = Pose::from_translation(Vector::new(center.x as f32, center.y as f32 + tuning::kerb::GROUND_CONTACT_TOLERANCE_M as f32, center.z as f32));
+        let f = QueryFilter::default().groups(InteractionGroups::new(Group::ALL, Character::filter(), InteractionTestMode::And));
         world.physics.intersect_shape(pose, &shape, f).next().is_none().then_some(feet)
     }
 
@@ -555,7 +603,7 @@ impl Player {
         }
         match self.mode {
             Mode::OnFoot => {
-                let mut probe = WorldProbe { world, exclude: None, filter: layer::WORLD | layer::STREET | layer::VEHICLE };
+                let mut probe = WorldProbe { world, exclude: None, filter: layer::WORLD | layer::STREET | layer::VEHICLE | layer::BOAT };
                 let feet = self.character.feet();
                 let pose: CameraPose = self.on_foot_cam.update(
                     &OnFootInput {
@@ -583,7 +631,7 @@ impl Player {
                 let speed = v.forward_speed(world);
                 let cv = DriveCameraVehicle { length_m: v.spec.length, width_m: v.spec.width, height_m: v.spec.height, datum, rotation: rot };
                 let pose = self.drive_cam.pose(datum, yaw, speed, Some(&cv), aspect);
-                let mut probe = WorldProbe { world, exclude: Some(v.body), filter: layer::WORLD | layer::STREET };
+                let mut probe = WorldProbe { world, exclude: Some(v.body), filter: layer::WORLD | layer::STREET | layer::BOAT };
                 let lens = camera::resolve_camera_collision(&mut probe, pose.pivot, pose.position, camera::drive::MIN_STANDOFF, true);
                 let full = (pose.position - pose.pivot).length();
                 if full > 0.0 {

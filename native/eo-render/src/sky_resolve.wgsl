@@ -153,6 +153,189 @@ fn rs_lit_fog(uv: vec2<f32>, dist: f32, ray: vec3<f32>) -> vec3<f32> {
     return select(max(l, vec3<f32>(0.0)), vec3<f32>(0.0), any(l != l));
 }
 
+/// Sky-only 3-ring isotropic Gaussian cloud softener over half-res `rs_vol` & `rs_volz`:
+/// In `sky_volume.wgsl:2064-2067`, `rs_vol.a = T_cloud * (1 - w)` and `rs_volz = -1 - T_cloud * w`,
+/// so `T_cloud = clamp(rs_vol.a + clamp(-rs_volz - 1.0, 0.0, 1.0), 0.0, 1.0)` is mathematically
+/// exact at every sun altitude (twilight `w = 1` AND full night `w = 0`).
+/// Returns `vec4(soft_vol_rgb, soft_T_cloud)` and writes Gaussian-blurred `vol.a` into `soft_a_out`,
+/// nearby clear-sky radiance into `sky_out`, and continuous clear-sky weight into `sky_w_out`.
+fn rs_soft_twi_cloud(
+    uv: vec2<f32>,
+    center: vec4<f32>,
+    sky_out: ptr<function, vec3<f32>>,
+    sky_w_out: ptr<function, f32>,
+    soft_a_out: ptr<function, f32>,
+) -> vec4<f32> {
+    let vd = vec2<i32>(textureDimensions(rs_vol));
+    let base = vec2<i32>(clamp(uv * vec2<f32>(vd), vec2<f32>(0.0), vec2<f32>(vd - 1)));
+    let cz = textureLoad(rs_volz, base, 0).r;
+    let ct = select(1.0, clamp(center.a + clamp(-cz - 1.0, 0.0, 1.0), 0.0, 1.0), cz < 0.0);
+    // 3 isotropic rings (radii ~2, ~5, ~9 half-res texels) melt jagged half-res cloud
+    // stair-stepping into feathery wisps while strictly skipping foreground geometry (`z >= 0.0`).
+    let offs = array<vec2<i32>, 16>(
+        vec2<i32>(-2, 0), vec2<i32>(2, 0), vec2<i32>(0, -2), vec2<i32>(0, 2),
+        vec2<i32>(-4, -3), vec2<i32>(4, -3), vec2<i32>(-4, 3), vec2<i32>(4, 3),
+        vec2<i32>(-5, 0), vec2<i32>(5, 0), vec2<i32>(0, -5), vec2<i32>(0, 5),
+        vec2<i32>(-9, -4), vec2<i32>(9, 4), vec2<i32>(-4, 9), vec2<i32>(4, -9),
+    );
+    let wgts = array<f32, 16>(
+        1.8, 1.8, 1.8, 1.8,
+        1.15, 1.15, 1.15, 1.15,
+        1.1, 1.1, 1.1, 1.1,
+        0.55, 0.55, 0.55, 0.55,
+    );
+    var acc_rgb = center.rgb * 2.2;
+    var acc_a = center.a * 2.2;
+    var acc_t = ct * 2.2;
+    var wsum = 2.2;
+    let ct3 = ct * ct * ct;
+    var sky_rgb = center.rgb * (ct3 * 2.2);
+    var sky_w = ct3 * 2.2;
+    for (var k = 0; k < 16; k = k + 1) {
+        let p = clamp(base + offs[k], vec2<i32>(0), vd - 1);
+        let z = textureLoad(rs_volz, p, 0).r;
+        if (z < 0.0) {
+            let w = wgts[k];
+            let v4 = textureLoad(rs_vol, p, 0);
+            let t = clamp(v4.a + clamp(-z - 1.0, 0.0, 1.0), 0.0, 1.0);
+            acc_rgb = acc_rgb + v4.rgb * w;
+            acc_a = acc_a + v4.a * w;
+            acc_t = acc_t + t * w;
+            wsum = wsum + w;
+            let t3 = t * t * t * w;
+            sky_rgb = sky_rgb + v4.rgb * t3;
+            sky_w = sky_w + t3;
+        }
+    }
+    let soft_rgb = acc_rgb / wsum;
+    let soft_t = acc_t / wsum;
+    *sky_out = sky_rgb / max(sky_w, 1e-5);
+    *sky_w_out = sky_w / wsum;
+    *soft_a_out = acc_a / wsum;
+    return vec4<f32>(soft_rgb, soft_t);
+}
+
+fn rs_aaa_vol(vol_in: vec4<f32>, uv: vec2<f32>, dist: f32, ray: vec3<f32>, d: f32, sea_t: f32) -> vec4<f32> {
+    if (!SF_AAA_AERIAL) {
+        return vol_in;
+    }
+    // Night photographic sky & skyline veil upgrade (`06a_night_skyline`, `06b_night_street`) +
+    // silky feathered blue-hour twilight clouds (`10_neighborhood_dusk_houses`, sun_alt = -7 deg):
+    // cleanly separates blue-hour twilight (`sun.y ~ -0.12`) from full night (`sun.y < -0.20`).
+    let deep_n = smoothstep(0.88, 1.0, skyu.night.z) * (1.0 - smoothstep(-0.24, -0.16, look.sun.y));
+    let dusk_n = smoothstep(0.18, 0.72, skyu.night.z) * (1.0 - smoothstep(-0.02, 0.04, look.sun.y)) * (1.0 - deep_n);
+    if ((deep_n > 0.001 || dusk_n > 0.001) && skyu.atmo3.x <= 0.5) {
+        let el = clamp(ray.y, 0.0, 1.0);
+        let is_sky = d <= 0.0 && sea_t >= 1e8;
+        let vl = lk_luma(vol_in.rgb);
+        var out_rgb = vol_in.rgb;
+        var out_a = vol_in.a;
+        if (deep_n > 0.001) {
+            let hz_w = exp(-el / 0.11);
+            let indigo_grad = mix(vec3<f32>(0.24, 0.44, 1.36), vec3<f32>(0.54, 0.56, 1.08), hz_w * 0.55);
+            let target_l = select(vl * mix(0.48, 0.64, hz_w), max(vl * mix(0.56, 0.74, hz_w), 0.0011 / max(look.key.w, 0.25)), is_sky);
+            let ind_rgb = indigo_grad * (target_l / max(lk_luma(indigo_grad), 1e-4));
+            let blend_n = deep_n * select(smoothstep(180.0, 1400.0, dist) * 0.80, 0.88, is_sky);
+            let dark_veil = 1.0 - smoothstep(0.06, 0.22, vl * max(look.key.w, 0.25));
+            out_rgb = mix(out_rgb, ind_rgb, blend_n * dark_veil);
+            if (is_sky) {
+                // At deep night (`sun_alt <= -16 deg`, `skyu.atmo2.y == 0`), `rs_vol.a` IS the true
+                // cumulus transmittance blocking `look_sky`'s midnight dome behind it (`rs_scene` does
+                // `dome * vol.a + vol.rgb`), while clear sky has `vol = (sky_city_glow, dome_share)`.
+                // Because `rs_scene` is linear in `(vol.rgb, vol.a)`, taking a strict convex blend
+                // between the 3-ring Gaussian-feathered cloud `(cloud_graded, soft_a_n)` and the
+                // exact clear-sky state `(clear_graded, dome_share)` dissolves dark horizon cumulus
+                // cutouts behind Transamerica/Embarcadero 4 into silky atmospheric wisps with ZERO
+                // double-counting / bright-puff overshoot and sharp untouched clear-sky stars.
+                var n_sky = vec3<f32>(0.0);
+                var n_sw = 0.0;
+                var soft_a_n = vol_in.a;
+                let sv_n = rs_soft_twi_cloud(uv, vol_in, &n_sky, &n_sw, &soft_a_n);
+                let raw_cov_n = clamp(1.0 - sv_n.a, 0.0, 1.0);
+                if (raw_cov_n > 0.001) {
+                    let blur_wn = smoothstep(0.001, 0.22, raw_cov_n);
+                    let ind_norm = max(lk_luma(indigo_grad), 1e-4);
+                    let sky_floor = 0.0011 / max(look.key.w, 0.25);
+                    let grade_k = mix(0.56, 0.74, hz_w);
+                    let exp_k = max(look.key.w, 0.25);
+                    // Grade both the blurred cloud in-scatter and the exact clear-sky in-scatter
+                    // with the identical deep-night indigo formula used on clear sky above.
+                    let sv_l = lk_luma(sv_n.rgb);
+                    let sv_ind = indigo_grad * (max(sv_l * grade_k, sky_floor) / ind_norm);
+                    let sv_dv = 1.0 - smoothstep(0.06, 0.22, sv_l * exp_k);
+                    let cloud_graded = mix(sv_n.rgb, sv_ind, deep_n * 0.88 * sv_dv);
+
+                    let anal_raw = select(vec3<f32>(0.0), sky_city_glow(ray, skyu.eye.xyz, skyu.amb_top.w), skyu.amb_top.w > 0.0);
+                    let clear_raw = mix(anal_raw, n_sky, smoothstep(0.0, 0.35, n_sw));
+                    let cl_l = lk_luma(clear_raw);
+                    let cl_ind = indigo_grad * (max(cl_l * grade_k, sky_floor) / ind_norm);
+                    let cl_dv = 1.0 - smoothstep(0.06, 0.22, cl_l * exp_k);
+                    let clear_graded = mix(clear_raw, cl_ind, deep_n * 0.88 * cl_dv);
+
+                    // Strict convex dissolve toward clear midnight sky: ~88% near horizon so crisp
+                    // dark cumulus blobs behind the skyline melt seamlessly, ~84% higher up so
+                    // upper night clouds read as whisper-faint atmospheric veils without puff glow.
+                    let dome_share = clamp(1.0 - skyu.atmo2.y, 0.0, 1.0);
+                    let dissolve = mix(0.88, 0.84, smoothstep(0.04, 0.25, el));
+                    let soft_vol_rgb = mix(cloud_graded, clear_graded, dissolve);
+                    let soft_vol_a = mix(soft_a_n, dome_share, dissolve);
+                    let w_n = blur_wn * deep_n * dark_veil;
+                    out_rgb = mix(out_rgb, soft_vol_rgb, w_n);
+                    out_a = mix(out_a, soft_vol_a, w_n);
+                }
+            }
+        }
+        if (dusk_n > 0.001 && is_sky) {
+            // Smooth & feather blue-hour twilight clouds (`10_neighborhood_dusk_houses`):
+            // 3-ring isotropic Gaussian filter melts half-res stair-stepping into feathery wisps,
+            // and a 100% continuous clear-sky blend (`smoothstep(0.0, 0.45, clear_w)`) softly lifts
+            // dark unlit cloud undersides into the twilight sky gradient with ZERO rim halo or hard step.
+            var clear_sky = vec3<f32>(0.0);
+            var clear_w = 0.0;
+            var soft_a_d = vol_in.a;
+            let sv = rs_soft_twi_cloud(uv, vol_in, &clear_sky, &clear_w, &soft_a_d);
+            let raw_cov = clamp(1.0 - sv.a, 0.0, 1.0);
+            if (raw_cov > 0.001) {
+                // Smoothly melt jagged cloud pixels into the 3-ring Gaussian blur (preserves sharp stars on clear sky).
+                let blur_w = smoothstep(0.001, 0.22, raw_cov);
+                let base_c = mix(out_rgb, sv.rgb, blur_w);
+                // Continuous twilight sky anchor: matches physical twilight gradient smoothly across large clouds.
+                let twi_grad = mix(vec3<f32>(0.50, 0.42, 0.56), vec3<f32>(0.18, 0.30, 0.64), smoothstep(0.04, 0.44, el));
+                let sv_l = max(lk_luma(sv.rgb), 0.0012 / max(look.key.w, 0.25));
+                let fb_l = sv_l * mix(1.52, 1.38, smoothstep(0.06, 0.45, el));
+                let fallback_sky = twi_grad * (fb_l / max(lk_luma(twi_grad), 1e-4));
+                let sky_est = mix(fallback_sky, clear_sky, smoothstep(0.0, 0.45, clear_w));
+                // Gentle atmospheric translucency: soft velvety twilight wisps ~12-22% deeper than surrounding sky.
+                let veil_w = raw_cov * mix(0.56, 0.72, smoothstep(0.05, 0.44, el));
+                let wisp = mix(base_c, sky_est * mix(0.95, 0.82, raw_cov), veil_w);
+                out_rgb = mix(out_rgb, wisp, dusk_n);
+            }
+        }
+        return vec4<f32>(out_rgb, out_a);
+    }
+    if (d <= 0.0 || dist <= 0.0 || sea_t <= dist || skyu.atmo3.x > 0.5 || skyu.atmo2.x < 0.5) {
+        return vol_in;
+    }
+    // Preserve crisp atmospheric depth layering across 0.4-5 km skyline (Embarcadero -> FiDi -> hills)
+    // by pulling back excessive near-range milky warm/grey veil while converging smoothly to full
+    // volume haze on far hills (8.2+ km) and horizon sky.
+    let near_skyline = 1.0 - smoothstep(2200.0, 8200.0, dist);
+    let day_a = smoothstep(-0.02, 0.10, skyu.atmo.y);
+    if (near_skyline <= 0.001 || day_a <= 0.001) {
+        return vol_in;
+    }
+    let clear_air = smoothstep(0.30, 0.55, vol_in.a);
+    let w = near_skyline * day_a * clear_air;
+    let cs = clamp(dot(ray, skyu.atmo.xyz), -1.0, 1.0);
+    let sunward = smoothstep(0.25, 0.92, cs);
+    let low_sun = smoothstep(0.45, 0.05, skyu.atmo.y);
+    let spec_tint = mix(vec3<f32>(0.78, 0.96, 1.22), mix(vec3<f32>(1.06, 0.98, 0.88), vec3<f32>(1.20, 0.96, 0.72), low_sun), sunward);
+    let lift_scale = mix(1.0, mix(0.44, 0.52, sunward), w);
+    let trans = mix(vol_in.a, pow(clamp(vol_in.a, 0.0, 1.0), 0.54), w);
+    let ins = vol_in.rgb * mix(vec3<f32>(1.0), spec_tint, w * 0.72) * lift_scale;
+    return vec4<f32>(ins, trans);
+}
+
 fn rs_scene(p: vec2<i32>, dims: vec2<i32>, vol: vec4<f32>) -> vec3<f32> {
     let c = textureLoad(rs_hdr, clamp(p, vec2<i32>(0), dims - 1), 0).rgb;
     return max(c, vec3<f32>(0.0)) * vol.a + vol.rgb;
@@ -229,7 +412,7 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
     var vol = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     if (skyu.flags.w == 1u) {
-        vol = rs_volume(uv, dist);
+        vol = rs_aaa_vol(rs_volume(uv, dist), uv, dist, ray, d, sea_t);
     }
     var c = rs_scene(p, dims, vol);
     // the sun's disc (0.533 deg, limb-darkened, a one-pixel edge) at full
@@ -404,7 +587,9 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         if (skyu.flags.w == 1u) {
             let dn = textureLoad(rs_depth, clamp(p + o, vec2<i32>(0), dims - 1), 0);
             if ((dn > 0.0) != (d > 0.0)) {
-                vn = rs_volume((vec2<f32>(p + o) + 0.5) / vec2<f32>(dims), select(-1.0, dist, dn > 0.0));
+                let d_n = select(-1.0, dist, dn > 0.0);
+                let uv_n = (vec2<f32>(p + o) + 0.5) / vec2<f32>(dims);
+                vn = rs_aaa_vol(rs_volume(uv_n, d_n), uv_n, d_n, ray, dn, sea_t);
             }
         }
         let s = rs_ycocg(rs_tm(rs_scene(p + o, dims, vn) + lit));

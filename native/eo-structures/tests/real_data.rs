@@ -290,3 +290,31 @@ fn the_city_clearance_envelope_holds_every_drawn_triangle() {
     assert!(tris > 500_000, "{tris} triangles");
     assert!(outside.is_empty(), "{} drawn points outside the clearance envelope", outside.len());
 }
+
+#[test]
+fn the_marin_landing_has_one_deck_owner() {
+    let world = world();
+    let tip = world.chains().iter().find(|c| c.kind == ChainKind::Deck
+        && c.pieces.iter().any(|p| p.way == "595194543")).expect("northbound survey tail");
+    let centre = tip.frame(tip.length() / 2.);
+    let key = eo_street::tile_key(centre.x,centre.z);
+    let roadway = eo_landmarks::data::num(&eo_landmarks::golden_gate::data(eo_landmarks::LandmarksJs::get()).dimensions,"roadwayM");
+    let mut generic = 0;
+    for x in key.0-1..=key.0+1 {
+        for z in key.1-1..=key.1+1 {
+            if let Some(mesh) = world.render_tile((x,z), 0) {
+                for tri in mesh.indices.chunks_exact(3) {
+                    let x = tri.iter().map(|i| f64::from(mesh.positions[*i as usize][0])).sum::<f64>()/3.;
+                    let z = tri.iter().map(|i| f64::from(mesh.positions[*i as usize][2])).sum::<f64>()/3.;
+                    let (s,_) = tip.project(x,z);
+                    let near = tip.frame(s);
+                    if s > 0. && s < tip.length() && (x-near.x).hypot(z-near.z)<roadway/2. {
+                        generic += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(generic == 0, eo_landmarks::golden_gate::approach_finish(),
+        "{generic} generic roadway/parapet triangles occupy the Marin landing");
+}

@@ -60,12 +60,12 @@ const SURFACE_MARGIN_M: f64 = 0.03;
 /// the street datum; further off (a junction's pad fanned from the mean of
 /// its approaches on a hillside) the datum is kept, and stage A6, which
 /// joins structure legs into junctions, meets it. INFERRED (a solve tolerance).
-const END_DRAWN_M: f64 = 0.5;
+pub(crate) const END_DRAWN_M: f64 = 0.5;
 
 /// A paved end's street surface is read this far past the end (on the
 /// stub, not the deck), and taken where it is within `END_SURFACE_M` of the
 /// street crown over the end's height. INFERRED (sampling tolerances).
-const END_SAMPLE_M: f64 = 0.05;
+pub(crate) const END_SAMPLE_M: f64 = 0.05;
 const END_SURFACE_M: f64 = 0.5;
 
 /// A column's footprint keeps this far from another deck's edge (its
@@ -415,7 +415,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
             }
             if paved_node[n] {
                 let p = nodes.at[n];
-                return NodeKind::Paved(streets.ground(p[0], p[1]) + lift);
+                return NodeKind::Paved(streets.street_datum(p[0], p[1]));
             }
             if ends.len() >= 2 { NodeKind::Shared } else { NodeKind::Free }
         })
@@ -427,8 +427,26 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
     // (stage A6: a stub raised on an approach embankment, `eo_street::joins`,
     // is met at its raised datum.)
     let rises: Vec<(P2, f64)> = o.structures.iter().flat_map(|j| j.ends.iter().flat_map(|e| [e.rise, e.cut].into_iter().flatten().map(move |r| (e.at, r.to)))).collect();
-    let end_height = |tip: P2, half: f64| -> f64 {
-        let datum = streets.ground(tip[0], tip[1]) + lift;
+    let mut legs_by_road = std::collections::HashMap::<usize, Vec<_>>::new();
+    for e in streets.plan.entries.iter().filter(|e| e.structure_leg.is_some()) {
+        legs_by_road.entry(e.road).or_default().push(e);
+    }
+    let end_height = |tip: P2, half: f64, segment: usize, shared: bool| -> f64 {
+        // (the street's datum there: eo-street `seams` moves a run to meet a busier one)
+        let terrain = streets.street_datum(tip[0], tip[1]);
+        let datum = paved.runs_near(tip, snap).into_iter().find_map(|n| {
+            let entry = &streets.plan.entries[n.entry as usize];
+            if n.s <= snap || entry.length - n.s <= snap || !o.landings.is_empty() {
+                streets.surveyed_datum(entry, tip, terrain)
+            } else { None }
+        }).unwrap_or(terrain);
+        let datum = if o.landings.is_empty() { datum } else {
+            legs_by_road.get(&segment).into_iter().flatten()
+                .find_map(|e| streets.surveyed_datum(e, tip, datum)).unwrap_or(datum)
+        };
+        // At one paved fork the decks share a baseline even when their widths
+        // (and crowns) differ. Each swept end samples its own street cross-section.
+        if !o.landings.is_empty() && (shared || (datum - terrain).abs() > END_TOL_M) { return datum; }
         let crown = o.cross_slope * half;
         let raised_to = |y: f64| rises.iter().any(|(at, to)| (at[0] - tip[0]).hypot(at[1] - tip[1]) <= snap && (y - crown - to).abs() <= END_DRAWN_M);
         match (streets.paved_layer_at(tip[0], tip[1]), streets.paved_at(tip[0], tip[1])) {
@@ -446,14 +464,17 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
         let out_dir = if e == 0 { [-f.tx, -f.tz] } else { [f.tx, f.tz] };
         let half = if e == 0 { c.pieces[0].half } else { c.pieces.last().unwrap().half };
         crate::sweep::deck_offsets(half, o.gutter_width)
-            .into_iter()
             .map(|u| {
                 let q = [f.x + f.nx * u + out_dir[0] * END_SAMPLE_M, f.z + f.nz * u + out_dir[1] * END_SAMPLE_M];
                 let crown = o.cross_section_y(0.0, u, half);
-                let drawn = match (streets.paved_layer_at(q[0], q[1]), streets.paved_at(q[0], q[1])) {
+                let drawn = if c.kind == ChainKind::Tunnel && options.tunnels && o.structures.is_some() {
+                    streets.carriageway_near(q[0], q[1], fixed + crown)
+                        .filter(|y| (y - fixed - crown).abs() <= END_SURFACE_M)
+                        .map_or(crown, |y| y-fixed)
+                } else { match (streets.paved_layer_at(q[0], q[1]), streets.paved_at(q[0], q[1])) {
                     (Some(eo_street::Layer::Carriageway), Some(y)) if (y - fixed - crown).abs() <= END_SURFACE_M => y - fixed,
                     _ => crown,
-                };
+                } };
                 [u, drawn]
             })
             .collect()
@@ -465,11 +486,22 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
             let (tip, half) = (tips[e], halves[e]);
             // a paved end meets the street at the chain's own end point.
             let (kind, fixed) = match node_kind[out[ci].ends[e].node as usize] {
-                NodeKind::Paved(_) => (EndKind::Paved, Some(end_height(tip, half))),
+                NodeKind::Paved(_) => (EndKind::Paved, Some(end_height(tip, half, if e == 0 { out[ci].pieces[0].segment } else { out[ci].pieces.last().unwrap().segment }, at_node[out[ci].ends[e].node as usize].len()>1))),
                 NodeKind::Landmark(h) => (EndKind::Landmark, Some(h)),
                 NodeKind::Shared => (EndKind::Shared, None),
                 NodeKind::Free => (EndKind::Free, None),
             };
+            // The approach cut can lower the connected street below both the
+            // bare-earth grid and a crossing sidewalk. Anchor the joined bore
+            // to that carriageway on the street side of the seam.
+            let fixed = if kind == EndKind::Paved && out[ci].kind == ChainKind::Tunnel && options.tunnels && o.structures.is_some() {
+                let f = out[ci].frame(if e == 0 { 0.0 } else { out[ci].length() });
+                let dir = if e == 0 { -END_SAMPLE_M } else { END_SAMPLE_M };
+                let crown = o.cross_section_y(0.0, 0.0, half);
+                let base = fixed.unwrap();
+                streets.carriageway_near(f.x + dir*f.tx, f.z + dir*f.tz, base + crown)
+                    .map(|y| y-crown).filter(|y| (y-base).abs() < limits.clearance(false).unwrap_or(0.0)).or(fixed)
+            } else { fixed };
             let surface = if kind == EndKind::Paved { end_surface(&out[ci], e, fixed.unwrap()) } else { vec![] };
             let end = &mut out[ci].ends[e];
             end.at = tip;
@@ -558,6 +590,13 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
                 let under = |d: &Chain| d.id != c.id && d.kind != ChainKind::Tunnel && (d.level < c.level || (outside && d.level <= c.level));
                 near(&out, &index, p, reach, &under).is_empty()
             };
+            // The closed leaf is carried at its fixed ends. A pier cannot
+            // stand in the navigation opening beneath the moving span.
+            if eo_data::movable_spans::is_leaf(&c.pieces[0].way) { return vec![]; }
+            if let Some(profile) = crate::east_span::readings(c) {
+                return crate::east_span::piers(c, profile).into_iter()
+                    .filter_map(|s| bents::room(&sites, c, s, &free).map(|room| (s, room))).collect();
+            }
             bents::place(&sites, c, &free)
         })
         .collect();
@@ -572,7 +611,14 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
         let mut edges = vec![0.0];
         edges.extend(&b);
         edges.push(c.length());
-        c.depths = edges.windows(2).map(|w| (w[1] - w[0]) * limits.depth_ratio).collect();
+        let abutment_x = crate::east_span::readings(c).and_then(crate::east_span::west_abutment_x);
+        c.depths = edges.windows(2).map(|w| {
+            if abutment_x.is_some_and(|x| c.frame((w[0] + w[1]) / 2.0).x >= x) {
+                crate::east_span::BOX_DEPTH_M * eo_data::groundscale::height_scale()
+            } else {
+                (w[1] - w[0]) * limits.depth_ratio
+            }
+        }).collect();
         c.bents = b;
         c.bent_columns = list.iter().map(|(_, rm)| rm.zones.iter().map(|z| [z.lo, z.hi]).collect()).collect();
         rooms_of.push(list.into_iter().map(|x| x.1).collect());
@@ -613,6 +659,17 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
             // little under the datum the floor asks: next to it the floor asks
             // no more than the end's own grade reaches.
             let mut floor = floor;
+            if let Some(profile) = crate::east_span::readings(c) {
+                for (bound, p) in floor.iter_mut().zip(&xz[c.id as usize]) {
+                    *bound = bound.max(eo_data::bridge_survey::height_at(profile, p[0]));
+                }
+            }
+            if eo_data::movable_spans::is_leaf(&c.pieces[0].way) {
+                for (bound, p) in floor.iter_mut().zip(&xz[c.id as usize]) {
+                    let measured = eo_data::bridge_survey::movable_height(&c.pieces[0].way, p[1]).expect("surveyed movable leaf");
+                    *bound = bound.max(measured);
+                }
+            }
             for (e, end) in c.ends.iter().enumerate() {
                 if let (EndKind::Paved, Some(h)) = (end.kind, end.fixed) {
                     let te = if e == 0 { tau[0] } else { tau[last] };
@@ -632,7 +689,17 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
         edges.push(c.length());
         let longest = edges.windows(2).map(|w| w[1] - w[0]).fold(0.0, f64::max);
         if c.kind == ChainKind::Deck && longest > LONGEST_SPAN_M {
-            static_holds.insert(c.id, Hold::NoBentRoom { span: longest.round() as u32 });
+            let supported = crate::east_span::readings(c).is_some_and(|profile| {
+                // Long spans rely on the registered supports. A future street
+                // occupying a skyway pier must not silently remove that pier.
+                let Some(west) = crate::east_span::west_abutment_x(profile) else { return false };
+                crate::east_span::piers(c, profile).iter()
+                    .filter(|&&s| c.frame(s).x >= west)
+                    .all(|s| c.bents.contains(s))
+            });
+            if !supported {
+                static_holds.insert(c.id, Hold::NoBentRoom { span: longest.round() as u32 });
+            }
         }
     }
     // the routes (OSM way ids and names) of every paved run and every chain,
@@ -705,6 +772,10 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
     // each junction pad's highest drawn point (eo-street's `emit_node`: a fan
     // from an apex at the approaches' mean datum plus the crown, to each
     // approach mouth's cross-section at its own datum).
+    let road_datum = |entry: &eo_street::plan::Entry, at: P2| {
+        let terrain = streets.street_datum(at[0], at[1]);
+        streets.surveyed_datum(entry, at, terrain).unwrap_or(terrain)
+    };
     let node_top: Vec<f64> = streets
         .plan
         .nodes
@@ -715,7 +786,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
                 .iter()
                 .map(|a| {
                     let f = eo_street::plan::approach_end_frame(&streets.plan.entries, a);
-                    (streets.ground(f.x, f.z) + lift, a.half)
+                    (road_datum(&streets.plan.entries[a.entry], [f.x, f.z]), a.half)
                 })
                 .collect();
             if ends.is_empty() {
@@ -750,6 +821,10 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
             // ribbon (its datum and crown, `StreetOptions::cross_section_y`)
             // where one covers a sample, else a junction's pad (its apex or
             // highest approach mouth).
+            // Keep bounds with the road they belong to: the deck can join
+            // its own elevated approach while crossing a lower road below it.
+            let mut road_tops = BTreeMap::<u32, f64>::new();
+            let mut surveyed_section = false;
             let mut section_top = f64::NEG_INFINITY;
             for q in &samples {
                 let mut on_ribbon = false;
@@ -762,18 +837,33 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
                         on_ribbon = true;
                     }
                     let f = e.frame(n.s, false);
-                    section_top = section_top.max(streets.ground(f.x, f.z) + lift + o.cross_section_y(0.0, n.dist, e.half));
+                    let terrain = streets.street_datum(f.x, f.z);
+                    let survey = streets.surveyed_datum(e, [f.x, f.z], terrain);
+                    surveyed_section |= survey.is_some();
+                    let top = survey.unwrap_or(terrain) + o.cross_section_y(0.0, n.dist, e.half);
+                    section_top = section_top.max(top);
+                    let bound = road_tops.entry(n.entry).or_insert(top);
+                    *bound = bound.max(top);
                 }
                 if !on_ribbon {
                     for nd in paved.pads_at(*q) {
-                        section_top = section_top.max(node_top[nd as usize]);
+                        let top = node_top[nd as usize];
+                        section_top = section_top.max(top);
+                        for app in &streets.plan.nodes[nd as usize].approaches {
+                            let bound = road_tops.entry(app.entry as u32).or_insert(top);
+                            *bound = bound.max(top);
+                        }
                     }
                 }
             }
             for u in paved.under_section(p, l, r) {
                 let e = &streets.plan.entries[u.entry as usize];
                 let half = e.half;
-                let top = (streets.ground(u.at[0], u.at[1]) + lift + o.cross_slope * half).max(section_top);
+                let centre_top = road_datum(e, u.at) + o.cross_slope * half;
+                // Without a surveyed layer, retain the conservative maximum
+                // over the section, including its junction pads.
+                let bounds = if surveyed_section || !o.landings.is_empty() { road_tops.get(&u.entry).copied().unwrap_or(centre_top) } else { section_top };
+                let top = centre_top.max(bounds);
                 streets_at.entry(u.entry).or_default().push((i, top + SURFACE_MARGIN_M, u.side, half));
             }
             for (di, sd) in under_chains(&out, &index, p, l, r, &lower) {
@@ -803,9 +893,12 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
         // a run passes over what it overlaps only if the centrelines cross
         // in it or this centreline is over the crossed roadway somewhere in
         // it; footprints that only graze side by side are not a crossing.
-        let passes_over = |list: &[(usize, f64, f64, f64)], a: usize, b: usize| -> bool {
+        let passes_over = |list: &[(usize, f64, f64, f64)], a: usize, b: usize, under: &[P2]| -> bool {
             let run: Vec<&(usize, f64, f64, f64)> = list.iter().filter(|x| x.0 >= a && x.0 <= b).collect();
-            run.iter().any(|x| x.2.abs() <= x.3) || run.windows(2).any(|w| w[0].2 * w[1].2 <= 0.0)
+            run.iter().any(|x| x.2.abs() <= x.3) || run.windows(2).any(|w| {
+                w[0].2 * w[1].2 <= 0.0 && under.windows(2).any(|u|
+                    crate::index::crossing(pts[w[0].0], pts[w[1].0], u[0], u[1]).is_some())
+            })
         };
         let mut specs = vec![];
         let shared_with = |d: &Chain, e: usize| d.ends.iter().any(|x| x.node == c.ends[e].node);
@@ -816,7 +909,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
             let freeway = freeway_clearance(&e.highway);
             for (a, b) in runs(list.iter().map(|x| x.0).collect()) {
                 // the street a paved end lands on is met at grade, not crossed.
-                if (a == 0 && c.ends[0].kind == EndKind::Paved) || (b == last && c.ends[1].kind == EndKind::Paved) || !passes_over(&list, a, b) {
+                if (a == 0 && c.ends[0].kind == EndKind::Paved) || (b == last && c.ends[1].kind == EndKind::Paved) || !passes_over(&list, a, b, &e.points) {
                     continue;
                 }
                 if same_route(c, Ok(entry), a, b) {
@@ -841,7 +934,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
             let name = format!("{} (chain {}, level {})", if d.name().is_empty() { "unnamed" } else { d.name() }, d.id, d.level);
             for (a, b) in runs(list.iter().map(|x| x.0).collect()) {
                 // a chain this one meets at its end is joined there, not crossed.
-                if (a == 0 && shared_with(d, 0)) || (b == last && shared_with(d, 1)) || !passes_over(&list, a, b) {
+                if (a == 0 && shared_with(d, 0)) || (b == last && shared_with(d, 1)) || !passes_over(&list, a, b, &d.points) {
                     continue;
                 }
                 if same_route(c, Err(di), a, b) {
@@ -875,7 +968,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
         }
         // over open water for longer than a creek crossing: a navigation
         // clearance would set the deck there, and the table has none.
-        if open_water_run(&c.stations, &ground[c.id as usize]) > OPEN_WATER_HOLD_M {
+        if open_water_run(&c.stations, &ground[c.id as usize]) > OPEN_WATER_HOLD_M && crate::east_span::readings(c).is_none() {
             static_holds.insert(c.id, Hold::NoSourcedClearance);
         }
         work[c.id as usize].cross = specs;
@@ -895,7 +988,10 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
                     continue;
                 }
                 let j = si as usize;
-                if crate::index::crossing(c.points[i], c.points[i + 1], d.points[j], d.points[j + 1]).is_some() && with.is_none_or(|w| di < w) {
+                if let Some((t,u)) = crate::index::crossing(c.points[i], c.points[i + 1], d.points[j], d.points[j + 1]) {
+                    let s = c.cum[i] + t * (c.cum[i+1] - c.cum[i]);
+                    let sd = d.cum[j] + u * (d.cum[j+1] - d.cum[j]);
+                    if shared_aisle(c,s,d,sd) || with.is_some_and(|previous| di >= previous) { continue; }
                     with = Some(di);
                 }
             }
@@ -947,7 +1043,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
     // carriageways side by side) are solved again to meet there (stage A5),
     // unless the free solve put one far enough over the other to pass over
     // it (a genuine over/under pair near a shared node).
-    let candidates = merge_ties(&out, limits.barrier_base);
+    let candidates = merge_ties(&out, limits.barrier_base, options.tunnels);
     let ties: Vec<Tie> = candidates
         .into_iter()
         .filter(|t| {
@@ -991,7 +1087,7 @@ pub(crate) fn build(streets: &StreetWorld, roads: &HashMap<String, RoadTags>, st
         if let Some(h) = held.get(&c.id) {
             c.status = Status::Held(h.clone());
             c.heights = held_heights.remove(&c.id).unwrap_or_default();
-            if matches!(h, Hold::EndTooLow { .. }) {
+            if matches!(h, Hold::EndTooLow { .. } | Hold::Grade) {
                 c.end_wants = [held_wants.get(&(c.id, 0)).copied(), held_wants.get(&(c.id, 1)).copied()];
             }
         } else {
@@ -1240,7 +1336,7 @@ fn twin_line(c: &Chain, s: f64, d: &Chain, barrier: f64) -> Option<TwinLine> {
 /// span. Every other chain's bents are as A1b placed them.
 fn second_tier(out: &[Chain], rooms: Vec<Vec<(f64, Room)>>, index: &Grid<(u32, u32)>, sites: &Sites, limits: &Limits) -> (Vec<Vec<(f64, Room)>>, usize) {
     let stations = |l: &[(f64, Room)]| -> Vec<f64> { l.iter().map(|x| x.0).collect() };
-    let wanting: Vec<bool> = out.iter().zip(&rooms).map(|(c, r)| c.kind == ChainKind::Deck && longest_span(c, &stations(r)) > LONGEST_SPAN_M).collect();
+    let wanting: Vec<bool> = out.iter().zip(&rooms).map(|(c, r)| c.kind == ChainKind::Deck && !eo_data::movable_spans::is_leaf(&c.pieces[0].way) && crate::east_span::readings(c).is_none() && longest_span(c, &stations(r)) > LONGEST_SPAN_M).collect();
     let mut rooms = rooms;
     let mut done = vec![false; out.len()];
     let mut relaxed = 0usize;
@@ -1472,8 +1568,21 @@ fn major_rank(c: &Chain) -> (u8, i64, i64, i64) {
 /// run within `route::ALONG_DEG` of each other with one's centreline over
 /// the other's roadway somewhere (twin decks side by side): the minor's
 /// stations there and the major's station its centreline projects to.
-pub(crate) fn merge_ties(chains: &[Chain], barrier: f64) -> Vec<Tie> {
-    let decks: Vec<&Chain> = chains.iter().filter(|c| c.kind == ChainKind::Deck && c.landmark.is_none()).collect();
+fn shared_aisle(c: &Chain, s: f64, d: &Chain, sd: f64) -> bool {
+    let first = c.piece_at(s);
+    let second = d.piece_at(sd);
+    if first.highway != "service" || second.highway != "service" { return false; }
+    let f = c.frame(s);
+    let reach = first.half + second.half;
+    eo_data::parking_junctions::CONNECTIONS.iter().any(|&(a,b,p)| {
+        if !(first.way == a && second.way == b || first.way == b && second.way == a) { return false; }
+        let at = eo_data::groundscale::plan(p);
+        (f.x-at[0]).hypot(f.z-at[1]) <= reach
+    })
+}
+
+pub(crate) fn merge_ties(chains: &[Chain], barrier: f64, tunnels: bool) -> Vec<Tie> {
+    let decks: Vec<&Chain> = chains.iter().filter(|c| (c.kind == ChainKind::Deck || (tunnels && c.kind == ChainKind::Tunnel)) && c.landmark.is_none()).collect();
     let max_half = decks.iter().map(|c| c.max_half()).fold(0.0, f64::max);
     let pad = 2.0 * (max_half + barrier) + 1.0;
     let mut grid: Grid<(u32, u32)> = Grid::default();
@@ -1492,7 +1601,8 @@ pub(crate) fn merge_ties(chains: &[Chain], barrier: f64) -> Vec<Tie> {
             let (l, r) = ([f.x + f.nx * h, f.z + f.nz * h], [f.x - f.nx * h, f.z - f.nz * h]);
             for &(di, si) in grid.at(f.x, f.z) {
                 let d = &chains[di as usize];
-                if di == c.id || d.level != c.level || major_rank(c) >= major_rank(d) {
+                if di == c.id || d.kind != c.kind || d.level != c.level || major_rank(c) >= major_rank(d)
+                    || (c.kind == ChainKind::Tunnel && !c.shares_end(d)) {
                     continue;
                 }
                 let k = si as usize;
@@ -1505,10 +1615,18 @@ pub(crate) fn merge_ties(chains: &[Chain], barrier: f64) -> Vec<Tie> {
                 // the line across: where the minor's centreline point projects on the major.
                 let (t, _, _) = project([f.x, f.z], a, b);
                 let sd = d.cum[k] + t * (d.cum[k + 1] - d.cum[k]);
+                // Project to the drawn carriageway, which stops at a square
+                // abutment. A clamped projection beyond it is a street join.
+                let end = if sd <= 1e-6 { Some(0) } else if sd >= d.length()-1e-6 {Some(1)} else {None};
+                if let Some(e) = end {
+                    let tip = d.frame(sd);
+                    let along = (f.x-tip.x)*tip.tx + (f.z-tip.z)*tip.tz;
+                    if (e == 0 && along < -1e-6) || (e == 1 && along > 1e-6) { continue; }
+                }
                 // (a merge or a split, sharing a node, at any angle; decks side by side only along each other.)
                 let g = d.frame(sd);
                 let shared = c.ends.iter().any(|e| d.ends.iter().any(|x| x.node == e.node));
-                if !shared && (f.tx * g.tx + f.tz * g.tz).abs() < cos {
+                if !shared && (f.tx * g.tx + f.tz * g.tz).abs() < cos && !shared_aisle(c, s, d, sd) {
                     continue;
                 }
                 let e = per.entry(di).or_default().entry(i).or_insert((f64::INFINITY, sd));
@@ -1543,7 +1661,7 @@ struct Solved {
     heights: HashMap<u32, Vec<f64>>,
     node_h: Vec<f64>,
     violations: BTreeMap<u32, Hold>,
-    /// For a violation held as end too low: the least height each fixed end
+    /// For a deck below a binding height or grade bound: the least height each fixed end
     /// would need (the binding bound's reach back to it).
     wants: BTreeMap<(u32, usize), f64>,
     rounds: usize,
@@ -1601,8 +1719,43 @@ fn solve_pass(chains: &[Chain], work: &[Work], order: &[u32], held: &BTreeMap<u3
                 };
                 if !feasible {
                     violations.insert(id, Hold::Grade);
+                    if let (Some(a), Some(b)) = (ends.a, ends.b) {
+                        let (low, desired) = if a < b { (0, b - t_end) } else { (1, a - t_end) };
+                        wants.insert((id, low), desired);
+                    }
                 }
-                profile::tunnel(&w.tau, &hi, ends, w.kappa, feasible)
+                let mut y = profile::tunnel(&w.tau, &hi, ends, w.kappa, feasible);
+                // At a mapped underground fork both roadways share one floor
+                // until they separate. Propagate the higher floor subject to
+                // each branch's own grade and fixed portal elevations.
+                let mut tied = false;
+                for t in as_minor.get(&id).into_iter().flatten() {
+                    if let Some(other) = heights.get(&t.major) {
+                        for &(i, sj) in &t.at {
+                            y[i] = y[i].max(interp(&chains[t.major as usize].stations, other, sj));
+                        }
+                        tied = true;
+                    }
+                }
+                for t in as_major.get(&id).into_iter().flatten() {
+                    if let Some(other) = heights.get(&t.minor) {
+                        for &(i, sj) in &t.at {
+                            let j = c.stations.partition_point(|&s| s<sj).min(n-1);
+                            // A pin between stations propagates to both at
+                            // most as fast as the allowed grade.
+                            let tau = interp(&c.stations, &w.tau, sj);
+                            for k in [j.saturating_sub(1), j] {
+                                y[k] = y[k].max(other[i] - (tau - w.tau[k]).abs());
+                            }
+                        }
+                        tied = true;
+                    }
+                }
+                if tied {
+                    y = profile::lowest_above(&w.tau, &y);
+                    profile::upper_cones(&mut y, &w.tau, ends);
+                }
+                y
             } else {
                 // the lower bound: on the ground (or above the water), and over each crossing.
                 let mut lo: Vec<f64> = w.floor.clone();
@@ -1707,14 +1860,14 @@ fn solve_pass(chains: &[Chain], work: &[Work], order: &[u32], held: &BTreeMap<u3
                     let other = fixed(1 - e, &node_h).map_or(f64::NEG_INFINITY, |o| o - t_end);
                     if best.max(other) > h + END_TOL_M {
                         feasible = false;
+                        // A paved approach can ramp up to meet either a crossing or the
+                        // grade cone from the terrain or the other end of the deck.
+                        wants.insert((id, e), best.max(other));
                         let why = if other >= best {
                             Hold::Grade
                         } else {
                             match at.and_then(|i| src[i]) {
-                                Some(k) => {
-                                    wants.insert((id, e), best);
-                                    Hold::EndTooLow { over: w.cross[k].over.clone() }
-                                }
+                                Some(k) => Hold::EndTooLow { over: w.cross[k].over.clone() },
                                 None => Hold::Grade,
                             }
                         };

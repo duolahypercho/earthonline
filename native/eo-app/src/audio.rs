@@ -255,7 +255,7 @@ pub fn cars_near<'a>(bufs: impl Iterator<Item = &'a eo_sim::output::AgentBuffer>
             }
             let y = elevation.ground(x as f64, z as f64) as f32 + 0.6;
             let (s, c) = v.heading.sin_cos();
-            out.push(city::Car { id: v.id, pos: [x, y, z], vel: [s * v.speed, 0.0, c * v.speed], speed: v.speed, kind: v.kind as u8, stopped: v.flags & eo_sim::output::FLAG_STOPPED != 0 });
+            out.push(city::Car { id: v.id, pos: [x, y, z], vel: [s * v.speed, 0.0, c * v.speed], speed: v.speed, kind: v.kind as u8, horn: v.flags & eo_sim::output::FLAG_HORN != 0 });
         }
         for p in &b.walkers {
             let (dx, dz) = ((b.origin[0] + p.pos[0] as f64) as f32 - eye[0], (b.origin[1] + p.pos[2] as f64) as f32 - eye[2]);
@@ -704,7 +704,12 @@ fn render_main(raw: &[String], k: usize, process_start: Instant) -> Result<()> {
     eprintln!("audio-render: data at {:.0} ms; bank {} clips ({} streamed), {:.1} MB decoded, loaded in {:.0} ms", process_start.elapsed().as_secs_f64() * 1e3, bank.clips.len(), bank.streamed, bank.memory_bytes as f64 / 1e6, bank.load_ms);
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
     let buildings = Arc::new(eo_player::world::BuildingSet::from_city(&city, lift));
-    let source = Arc::new(eo_sim::native::load(&paths)?);
+    let mut source = eo_sim::native::load(&paths)?;
+    if crate::agents::traffic_street_plan_on() {
+        source = source.with_traffic_plan(street.traffic_plan())
+            .with_passing(crate::agents::traffic_passing_on());
+    }
+    let source = Arc::new(source);
     for s in SCENES.iter().filter(|s| which == "all" || which.split(',').any(|w| s.name.starts_with(w))) {
         let rate = eo_audio::NULL_RATE;
         let (mut engine, mut off) = Engine::offline(bank.clone(), rate);

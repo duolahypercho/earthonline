@@ -50,12 +50,12 @@ pub const LEAFLET_M: f64 = 0.5;
 pub const FOLD_RAD: f64 = 0.45;
 pub const RAKE: f64 = 0.55;
 
-/// Linear colours (INFERRED): the leaves' dark glossy green and the older
-/// leaves' olive, the trunk's grey-brown and the trimmed boss's tan.
-pub const LEAF_LINEAR: Rgb = [0.032, 0.066, 0.022];
-pub const OLD_LEAF_LINEAR: Rgb = [0.07, 0.078, 0.03];
-pub const TRUNK_LINEAR: Rgb = [0.2, 0.165, 0.125];
-pub const BOSS_LINEAR: Rgb = [0.27, 0.19, 0.11];
+/// Linear colours (INFERRED): the leaves' natural coastal olive-green and the older
+/// leaves' warm dry olive, the trunk's weathered ash-grey-brown fibrous bark and the boss's dark umber.
+pub const LEAF_LINEAR: Rgb = [0.030, 0.058, 0.021];
+pub const OLD_LEAF_LINEAR: Rgb = [0.068, 0.072, 0.028];
+pub const TRUNK_LINEAR: Rgb = [0.112, 0.095, 0.079];
+pub const BOSS_LINEAR: Rgb = [0.165, 0.115, 0.070];
 
 /// The palms' second pass (`features::palm_detail`; off: the first pass, as before).
 ///
@@ -63,36 +63,36 @@ pub const BOSS_LINEAR: Rgb = [0.27, 0.19, 0.11];
 ///   corridor's medians times 0.85-1.15 (its own draw), so unsurveyed palms
 ///   are not one clone; a recorded size is kept. The lean reaches 5 degrees
 ///   (street palms lean a few degrees off true, INFERRED).
-/// * The trunk's leaf-base scars as a diamond lattice in its surface (EDIS
-///   ST439: "diamond-shaped scars"): `SCARS_AROUND` scars a course, a course
-///   every `SCAR_COURSE_M`, their ridges standing `SCAR_RELIEF` of the radius
-///   proud, the grooves between them darker, and the silhouette broken by them.
+/// * The trunk's leaf-base scars as a staggered diamond lattice in its surface
+///   (EDIS ST439: "diamond-shaped scars"): `SCARS_AROUND` scars a course, a course
+///   every `SCAR_COURSE_M`, with overhanging upper petiole lips, shadowed fibrous
+///   grooves, alternating triangulation (no diagonal twist), and per-scar grit.
 /// * The root initials at its foot: a palm's adventitious roots break out of
 ///   the trunk's base as a mat of short knuckles (INFERRED count and size).
 /// * The crown: a few senescent lower leaves hanging down, yellowing to
 ///   straw (a maintained palm keeps a ring of them between trims), and the
 ///   unopened spear leaf upright in the middle.
-/// * The tree well: the palm stands in a square basin of decomposed granite
-///   `WELL_M` across behind a steel edge, the fill darker toward the trunk
-///   (the occlusion the trunk and crown cast on it at its foot, and the
-///   wetter soil there). INFERRED size: SF tree basins are 3-4 ft for street
-///   trees; a palm's 0.6-0.9 m trunk takes the larger, 5 ft square.
-pub const SCARS_AROUND: usize = 7;
-pub const SCAR_COURSE_M: f64 = 0.24;
-pub const SCAR_RELIEF: f64 = 0.06;
-/// The lattice is drawn up to this over the ground (where a walker sees the
-/// scars); over it the trunk keeps the first pass's scar bands (INFERRED).
-pub const SCAR_LATTICE_TOP_M: f64 = 6.0;
-pub const ROOT_KNUCKLES: usize = 11;
+/// * The tree well: the palm stands in an Embarcadero-aligned square basin of
+///   weathered decomposed granite `WELL_M` across behind a deep-skirted cast-iron
+///   & stone curb that seats solidly into sloped median curbs with zero floating
+///   overhang. INFERRED size: SF tree basins are 3-4 ft for street trees; a
+///   palm's 0.6-0.9 m trunk takes the larger, 5 ft square.
+pub const SCARS_AROUND: usize = 8;
+pub const SCAR_COURSE_M: f64 = 0.28;
+pub const SCAR_RELIEF: f64 = 0.105;
+/// The lattice is drawn up to this over the ground (covering eye-level and mid-trunk
+/// views along the Embarcadero); over it the trunk keeps the first pass's scar bands (INFERRED).
+pub const SCAR_LATTICE_TOP_M: f64 = 8.0;
+pub const ROOT_KNUCKLES: usize = 0;
 pub const DEAD_LEAVES: usize = 6;
-pub const WELL_M: f64 = 1.52;
-pub const WELL_EDGE_M: f64 = 0.06;
-/// Decomposed granite (a tan crushed granite, albedo about 0.25-0.3), linear, the
-/// steel edging's dark oxide, the senescent leaves' straw, the trunk's scar grooves.
-pub const WELL_FILL_LINEAR: Rgb = [0.3, 0.25, 0.185];
-pub const WELL_EDGE_LINEAR: Rgb = [0.05, 0.045, 0.04];
-pub const DEAD_LEAF_LINEAR: Rgb = [0.24, 0.17, 0.075];
-pub const ROOT_LINEAR: Rgb = [0.12, 0.09, 0.065];
+/// Compact SF Embarcadero median tree grate (~3.15 ft) fitting tightly inside curb wells.
+pub const WELL_M: f64 = 0.96;
+pub const WELL_EDGE_M: f64 = 0.05;
+/// Weathered SF concrete-grey flush tree surround & slotted cast-iron grate matching Embarcadero paving.
+pub const WELL_FILL_LINEAR: Rgb = [0.165, 0.160, 0.152];
+pub const WELL_EDGE_LINEAR: Rgb = [0.225, 0.220, 0.212];
+pub const DEAD_LEAF_LINEAR: Rgb = [0.22, 0.155, 0.068];
+pub const ROOT_LINEAR: Rgb = [0.095, 0.074, 0.056];
 
 /// One surveyed palm on the drawn plan.
 #[derive(Clone, Copy, Debug)]
@@ -178,9 +178,11 @@ fn tube(m: &mut MeshArrays, rings: &[(V3, f64, Rgb)], seg: usize) {
     }
 }
 
-/// One palm at `site`, standing on `ground` (its trunk's foot sinks a little
-/// below it so a slope never shows a gap).
-fn palm(trunks: &mut MeshArrays, leaves: &mut MeshArrays, site: &Site, ground: f64, detail: bool) {
+/// One palm at `site`, standing on `ground_at` (its trunk's foot sinks a little
+/// below ground so a slope never shows a gap, and its tree well aligns with The
+/// Embarcadero median and extends a solid curb skirt down into sloped kerbs).
+fn palm(trunks: &mut MeshArrays, leaves: &mut MeshArrays, site: &Site, ground_at: &dyn Fn(f64, f64) -> f64, detail: bool) {
+    let ground = ground_at(site.x, site.z);
     let id = site.id;
     // an unsurveyed size: the median, varied per palm with the second pass.
     let vary = |salt: u32| if detail { 0.85 + 0.3 * draw(id, salt) } else { 1.0 };
@@ -199,8 +201,14 @@ fn palm(trunks: &mut MeshArrays, leaves: &mut MeshArrays, site: &Site, ground: f
     let lean_v = [lean_a.cos() * lean, 0.0, lean_a.sin() * lean];
     let foot = [site.x, ground - 0.3, site.z];
     let at = |y: f64| add(foot, add([0.0, y - foot[1], 0.0], scale(lean_v, y - foot[1])));
-    // the trunk: a flared foot, then rings of leaf-base scars to the boss.
-    let mut rings: Vec<(V3, f64, Rgb)> = vec![(at(ground - 0.3), r * 1.3, TRUNK_LINEAR), (at(ground + 0.15), r * 1.22, TRUNK_LINEAR), (at(ground + 0.6), r * 1.06, TRUNK_LINEAR)];
+    // the trunk: a flared damp-soot foot, then rings of leaf-base scars to the boss.
+    let trunk_tint = 0.84 + 0.32 * draw(id, 17);
+    let foot_col = scale(TRUNK_LINEAR, 0.72 * trunk_tint);
+    let mut rings: Vec<(V3, f64, Rgb)> = vec![
+        (at(ground - 0.3), r * 1.3, foot_col),
+        (at(ground + 0.15), r * 1.22, scale(TRUNK_LINEAR, 0.80 * trunk_tint)),
+        (at(ground + 0.6), r * 1.06, scale(TRUNK_LINEAR, 0.90 * trunk_tint)),
+    ];
     let boss0 = top - 1.5;
     let n = ((boss0 - ground - 0.6) / 0.42).floor().max(1.0) as usize;
     for k in 1..=n {
@@ -208,19 +216,21 @@ fn palm(trunks: &mut MeshArrays, leaves: &mut MeshArrays, site: &Site, ground: f
         // the scar bands: a ridge and a groove a course, the groove darker
         let ridge = k % 2 == 0;
         let t = (y - ground) / (boss0 - ground).max(1.0);
-        let col = mix(TRUNK_LINEAR, [0.16, 0.135, 0.105], t) ;
-        rings.push((at(y), r * (1.0 - 0.06 * t) * if ridge { 1.035 } else { 0.985 }, if ridge { col } else { scale(col, 0.78) }));
+        let col = scale(mix(TRUNK_LINEAR, [0.095, 0.080, 0.066], t), trunk_tint);
+        rings.push((at(y), r * (1.0 - 0.06 * t) * if ridge { 1.045 } else { 0.975 }, if ridge { col } else { scale(col, 0.66) }));
     }
-    // the boss: the trimmed leaf bases, wider than the trunk, up into the crown
-    let boss: Vec<(V3, f64, Rgb)> = [(0.0, 1.0, 1.0), (0.35, 1.32, 1.0), (0.85, 1.45, 0.92), (1.3, 1.38, 0.85), (1.6, 1.0, 0.7), (1.75, 0.45, 0.6)].iter().map(|&(dy, k, tone)| (at(boss0 + dy), r * k, scale(BOSS_LINEAR, tone))).collect();
+    // the boss: the trimmed fibrous leaf bases ("pineapple"), wider than the trunk, up into the crown
+    let boss: Vec<(V3, f64, Rgb)> = [(0.0, 1.0, 0.92), (0.35, 1.32, 1.0), (0.85, 1.45, 0.86), (1.3, 1.38, 0.76), (1.6, 1.0, 0.62), (1.75, 0.45, 0.52)].iter().map(|&(dy, k, tone)| (at(boss0 + dy), r * k, scale(BOSS_LINEAR, tone * trunk_tint))).collect();
     if detail {
-        // the foot's rings, the lattice to SCAR_LATTICE_TOP_M, the first pass's bands over it, the boss.
+        // Textured diamond leaf-scar bark runs continuously down into the tree grate (zero smooth toy-cone flare
+        // or spiky fin roots!), then transitions to the upper scar bands and trimmed pineapple boss.
         let lattice_top = (ground + SCAR_LATTICE_TOP_M).min(boss0);
         let mut upper: Vec<(V3, f64, Rgb)> = rings[3..].iter().filter(|(c, ..)| c[1] > lattice_top + 0.2).cloned().collect();
         upper.extend(boss.iter().cloned());
-        scar_trunk(trunks, &rings[..3], &upper, &at, ground, lattice_top, boss0, r, id);
-        roots(trunks, &at, ground, r, id);
-        well(trunks, [site.x, site.z], ground, r, lean_a);
+        scar_trunk(trunks, &upper, &at, ground, lattice_top, boss0, r, id);
+        // Align flush cast-iron tree grate cleanly with The Embarcadero frontage.
+        let emb_yaw = (-1844.6_f64 - (-2006.2)).atan2(2325.5 - 2206.4);
+        well(trunks, [site.x, site.z], ground_at, ground, r, emb_yaw);
     } else {
         rings.extend(boss);
         tube(trunks, &rings, 12);
@@ -263,10 +273,13 @@ fn palm(trunks: &mut MeshArrays, leaves: &mut MeshArrays, site: &Site, ground: f
             let seg = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
             for s in [-1.0f64, 1.0] {
                 let dir = norm(add(add(scale(side, s * FOLD_RAD.cos()), scale(up, FOLD_RAD.sin())), scale(tg, RAKE)));
-                // the cluster's tips sag a little under their own weight
-                let reach = add(scale(dir, l), [0.0, -0.12 * l, 0.0]);
-                let (a, b) = (p0, p1);
-                let (ta, tb) = (add(p0, reach), add(add(p0, scale(seg, CLUSTER_EDGE)), scale(reach, 0.96)));
+                // the cluster's tips sag naturally and taper to fine pointed pinnate spears (never blunt cards)
+                let reach = add(scale(dir, l), [0.0, -0.14 * l, 0.0]);
+                let (a, b) = (p0, add(p0, scale(seg, 0.78)));
+                let (ta, tb) = (
+                    add(add(p0, scale(seg, 0.16)), scale(reach, 1.05)),
+                    add(add(p0, scale(seg, 0.34)), scale(reach, 0.88)),
+                );
                 let tone = 0.85 + 0.3 * draw(id, 1000 + (j * 64 + i * 2) as u32 + if s > 0.0 { 1 } else { 0 });
                 let lc = scale(col, tone * (0.92 + 0.16 * t));
                 let nrm = norm(cross([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [ta[0] - a[0], ta[1] - a[1], ta[2] - a[2]]));
@@ -327,58 +340,66 @@ fn palm(trunks: &mut MeshArrays, leaves: &mut MeshArrays, site: &Site, ground: f
     }
 }
 
-/// The trunk with its leaf-base scars (the second pass): from the flared foot
-/// `foot` rings up to `top`, a lattice of `SCARS_AROUND`
-/// diamond scars a `SCAR_COURSE_M` course, their ridges proud and light,
-/// their grooves dark, the surface's normals from the relief; then the rings
-/// `boss` (the bands over the lattice and the boss).
+/// The trunk with its leaf-base scars (the second pass): running continuously
+/// from below the tree grate (`ground - 0.25`) up to `top` with a gentle organic
+/// textured basal swell (zero smooth untextured cone skirt), staggered diamond
+/// petiole-stub scars, overhanging lips, shadowed crevices, and alternating
+/// diamond triangulation (no diagonal barberpole twist).
 #[allow(clippy::too_many_arguments)]
-fn scar_trunk(m: &mut MeshArrays, foot: &[(V3, f64, Rgb)], boss: &[(V3, f64, Rgb)], at: &dyn Fn(f64) -> V3, ground: f64, top: f64, boss0: f64, r: f64, id: u32) {
+fn scar_trunk(m: &mut MeshArrays, boss: &[(V3, f64, Rgb)], at: &dyn Fn(f64) -> V3, ground: f64, top: f64, boss0: f64, r: f64, id: u32) {
     let seg = SCARS_AROUND * 2;
-    let y0 = ground + 0.6;
+    let y0 = ground - 0.25;
     let rows = ((top - y0) / (SCAR_COURSE_M / 2.0)).round().max(2.0) as usize;
     let twist = draw(id, 40) * std::f64::consts::TAU;
-    // the relief at (around a, up y): a diamond lattice, 1 on a scar's ridge, 0 in its groove.
+    let trunk_tint = 0.84 + 0.32 * draw(id, 17);
+    // Asymmetric overhanging diamond petiole-stub relief: 1 on a jagged leaf-base ridge, 0 in deep bark grooves.
     let lattice = |a: f64, y: f64| -> f64 {
         let u = a / std::f64::consts::TAU * SCARS_AROUND as f64;
         let v = (y - y0) / SCAR_COURSE_M;
         let (p, q) = ((u + v).rem_euclid(1.0), (u - v).rem_euclid(1.0));
         let tri = |x: f64| 1.0 - (2.0 * x - 1.0).abs();
-        (tri(p) * tri(q)).sqrt()
+        let dia = (tri(p) * tri(q)).sqrt();
+        // Steep overhanging horizontal lip at each pruned frond base, deeply undercut beneath.
+        let v_in = v.rem_euclid(1.0);
+        let lip = if v_in < 0.72 { v_in / 0.72 } else { (1.0 - v_in) / 0.28 };
+        (dia * (0.62 + 0.38 * lip)).clamp(0.0, 1.0)
     };
-    let radius = |a: f64, y: f64| {
+    let cell_jitter = |k: usize, j: usize, salt: u32| -> f64 {
+        let jj = j % seg;
+        draw(id ^ ((k as u32).wrapping_mul(37) ^ (jj as u32).wrapping_mul(131)), salt)
+    };
+    let radius = |a: f64, y: f64, jit: f64| {
         let t = ((y - ground) / (boss0 - ground).max(1.0)).clamp(0.0, 1.0);
-        r * (1.0 - 0.06 * t) * (1.0 + SCAR_RELIEF * (lattice(a, y) - 0.5))
+        let l = lattice(a, y);
+        // Subtle organic fibrous basal swell over the bottom 0.65 m (textured bark all the way down into soil!).
+        let basal = ((ground + 0.65 - y) / 0.90).clamp(0.0, 1.0);
+        let swell = 1.0 + 0.14 * basal * basal;
+        r * swell * (1.0 - 0.06 * t) * (1.0 + SCAR_RELIEF * (l - 0.45) + 0.022 * (jit - 0.5))
     };
-    let point = |a: f64, y: f64| {
+    let point = |a: f64, y: f64, jit: f64| {
         let c = at(y);
-        let rr = radius(a, y);
+        let rr = radius(a, y, jit);
         [c[0] + a.cos() * rr, y, c[2] + a.sin() * rr]
     };
-    // the flared foot first (plain rings), into the lattice's first row.
     let mut lines: Vec<Vec<(V3, V3, Rgb)>> = Vec::new();
-    for (c, rr, col) in foot {
-        lines.push((0..=seg).map(|j| {
-            let a = twist + j as f64 / seg as f64 * std::f64::consts::TAU;
-            let n = [a.cos(), 0.0, a.sin()];
-            (add(*c, scale(n, *rr)), n, *col)
-        }).collect());
-    }
     for k in 0..=rows {
         let y = y0 + (top - y0) * k as f64 / rows as f64;
         let t = ((y - ground) / (boss0 - ground).max(1.0)).clamp(0.0, 1.0);
-        let base = mix(TRUNK_LINEAR, [0.16, 0.135, 0.105], t);
+        // Damp ground-contact bark darkening fading smoothly over the lowest 1.4 m.
+        let base_soot = 0.62 + 0.38 * ((y - ground + 0.1) / 1.4).clamp(0.0, 1.0);
+        let base = scale(mix(TRUNK_LINEAR, [0.095, 0.080, 0.066], t), trunk_tint * base_soot);
         lines.push((0..=seg).map(|j| {
             let a = twist + j as f64 / seg as f64 * std::f64::consts::TAU;
-            let p = point(a, y);
-            // the normal from the surface's two tangents (around and up)
-            let (da, dy) = (0.02, 0.02);
+            let jit = cell_jitter(k, j, 81);
+            let col_jit = cell_jitter(k, j, 97);
+            let p = point(a, y, jit);
+            let (da, dy) = (0.025, 0.025);
             let ta = {
-                let (p0, p1) = (point(a - da, y), point(a + da, y));
+                let (p0, p1) = (point(a - da, y, jit), point(a + da, y, jit));
                 [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]]
             };
             let ty = {
-                let (p0, p1) = (point(a, y - dy), point(a, y + dy));
+                let (p0, p1) = (point(a, y - dy, jit), point(a, y + dy, jit));
                 [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]]
             };
             let mut n = norm(cross(ty, ta));
@@ -386,84 +407,71 @@ fn scar_trunk(m: &mut MeshArrays, foot: &[(V3, f64, Rgb)], boss: &[(V3, f64, Rgb
                 n = scale(n, -1.0);
             }
             let l = lattice(a, y);
-            (p, n, scale(base, 0.68 + 0.42 * l))
+            let bark_shade = (0.42 + 0.78 * l) * (0.86 + 0.28 * col_jit);
+            let col = [
+                base[0] * bark_shade * (0.96 + 0.08 * l),
+                base[1] * bark_shade * (0.97 + 0.05 * l),
+                base[2] * bark_shade * (1.02 - 0.04 * l),
+            ];
+            (p, n, col)
         }).collect());
     }
-    for (c, rr, col) in boss {
+    for (bi, (c, rr, col)) in boss.iter().enumerate() {
         lines.push((0..=seg).map(|j| {
             let a = twist + j as f64 / seg as f64 * std::f64::consts::TAU;
             let n = [a.cos(), 0.0, a.sin()];
-            (add(*c, scale(n, *rr)), n, *col)
+            let checker = if (bi + j) % 2 == 0 { 1.03 } else { 0.96 };
+            let tone = if (bi + j) % 2 == 0 { 1.08 } else { 0.76 };
+            (add(*c, scale(n, *rr * checker)), n, scale(*col, tone))
         }).collect());
     }
     let mut prev: Vec<u32> = Vec::new();
-    for line in lines {
+    for (row_i, line) in lines.into_iter().enumerate() {
         let cur: Vec<u32> = line.iter().map(|(p, n, c)| m.vertex(*p, *n, *c)).collect();
         if !prev.is_empty() {
             for j in 0..seg {
-                m.tri_idx(prev[j], cur[j + 1], cur[j]);
-                m.tri_idx(prev[j], prev[j + 1], cur[j + 1]);
+                if (row_i + j) % 2 == 0 {
+                    m.tri_idx(prev[j], cur[j + 1], cur[j]);
+                    m.tri_idx(prev[j], prev[j + 1], cur[j + 1]);
+                } else {
+                    m.tri_idx(prev[j], prev[j + 1], cur[j]);
+                    m.tri_idx(prev[j + 1], cur[j + 1], cur[j]);
+                }
             }
         }
         prev = cur;
     }
 }
 
-/// The root initials breaking out of the trunk's foot over the ground (the second pass).
-fn roots(m: &mut MeshArrays, at: &dyn Fn(f64) -> V3, ground: f64, r: f64, id: u32) {
-    let c = at(ground);
-    for k in 0..ROOT_KNUCKLES {
-        let a = (k as f64 + 0.5 * draw(id, 700 + k as u32)) / ROOT_KNUCKLES as f64 * std::f64::consts::TAU;
-        let d = [a.cos(), 0.0, a.sin()];
-        let reach = r * (1.25 + 0.35 * draw(id, 720 + k as u32));
-        let rr = 0.035 + 0.03 * draw(id, 740 + k as u32);
-        let y0 = ground + 0.18 + 0.12 * draw(id, 760 + k as u32);
-        // from inside the flare, out and down into the fill
-        let pts = [add(c, add(scale(d, r * 0.9), [0.0, y0 - ground, 0.0])), add(c, add(scale(d, reach * 0.85), [0.0, (y0 - ground) * 0.35, 0.0])), add(c, add(scale(d, reach), [0.0, -0.04, 0.0]))];
-        let rings = [(pts[0], rr * 1.4, ROOT_LINEAR), (pts[1], rr, scale(ROOT_LINEAR, 0.9)), (pts[2], rr * 0.6, scale(ROOT_LINEAR, 0.8))];
-        // a short bent tube (its rings across its own direction)
-        let mut prev: Vec<u32> = Vec::new();
-        for (i, (p, rad, col)) in rings.iter().enumerate() {
-            let dir = if i + 1 < rings.len() { norm([rings[i + 1].0[0] - p[0], rings[i + 1].0[1] - p[1], rings[i + 1].0[2] - p[2]]) } else { norm([p[0] - rings[i - 1].0[0], p[1] - rings[i - 1].0[1], p[2] - rings[i - 1].0[2]]) };
-            let s = norm(cross(dir, [0.0, 1.0, 0.0]));
-            let u = norm(cross(s, dir));
-            let cur: Vec<u32> = (0..=5)
-                .map(|j| {
-                    let t = j as f64 / 5.0 * std::f64::consts::TAU;
-                    let n = add(scale(s, t.cos()), scale(u, t.sin()));
-                    m.vertex(add(*p, scale(n, *rad)), n, *col)
-                })
-                .collect();
-            if !prev.is_empty() {
-                for j in 0..5 {
-                    m.tri_idx(prev[j], cur[j + 1], cur[j]);
-                    m.tri_idx(prev[j], prev[j + 1], cur[j + 1]);
-                }
-            }
-            prev = cur;
-        }
-    }
-}
-
-/// The tree well (the second pass): a square of decomposed granite `WELL_M`
-/// across, laid 12 mm over the drawn surface, its fill darker toward the trunk,
-/// inside a steel edge standing 25 mm proud; squared to the palm's own draw.
-fn well(m: &mut MeshArrays, c: [f64; 2], ground: f64, r: f64, turn: f64) {
+/// The flush cast-iron & concrete SF Embarcadero tree grate (the second pass): a compact
+/// `WELL_M` surround aligned to the Embarcadero median, clamped at or below the palm's
+/// own root level `ground` so corners never ride up onto adjacent raised curb lips.
+fn well(m: &mut MeshArrays, c: [f64; 2], ground_at: &dyn Fn(f64, f64) -> f64, ground: f64, r: f64, turn: f64) {
     let half = WELL_M / 2.0;
     let (ca, sa) = (turn.cos(), turn.sin());
-    let w = |u: f64, v: f64, y: f64| [c[0] + u * ca - v * sa, y, c[1] + u * sa + v * ca];
-    let n = 8;
-    let fill_y = ground + 0.012;
+    let plan = |u: f64, v: f64| [c[0] + u * ca - v * sa, c[1] + u * sa + v * ca];
+    let w = |u: f64, v: f64, y: f64| {
+        let p = plan(u, v);
+        [p[0], y, p[1]]
+    };
+    // Never climb upward onto a raised neighbouring curb step (eliminates raised shark-fin corners in curb slots).
+    let seated_g = |u: f64, v: f64| {
+        let p = plan(u, v);
+        ground_at(p[0], p[1]).min(ground)
+    };
+    let n = 6;
     let step = WELL_M / n as f64;
     let mut idx = vec![vec![0u32; n + 1]; n + 1];
     for (i, row) in idx.iter_mut().enumerate() {
         for (j, slot) in row.iter_mut().enumerate() {
             let (u, v) = (-half + i as f64 * step, -half + j as f64 * step);
+            let fill_y = seated_g(u, v) + 0.008;
             let d = u.hypot(v);
-            let ao = 0.5 + 0.5 * ((d - r) / 0.55).clamp(0.0, 1.0).powf(0.8);
-            // the granite's own grain: a few per cent from cell to cell
+            let ao = 0.45 + 0.55 * ((d - r * 0.90) / 0.36).clamp(0.0, 1.0).powf(0.8);
+            // Subtle weathered flush tree-grate texture blending with Embarcadero concrete.
+            let slot_pat = if (i + j) % 2 == 0 { 1.08 } else { 0.84 };
             let grain = 0.92 + 0.16 * draw((i * 31 + j) as u32, (c[0] * 10.0) as u32 ^ (c[1] * 10.0) as u32);
-            *slot = m.vertex(w(u, v, fill_y), [0.0, 1.0, 0.0], scale(WELL_FILL_LINEAR, ao * grain));
+            *slot = m.vertex(w(u, v, fill_y), [0.0, 1.0, 0.0], scale(WELL_FILL_LINEAR, ao * slot_pat * grain));
         }
     }
     for i in 0..n {
@@ -473,8 +481,11 @@ fn well(m: &mut MeshArrays, c: [f64; 2], ground: f64, r: f64, turn: f64) {
             m.tri_idx(a, d, cc);
         }
     }
-    // the edging: four strips round the square, their tops and outer faces.
-    let (e, top) = (WELL_EDGE_M, ground + 0.025);
+    // Thin flush weathered concrete/iron surround rim (14 mm proud, 25 mm seated lip).
+    let e = WELL_EDGE_M;
+    let edge_y = |u: f64, v: f64| seated_g(u, v) + 0.014;
+    let lip_y = |u: f64, v: f64| seated_g(u, v) - 0.025;
+    let lip_col = scale(WELL_EDGE_LINEAR, 0.82);
     for k in 0..4 {
         let rot = |p: [f64; 2]| match k {
             0 => p,
@@ -484,11 +495,16 @@ fn well(m: &mut MeshArrays, c: [f64; 2], ground: f64, r: f64, turn: f64) {
         };
         let corners = [rot([-half - e, half]), rot([half + e, half]), rot([half + e, half + e]), rot([-half - e, half + e])];
         let out_n = { let o = rot([0.0, 1.0]); [o[0] * ca - o[1] * sa, 0.0, o[0] * sa + o[1] * ca] };
-        let tops: Vec<u32> = corners.iter().map(|p| m.vertex(w(p[0], p[1], top), [0.0, 1.0, 0.0], WELL_EDGE_LINEAR)).collect();
+        let tops: Vec<u32> = corners.iter().map(|p| m.vertex(w(p[0], p[1], edge_y(p[0], p[1])), [0.0, 1.0, 0.0], WELL_EDGE_LINEAR)).collect();
         m.tri_idx(tops[0], tops[2], tops[1]);
         m.tri_idx(tops[0], tops[3], tops[2]);
         let (o0, o1) = (corners[3], corners[2]);
-        let f = [m.vertex(w(o0[0], o0[1], ground - 0.05), out_n, WELL_EDGE_LINEAR), m.vertex(w(o1[0], o1[1], ground - 0.05), out_n, WELL_EDGE_LINEAR), m.vertex(w(o1[0], o1[1], top), out_n, WELL_EDGE_LINEAR), m.vertex(w(o0[0], o0[1], top), out_n, WELL_EDGE_LINEAR)];
+        let f = [
+            m.vertex(w(o0[0], o0[1], lip_y(o0[0], o0[1])), out_n, lip_col),
+            m.vertex(w(o1[0], o1[1], lip_y(o1[0], o1[1])), out_n, lip_col),
+            m.vertex(w(o1[0], o1[1], edge_y(o1[0], o1[1])), out_n, WELL_EDGE_LINEAR),
+            m.vertex(w(o0[0], o0[1], edge_y(o0[0], o0[1])), out_n, WELL_EDGE_LINEAR),
+        ];
         m.tri_idx(f[0], f[1], f[2]);
         m.tri_idx(f[0], f[2], f[3]);
     }
@@ -504,7 +520,7 @@ pub fn build_with(sites: &[Site], ground_at: &dyn Fn(f64, f64) -> f64, detail: b
     let mut trunks = MeshArrays::new("palms:trunks");
     let mut leaves = MeshArrays::new("palms:leaves");
     for s in sites {
-        palm(&mut trunks, &mut leaves, s, ground_at(s.x, s.z), detail);
+        palm(&mut trunks, &mut leaves, s, ground_at, detail);
     }
     Palms { trunks: trunks.freeze(), leaves: leaves.freeze(), count: sites.len() }
 }

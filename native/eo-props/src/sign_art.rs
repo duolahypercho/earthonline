@@ -601,6 +601,16 @@ impl SignArt {
         Ok(())
     }
 
+    /// The real size (width, height, m) of a D3-1 Street Name sign with this legend whose capitals
+    /// are `cap` tall: the height from the D3-1a layout's cap height share, the width the legend's
+    /// (mixed case, Overpass Bold at the layout's series factor) and the layout's margin each side.
+    pub fn blade_size(&self, legend: &str, cap: f64) -> Result<[f64; 2]> {
+        let b = self.blade_geometry()?;
+        let h = cap / b.cap;
+        let w = ink_width(&self.bold, &mixed_case(legend), cap) * b.factor + 2.0 * b.margin * h;
+        Ok([w.max(2.0 * h), h])
+    }
+
     fn blade_geometry(&self) -> Result<Blade> {
         let m = Manifest::get();
         let sn = &m.raw["streetName"];

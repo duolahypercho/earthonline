@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["eo-data", "eo-assets", "eo-kit", "eo-street", "eo-render", "eo-app", "eo-sim", "eo-player", "eo-ui", "eo-look", "eo-agents", "eo-props", "eo-net", "eo-server", "eo-water", "eo-sky", "eo-landmarks", "eo-audio", "eo-farshore", "eo-structures"]
+members = ["eo-data", "eo-assets", "eo-kit", "eo-street", "eo-render", "eo-app", "eo-sim", "eo-player", "eo-ui", "eo-look", "eo-agents", "eo-props", "eo-net", "eo-server", "eo-water", "eo-sky", "eo-landmarks", "eo-audio", "eo-farshore", "eo-structures", "eo-hills"]
 exclude = ["vendor"]
 
 [workspace.package]

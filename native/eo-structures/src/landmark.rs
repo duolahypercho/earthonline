@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use eo_data::ElevationGrid;
-use eo_landmarks::{LandmarksJs, bay_bridge, golden_gate};
+use eo_data::sim_source::TrafficDeckLane;
+use eo_landmarks::{LandmarksJs, bay_bridge, golden_gate, suspension};
 use eo_street::plan::P2;
 
 use crate::{LandmarkDeck, RoadTags};
@@ -32,6 +33,88 @@ pub(crate) struct LandmarkSpec {
     pub chainage: Box<dyn Fn(f64, f64) -> f64>,
     /// Deck top at a chainage, game frame.
     pub top: Box<dyn Fn(f64) -> f64>,
+}
+
+/// The northbound survey way ends past the nominal Golden Gate deck line.
+/// Its remaining short chain still participates in routing and the profile
+/// solve. The Marin apron supplies its asphalt and wheel surface; building a
+/// generic deck here also installs two concrete parapets inside the highway.
+pub(crate) fn marin_apron_chains(js: &LandmarksJs, chains: &[crate::Chain]) -> Vec<u32> {
+    if !golden_gate::approach_finish() || !js.registry.contains_key("golden-gate-bridge") {
+        return Vec::new();
+    }
+    let gate = golden_gate::data(js);
+    let site = golden_gate::Site::new(&gate);
+    let tip = gate.way_ends["north"];
+    let seam = site.chainage(tip[0],tip[1]);
+    let end = gate.carriageways.iter().flat_map(|w| w.chunks_exact(2))
+        .map(|p| site.chainage(p[0],p[1])).fold(seam,f64::max);
+    let carried: Vec<_> = gate.carried_ways.iter().map(ToString::to_string).collect();
+    chains.iter().filter(|chain| {
+        chain.kind == crate::ChainKind::Deck && !chain.pieces.is_empty()
+            && chain.pieces.iter().all(|piece| carried.contains(&piece.way))
+            && chain.points.iter().all(|p| (seam-1e-5..=end+1e-5).contains(&site.chainage(p[0],p[1])))
+    }).map(|chain| chain.id).collect()
+}
+
+/// Use the same frame, lane spacing and panel stations as the Golden Gate's
+/// center stripes. The two mapped centrelines identify each carriageway and
+/// its route endpoints, which are staggered at the abutments.
+pub(crate) fn golden_gate_traffic_lanes(
+    js: &LandmarksJs,
+    streets: &eo_street::StreetWorld,
+    ca: &suspension::DeckStandards,
+    roads: &HashMap<&str, &eo_data::Road>,
+    world: &crate::StructureWorld,
+) -> HashMap<String, Vec<TrafficDeckLane>> {
+    let mut lanes = HashMap::new();
+    if !js.registry.contains_key("golden-gate-bridge") || js.golden_gate.carriageways.len() < 2 {
+        return lanes;
+    }
+    let g = golden_gate::data(js);
+    let site = golden_gate::Site::new(&g);
+    let sample = |x, z| streets.terrain.grid.sample(x, z);
+    let ground = eo_landmarks::set::ground_of(js, "golden-gate-bridge", &sample);
+    let p = golden_gate::plan(js, &site, &|x, z| ground.at(x, z));
+    let num = |key| eo_landmarks::data::num(&g.dimensions, key);
+    let count = num("lanesPerDirection") as u32;
+    let width = ca.median_lane_width(num("roadwayM"), f64::from(count));
+    let panels = suspension::stations(p.c_south, p.c_north, num("panelM"));
+    let chainage = |[x, z]: P2| site.chainage(x, z);
+    for chain in world.chains().iter().filter(|c| c.kind == crate::ChainKind::Landmark && c.landmark == Some(LandmarkDeck::GoldenGate)) {
+        for way in chain.ways() {
+            let Some(road) = roads.get(way) else { continue };
+            if road.lanes != count || road.points64.len() < 2 || lanes.contains_key(way) {
+                continue;
+            }
+            let start = chainage(road.points64[0]);
+            let end = chainage(*road.points64.last().unwrap());
+            let [lo, hi] = [start.min(end), start.max(end)];
+            if lo == hi {
+                continue;
+            }
+            let middle = road.points64[road.points64.len() / 2];
+            let centre = site.deck_point(chainage(middle), 0.0);
+            let across = (middle[0] - centre[0]) * site.across[0] + (middle[1] - centre[1]) * site.across[1];
+            let stations = std::iter::once(lo)
+                .chain(panels.iter().copied().filter(|&c| c > lo && c < hi))
+                .chain(std::iter::once(hi));
+            let tracks = (0..count).map(|k| {
+                let offset = across.signum() * (ca.median_edge() + (f64::from(k) + 0.5) * width);
+                let mut points: Vec<_> = stations.clone().map(|c| {
+                    let [x, z] = site.deck_point(c, offset);
+                    let y = world.deck_top(chain.id, x, z).unwrap_or_else(|| p.deck_top(c));
+                    [x, y, z]
+                }).collect();
+                if start > end {
+                    points.reverse();
+                }
+                TrafficDeckLane { width, points }
+            }).collect();
+            lanes.insert(way.to_string(), tracks);
+        }
+    }
+    lanes
 }
 
 impl LandmarkSpec {

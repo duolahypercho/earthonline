@@ -72,14 +72,16 @@ fn fs_fill(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
 @vertex
 fn vs_mesh(@location(0) pos: vec2<f32>, @location(1) dir: vec2<f32>, @location(2) ext: vec2<f32>, @location(3) kind: u32) -> FOut {
     var o: FOut;
-    let w = pal.widths[kind];
+    // Bit 3 marks an underground road. Its class still sets its width and colour.
+    let road_class = kind & 7u;
+    let w = pal.widths[road_class];
     let hw = max(w.x, 0.5 * w.y / v.view.z);
     let perp = vec2<f32>(-dir.y, dir.x);
     let p = pos + dir * ext.x * hw + perp * ext.y * hw;
     let d = (p - v.view.xy) * v.view.z / (v.size.xy * 0.5);
     o.clip = vec4<f32>(d.x, -d.y, 0.0, 1.0);
-    let c = pal.colors[kind];
-    let a = c.a * w.z;
+    let c = pal.colors[road_class];
+    let a = c.a * w.z * select(1.0, 0.6, (kind & 8u) != 0u);
     o.color = vec4<f32>(c.rgb * a, a);
     return o;
 }

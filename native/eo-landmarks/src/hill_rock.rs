@@ -25,6 +25,12 @@ pub const ROCK_PITCH_M: f64 = 5.0;
 pub const CHERT_SRGB: [u8; 3] = [90, 67, 62];
 pub const SERPENTINITE_SRGB: [u8; 3] = [88, 104, 95];
 pub const SANDSTONE_SRGB: [u8; 3] = [128, 122, 101];
+/// The greenstone (altered basalt) where the bedrock map has it: the round-2 rock
+/// geology's chip for it, dark greenish grey 5GY 4/1 (`rocks::place::unit_srgb`,
+/// INFERRED from "green" and altered basalt). The city's map words it "grayish olive to
+/// moderate olive gray where moderately weathered" (USGS OF 98-354, KJg), "softened by
+/// weathering, and bear distinctive red soil" (MF-2337, Jfgs).
+pub const GREENSTONE_SRGB: [u8; 3] = [86, 94, 84];
 /// The rock mesh's mean vertex shade (vegetation_models.rs `rock`: 0.78 + up light,
 /// cavities darker; about 0.8): the tint divides it out so the rock's mean is its colour.
 pub const ROCK_SHADE: f32 = 0.8;
@@ -110,6 +116,8 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             Lithology::Chert => shape % 2,
             Lithology::Serpentinite => 2 + shape % 2,
             Lithology::Sandstone => shape,
+            // massive, closely fractured: the unbedded blocks
+            Lithology::Greenstone => 2 + shape % 2,
         };
         let base = match s.lithology {
             Lithology::Serpentinite if serp => crate::flora::SERPENTINITE_SRGB,
@@ -117,6 +125,7 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             Lithology::Chert => CHERT_SRGB,
             Lithology::Serpentinite => SERPENTINITE_SRGB,
             Lithology::Sandstone => SANDSTONE_SRGB,
+            Lithology::Greenstone => GREENSTONE_SRGB,
         };
         let v = 0.85 + 0.3 * hash(ix, iz, 6) as f32;
         // the second flora pass (`--no-bluff-rock`): the Baker bluff's knobs in the face's rock colours.
@@ -248,5 +257,34 @@ mod tests {
         let mut none = vec![];
         plant_with(Some(&crate::rocks::scan::Claims::default()), 0.0, 0.0, 200.0, 200.0, &site, &mut none);
         assert_eq!(none.iter().map(key).collect::<Vec<_>>(), all.iter().map(key).collect::<Vec<_>>());
+    }
+
+    /// Each lithology plants the same blocks in its own colour and shapes (H7: the city's
+    /// chert and greenstone hills off the bedrock map): chert the bedded shapes and a fifth
+    /// taller, greenstone the unbedded ones in its chip, sandstone any; inland of the
+    /// strait (south of `marin_z`), where no ribbon chert or Baker bluff applies.
+    #[test]
+    fn each_lithology_takes_its_colour_and_shapes() {
+        let z0 = crate::vegetation::marin_z() + 2000.0;
+        let plants = |lithology: Lithology| {
+            let site = move |_x: f64, _z: f64| Some(Site { y: 60.0, normal: [0.5, 0.866, 0.0], ground: [0.2; 3], cover: Some(Cover::Rock), lithology, shore_m: 900.0, hollow_m: 0.0 });
+            let mut out = vec![];
+            plant_with(None, 0.0, z0, 200.0, z0 + 200.0, &site, &mut out);
+            out
+        };
+        let (chert, green, sand) = (plants(Lithology::Chert), plants(Lithology::Greenstone), plants(Lithology::Sandstone));
+        assert!(sand.len() > 100 && chert.len() == sand.len() && green.len() == sand.len(), "{} {} {}", chert.len(), green.len(), sand.len());
+        let mean = |ps: &[Plant]| [0, 1, 2].map(|k| ps.iter().map(|p| p.tint[k]).sum::<f32>() / ps.len() as f32);
+        let lin = |c: [u8; 3]| c.map(|v| srgb_to_linear(v) / ROCK_SHADE);
+        for (ps, c) in [(&chert, CHERT_SRGB), (&green, GREENSTONE_SRGB), (&sand, SANDSTONE_SRGB)] {
+            let (m, t) = (mean(ps), lin(c));
+            assert!((0..3).all(|k| (m[k] / t[k] - 1.0).abs() < 0.05), "{m:?} vs {t:?}");
+        }
+        assert!(chert.iter().all(|p| matches!(p.kind, Kind::Rock(0 | 1))));
+        assert!(green.iter().all(|p| matches!(p.kind, Kind::Rock(2 | 3))));
+        assert!(sand.iter().any(|p| matches!(p.kind, Kind::Rock(0 | 1))) && sand.iter().any(|p| matches!(p.kind, Kind::Rock(2 | 3))));
+        let tall = |ps: &[Plant]| ps.iter().map(|p| p.scale[1] / p.scale[2]).sum::<f32>() / ps.len() as f32;
+        assert!((tall(&chert) / tall(&sand) - 1.2).abs() < 0.01 && (tall(&green) / tall(&sand) - 1.0).abs() < 0.01);
+        assert_eq!(crate::rocks::place::unit_srgb(crate::rocks::place::Unit::Greenstone), GREENSTONE_SRGB);
     }
 }

@@ -191,6 +191,13 @@ pub fn material(m: &eo_landmarks::data::Material, anchor: [f64; 2], landmark: bo
         g.base = [v(0), v(1), v(2), 1.0];
         g.flags |= F_LM_FLOOD;
     }
+    if m.draw.as_deref() == Some(eo_landmarks::golden_gate::safety_net::DRAW) {
+        let scale = eo_landmarks::golden_gate::structure_scale() as f32;
+        g.flags = F_VERTEX_COLOUR | F_BLEND;
+        g.params[2] = eo_landmarks::golden_gate::safety_net::WIRE_M as f32 * scale;
+        g.params[3] = eo_landmarks::golden_gate::safety_net::OPENING_M as f32 * scale;
+        g.thin_absorption = -5.0; // identifies the fabric in the blended pass
+    }
     if m.draw.as_deref() == Some(DRAW_GLASS_PANE) {
         // a deck's glazing: blended glass (look_light's glass branch: the
         // glazing environment class, opacity rising to 1 with Schlick's
@@ -272,9 +279,9 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
         }
     }
     // the glazing last (access.rs): blended objects must stand at the end of the static table.
-    let is_glass = |s: &&eo_landmarks::set::Structure| s.material.draw.as_deref() == Some(DRAW_GLASS_PANE);
-    meshes.extend(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(|s| !is_glass(s)).map(|s| &s.mesh));
-    meshes.extend(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(is_glass).map(|s| &s.mesh));
+    let is_blended = |s: &&eo_landmarks::set::Structure| matches!(s.material.draw.as_deref(), Some(DRAW_GLASS_PANE | eo_landmarks::golden_gate::safety_net::DRAW));
+    meshes.extend(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(|s| !is_blended(s)).map(|s| &s.mesh));
+    meshes.extend(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(is_blended).map(|s| &s.mesh));
     let t = std::time::Instant::now();
     let chunks = chunk_meshes(&meshes);
     out.append_ms[0] = t.elapsed().as_secs_f64() * 1e3;
@@ -366,9 +373,9 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
             out.wall_far_triangles += w.far.triangles();
         }
     }
-    let ordered: Vec<&eo_landmarks::set::Structure> = set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(|s| !is_glass(s)).chain(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(is_glass)).collect();
+    let ordered: Vec<&eo_landmarks::set::Structure> = set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(|s| !is_blended(s)).chain(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(is_blended)).collect();
     for s in ordered {
-        if is_glass(&s) {
+        if is_blended(&s) {
             let mat = materials.named(&format!("structure:{}", s.name), material(&s.material, [0.0, 0.0], false));
             let first = scene.objects.len();
             out.blend_first.get_or_insert(first as u32);
@@ -479,6 +486,56 @@ pub fn push_chunks(scene: &mut Scene, chunks: Vec<Chunk>, kind: ObjectKind, role
 /// A mesh's triangles split by the plan cell (`CHUNK_M`) of their centroid,
 /// each cell's vertices packed once, in first-use order.
 pub fn chunk_mesh(m: &eo_landmarks::Frozen) -> Vec<Chunk> {
+    chunk_mesh_with_finishes(m, eo_landmarks::golden_gate::wheel_wear(), bridge_deck_markings(), bay_bridge_pavement())
+}
+
+fn bridge_deck_markings() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| road_finish_enabled("--bridge-deck-markings", "--no-bridge-deck-markings"))
+}
+
+fn bay_bridge_pavement() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| road_finish_enabled("--bay-bridge-pavement", "--no-bay-bridge-pavement"))
+}
+
+fn road_finish_enabled(on: &str, off: &str) -> bool {
+    let mut enabled = false;
+    for arg in std::env::args() {
+        if arg == off { return false; }
+        enabled |= arg == on;
+    }
+    enabled
+}
+
+fn chunk_mesh_with_finishes(m: &eo_landmarks::Frozen, wheel_wear: bool, markings: bool, bay_pavement: bool) -> Vec<Chunk> {
+    // The marking's two edges are a street-paint coordinate in the spare
+    // signed-normal byte. This survives chunk boundaries and the approach bend.
+    let bay_panels = bay_pavement && m.name.starts_with("bay-bridge-west:") && !m.pavement_quads.is_empty();
+    let finishes = (bay_panels || (markings && !m.marking_quads.is_empty())).then(|| {
+        let mut tags = vec![0u8; m.vertices()];
+        if bay_panels {
+            for &first in &m.pavement_quads {
+                let v = first as usize;
+                tags[v..v + 4].fill((-64_i8) as u8);
+            }
+        }
+        if markings {
+            for &first in &m.marking_quads {
+                let v = first as usize;
+                tags[v..v + 4].copy_from_slice(&[32, 52, 52, 32]);
+            }
+        }
+        tags
+    });
+    // Store signed cross-deck distance at the actual vertices of the surveyed
+    // road. Interpolation then follows the bends and the drawn panel edges.
+    // The draw registry merges the near deck into the concrete draw.
+    let gate = (wheel_wear && matches!(m.name.as_str(), "golden-gate-bridge:concrete" | "golden-gate-bridge:deck" | "golden-gate-bridge:far")).then(|| {
+        let data = eo_landmarks::golden_gate::data(eo_landmarks::LandmarksJs::get());
+        let asphalt = eo_landmarks::geometry::srgb_hex(eo_landmarks::data::hex(&data.dimensions, "asphaltSrgb")).map(|v| v as f32);
+        (eo_landmarks::golden_gate::Site::new(&data), eo_landmarks::data::num(&data.dimensions, "roadwayM") * 0.5, pack_colour(&asphalt) & 0x00ff_ffff)
+    });
     let mut cells: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
     let mut order: Vec<(i64, i64)> = Vec::new();
     for t in m.indices.chunks_exact(3) {
@@ -520,9 +577,20 @@ pub fn chunk_mesh(m: &eo_landmarks::Frozen) -> Vec<Chunk> {
                     // a deck interior's baked sky visibility in the alpha byte (0..254; 255: none), draw.wgsl `shade`.
                     color = (color & 0x00ff_ffff) | (((sky[v].clamp(0.0, 1.0) * 254.0).round() as u32) << 24);
                 }
+                let pos = [m.positions[3 * v], m.positions[3 * v + 1], m.positions[3 * v + 2]];
+                let mut normal = eo_assets::glb::pack_normal(Vec3::new(m.normals[3 * v], m.normals[3 * v + 1], m.normals[3 * v + 2]));
+                if let Some(tags) = &finishes && tags[v] != 0 {
+                    normal |= u32::from(tags[v]) << 24;
+                } else if let Some((site, half, asphalt)) = &gate
+                    && color & 0x00ff_ffff == *asphalt && m.normals[3 * v + 1] > 0.8 {
+                    let (x, z) = (f64::from(pos[0]), f64::from(pos[2]));
+                    let centre = site.deck_point(site.chainage(x, z), 0.0);
+                    let across = (x - centre[0]) * site.across[0] + (z - centre[1]) * site.across[1];
+                    normal |= (((across / half).clamp(-1.0, 1.0) * 127.0).round() as i8 as u8 as u32) << 24;
+                }
                 verts.push(Vertex {
-                    pos: [m.positions[3 * v], m.positions[3 * v + 1], m.positions[3 * v + 2]],
-                    normal: eo_assets::glb::pack_normal(Vec3::new(m.normals[3 * v], m.normals[3 * v + 1], m.normals[3 * v + 2])),
+                    pos,
+                    normal,
                     color,
                 });
                 remap[v] = (verts.len() - 1) as u32;
@@ -657,7 +725,8 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     let (gg, bay) = (eo_landmarks::suspension::deck_line("golden-gate-bridge"), eo_landmarks::suspension::deck_line("bay-bridge-west"));
     let arr = |v: Option<[f64; 8]>| format!("array<f32, 8>({})", v.unwrap_or([0.0; 8]).iter().map(|x| format!("{x:.4}")).collect::<Vec<_>>().join(", "));
     s.push_str(&format!(
-        "const LM_DECKSHADE_ON: bool = {};\nconst LM_GG_DECK: array<f32, 8> = {};\nconst LM_BAY_DECK: array<f32, 8> = {};\nconst LM_BAY_ROUND_M: f32 = {:.3};\n",
+        "const LM_BRIDGE_SCALE_ON: bool = {};\nconst LM_DECKSHADE_ON: bool = {};\nconst LM_GG_DECK: array<f32, 8> = {};\nconst LM_BAY_DECK: array<f32, 8> = {};\nconst LM_BAY_ROUND_M: f32 = {:.3};\n",
+        feat.scale,
         feat.finish && gg.is_some() && bay.is_some(),
         arr(gg),
         arr(bay),
@@ -666,6 +735,28 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     // the fourth pass's shading (`shade2`, `dielectric`): the Golden Gate's own sky
     // occlusion (its deck line and its legs' stages) and its sea light counted once.
     let g = eo_landmarks::golden_gate::data(js);
+    let approach = eo_landmarks::golden_gate::approach_finish();
+    let surfaces = eo_landmarks::golden_gate::surveyed_surfaces();
+    let mesh = eo_landmarks::golden_gate::safety_net::enabled();
+    s.push_str(&format!("const LM_GG_SURFACES: bool = {surfaces};\nconst LM_GG_NET: bool = {mesh};\n"));
+    s.push_str(&crate::scene::terrain_detail::marin_ground::atlas_constants());
+    let (unit_length, unit_height, median_edge) = if approach {
+        let paths = eo_data::DataPaths::discover().expect("bridge standards data path");
+        let standards = eo_data::CaStandards::load(&paths).expect("bridge standards");
+        let unit = |key| standards.metric_key("golden-gate-moveable-median", key).expect("installed Golden Gate barrier dimensions");
+        let ca = eo_landmarks::suspension::DeckStandards::load(&standards).expect("bridge deck standards");
+        (unit("length"), unit("height"), ca.median_edge())
+    } else { (1.0, 1.0, 0.0) };
+    let half = eo_landmarks::data::num(&g.dimensions, "roadwayM") * 0.5;
+    let lane = (half - median_edge) / eo_landmarks::data::num(&g.dimensions, "lanesPerDirection");
+    s.push_str(&format!("const LM_BRIDGE_MARKINGS: bool = {};\nconst LM_BAY_PAVEMENT: bool = {};\n", bridge_deck_markings(), bay_bridge_pavement()));
+    s.push_str(&format!("const LM_GG_WHEELS: bool = {};\nconst LM_GG_ROAD_HALF: f32 = {half:.6};\nconst LM_GG_MEDIAN_EDGE: f32 = {median_edge:.6};\nconst LM_GG_LANE: f32 = {lane:.6};\n", eo_landmarks::golden_gate::wheel_wear()));
+    s.push_str(&format!("const LM_GG_APPROACH: bool = {approach};\nconst LM_GG_MEDIAN_PITCH: f32 = {unit_length:.6};\nconst LM_GG_MEDIAN_HEIGHT: f32 = {unit_height:.6};\n"));
+    // Landmark object kinds 9 and 10 use exact sRGB decoding in the vertex stage.
+    for (name, key) in [("PAVEMENT", "asphaltSrgb"), ("MEDIAN", "barrierSrgb"), ("STRIPE", "yellowSrgb")] {
+        let [r,g,b] = eo_landmarks::geometry::srgb_hex(eo_landmarks::data::hex(&g.dimensions, key));
+        s.push_str(&format!("const LM_GG_{name}: vec3<f32> = vec3<f32>({r:.8}, {g:.8}, {b:.8});\n"));
+    }
     let w = js.sea_level_y;
     let stages = g.leg_stages.iter().map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", w + st[0], w + st[1], st[2] / 2.0, st[3] / 2.0)).collect::<Vec<_>>();
     // the chainages between which the Golden Gate stands over the strait (the
@@ -673,6 +764,9 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     // ground's there, the land's stays outside.
     let site = eo_landmarks::golden_gate::Site::new(&g);
     let ch = |k: &str| site.chainage(g.supports[k].centre[0], g.supports[k].centre[1]);
+    let joints = eo_landmarks::golden_gate::expansion_joints(&g, &site);
+    s.push_str(&format!("const LM_GG_COURSE: bool = {};\nconst LM_GG_JOINTS: vec2<f32> = {};\n",
+        eo_landmarks::golden_gate::deck_pavement(), v2(joints)));
     // the rough-board-formed concrete (`pylons`; eo-landmarks golden_gate/pylons.rs): INFERRED a
     // nominal 1 x 6 board (5.5 in) 8 ft long, at the structure's scale, its tone within 6 %, the
     // joints' ridge 4 mm.
@@ -984,7 +1078,15 @@ impl LandmarksGpu {
         let round = ROUND_WIRES.load(std::sync::atomic::Ordering::Relaxed);
         // (`BridgeFeatures::wire_sky`) the overlay's aerial sky colours per vertex.
         let sky_vertex = eo_landmarks::suspension::features().wire_sky;
-        let src = format!("{}\nconst LM_WIRE_ROUND: bool = {round};\nconst LM_WIRE_AERIAL_VERTEX: bool = {sky_vertex};\n{}", crate::look::city_shader_source(), include_str!("landmarks_wire.wgsl"));
+        let mut joints = false;
+        for flag in std::env::args() {
+            match flag.as_str() {
+                "--bridge-wire-joints" => joints = true,
+                "--no-bridge-wire-joints" => { joints = false; break; }
+                _ => {}
+            }
+        }
+        let src = format!("{}\nconst LM_WIRE_JOINTS: bool = {joints};\nconst LM_WIRE_ROUND: bool = {round};\nconst LM_WIRE_AERIAL_VERTEX: bool = {sky_vertex};\n{}", crate::look::city_shader_source(), include_str!("landmarks_wire.wgsl"));
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("landmarks_wire.wgsl"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("landmark-wires-layout"), bind_group_layouts: &[Some(w.draw_bgl), Some(w.main_bgl), Some(&bgl)], immediate_size: 0 });
         let attrs = [
@@ -1081,5 +1183,99 @@ impl LandmarksGpu {
         pass.set_vertex_buffer(0, self.vbuf.slice(..));
         pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
         pass.draw_indexed(0..self.index_count, 0, 0..1);
+    }
+}
+
+#[cfg(test)]
+mod bridge_pavement_tests {
+    use super::*;
+
+    #[test]
+    fn both_bridges_preserve_each_lane_marking_through_draw_merging_and_chunking() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let ca = eo_data::CaStandards::load(&paths).unwrap();
+        let set = eo_landmarks::LandmarkSet::build(&paths.repo_root, &|_, _| Some(0.), &ca).unwrap();
+        for id in ["golden-gate-bridge", "bay-bridge-west"] {
+            let bridge = set.landmarks.iter().find(|b| b.id == id).unwrap();
+            let mut expected = 0;
+            let mut drawn = 0;
+            for d in bridge.draws.iter().filter(|d| d.role == Role::Near && !d.mesh.marking_quads.is_empty()) {
+                expected += d.mesh.marking_quads.len() * 2;
+                for chunk in chunk_mesh_with_finishes(&d.mesh, false, true, false) {
+                    for face in chunk.idx.chunks_exact(3) {
+                        let tags = [face[0], face[1], face[2]].map(|i| chunk.verts[i as usize].normal >> 24);
+                        if tags.iter().any(|&t| t != 0) {
+                            assert!(tags.iter().all(|&t| t == 32 || t == 52), "{id} mixed materials");
+                            assert!(tags.contains(&32) && tags.contains(&52), "{id} lost a stripe edge");
+                            drawn += 1;
+                        }
+                    }
+                }
+                assert!(chunk_mesh_with_finishes(&d.mesh, false, false, false).iter()
+                    .all(|c| c.verts.iter().all(|v| v.normal >> 24 == 0)));
+            }
+            assert!(expected > 0 && expected == drawn, "{id}: {drawn} of {expected} marking faces");
+        }
+    }
+
+    #[test]
+    fn western_bay_bridge_wearing_course_reaches_only_the_tagged_road_panels() {
+        // The far traffic decks are a separate runtime switch. Exercise the
+        // two real registries in fresh processes so their cached options agree.
+        let distant = std::env::args().any(|arg| arg == "--distant-bridge-decks");
+        if !distant {
+            let child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "landmarks::bridge_pavement_tests::western_bay_bridge_wearing_course_reaches_only_the_tagged_road_panels", "--", "--distant-bridge-decks"])
+                .status().unwrap();
+            assert!(child.success());
+        }
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let ca = eo_data::CaStandards::load(&paths).unwrap();
+        let set = eo_landmarks::LandmarkSet::build(&paths.repo_root, &|_, _| Some(0.), &ca).unwrap();
+        let bridge = set.landmarks.iter().find(|b| b.id == "bay-bridge-west").unwrap();
+        for role in [Role::Near, Role::Far] {
+            let mut panels = 0;
+            for draw in bridge.draws.iter().filter(|d| d.role == role) {
+                let mesh = &draw.mesh;
+                let expected = mesh.pavement_quads.len() * 2;
+                let mut tagged = 0;
+                for chunk in chunk_mesh_with_finishes(mesh, false, true, true) {
+                    for face in chunk.idx.chunks_exact(3) {
+                        let vertices = [face[0], face[1], face[2]].map(|i| chunk.verts[i as usize]);
+                        if vertices[0].normal >> 24 == 192 {
+                            assert!(vertices.iter().all(|v| v.normal >> 24 == 192));
+                            let [a,b,c] = vertices.map(|v| Vec3::from_array(v.pos));
+                            assert!((b-a).cross(c-a).normalize().y > 0.8);
+                            tagged += 1;
+                        }
+                    }
+                }
+                assert_eq!(tagged, expected, "{}", mesh.name);
+                panels += tagged;
+            }
+            assert_eq!(panels > 0, role == Role::Near || distant, "{role:?}");
+        }
+    }
+
+    #[test]
+    fn registered_near_road_carries_both_curbs_in_its_vertex_data() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let ca = eo_data::CaStandards::load(&paths).unwrap();
+        let set = eo_landmarks::LandmarkSet::build(&paths.repo_root, &|_, _| Some(0.), &ca).unwrap();
+        let bridge = set.landmarks.iter().find(|b| b.id == "golden-gate-bridge").unwrap();
+        let mut left = 0;
+        let mut right = 0;
+        for d in bridge.draws.iter().filter(|d| d.role == Role::Near && d.mesh.radii.is_none()) {
+            for chunk in chunk_mesh_with_finishes(&d.mesh, true, false, false) {
+                for v in chunk.verts {
+                    match (v.normal >> 24) as i8 {
+                        -127 => left += 1,
+                        127 => right += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert!(left > 0 && right > 0, "road coordinates at curb vertices: left {left}, right {right}");
     }
 }

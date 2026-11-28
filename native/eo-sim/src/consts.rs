@@ -21,6 +21,10 @@ pub const SIGNAL_LOOKAHEAD: f64 = 42.0;
 pub const BOX_CLEAR_LOOKAHEAD_M: f64 = 16.0;
 pub const TURN_SIGNAL_DIST: f64 = 16.0;
 pub const TURN_APPROACH_M: f64 = 14.0;
+/// Integration step for sampling a body along a junction plan.
+pub const JUNCTION_SWEEP_STEP_M: f64 = 0.5;
+/// Clearance behind the bumper before a junction reservation ends.
+pub const CLAIM_RELEASE_MARGIN_M: f64 = 0.5;
 pub const APPROACH_COMFORT_DECEL: f64 = 0.8 * DECEL;
 pub const STALL_SPEED_MS: f64 = 0.05;
 pub const CLAIM_STALL_S: f64 = 4.0;
@@ -60,6 +64,8 @@ pub const PERSON_DECEL: f64 = 3.0;
 pub const PERSON_STOP_MARGIN_M: f64 = 1.6;
 pub const PERSON_SIDE_MARGIN_M: f64 = 0.45;
 pub const PERSON_CAPSULE_R_M: f64 = 0.30;
+/// Maximum sideways step from a pedestrian's walking line.
+pub const WALKER_LATERAL_LIMIT_M: f64 = 0.85;
 pub const PERSON_SCAN_MIN_M: f64 = 6.0;
 pub const PERSON_SCAN_MAX_M: f64 = 34.0;
 pub const PERSON_CELL_M: f64 = 16.0;
@@ -87,6 +93,11 @@ pub const METRES_PER_SECOND_PER_MPH: f64 = 0.44704;
 
 // src/citygen/traffic.js, ambient routing.
 pub const PEDESTRIAN_TURN_RATE: f64 = 2.6;
+/// Body footprint and following distance used on both footways and corridor
+/// walks. Model dimensions from the corridor's 0.6 by 0.5 m pedestrian.
+pub const WALKER_LEN_M: f64 = 0.6;
+pub const WALKER_WIDTH_M: f64 = 0.5;
+pub const WALKER_SLOW_GAP_M: f64 = 1.5;
 pub const SIGNAL_NODE_RADIUS_M: f64 = 20.0;
 pub const CROSSING_SETBACK_M: f64 = 4.0;
 pub const CROSSING_SHARE: f64 = 0.6;

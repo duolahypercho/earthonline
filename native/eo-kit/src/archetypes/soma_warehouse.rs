@@ -130,18 +130,20 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
 
     let bays: Vec<J> = types.iter().map(|t| json!({ "width": front_bay_width, "storeys": { "0": t } })).collect();
     let transom_at = json!([sash_clear / 3.0, (sash_clear * 2.0) / 3.0]);
+    let detail_on = crate::typology::detail_enabled();
     let mut front = json!({
         "bays": bays,
         "endPier": front_end_pier,
         "window": "punched",
+        "reveal": if detail_on { 0.26 } else { 0.16 },
         "windowSpec": {
             "sillHeight": 0.8, "headClear": 0.55, "widthRatio": 0.70, "frameWidth": 0.06, "frameDepth": 0.09,
             "mullions": 2, "transomAt": transom_at,
         },
-        "sill": { "height": 0.12, "projection": 0.07, "overhang": 0.1, "profile": "sloped" },
-        "pilasters": { "width": 0.7, "projection": 0.1, "ends": true },
-        "cornice": { "height": 0.55, "projection": 0.34, "profile": "stepped" },
-        "base": { "height": 0.65, "projection": 0.05 },
+        "sill": { "height": 0.12, "projection": if detail_on { 0.11 } else { 0.07 }, "overhang": 0.11, "profile": "sloped" },
+        "pilasters": { "width": 0.7, "projection": if detail_on { 0.18 } else { 0.1 }, "ends": true },
+        "cornice": { "height": if detail_on { 0.62 } else { 0.55 }, "projection": if detail_on { 0.60 } else { 0.34 }, "profile": "stepped" },
+        "base": { "height": 0.65, "projection": if detail_on { 0.08 } else { 0.05 } },
         "storefrontSpec": { "stallRiser": 0.45, "pier": 0.2, "mullionSpacing": 1.8, "transom": 0.45 },
         "entranceSpec": { "width": 1.9, "height": 2.7, "recess": 0.45, "leaf": "double-glass" },
         "rollerSpec": { "width": 4.6, "height": 4.0, "inset": 0.14, "hood": 0.4, "slat": 0.45 },
@@ -160,14 +162,15 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
         "endPier": END_PIER_M,
         "window": "punched",
         "ground": "punched",
+        "reveal": if detail_on { 0.24 } else { 0.16 },
         "windowSpec": {
             "sillHeight": 0.8, "headClear": 0.55, "widthRatio": 0.66, "frameWidth": 0.06, "frameDepth": 0.09,
             "mullions": 2, "transomAt": transom_at,
         },
-        "sill": { "height": 0.12, "projection": 0.07, "overhang": 0.1, "profile": "sloped" },
-        "pilasters": { "width": 0.6, "projection": 0.08, "ends": false },
+        "sill": { "height": 0.12, "projection": if detail_on { 0.10 } else { 0.07 }, "overhang": 0.1, "profile": "sloped" },
+        "pilasters": { "width": 0.6, "projection": if detail_on { 0.14 } else { 0.08 }, "ends": false },
         "base": { "height": 0.65, "projection": 0.05 },
-        "cornice": { "height": 0.5, "projection": 0.3, "profile": "stepped" },
+        "cornice": { "height": if detail_on { 0.56 } else { 0.5 }, "projection": if detail_on { 0.48 } else { 0.3 }, "profile": "stepped" },
     });
 
     let mut elevations = json!({
@@ -310,6 +313,65 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                 .shadow(false)
                 .meta(json!({ "archetype": kind })),
             );
+        }
+    }
+
+    if crate::typology::detail_enabled() {
+        let mut street_edges = vec![front];
+        street_edges.extend(frame.edges_for_role("front-secondary"));
+        for edge in street_edges {
+            if edge.party || edge.length < 2.0 {
+                continue;
+            }
+            let allow_e = 0.24f64.min(0.05f64.max(edge.allowance - 0.04));
+            let (ops, mut cuts): (Vec<(f64, f64, f64)>, Vec<(f64, f64)>) = {
+                let Some(rec) = plan.edges.iter().find(|e| e.index == edge.index) else { continue };
+                let ops = if meta.truthy("masonry") {
+                    rec.openings
+                        .iter()
+                        .filter(|o| o.type_ == "punched" && o.s1 - o.s0 >= 0.7)
+                        .map(|o| (o.s0, o.s1, o.y1))
+                        .collect()
+                } else {
+                    vec![]
+                };
+                let cuts = rec
+                    .openings
+                    .iter()
+                    .filter(|o| o.storey == 0 && matches!(o.type_.as_str(), "roller" | "entrance" | "storefront"))
+                    .map(|o| (o.s0 - 0.08, o.s1 + 0.08))
+                    .collect();
+                (ops, cuts)
+            };
+            // Cast-stone flat-arch window lintel headers & subtle keystones over loft windows
+            for (s0, s1, y1) in ops {
+                let y_h0 = y1 + base_y - 0.01;
+                let y_h1 = (y_h0 + 0.22).min(wall_top - 0.56);
+                if y_h1 - y_h0 > 0.1 {
+                    plan.add_box(
+                        &edge.basis,
+                        PartArgs::new("window-head", "trim", s0 - 0.14, s1 + 0.14, y_h0, y_h1, -0.02, 0.08f64.min(allow_e))
+                            .edge(edge.index)
+                            .meta(json!({ "archetype": kind, "part": "loft-lintel" })),
+                    );
+                }
+            }
+            // Heavy cast-stone water-table plinth belt along wall base outside openings
+            cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            cuts.push((edge.length, edge.length));
+            let mut cur = 0.0;
+            for (a, b) in cuts {
+                let end = a.min(edge.length);
+                if end - cur > 0.3 {
+                    plan.add_box(
+                        &edge.basis,
+                        PartArgs::new("water-table", "base", cur, end, base_y - 0.02, base_y + 0.24, -0.02, 0.075f64.min(allow_e))
+                            .edge(edge.index)
+                            .meta(json!({ "archetype": kind, "part": "water-table" })),
+                    );
+                }
+                cur = cur.max(b);
+            }
         }
     }
 }

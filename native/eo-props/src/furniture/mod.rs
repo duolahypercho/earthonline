@@ -109,6 +109,21 @@ pub struct EntryFurniture {
     pub items: Vec<Item>,
     pub props: Vec<Prop>,
     pub lights: Vec<LampLight>,
+    /// What became of each list tree this ribbon owns (census).
+    pub tree_fates: Vec<TreeFate>,
+}
+
+/// What became of one list tree a walk was offered (census, `examples/tree_fates.rs`).
+#[derive(Clone, Copy, Debug)]
+pub struct TreeFate {
+    pub id: u32,
+    /// "placed", or the refusal (`placeItem`'s, or "overlay-absent").
+    pub why: &'static str,
+    /// Where it was placed (the item's foot), else NaN.
+    pub at: [f64; 2],
+    /// The placed item's street variant (`eztree::street_tree_species`), scale and height scale; 0 when not placed.
+    pub variant: u32,
+    pub scale: [f32; 2],
 }
 
 /// Seed ids substituted for the runtime's stable keys (tests: a JS boot window's ids).
@@ -427,12 +442,17 @@ enum Layer {
 
 /// The street trees as `surveyedTreeRecord` makes them (with the overlays' reshaping).
 struct TreeRec {
+    id: u32,
     x: f64,
     z: f64,
     form: String,
     crown_m: Option<f64>,
     height_m: Option<f64>,
     leaf: Option<String>,
+    /// The list's genus class.
+    genus: String,
+    /// (`--tree-sizes`) the crown and height are the DBH allometry's.
+    sized: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -491,6 +511,72 @@ pub fn poster_hoardings() -> bool {
     POSTER_HOARDINGS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// `--tree-keep` (off by default: the walk as before). A DataSF list tree the walk
+/// drops for a reason of the port's own making is kept:
+///   - a tree at a joint between two pieces of a street (an end with no junction
+///     trim) may stand up to the joint: the walk's 1.2 m end pad applies only where
+///     the end is trimmed for a junction (`tree_span`), so a tree is not lost in the
+///     2.4 m between two pieces;
+///   - a tree two ribbons take goes to the nearest whose own seat tests pass for it
+///     (`Furniture::tree_seats`: kerb ramps, driveways, the footway's room and
+///     through route, carriageway, buildings), not to the nearest outright, whose
+///     refusal lost it;
+///   - a tree whose station falls in a kerb ramp's span or a driveway slides along
+///     the kerb by `SURVEYED_KERB_SHIFTS` (at most 2.4 m) as one in an occupied slot
+///     does, instead of being dropped;
+///   - a trunk is kept off driveways and alley mouths (`parking::kerb_mouths`
+///     without the no-parking margin, and the vehicle crossovers): not tested before;
+///   - the survey wins over an observed overlay's `treesAbsent` window (the
+///     Folsom 4th-5th reference observation is of unknown date; DataSF lists the
+///     trees as of 2026-09-30).
+/// Every other test stands: no tree in a kerb ramp, a driveway, on carriageway,
+/// in a building, or where the footway has no room beside its through route.
+static TREE_KEEP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set before the furniture world is built (eo-app, from `--tree-keep`).
+pub fn set_tree_keep(on: bool) {
+    TREE_KEEP.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn tree_keep() -> bool {
+    TREE_KEEP.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `--tree-sizes` (off by default: the list's crowns and heights as exported). A list
+/// tree joined to a current DataSF record with a trunk diameter (`tree_survey`) takes
+/// the crown diameter and height the Urban Tree Database allometry gives for that DBH
+/// (eo-data `tree_sizes`), in real metres as before; its model's scale may then run
+/// from `TREE_SIZED_SCALE` (a young tree's narrow crown) and its height from the leaf
+/// clearance over the walk alone, the crown divided by its form's drawn leaf width
+/// (`eztree::street_crown_widths`) so it draws that wide. The rest keep their sizes.
+static TREE_SIZES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `--tree-species` (off by default: the model by the survey's form). A list tree draws
+/// as the street form of its species or genus (`eztree::species_model`), a palm as a palm.
+static TREE_SPECIES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set before the furniture world is built (eo-app, from `--tree-sizes`).
+pub fn set_tree_sizes(on: bool) {
+    TREE_SIZES.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn tree_sizes() -> bool {
+    TREE_SIZES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Set before the furniture world is built (eo-app, from `--tree-species`).
+pub fn set_tree_species(on: bool) {
+    TREE_SPECIES.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn tree_species() -> bool {
+    TREE_SPECIES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// (`--tree-sizes`) The model scale a DBH-sized tree's crown may take: the list's own
+/// sizes keep the walk's 0.82..1.35; a young tree's crown is far narrower than a street
+/// form's, an old plane's wider.
+pub const TREE_SIZED_SCALE: (f64, f64) = (0.25, 1.6);
 pub struct Furniture {
     pub js: FurnitureJs,
     pub kinds: Vec<KindSpec>,
@@ -513,6 +599,13 @@ pub struct Furniture {
     /// `--surveyed-furniture` (`surveyed_first()` when the world was built): the hashed walk
     /// invents nothing the city surveys and none of the rare kinds (`SURVEYED_FIRST_DROP`).
     pub surveyed_first: bool,
+    /// `--tree-keep` (`tree_keep()` when the world was built): see `set_tree_keep`.
+    pub tree_keep: bool,
+    /// `--tree-sizes`, `--tree-species` (`tree_sizes()`, `tree_species()` when the world was built).
+    pub tree_sizes: bool,
+    pub tree_species: bool,
+    /// The list trees joined to the current DataSF records (with `--tree-sizes` or `--tree-species`).
+    pub tree_join: Option<crate::tree_survey::TreeJoin>,
     lamp_colour: [f32; 3],
     node_cache: Mutex<HashMap<u32, Arc<Vec<Item>>>>,
     entry_cache: Mutex<HashMap<u32, Arc<EntryFurniture>>>,
@@ -659,6 +752,10 @@ impl Furniture {
             lamp_through_m: w.std.throughway_min,
             guard_pack: std::env::var("EO_FURNITURE_PACK_GUARD").map(|v| v != "0").unwrap_or(true),
             surveyed_first: surveyed_first(),
+            tree_keep: tree_keep(),
+            tree_sizes: tree_sizes(),
+            tree_species: tree_species(),
+            tree_join: None,
             lamp_colour,
             node_cache: Mutex::new(HashMap::new()),
             entry_cache: Mutex::new(HashMap::new()),
@@ -666,6 +763,18 @@ impl Furniture {
             build_ms: 0.0,
             js,
         };
+        // (`--tree-sizes`, `--tree-species`) the list trees joined to the current records.
+        if f.tree_sizes || f.tree_species {
+            match eo_data::DataPaths::discover().and_then(|p| eo_data::tree_sizes::TreeSizes::load(&p)) {
+                Ok(table) => {
+                    let j = crate::tree_survey::TreeJoin::new(w, table);
+                    let n = j.record.len();
+                    eprintln!("street trees: {} of {n} list trees joined to a DataSF record within {} m, {} sized from their DBH", j.joined, crate::tree_survey::JOIN_M, j.sized);
+                    f.tree_join = Some(j);
+                }
+                Err(e) => eprintln!("street trees: sf-tree-sizes not loaded ({e:#}); --tree-sizes and --tree-species do nothing"),
+            }
+        }
         // The lamps' `through` is the CA throughway minimum (`STREET_LIGHT_THROUGH_M`).
         for k in f.kinds.iter_mut() {
             if matches!(k.id.as_str(), "lampHistoric" | "lampBanner" | "lampCobra") {
@@ -706,10 +815,17 @@ impl Furniture {
 
     fn tree(&self, w: &PropsWorld, i: u32) -> TreeRec {
         let r = crate::trees::record(w, i);
-        if let Some(o) = self.tree_over.get(&i) {
-            return TreeRec { x: r.x, z: r.z, form: o.form.clone(), crown_m: o.crown_m, height_m: o.height_m, leaf: o.leaf.clone() };
+        let mut t = match self.tree_over.get(&i) {
+            Some(o) => TreeRec { id: i, x: r.x, z: r.z, form: o.form.clone(), crown_m: o.crown_m, height_m: o.height_m, leaf: o.leaf.clone(), genus: r.genus, sized: false },
+            None => TreeRec { id: i, x: r.x, z: r.z, form: r.form, crown_m: r.crown_m, height_m: r.height_m, leaf: None, genus: r.genus, sized: false },
+        };
+        // (`--tree-sizes`) the size from the trunk (an overlay's reshaped tree keeps its form).
+        if self.tree_sizes && t.form != "palm" {
+            if let Some([c, h]) = self.tree_join.as_ref().and_then(|j| j.size.get(i as usize).copied().flatten()) {
+                (t.crown_m, t.height_m, t.sized) = (Some(c as f64), Some(h as f64), true);
+            }
         }
-        TreeRec { x: r.x, z: r.z, form: r.form, crown_m: r.crown_m, height_m: r.height_m, leaf: None }
+        t
     }
 
     /// The runtime's seed id of a ribbon: its first piece's stable key.
@@ -753,15 +869,20 @@ impl Furniture {
         }
         let cells = crate::signs::entry_cells(w);
         let key = ((p[0] / 32.0).floor() as i32, (p[1] / 32.0).floor() as i32);
-        let mut best: Option<(f64, u32)> = None;
+        let mut takers: Vec<(f64, u32)> = vec![];
         for &ei in cells.get(&key).map(|v| v.as_slice()).unwrap_or(&[]) {
             if let Some(d) = self.takes(w, layer, ei as usize, p) {
-                if best.is_none_or(|b| d < b.0) {
-                    best = Some((d, ei));
-                }
+                takers.push((d, ei));
             }
         }
-        let o = best.map(|b| b.1);
+        // the nearest (the first of equals, in the cell's order: a stable sort).
+        takers.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // (`--tree-keep`) the nearest whose seat tests pass for the tree, else the nearest.
+        let o = if layer == Layer::Tree && self.tree_keep && takers.len() > 1 {
+            takers.iter().find(|t| self.tree_seats(w, t.1 as usize, id)).or(takers.first()).map(|t| t.1)
+        } else {
+            takers.first().map(|t| t.1)
+        };
         let mut c = self.owners.lock().unwrap();
         if c.len() > 1 << 21 {
             c.clear();
@@ -772,36 +893,113 @@ impl Furniture {
 
     /// Whether a ribbon's candidate filter for `layer` takes the point; its distance.
     fn takes(&self, w: &PropsWorld, layer: Layer, ei: usize, p: P2) -> Option<f64> {
+        self.takes_why(w, layer, ei, p).ok()
+    }
+
+    /// `takes`, with the filter that refuses the point when it does not.
+    fn takes_why(&self, w: &PropsWorld, layer: Layer, ei: usize, p: P2) -> Result<f64, &'static str> {
         let e = &w.street.plan.entries[ei];
-        let (s0, s1) = (e.trim_start + 1.2, e.length - e.trim_end - 1.2);
-        if s1 - s0 < 2.0 {
-            return None;
+        let keep = layer == Layer::Tree && self.tree_keep;
+        let (s0, s1) = if layer == Layer::Tree { tree_span(e, keep) } else { (e.trim_start + 1.2, e.length - e.trim_end - 1.2) };
+        if s1 - s0 < if keep { 0.0 } else { 2.0 } {
+            return Err("ribbon-too-short");
         }
-        let (station, distance, lateral) = project(e, p[0], p[1])?;
+        let (station, distance, lateral) = project(e, p[0], p[1]).ok_or("no-projection")?;
+        if keep && past_end(distance, lateral) {
+            return Err("outside-trimmed-span");
+        }
         let side = if lateral >= 0.0 { 1.0 } else { -1.0 };
-        let band = w.band(e, side, self.js.options.through_route)?;
+        let band = w.band(e, side, self.js.options.through_route).ok_or("no-footway")?;
         let seg = w.segment_of(e);
         match layer {
             Layer::Stop => {
                 let reach = band.outer + 4.0;
                 if station < s0 - 3.0 || station > s1 + 3.0 || lateral.abs() > reach || distance > reach.hypot(3.0) {
-                    return None;
+                    return Err("out-of-reach");
                 }
             }
             Layer::Tree | Layer::Meter | Layer::Hydrant | Layer::Dressing => {
                 let reach = band.outer + if matches!(layer, Layer::Tree | Layer::Meter) { 1.5 } else { 2.0 };
                 if layer == Layer::Tree && !tree_covers(w, e) {
-                    return None;
+                    return Err("survey-does-not-cover");
                 }
                 if layer == Layer::Meter && !survey_covers(seg.street_id.as_deref(), e, self.js.meters.bounds) {
-                    return None;
+                    return Err("survey-does-not-cover");
                 }
-                if station < s0 || station > s1 || lateral.abs() > reach || lateral.abs() < e.half - 3.0 {
-                    return None;
+                if station < s0 || station > s1 {
+                    return Err("outside-trimmed-span");
+                }
+                if lateral.abs() > reach {
+                    return Err("beyond-footway");
+                }
+                if lateral.abs() < e.half - 3.0 {
+                    return Err("in-carriageway");
                 }
             }
         }
-        Some(distance)
+        Ok(distance)
+    }
+
+    /// (`--tree-keep`) Whether ribbon `ei`'s walk could seat list tree `id` on its side
+    /// at the tree's station or one of the kerb shifts, by every test but the walk's
+    /// own occupancy (`Walk::seat`).
+    fn tree_seats(&self, w: &PropsWorld, ei: usize, id: u32) -> bool {
+        let e = &w.street.plan.entries[ei];
+        let t = self.tree(w, id);
+        let Some((station, _, lateral)) = project(e, t.x, t.z) else { return false };
+        let walk = Walk::new(w, self, None, ei as u32);
+        let Some(sc) = walk.side_ctx(ei, if lateral >= 0.0 { 1.0 } else { -1.0 }) else { return false };
+        let fit = walk.tree_fit(&sc, &t);
+        self.js.consts.kerb_shifts.iter().any(|&shift| {
+            let at = station + shift;
+            at >= sc.tree_s0 && at <= sc.tree_s1 && walk.seat(&sc, walk.tree_spec(&t, at, fit.as_ref()), false).is_ok()
+        })
+    }
+
+    /// (`--tree-keep`) Whether a trunk of radius `r` at `station` on side `side` of ribbon
+    /// `ei` stands in a driveway or alley mouth (`parking::kerb_mouths`, without their
+    /// no-parking margin) or a vehicle crossover (`KerbRules::crossovers`).
+    fn in_driveway(&self, w: &PropsWorld, ei: usize, side: f64, station: f64, r: f64) -> bool {
+        let key = (ei as u32, if side > 0.0 { 1i8 } else { -1 });
+        let clear = w.std.no_parking_driveway;
+        crate::parking::kerb_mouths(w).get(&key).is_some_and(|v| v.iter().any(|m| station + r > m[0] + clear && station - r < m[1] - clear))
+            || crate::parking::rules(w).on_crossover(ei, key.1, station, r)
+    }
+
+    /// The ribbon that owns list tree `id` (diagnostics, census).
+    pub fn tree_owner(&self, w: &PropsWorld, id: u32) -> Option<u32> {
+        let t = self.tree(w, id);
+        self.owner(w, Layer::Tree, id, [t.x, t.z])
+    }
+
+    /// Whether ribbon `ei` takes list tree `id` (its distance), or the filter that refuses it (diagnostics).
+    pub fn tree_take_why(&self, w: &PropsWorld, ei: usize, id: u32) -> Result<f64, &'static str> {
+        let t = self.tree(w, id);
+        self.takes_why(w, Layer::Tree, ei, [t.x, t.z])
+    }
+
+    /// Why no ribbon owns list tree `id`: the refusal of the ribbon whose
+    /// centreline is nearest among those indexed at its cell (diagnostics, census).
+    pub fn tree_unowned_reason(&self, w: &PropsWorld, id: u32) -> (&'static str, Option<u32>) {
+        let t = self.tree(w, id);
+        let cells = crate::signs::entry_cells(w);
+        let key = ((t.x / 32.0).floor() as i32, (t.z / 32.0).floor() as i32);
+        let mut best: Option<(f64, u32, &'static str)> = None;
+        for &ei in cells.get(&key).map(|v| v.as_slice()).unwrap_or(&[]) {
+            let e = &w.street.plan.entries[ei as usize];
+            let Some((_, d, _)) = project(e, t.x, t.z) else { continue };
+            let why = match self.takes_why(w, Layer::Tree, ei as usize, [t.x, t.z]) {
+                Ok(_) => "taken",
+                Err(r) => r,
+            };
+            if best.is_none_or(|b| d < b.0) {
+                best = Some((d, ei, why));
+            }
+        }
+        match best {
+            Some((_, ei, why)) => (why, Some(ei)),
+            None => ("no-ribbon-near", None),
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -865,7 +1063,9 @@ impl Furniture {
         }
         let mut items = own;
         items.append(&mut walk.items);
-        self.finish(w, items)
+        let mut out = self.finish(w, items);
+        out.tree_fates = walk.tree_fates;
+        out
     }
 
     fn occ_radius(&self, k: usize) -> f64 {
@@ -895,7 +1095,43 @@ impl Furniture {
             }
         }
         let _ = w;
-        EntryFurniture { items, props, lights }
+        EntryFurniture { items, props, lights, tree_fates: vec![] }
+    }
+
+    /// The district lights' median spacing on one ribbon (`placeStreetLights`: by the
+    /// street's class), or None where the walk stands no lamps (a distribution way,
+    /// whose timber poles carry the cobra heads, or a class with no measured spacing).
+    pub fn lamp_spacing(&self, w: &PropsWorld, ei: usize) -> Option<f64> {
+        let seg = w.segment_of(&w.street.plan.entries[ei]);
+        if Furniture::way_id(seg.street_id.as_deref()).is_some_and(|id| self.dist_ways.contains(&id)) {
+            return None;
+        }
+        let hw = seg.highway.as_str();
+        let cls = if hw.starts_with("primary") || hw.starts_with("trunk") {
+            "primary"
+        } else if hw.starts_with("secondary") {
+            "secondary"
+        } else if hw.starts_with("tertiary") {
+            "tertiary"
+        } else {
+            "residential"
+        };
+        self.js.street_lights.spacing.get(cls).and_then(|v| v["medianM"].as_f64()).filter(|v| *v != 0.0)
+    }
+
+    /// A district street light (`lampCobra`, `lampBanner`, `lampHistoric`).
+    pub fn is_street_light(&self, k: u16) -> bool {
+        matches!(self.kind_id(k), "lampCobra" | "lampBanner" | "lampHistoric")
+    }
+
+    /// One lamp item stood at `to` instead (a lamp standard that is also a trolley
+    /// support pole, `overhead::Overhead::lamp_moves`): its prop and its light.
+    pub fn moved_lamp(&self, it: &Item, to: [f64; 3]) -> Option<(Prop, Option<LampLight>)> {
+        let model = self.model_of(it.kind)?;
+        let mut m = it.clone();
+        (m.x, m.y, m.z) = (to[0], to[1], to[2]);
+        let prop = Prop { model, pos: to, yaw: m.rotation, scale: [m.scale as f32, m.height_scale as f32, m.scale as f32], variant: m.variant as u16, live: Live::None };
+        Some((prop, self.lamp_light(&m, model)))
     }
 
     /// `districtLightFixtures` + `streetLampHead` + `lampPoolOptics` for a district light.
@@ -962,6 +1198,28 @@ fn survey_covers(street_id: Option<&str>, e: &Entry, b: data::XzBounds) -> bool 
     e.points.iter().all(|q| q[0] >= b.min_x && q[0] <= b.max_x && q[1] >= b.min_z && q[1] <= b.max_z)
 }
 
+/// An end with a junction trim shorter than this is a joint between two pieces of one
+/// street (or where a link leaves it): the footway runs on through it (`tree_span`).
+const TREE_JOINT_TRIM_M: f64 = 0.05;
+
+/// The stations a list tree may stand at on ribbon `e`: the walk's span
+/// (`trim + 1.2 m` at each end); with `--tree-keep` the 1.2 m pad only at an end
+/// trimmed for a junction (`set_tree_keep`).
+fn tree_span(e: &Entry, keep: bool) -> (f64, f64) {
+    let pad = |trim: f64| if keep && trim < TREE_JOINT_TRIM_M { 0.0 } else { TREE_END_PAD_M };
+    (e.trim_start + pad(e.trim_start), e.length - e.trim_end - pad(e.trim_end))
+}
+
+/// The walk's end pad (`trim + 1.2`).
+const TREE_END_PAD_M: f64 = 1.2;
+
+/// (`--tree-keep`) Whether a point projected onto a ribbon (`project`: distance, lateral) lies
+/// past its end by more than the end pad: with no pad at an untrimmed end, a projection clamped
+/// to the end would otherwise take a point far beyond it.
+fn past_end(distance: f64, lateral: f64) -> bool {
+    (distance * distance - lateral * lateral).max(0.0).sqrt() > TREE_END_PAD_M
+}
+
 /// `classBand(classRank)`.
 fn class_band(rank: i32) -> usize {
     if rank <= 2 {
@@ -987,6 +1245,9 @@ struct SideCtx {
     band: Band,
     s0: f64,
     s1: f64,
+    /// The stations a list tree may take (`tree_span`): `s0`, `s1` unless `--tree-keep`.
+    tree_s0: f64,
+    tree_s1: f64,
     /// The drawn kerb ramp windows of this side.
     ramps: Vec<RampWin>,
 }
@@ -998,6 +1259,8 @@ struct TreeSpec {
     leaf: Option<String>,
     crown_m: Option<f64>,
     height_m: Option<f64>,
+    /// (`--tree-sizes`) the crown and height are the DBH allometry's (`TREE_SIZED_SCALE`).
+    sized: bool,
 }
 
 struct Spec<'k> {
@@ -1021,11 +1284,13 @@ struct Walk<'a> {
     last_rejection: &'static str,
     /// Points this walk has placed (`surveyedClaimed`, per walk).
     claimed: HashSet<(Layer, u32)>,
+    /// The list trees this walk was offered (census).
+    tree_fates: Vec<TreeFate>,
 }
 
 impl<'a> Walk<'a> {
     fn new(w: &'a PropsWorld, f: &'a Furniture, ids: Option<&'a SeedIds>, owner: u32) -> Self {
-        Walk { w, f, ids, owner, occ: Occupancy::default(), items: vec![], last_rejection: "", claimed: HashSet::new() }
+        Walk { w, f, ids, owner, occ: Occupancy::default(), items: vec![], last_rejection: "", claimed: HashSet::new(), tree_fates: vec![] }
     }
 
     fn reject(&mut self, why: &'static str) {
@@ -1036,6 +1301,7 @@ impl<'a> Walk<'a> {
         let e = &self.w.street.plan.entries[ei];
         let band = self.w.band(e, side, self.f.js.options.through_route)?;
         let ramps = segment_kerb_ramps(e, &self.w.street.o);
+        let (tree_s0, tree_s1) = tree_span(e, self.f.tree_keep);
         Some(SideCtx {
             ei,
             seg_id: self.f.entry_seed(self.w, ei, self.ids),
@@ -1043,6 +1309,8 @@ impl<'a> Walk<'a> {
             band,
             s0: e.trim_start + 1.2,
             s1: e.length - e.trim_end - 1.2,
+            tree_s0,
+            tree_s1,
             ramps: ramps[if side > 0.0 { 0 } else { 1 }].clone(),
         })
     }
@@ -1128,6 +1396,22 @@ impl<'a> Walk<'a> {
 
     /// `placeItem(state, spec)`.
     fn place(&mut self, sc: &SideCtx, spec: Spec) -> Option<usize> {
+        match self.seat(sc, spec, true) {
+            Ok((item, occ_r)) => {
+                self.occ.add(item.x, item.z, occ_r);
+                self.items.push(item);
+                Some(self.items.len() - 1)
+            }
+            Err(why) => {
+                self.reject(why);
+                None
+            }
+        }
+    }
+
+    /// `placeItem`'s seat and tests: the item and its occupancy radius, or the refusal. With
+    /// `occ` false the walk's occupancy is not asked (`--tree-keep`'s owner test).
+    fn seat(&self, sc: &SideCtx, spec: Spec, occ: bool) -> Result<(Item, f64), &'static str> {
         let f = self.f;
         let w = self.w;
         let e = &w.street.plan.entries[sc.ei];
@@ -1137,24 +1421,24 @@ impl<'a> Walk<'a> {
         let side = sc.side;
         let station = spec.station;
         if kind.zone != Zone::Building && self.ramp_blocked(sc, station) {
-            self.reject("in-kerb-ramp");
-            return None;
+            return Err("in-kerb-ramp");
+        }
+        // (`--tree-keep`) a trunk off driveways and alley mouths.
+        if f.tree_keep && matches!(kind_id, "tree" | "palm") && f.in_driveway(w, sc.ei, side, station, kind.radius) {
+            return Err("in-driveway");
         }
         let wall_reach = f.js.options.wall_reach;
         let reach_kind = KindSpec { reach: Some(wall_reach), ..kind.clone() };
         let (lateral, limit) = self.lateral_for(&reach_kind, band);
         if lateral - kind.depth < band.inner - 0.05 {
-            self.reject("inside-curb");
-            return None;
+            return Err("inside-curb");
         }
         if kind.zone != Zone::Building {
             if lateral + kind.depth > band.outer + 0.05 {
-                self.reject("past-property-line");
-                return None;
+                return Err("past-property-line");
             }
             if lateral + kind.depth > limit + 1e-6 {
-                self.reject("blocks-through-route");
-                return None;
+                return Err("blocks-through-route");
             }
         }
         let st = station_at(e, station, false);
@@ -1178,25 +1462,22 @@ impl<'a> Walk<'a> {
                 probe -= 0.12;
             }
             let Some(s) = snapped else {
-                self.reject("no-facade");
-                return None;
+                return Err("no-facade");
             };
             placed_lateral = s;
             if let Some(off) = kind.wall_stand_off {
                 let gap_now = f.buildings.distance_within(st.x + nx * side * placed_lateral, st.z + nz * side * placed_lateral, off);
                 placed_lateral -= (off - gap_now).max(0.0) / nx.hypot(nz).max(1.0);
                 if placed_lateral - kind.depth < band.inner + 0.3 {
-                    self.reject("stand-off-too-narrow");
-                    return None;
+                    return Err("stand-off-too-narrow");
                 }
             }
         }
         let x = st.x + nx * side * placed_lateral;
         let z = st.z + nz * side * placed_lateral;
         let occ_r = kind.exclusive.unwrap_or(kind.radius);
-        if self.occ.hit(x, z, occ_r) {
-            self.reject("overlap");
-            return None;
+        if occ && self.occ.hit(x, z, occ_r) {
+            return Err("overlap");
         }
         let mut rng = StreetRandom::new(&format!("{}:item:{}:{}:{}:{}", f.seed, sc.seg_id, int_str(side), int_str(js_round(station * 100.0)), kind_id));
         let facing = (side * nx).atan2(side * nz);
@@ -1207,25 +1488,21 @@ impl<'a> Walk<'a> {
         };
         let rotation = facing + spin;
         if self.on_roadway(kind, x, z, rotation.sin(), rotation.cos()) {
-            self.reject("on-carriageway");
-            return None;
+            return Err("on-carriageway");
         }
         let clearance = if kind.zone == Zone::Building { 0.02 } else { 0.15 };
         if f.buildings.distance_within(x, z, clearance) <= clearance {
-            self.reject("inside-building");
-            return None;
+            return Err("inside-building");
         }
         // Not in the JS: a drawn footprint the JS index lacks (the footprint pack) is
         // stood clear of too, so nothing is placed inside a building this world draws.
         if f.guard_pack && w.street.buildings.contains(x, z) {
-            self.reject("inside-building");
-            return None;
+            return Err("inside-building");
         }
         let o = &w.street.o;
         let surface_lateral = placed_lateral.min(band.outer);
         if !(o.sidewalk_surface_y(0.0, surface_lateral, e.half) >= o.sidewalk_surface_y(0.0, e.half, e.half) - 1e-6) {
-            self.reject("below-curb");
-            return None;
+            return Err("below-curb");
         }
         let y = w.ground(x, z);
         let tree = kind_id == "tree";
@@ -1256,7 +1533,12 @@ impl<'a> Walk<'a> {
         if tree && ts.crown_m.is_some_and(|c| c > 0.0) {
             let half = species.map(|s| s.max_half_crown_m).filter(|v| *v != 0.0 && v.is_finite()).unwrap_or(f.js.consts.street_tree_max_half_crown);
             let factor = species.and_then(|s| s.crown_factor).filter(|v| *v != 0.0).unwrap_or(1.0);
-            scale = clamp(ts.crown_m.unwrap() * factor / (2.0 * half), 0.82, 1.35);
+            // (`--tree-sizes`) a sized crown over the form's drawn leaves (`street_crown_widths`),
+            // so the tree draws that wide; the list's own over `2 maxHalfCrownM`, as the JS.
+            let drawn = if ts.sized { crate::eztree::street_crown_widths().get(variant).copied().filter(|w| w.is_finite() && *w > 0.5) } else { None };
+            let width = drawn.unwrap_or(2.0 * half);
+            let (lo, hi) = if ts.sized { TREE_SIZED_SCALE } else { (0.82, 1.35) };
+            scale = clamp(ts.crown_m.unwrap() * factor / width, lo, hi);
         }
         let mut height_scale = if tree { scale * (0.92 + rng.next() * 0.2) } else { scale };
         if tree && ts.height_m.is_some_and(|h| h > 0.0) {
@@ -1264,7 +1546,9 @@ impl<'a> Walk<'a> {
                 let species_height = sp.height_m;
                 if species_height > 0.0 {
                     let clear = sp.clearance_m.filter(|v| *v != 0.0).unwrap_or(2.8);
-                    let floor = (0.82f64).max(f.js.consts.street_tree_min_leaf_clearance_m / clear);
+                    // (`--tree-sizes`) a sized tree only as short as keeps its leaves over the walk.
+                    let clearance = f.js.consts.street_tree_min_leaf_clearance_m / clear;
+                    let floor = if ts.sized { clearance } else { (0.82f64).max(clearance) };
                     let max_h = sp.max_height_m.filter(|v| *v != 0.0).unwrap_or(f64::INFINITY);
                     let ceiling = floor.max((1.4f64).min(max_h / species_height));
                     let hf = sp.height_factor.filter(|v| *v != 0.0).unwrap_or(1.0);
@@ -1280,27 +1564,27 @@ impl<'a> Walk<'a> {
         let leans = tree && species.and_then(|s| s.street_lean_m).is_some_and(|l| l > 0.0);
         let item_rotation = if leans { facing + spin * 0.1 } else { rotation };
         if item_rotation != rotation && self.on_roadway(kind, x, z, item_rotation.sin(), item_rotation.cos()) {
-            self.reject("on-carriageway");
-            return None;
+            return Err("on-carriageway");
         }
-        self.occ.add(x, z, occ_r);
-        self.items.push(Item {
-            kind: spec.kind as u16,
-            x,
-            y,
-            z,
-            rotation: item_rotation,
-            scale,
-            height_scale,
-            variant: variant as u32,
-            surveyed: false,
-            forced: spec.forced,
-            entry: sc.ei as u32,
-            side: side as i8,
-            station,
-            node: if spec.forced { spec.node } else { None },
-        });
-        Some(self.items.len() - 1)
+        Ok((
+            Item {
+                kind: spec.kind as u16,
+                x,
+                y,
+                z,
+                rotation: item_rotation,
+                scale,
+                height_scale,
+                variant: variant as u32,
+                surveyed: false,
+                forced: spec.forced,
+                entry: sc.ei as u32,
+                side: side as i8,
+                station,
+                node: if spec.forced { spec.node } else { None },
+            },
+            occ_r,
+        ))
     }
 
     fn spec(&self, station: f64, kind: usize) -> Spec<'a> {
@@ -1398,11 +1682,15 @@ impl<'a> Walk<'a> {
         let f = self.f;
         let e = &w.street.plan.entries[ei];
         let Some(sc) = self.side_ctx(ei, side) else { return };
-        if sc.s1 - sc.s0 < 2.0 {
-            return;
-        }
         let seg = w.segment_of(e);
         let overlay = observed::overlay_for(&f.js.overlays, seg.street_id.as_deref());
+        if sc.s1 - sc.s0 < 2.0 {
+            // (`--tree-keep`) a ribbon too short for the walk still seats its list trees.
+            if f.tree_keep && sc.tree_s1 > sc.tree_s0 {
+                self.trees(&sc, overlay, &mut HashSet::new());
+            }
+            return;
+        }
         let mut rng = StreetRandom::new(&format!("{}:furnish:{}:{}", f.seed, sc.seg_id, int_str(side)));
         let mut suppress: HashSet<&'static str> = HashSet::new();
         self.transit(&sc, overlay, &mut suppress);
@@ -1544,6 +1832,10 @@ impl<'a> Walk<'a> {
                 continue;
             }
             if (id == "pedSignalPost" || id == "signalCabinet") && !c.signal_corner {
+                continue;
+            }
+            // (`--no-one-cabinet` off) the junction's one cabinet is the overhead's
+            if id == "signalCabinet" && crate::overhead::one_cabinet() {
                 continue;
             }
             if c.band.walk < kind.min_walk {
@@ -1734,7 +2026,7 @@ impl<'a> Walk<'a> {
                 continue;
             }
             let offset = shelter.radius + flag_r + 0.5;
-            let trees = self.tree_candidates(sc, overlay);
+            let trees = self.tree_candidates(sc, overlay).map(|t| t.0);
             let tree_clear = shelter.radius + f.kinds[tree_k].radius;
             let clear_of_trees = |at: f64| trees.as_ref().is_none_or(|t| t.iter().all(|c| (c.1 - at).abs() >= tree_clear));
             let mut slots = vec![];
@@ -1810,8 +2102,9 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// `surveyedTreeCandidates`: (list id, station), or None where the list does not cover the ribbon.
-    fn tree_candidates(&self, sc: &SideCtx, overlay: Option<&Overlay>) -> Option<Vec<(u32, f64)>> {
+    /// `surveyedTreeCandidates`: (list id, station), or None where the list does not cover the ribbon;
+    /// with the owned trees an overlay's observed absence drops (census).
+    fn tree_candidates(&self, sc: &SideCtx, overlay: Option<&Overlay>) -> Option<(Vec<(u32, f64)>, Vec<TreeFate>)> {
         let w = self.w;
         let e = &w.street.plan.entries[sc.ei];
         if !tree_covers(w, e) {
@@ -1820,13 +2113,14 @@ impl<'a> Walk<'a> {
         let reach = sc.band.outer + 1.5;
         let absent = observed::windows(overlay, e, sc.side, "treesAbsent");
         let mut out = vec![];
+        let mut dropped = vec![];
         for id in self.along(&w.tree_cells, e, reach) {
             if self.claimed.contains(&(Layer::Tree, id)) {
                 continue;
             }
             let t = self.f.tree(w, id);
-            let Some((station, _, lateral)) = project(e, t.x, t.z) else { continue };
-            if station < sc.s0 || station > sc.s1 {
+            let Some((station, distance, lateral)) = project(e, t.x, t.z) else { continue };
+            if station < sc.tree_s0 || station > sc.tree_s1 || (self.f.tree_keep && past_end(distance, lateral)) {
                 continue;
             }
             if lateral.abs() > reach || lateral.abs() < e.half - 3.0 {
@@ -1835,16 +2129,57 @@ impl<'a> Walk<'a> {
             if (if lateral >= 0.0 { 1.0 } else { -1.0 }) != sc.side {
                 continue;
             }
-            if absent.iter().any(|win| station >= win.lo && station <= win.hi) {
+            if !self.owns(Layer::Tree, id, [t.x, t.z]) {
                 continue;
             }
-            if !self.owns(Layer::Tree, id, [t.x, t.z]) {
+            // (`--tree-keep`) the survey wins over an observed absence.
+            if !self.f.tree_keep && absent.iter().any(|win| station >= win.lo && station <= win.hi) {
+                dropped.push(TreeFate { id, why: "overlay-absent", at: [f64::NAN; 2], variant: 0, scale: [0.0; 2] });
                 continue;
             }
             out.push((id, station));
         }
         out.sort_by(|a, b| a.1.total_cmp(&b.1));
-        Some(out)
+        Some((out, dropped))
+    }
+
+    /// `surveyedAlleyTreeFit`: the narrower footprint and the oak variant a tall list tree
+    /// takes on an alley's narrow footway, or None.
+    fn tree_fit(&self, sc: &SideCtx, t: &TreeRec) -> Option<(KindSpec, usize)> {
+        let f = self.f;
+        let tree_k = f.k("tree");
+        let oak = crate::eztree::street_tree_species().ok().and_then(|s| s.iter().position(|x| x == "street-oak"))?;
+        let variants = f.variant_count(tree_k);
+        let seg = self.w.segment_of(&self.w.street.plan.entries[sc.ei]);
+        if t.form == "palm" || seg.street_type.as_deref() != Some("alley") || t.form != "tall" || !(sc.band.walk < 2.3) || variants == 0 {
+            return None;
+        }
+        let tree_kind = &f.kinds[tree_k];
+        let depth = 0.2;
+        if sc.band.usable < depth * 2.0 + 0.06 + tree_kind.through.unwrap_or(0.0) {
+            return None;
+        }
+        Some((KindSpec { radius: depth, depth, exclusive: Some(tree_kind.radius), ..tree_kind.clone() }, oak % variants))
+    }
+
+    /// The item a list tree asks for at station `at` (`placeSurveyedTrees`' spec).
+    fn tree_spec<'k>(&self, t: &TreeRec, at: f64, fit: Option<&'k (KindSpec, usize)>) -> Spec<'k> {
+        let f = self.f;
+        let palm = t.form == "palm";
+        let mut variant = fit.map(|x| x.1);
+        // (`--tree-species`) the street form of the tree's species or genus (the alley fit keeps its own).
+        if f.tree_species && !palm && variant.is_none() {
+            let species = f.tree_join.as_ref().and_then(|j| j.species(t.id));
+            variant = crate::eztree::species_tree_variant(&t.genus, species, f.variant_count(f.k("tree")), t.leaf.as_deref());
+        }
+        Spec {
+            station: at,
+            kind: f.k(if palm { "palm" } else { "tree" }),
+            fit: fit.map(|x| &x.0),
+            forced: false,
+            node: None,
+            tree: Some(TreeSpec { variant, form: Some(t.form.clone()), leaf: t.leaf.clone(), crown_m: t.crown_m, height_m: t.height_m, sized: t.sized }),
+        }
     }
 
     /// `placeSurveyedTrees`.
@@ -1852,58 +2187,36 @@ impl<'a> Walk<'a> {
         let w = self.w;
         let f = self.f;
         let e = &w.street.plan.entries[sc.ei];
-        let Some(cands) = self.tree_candidates(sc, overlay) else { return };
+        let Some((cands, dropped)) = self.tree_candidates(sc, overlay) else { return };
+        self.tree_fates.extend(dropped);
         let tree_k = f.k("tree");
-        let palm_k = f.k("palm");
-        let oak = crate::eztree::street_tree_species().ok().and_then(|s| s.iter().position(|x| x == "street-oak"));
-        let variants = f.variant_count(tree_k);
-        let seg = w.segment_of(e);
         for (id, station) in cands {
             let t = f.tree(w, id);
-            let palm = t.form == "palm";
-            // `surveyedAlleyTreeFit`.
-            let tree_kind = &f.kinds[tree_k];
-            let fit: Option<(KindSpec, usize)> = if !palm
-                && seg.street_type.as_deref() == Some("alley")
-                && t.form == "tall"
-                && sc.band.walk < 2.3
-                && oak.is_some()
-                && variants > 0
-            {
-                let depth = 0.2;
-                if sc.band.usable < depth * 2.0 + 0.06 + tree_kind.through.unwrap_or(0.0) {
-                    None
-                } else {
-                    Some((KindSpec { radius: depth, depth, exclusive: Some(tree_kind.radius), ..tree_kind.clone() }, oak.unwrap() % variants))
-                }
-            } else {
-                None
-            };
+            let fit = self.tree_fit(sc, &t);
             let mut placed = None;
+            self.last_rejection = "shift-out-of-span";
             for &shift in &f.js.consts.kerb_shifts {
                 let at = station + shift;
-                if at < sc.s0 || at > sc.s1 {
+                if at < sc.tree_s0 || at > sc.tree_s1 {
                     continue;
                 }
-                let spec = Spec {
-                    station: at,
-                    kind: if palm { palm_k } else { tree_k },
-                    fit: fit.as_ref().map(|x| &x.0),
-                    forced: false,
-                    node: None,
-                    tree: Some(TreeSpec { variant: fit.as_ref().map(|x| x.1), form: Some(t.form.clone()), leaf: t.leaf.clone(), crown_m: t.crown_m, height_m: t.height_m }),
-                };
-                placed = self.place(sc, spec);
+                placed = self.place(sc, self.tree_spec(&t, at, fit.as_ref()));
                 if placed.is_some() {
                     break;
                 }
-                if shift == 0.0 && self.last_rejection != "overlap" {
+                // Only a slot taken by another object is worth sliding out of; (`--tree-keep`)
+                // and a kerb ramp's span or a driveway.
+                let slides = self.last_rejection == "overlap" || (f.tree_keep && matches!(self.last_rejection, "in-kerb-ramp" | "in-driveway"));
+                if shift == 0.0 && !slides {
                     break;
                 }
             }
             if placed.is_none() {
+                self.tree_fates.push(TreeFate { id, why: self.last_rejection, at: [f64::NAN; 2], variant: 0, scale: [0.0; 2] });
                 continue;
             }
+            let it = &self.items[placed.unwrap()];
+            self.tree_fates.push(TreeFate { id, why: "placed", at: [it.x, it.z], variant: it.variant, scale: [it.scale as f32, it.height_scale as f32] });
             self.claimed.insert((Layer::Tree, id));
             self.mark_surveyed(placed);
         }
@@ -1921,6 +2234,7 @@ impl<'a> Walk<'a> {
                         leaf: None,
                         crown_m: Some(win.entry.crown_m.unwrap_or(0.0)),
                         height_m: Some(win.entry.height_m.unwrap_or(0.0)),
+                        sized: false,
                     }),
                     ..self.spec(lo + nudge, tree_k)
                 };
@@ -2176,20 +2490,7 @@ impl<'a> Walk<'a> {
         let e = &w.street.plan.entries[sc.ei];
         let seg = w.segment_of(e);
         let way = Furniture::way_id(seg.street_id.as_deref());
-        if way.is_some_and(|id| f.dist_ways.contains(&id)) {
-            return;
-        }
-        let hw = seg.highway.as_str();
-        let cls = if hw.starts_with("primary") || hw.starts_with("trunk") {
-            "primary"
-        } else if hw.starts_with("secondary") {
-            "secondary"
-        } else if hw.starts_with("tertiary") {
-            "tertiary"
-        } else {
-            "residential"
-        };
-        let Some(spacing) = f.js.street_lights.spacing.get(cls).and_then(|v| v["medianM"].as_f64()).filter(|v| *v != 0.0) else { return };
+        let Some(spacing) = f.lamp_spacing(w, sc.ei) else { return };
         let code = way.and_then(|id| f.light_ways.get(&id)).map(|c| c.to_string());
         let kind_id = code.and_then(|c| f.js.consts.street_light_kind.get(&c).cloned()).unwrap_or_else(|| "lampCobra".into());
         let k = f.k(&kind_id);

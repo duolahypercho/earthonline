@@ -406,6 +406,53 @@ impl Library {
         self.meta.vehicle_models.get(name).copied()
     }
 
+    /// Resolve the same body regardless of whether the consumer draws it or
+    /// gives it a local collider. A partial fleet still uses its available models.
+    pub fn traffic_model<'a>(&self, catalog: &'a AgentsJs, seed: u32, entity: u32, kind: u16) -> Option<(&'a str, u32)> {
+        eo_sim::vehicle_catalogue::resolve(seed, entity, kind, catalog.pool(kind), |id| self.model(id))
+    }
+
+    /// Bounds of the finest drawn body, in the model's road-datum frame.
+    /// The bottom of the main shell gives the collider room for its tyres.
+    pub fn vehicle_chassis_bounds(&self, model: u32) -> Option<(glam::Vec3, glam::Vec3)> {
+        use glam::Vec3;
+        let model = self.models.get(model as usize).filter(|m| m.class == CLASS_VEHICLE)?;
+        let mesh = self.meshes.get(model.meshes[0] as usize)?;
+        let base = usize::try_from(mesh.base_vertex).ok()?;
+        let (mut min, mut max) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+        let mut shell_bottom = f32::INFINITY;
+        for (first, count) in [(mesh.first_index, mesh.index_count), (mesh.glass_first, mesh.glass_count)] {
+            let indices = self.indices.get(first as usize..first as usize + count as usize)?;
+            for &i in indices {
+                let v = self.vertices.get(base + i as usize)?;
+                let p = Vec3::from_array(v.pos);
+                min = min.min(p);
+                max = max.max(p);
+                let part = (v.tag >> 16) & 0xff;
+                if (part == crate::WHEEL_NONE || part == crate::PART_DRIVER_DOOR)
+                    && self.materials[(v.tag & 0xffff) as usize].flags & crate::M_PAINT != 0
+                {
+                    shell_bottom = shell_bottom.min(p.y);
+                }
+            }
+        }
+        // A fallback mesh without a painted shell uses the chassis template's sill.
+        min.y = if shell_bottom.is_finite() { shell_bottom.max(0.0) } else { 0.0 };
+        (min.is_finite() && max.is_finite() && (max - min).cmpgt(Vec3::ZERO).all()).then_some((min, max))
+    }
+
+    /// The same measured road-datum chassis used by local contacts and in the scale report.
+    pub fn vehicle_chassis_geometry(&self, model: u32, scale: f32) -> Option<eo_sim::vehicle_catalogue::ChassisGeometry> {
+        let (min, max) = self.vehicle_chassis_bounds(model)?;
+        let body = &self.models[model as usize];
+        Some(eo_sim::vehicle_catalogue::ChassisGeometry {
+            min_xyz_m: (min * scale).to_array(),
+            max_xyz_m: (max * scale).to_array(),
+            wheels_xz_m: body.wheel.map(|p| [p[0] * scale, p[2] * scale]),
+            wheel_radius_m: body.wheel_radius * scale,
+        })
+    }
+
     pub fn triangles(&self, mesh: u32) -> u32 {
         self.meta.mesh_triangles.get(mesh as usize).copied().unwrap_or(0)
     }

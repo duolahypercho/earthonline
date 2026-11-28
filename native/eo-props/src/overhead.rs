@@ -53,6 +53,50 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 pub const OVERHEAD_JS_GZ: &[u8] = include_bytes!("../data/overhead-js.json.gz");
 
+/// (`--no-one-cabinet` off) One controller cabinet a signalised junction (the city's inventory
+/// has one per signal: DataSF Traffic Signals, field CABINET_SI): the walk's furniture draws none
+/// (`signalCabinet`) and the nodes of one junction ([`JUNCTION_LINK_M`]) share the first one any
+/// of them can stand. Off: each node's cabinet and the walk's, as before.
+static ONE_CABINET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_one_cabinet(on: bool) {
+    ONE_CABINET.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn one_cabinet() -> bool {
+    ONE_CABINET.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// (`--no-cabinet-model` off; eo-app sets it from the cabinet model) The cabinet as modelled
+/// (eo-props `signal_poles::Dims`): width, depth, height, its pad's height and margin (m). Set,
+/// a cabinet stands along the kerb in the furnishing zone, its back the edge zone's offset from
+/// the kerb face (`sidewalk-edge-zone-sf`), its doors to the walk, the throughway clear behind it
+/// (`sidewalk-throughway-zone-sf`); None: the JS box across the walk, as before.
+static CABINET_MODEL: Mutex<Option<[f64; 5]>> = Mutex::new(None);
+
+pub fn set_cabinet_model(size: Option<[f64; 5]>) {
+    *CABINET_MODEL.lock().unwrap() = size;
+}
+
+fn cabinet_model() -> Option<[f64; 5]> {
+    *CABINET_MODEL.lock().unwrap()
+}
+
+/// Two signalised nodes joined by an entry shorter than this are one junction: a divided street's
+/// carriageways crossing the same street (modelling value: the city's widest medians are under
+/// it, the next signalised junction along a street beyond it).
+pub const JUNCTION_LINK_M: f64 = 30.0;
+
+/// (the cabinet model) Stations past the JS's (m from the approach's trim) a cabinet tries when
+/// none of those has room for it along the kerb (modelling values).
+const CABINET_MORE_STATIONS_M: [f64; 4] = [14.0, 17.0, 20.0, 24.0];
+/// How far inside the edge zone's offset a cabinet's back may come (the kerb line's drawing
+/// tolerance: the lateral is laid out from the approach's half width, the kerb face found a
+/// centimetre or two off it).
+const CABINET_KERB_TOLERANCE_M: f64 = 0.03;
+/// (the cabinet model) How far its pad keeps from a drawn prop's radius (modelling value).
+const CABINET_PROP_GAP_M: f64 = 0.15;
+
 // ---------------------------------------------------------------- output
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -92,6 +136,9 @@ pub struct OverheadPole {
     pub radius_base: f64,
     pub radius_top: f64,
     pub arm: Option<PoleArm>,
+    /// A street lamp standard stands here and holds this pole's wires (`Overhead::lamp_moves`):
+    /// the furniture lamp is drawn in its place, so the plain shaft is not.
+    pub lamp_standard: bool,
     /// The JS id (`overhead-pole:<segment>:support:<k>:<side>`, `overhead-pole:<node>:<corner>`, `distribution-pole:...`).
     pub id: String,
 }
@@ -211,6 +258,51 @@ pub struct OverheadTile {
     pub signs: Vec<SignAssembly>,
     pub corner_signs: Vec<CornerSign>,
     pub lanterns: Vec<Lantern>,
+}
+
+/// A district street light the furniture walk stood near a trolley support
+/// pole, stood on that pole's spot instead, so one standard is the lamp and
+/// holds the wires (`Overhead::lamp_moves`).
+#[derive(Clone, Copy, Debug)]
+pub struct LampMove {
+    /// Index into the ribbon's `furniture::EntryFurniture::items`.
+    pub item: usize,
+    /// The ribbon whose support pole it stands on (this ribbon, or a neighbour meeting it at a node or a plain joint).
+    pub pole_entry: u32,
+    /// Index into that ribbon's support poles.
+    pub pole: usize,
+    /// The pole's foot: where the lamp now stands.
+    pub to: [f64; 3],
+}
+
+static LAMP_STANDARDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Street lights share the trolley support poles (eo-app `--no-shared-poles`
+/// turns it off; the app sets it only when both the furniture lamps and the
+/// overhead poles are drawn). Off in the library unless set: a world without
+/// it plans what it always did.
+pub fn set_lamp_standards(on: bool) {
+    LAMP_STANDARDS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn lamp_standards() -> bool {
+    LAMP_STANDARDS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+static JOINT_DEDUPE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// One pole where two pieces of a street meet at a plain joint (no junction
+/// node): the higher-numbered piece stands no support station there when the
+/// lower-numbered one holds the wires within half a span, and its
+/// distribution poles keep the lower-quartile spacing from that piece's, as
+/// at a node (eo-app `--no-joint-dedupe` turns it off). Off in the library
+/// unless set.
+pub fn set_joint_dedupe(on: bool) {
+    JOINT_DEDUPE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn joint_dedupe() -> bool {
+    JOINT_DEDUPE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 // ---------------------------------------------------------------- JS data
@@ -736,6 +828,7 @@ pub struct Overhead {
     node_signal_cache: Mutex<HashMap<u32, Arc<Vec<Prop>>>>,
     tree_cache: Mutex<HashMap<u32, Arc<Vec<Prop>>>>,
     support_cache: Mutex<HashMap<u32, Arc<Supports>>>,
+    lamp_cache: Mutex<HashMap<u32, Arc<Vec<LampMove>>>>,
     rest_cache: Mutex<HashMap<u32, Arc<EntryRest>>>,
     node_cache: Mutex<HashMap<u32, Arc<NodePlan>>>,
     dist_raw_cache: Mutex<HashMap<u32, Arc<DistEntry>>>,
@@ -744,6 +837,10 @@ pub struct Overhead {
     input_ns: std::sync::atomic::AtomicU64,
     /// Per entry: its distribution poles and the wires it owns.
     dist_wire_cache: Mutex<HashMap<u32, Arc<(Vec<OverheadPole>, Vec<Wire>)>>>,
+    /// Per node: its junction (an index into `junctions`; u32::MAX: not signalised), and each
+    /// junction's nodes in the order they are offered its cabinet ([`one_cabinet`]).
+    junction_of: Vec<u32>,
+    junctions: Vec<Vec<u32>>,
     pub build_ms: f64,
 }
 
@@ -779,6 +876,53 @@ fn cached<K: std::hash::Hash + Eq + Copy, V>(m: &Mutex<HashMap<K, Arc<V>>>, k: K
         c.clear();
     }
     c.entry(k).or_insert(v).clone()
+}
+
+/// The signalised junctions: the signalised nodes joined by entries shorter than
+/// [`JUNCTION_LINK_M`] (both ends signalised) as one, each junction's nodes ordered by the
+/// highest street class they meet, then the most approaches, then index. Returns per node its
+/// junction (u32::MAX: not signalised) and the junctions.
+pub fn junctions(w: &PropsWorld) -> (Vec<u32>, Vec<Vec<u32>>) {
+    let plan = &w.street.plan;
+    let n = plan.nodes.len();
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn find(p: &mut [usize], mut i: usize) -> usize {
+        while p[i] != i {
+            p[i] = p[p[i]];
+            i = p[i];
+        }
+        i
+    }
+    for e in &plan.entries {
+        if let (Some((a, _)), Some((b, _))) = (e.approach_start, e.approach_end) {
+            if a != b && plan.nodes[a].signalised() && plan.nodes[b].signalised() && e.length < JUNCTION_LINK_M {
+                let (ra, rb) = (find(&mut parent, a), find(&mut parent, b));
+                parent[ra.max(rb)] = ra.min(rb);
+            }
+        }
+    }
+    let mut of = vec![u32::MAX; n];
+    let mut out: Vec<Vec<u32>> = vec![];
+    let mut root_of: HashMap<usize, u32> = HashMap::new();
+    for i in 0..n {
+        if !plan.nodes[i].signalised() {
+            continue;
+        }
+        let r = find(&mut parent, i);
+        let j = *root_of.entry(r).or_insert_with(|| {
+            out.push(vec![]);
+            out.len() as u32 - 1
+        });
+        of[i] = j;
+        out[j as usize].push(i as u32);
+    }
+    for j in &mut out {
+        j.sort_by(|&a, &b| {
+            let (na, nb) = (&plan.nodes[a as usize], &plan.nodes[b as usize]);
+            nb.max_class_rank.cmp(&na.max_class_rank).then(nb.approaches.len().cmp(&na.approaches.len())).then(a.cmp(&b))
+        });
+    }
+    (of, out)
 }
 
 fn street_way_id(street_id: Option<&str>) -> Option<u64> {
@@ -860,6 +1004,7 @@ impl Overhead {
             node_signal_cache: Mutex::new(HashMap::new()),
             tree_cache: Mutex::new(HashMap::new()),
             support_cache: Mutex::new(HashMap::new()),
+            lamp_cache: Mutex::new(HashMap::new()),
             rest_cache: Mutex::new(HashMap::new()),
             node_cache: Mutex::new(HashMap::new()),
             dist_raw_cache: Mutex::new(HashMap::new()),
@@ -867,8 +1012,11 @@ impl Overhead {
             inputs_cache: Mutex::new(HashMap::new()),
             input_ns: std::sync::atomic::AtomicU64::new(0),
             dist_wire_cache: Mutex::new(HashMap::new()),
+            junction_of: vec![],
+            junctions: vec![],
             build_ms: 0.0,
         };
+        (o.junction_of, o.junctions) = junctions(w);
         let (runs, links) = build_streetcar(&o.h, &o.js, w);
         o.streetcar = runs;
         o.links = links;
@@ -1215,8 +1363,10 @@ impl Overhead {
                         Model::SignalHead => t.hardware.push(HwIn { a: [p.pos[0], p.pos[2]], b: [p.pos[0], p.pos[2]], y0: p.pos[1] - 0.68, y1: p.pos[1] + 0.70, radius: 0.36 }),
                         Model::MastArm => {
                             let l = p.scale[0] as f64;
+                            // a rising arm (`signals::ArmClass`, `--no-arm-rise` off) reaches its rise higher at its end
+                            let rise = (p.variant as usize).checked_sub(1).and_then(|c| w.std.signal_arms.get(c)).map_or(0.0, |c| c.rise);
                             if l > 0.1 {
-                                t.hardware.push(HwIn { a: [p.pos[0], p.pos[2]], b: [p.pos[0] + p.yaw.cos() * l, p.pos[2] - p.yaw.sin() * l], y0: p.pos[1] - 0.12, y1: p.pos[1] + 0.12, radius: 0.1 });
+                                t.hardware.push(HwIn { a: [p.pos[0], p.pos[2]], b: [p.pos[0] + p.yaw.cos() * l, p.pos[2] - p.yaw.sin() * l], y0: p.pos[1] - 0.12, y1: p.pos[1] + rise + 0.12, radius: 0.1 });
                             }
                         }
                         _ => {}
@@ -1326,6 +1476,132 @@ impl Overhead {
         cached(&self.support_cache, ei, 16384, || self.plan_supports(w, ei as usize))
     }
 
+    /// The district lights of one ribbon that stand on a trolley support pole's
+    /// spot instead of beside it, so one standard is the lamp and holds the
+    /// wires. SF Better Streets Plan, Utilities, Consolidation: "Street
+    /// lighting, traffic signal, and MUNI catenary poles should share poles
+    /// wherever possible" (https://sfbetterstreets.org/design-guidelines/utilities/); SF Public Works mounts luminaires on trolley poles
+    /// (the trolley-pole mounts of `streetlight-sf-residential-pole`). A lamp
+    /// takes the nearest free support pole on its own side of the pole's ribbon
+    /// (this one's, or a neighbour's at a shared node or plain joint, claimed in
+    /// ribbon order) within the lamp walk's own nudge reach (`floor(spacing /
+    /// 3)`, as far as `placeStreetLights` already moves a lamp off its station), when the lamp
+    /// standard stands taller than every wire seat on the pole and the spot
+    /// keeps the lamp kind's gap (`STREET_FURNITURE_KINDS[].gap`, the walk's
+    /// least spacing of two of a kind) from every other street light.
+    pub fn lamp_moves(&self, w: &PropsWorld, ei: u32) -> Arc<Vec<LampMove>> {
+        cached(&self.lamp_cache, ei, 16384, || self.plan_lamp_moves(w, ei as usize))
+    }
+
+    fn plan_lamp_moves(&self, w: &PropsWorld, ei: usize) -> Vec<LampMove> {
+        let f = w.furniture();
+        let Some(spacing) = f.lamp_spacing(w, ei) else { return vec![] };
+        let reach = (spacing / 3.0).floor();
+        // The poles a lamp of this ribbon may take: its own, then each lower-numbered
+        // neighbour's that the neighbour's lamps (and those of its other neighbours numbered
+        // below this ribbon) have not taken. A pole is claimed in ribbon order, never twice.
+        let mut cands: Vec<Cand> = vec![];
+        self.lamp_cands(w, ei, &HashSet::new(), &mut cands);
+        for c in self.lamp_neighbours(w, ei).into_iter().filter(|&c| c < ei) {
+            let mut claimed: HashSet<usize> = HashSet::new();
+            for x in std::iter::once(c).chain(self.lamp_neighbours(w, c).into_iter().filter(|&x| x > c && x < ei)) {
+                claimed.extend(self.lamp_moves(w, x as u32).iter().filter(|m| m.pole_entry as usize == c).map(|m| m.pole));
+            }
+            self.lamp_cands(w, c, &claimed, &mut cands);
+        }
+        if cands.is_empty() {
+            return vec![];
+        }
+        // Every street light near the poles, where the walks stood them.
+        let mut near: Vec<u32> = vec![];
+        for p in &cands {
+            let key = eo_street::tile_key(p.pos[0], p.pos[2]);
+            for dz in -1..=1 {
+                for dx in -1..=1 {
+                    if let Some(t) = w.street.tiles.get(&(key.0 + dx, key.1 + dz)) {
+                        near.extend(t.spans.iter().map(|s| s.0));
+                    }
+                }
+            }
+        }
+        near.sort_unstable();
+        near.dedup();
+        let mut lights: Vec<(u32, usize, [f64; 2])> = vec![];
+        for &o in &near {
+            let items = f.entry(w, o as usize);
+            lights.extend(items.items.iter().enumerate().filter(|(_, it)| f.is_street_light(it.kind)).map(|(ii, it)| (o, ii, [it.x, it.z])));
+        }
+        let fe = f.entry(w, ei);
+        let mut taken = vec![false; cands.len()];
+        let mut out = vec![];
+        for (ii, it) in fe.items.iter().enumerate() {
+            if it.entry != ei as u32 || !f.is_street_light(it.kind) {
+                continue;
+            }
+            let tall = f.kinds[it.kind as usize].height * it.height_scale;
+            let gap = f.kinds[it.kind as usize].gap;
+            let mut best: Option<(f64, usize)> = None;
+            for (ci, c) in cands.iter().enumerate() {
+                if taken[ci] || c.seat > c.pos[1] + tall - SEAT_UNDER_TOP_M {
+                    continue;
+                }
+                let d = (c.pos[0] - it.x).hypot(c.pos[2] - it.z);
+                if d > reach || best.is_some_and(|b| d >= b.0) {
+                    continue;
+                }
+                // the lamp on the pole's side of the pole's own ribbon.
+                let side = if c.entry == ei { it.side as f64 } else { crate::project(&w.street.plan.entries[c.entry], it.x, it.z).map(|r| r.2.signum()).unwrap_or(0.0) };
+                if side != c.side {
+                    continue;
+                }
+                if lights.iter().any(|&(o, oi, q)| !(o as usize == ei && oi == ii) && (q[0] - c.pos[0]).hypot(q[1] - c.pos[2]) < gap) {
+                    continue;
+                }
+                best = Some((d, ci));
+            }
+            if let Some((_, ci)) = best {
+                taken[ci] = true;
+                let c = &cands[ci];
+                out.push(LampMove { item: ii, pole_entry: c.entry as u32, pole: c.pole, to: c.pos });
+            }
+        }
+        out
+    }
+
+    /// One ribbon's support poles as lamp standards to be: each pole's side of
+    /// the ribbon and its highest wire seat (the span and bracket ends at its shaft).
+    fn lamp_cands(&self, w: &PropsWorld, ei: usize, claimed: &HashSet<usize>, out: &mut Vec<Cand>) {
+        let sup = self.supports(w, ei as u32);
+        let e = &w.street.plan.entries[ei];
+        for (pi, p) in sup.poles.iter().enumerate() {
+            if claimed.contains(&pi) {
+                continue;
+            }
+            let side = crate::project(e, p.pos[0], p.pos[2]).map(|r| r.2.signum()).unwrap_or(0.0);
+            let seat = sup
+                .wires
+                .iter()
+                .flat_map(|wr| [wr.points[0], wr.points[wr.points.len() - 1]])
+                .filter(|q| (q[0] as f64 - p.pos[0]).hypot(q[2] as f64 - p.pos[2]) < SEAT_REACH_M)
+                .map(|q| q[1] as f64)
+                .fold(f64::NEG_INFINITY, f64::max);
+            out.push(Cand { entry: ei, pole: pi, pos: p.pos, side, seat });
+        }
+    }
+
+    /// The ribbons a lamp may cross to a neighbour's pole from: those meeting this one at an
+    /// end node, and those continuing it through a plain joint.
+    fn lamp_neighbours(&self, w: &PropsWorld, ei: usize) -> Vec<usize> {
+        let e = &w.street.plan.entries[ei];
+        let mut v: Vec<usize> = continuations(w, ei).into_iter().flatten().collect();
+        for (ni, _) in [e.approach_start, e.approach_end].into_iter().flatten() {
+            v.extend(w.street.plan.nodes[ni].approaches.iter().map(|a| a.entry).filter(|&a| a != ei));
+        }
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
     fn plan_supports(&self, w: &PropsWorld, ei: usize) -> Supports {
         let h = &self.h;
         let mut out = Supports { contact: vec![], poles: vec![], wires: vec![], signs: vec![] };
@@ -1375,6 +1651,16 @@ impl Overhead {
         }
         if runs.is_empty() {
             return out;
+        }
+        // At a plain joint (one street's pieces meeting end to end, no junction node) both
+        // pieces would stand an end station on the same spot: the lower-numbered piece's holds
+        // the wires there, and this one stands none when that piece has a support pole within
+        // half a span of the joint.
+        let mut joint_held = [false, false];
+        for (end, c) in if joint_dedupe() { continuations(w, ei) } else { [None, None] }.into_iter().enumerate() {
+            let Some(c) = c.filter(|&c| c < ei) else { continue };
+            let p = if end == 0 { e.points[0] } else { e.points[e.points.len() - 1] };
+            joint_held[end] = self.supports(w, c as u32).poles.iter().any(|q| (q.pos[0] - p[0]).hypot(q.pos[2] - p[1]) < h.support_spacing / 2.0);
         }
         let spans = 1usize.max((run / h.support_spacing).round() as usize);
         let span_length = run / spans as f64;
@@ -1429,7 +1715,7 @@ impl Overhead {
                 }
             }
         }
-        self.plan_support_poles(w, ei, e, &inputs, run_start, run_end, spans, span_length, &runs, &mut out);
+        self.plan_support_poles(w, ei, e, &inputs, run_start, run_end, spans, span_length, &runs, joint_held, &mut out);
         out
     }
 
@@ -1515,7 +1801,7 @@ impl Overhead {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn plan_support_poles(&self, w: &PropsWorld, ei: usize, e: &Entry, inputs: &Inputs, run_start: f64, run_end: f64, spans: usize, span_length: f64, runs: &[(f64, Vec<f64>, bool)], out: &mut Supports) {
+    fn plan_support_poles(&self, w: &PropsWorld, ei: usize, e: &Entry, inputs: &Inputs, run_start: f64, run_end: f64, spans: usize, span_length: f64, runs: &[(f64, Vec<f64>, bool)], joint_held: [bool; 2], out: &mut Supports) {
         let h = &self.h;
         let bands = [self.fband(w, e, 1.0), self.fband(w, e, -1.0)];
         let ramps = segment_kerb_ramps(e, &w.street.o);
@@ -1528,6 +1814,9 @@ impl Overhead {
         for k in 0..=spans {
             let at_start = k == 0;
             let at_end = k == spans;
+            if (at_start && joint_held[0]) || (at_end && joint_held[1]) {
+                continue;
+            }
             if at_start && e.approach_start.is_some_and(|(ni, _)| self.node_webbed(w, ni)) {
                 continue;
             }
@@ -1650,6 +1939,7 @@ impl Overhead {
                     radius_base: if wood { h.wood_r_base } else { h.pole_r_base },
                     radius_top: if wood { h.wood_r_top } else { h.pole_r_top },
                     arm: None,
+                    lamp_standard: false,
                     id: id.clone(),
                 });
                 // A regulation stack strapped to the pole.
@@ -1780,6 +2070,7 @@ impl Overhead {
                         radius_base: h.pole_r_base,
                         radius_top: h.pole_r_top,
                         arm: None,
+                        lamp_standard: false,
                         id: format!("overhead-pole:{}:{}", n.id, idx),
                     });
                 }
@@ -1799,9 +2090,25 @@ impl Overhead {
         if n.signalised() {
             let mut all_poles = standing;
             all_poles.extend(out.poles.iter().map(|p| [p.pos[0], p.pos[2]]));
-            out.cabinet = self.plan_cabinet(w, ni, &inputs, &all_poles);
+            out.cabinet = if one_cabinet() { self.junction_cabinet(w, ni, &inputs, &all_poles) } else { self.plan_cabinet(w, ni, &inputs, &all_poles) };
         }
         out
+    }
+
+    /// (`--no-one-cabinet` off) The junction's one cabinet: the node's own unless a node offered
+    /// it earlier ([`junctions`]) stands it.
+    fn junction_cabinet(&self, w: &PropsWorld, ni: usize, inputs: &Inputs, poles: &[[f64; 2]]) -> Option<Cabinet> {
+        if let Some(&j) = self.junction_of.get(ni).filter(|&&j| j != u32::MAX) {
+            for &nj in &self.junctions[j as usize] {
+                if nj as usize == ni {
+                    break;
+                }
+                if self.node(w, nj).cabinet.is_some() {
+                    return None;
+                }
+            }
+        }
+        self.plan_cabinet(w, ni, inputs, poles)
     }
 
     fn anchor_for(&self, w: &PropsWorld, ni: usize, ci: usize, inputs: &Inputs, poles: &[[f64; 2]]) -> Option<Anchor> {
@@ -1919,6 +2226,16 @@ impl Overhead {
             pb.class_rank.cmp(&pa.class_rank).then_with(|| if self.key[pa.entry] < self.key[pb.entry] { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater })
         });
         let [cw, cd, _] = h.cabinet;
+        let model = cabinet_model();
+        // (the model) the walk's furniture on the junction's approaches, where it stands
+        let walk_props: Vec<[f64; 2]> = if model.is_some() {
+            let mut es: Vec<usize> = n.approaches.iter().map(|a| a.entry).collect();
+            es.sort_unstable();
+            es.dedup();
+            es.iter().flat_map(|&e| w.entry_props(e as u32).props.iter().map(|p| [p.pos[0], p.pos[2]]).collect::<Vec<_>>()).collect()
+        } else {
+            vec![]
+        };
         for ai in ordered {
             let app = &n.approaches[ai];
             let e = &w.street.plan.entries[app.entry];
@@ -1933,14 +2250,29 @@ impl Overhead {
                 sides.swap(0, 1);
             }
             for (sign, walk) in sides {
-                if walk < h.cabinet_footway_min {
-                    continue;
-                }
-                let lateral = half + (h.cabinet_kerb_gap + cd / 2.0).max(walk * 0.5).min(walk - 0.35 - cd / 2.0);
+                // (`--no-cabinet-model` off) along the kerb, its back the edge zone's offset from
+                // the kerb face, the throughway clear behind it; the JS box across the walk else
+                let (lateral, hw, hd) = match model {
+                    Some([mw, md, _, _, po]) => {
+                        let deep = md + 2.0 * po;
+                        if walk < w.std.kerb_vertical_offset + deep + w.std.throughway_min {
+                            continue;
+                        }
+                        (half + w.std.kerb_vertical_offset + deep / 2.0, deep / 2.0, mw / 2.0 + po)
+                    }
+                    None => {
+                        if walk < h.cabinet_footway_min {
+                            continue;
+                        }
+                        (half + (h.cabinet_kerb_gap + cd / 2.0).max(walk * 0.5).min(walk - 0.35 - cd / 2.0), cw / 2.0, cd / 2.0)
+                    }
+                };
                 if lateral <= half {
                     continue;
                 }
-                for &station in &h.cabinet_stations {
+                // (the model) further along the block where the JS's stations find no room
+                let more: &[f64] = if model.is_some() { &CABINET_MORE_STATIONS_M } else { &[] };
+                for &station in h.cabinet_stations.iter().chain(more) {
                     let along = trim + station;
                     if along > run_length - 1.5 {
                         break;
@@ -1954,7 +2286,6 @@ impl Overhead {
                         continue;
                     }
                     let (ux, uz) = (app.u[0] * sign, app.u[1] * sign);
-                    let (hw, hd) = (cw / 2.0, cd / 2.0);
                     let corners = [(-hw, -hd), (-hw, hd), (hw, -hd), (hw, hd)];
                     let pt = |a: f64, f: f64| (x - uz * a + ux * f, z + ux * a + uz * f);
                     if w.roadway.hit(x, z, 0.05).is_some() || corners.iter().any(|&(a, f)| {
@@ -1969,7 +2300,37 @@ impl Overhead {
                     }) {
                         continue;
                     }
-                    return Some(Cabinet { pos: [x, self.footway(w, x, z), z], yaw: ux.atan2(uz), size: h.cabinet, node: ni as u32 });
+                    // (the model) nothing standing on its pad: a drawn sign post or tree, nor the
+                    // walk's furniture of the junction's approaches (a bollard, a hydrant, a meter)
+                    if model.is_some() {
+                        let on_pad = |px: f64, pz: f64, r: f64| {
+                            let (dx, dz) = (px - x, pz - z);
+                            (dx * -uz + dz * ux).abs() < hw + r && (dx * ux + dz * uz).abs() < hd + r
+                        };
+                        let mut blocked = false;
+                        inputs.drawn_grid.near(x, z, hw.hypot(hd) + 1.0, |i| {
+                            let it = inputs.drawn[i];
+                            if on_pad(it.x, it.z, if it.radius.is_finite() { it.radius } else { 0.3 } + CABINET_PROP_GAP_M) {
+                                blocked = true;
+                            }
+                        });
+                        if blocked || walk_props.iter().any(|p| on_pad(p[0], p[1], CABINET_PROP_GAP_M + 0.2)) {
+                            continue;
+                        }
+                    }
+                    // (the model) its back the edge zone's offset from any kerb (a corner's other
+                    // street too), within the kerb line's few centimetres of drawing tolerance
+                    if model.is_some() && [-hd, 0.0, hd].iter().any(|&f| {
+                        let (qx, qz) = pt(-hw, f);
+                        w.roadway.hit(qx, qz, w.std.kerb_vertical_offset - CABINET_KERB_TOLERANCE_M).is_some()
+                    }) {
+                        continue;
+                    }
+                    return Some(match model {
+                        // its doors (local +Z) away from the kerb, its width along it
+                        Some([mw, md, mh, _, _]) => Cabinet { pos: [x, self.footway(w, x, z), z], yaw: (-uz).atan2(ux), size: [mw, md, mh], node: ni as u32 },
+                        None => Cabinet { pos: [x, self.footway(w, x, z), z], yaw: ux.atan2(uz), size: h.cabinet, node: ni as u32 },
+                    });
                 }
             }
         }
@@ -2270,6 +2631,12 @@ impl Overhead {
                 }
             }
         }
+        // and the pieces it continues through a plain joint (no node to meet at).
+        for c in if joint_dedupe() { continuations(w, ei) } else { [None, None] }.into_iter().flatten() {
+            if self.dist[c].is_some() && !v.contains(&c) {
+                v.push(c);
+            }
+        }
         v
     }
 
@@ -2380,6 +2747,7 @@ impl Overhead {
                     radius_base: shaft,
                     radius_top: shaft,
                     arm: Some(PoleArm { pos: [p.x + p.rx * shaft, p.base_y + mount, p.z + p.rz * shaft], yaw: p.yaw }),
+                    lamp_standard: false,
                     id: p.id.clone(),
                 });
             }
@@ -2550,11 +2918,18 @@ impl Overhead {
         nodes.sort_unstable();
         nodes.dedup();
         let take_wires = |src: &[Wire], out: &mut Vec<Wire>| out.extend(src.iter().filter(|wr| owner_of(wr) == key).cloned());
+        let standards = lamp_standards();
         for &ei in &entries {
             let s = self.supports(w, ei);
             take_wires(&s.contact, &mut out.wires);
             take_wires(&s.wires, &mut out.wires);
-            out.poles.extend(s.poles.iter().filter(|p| inside(p.pos[0], p.pos[2])).cloned());
+            // the lamps that stand on this ribbon's poles: its own, and its higher-numbered neighbours'.
+            let moves: Vec<Arc<Vec<LampMove>>> = if standards && !s.poles.is_empty() {
+                std::iter::once(ei as usize).chain(self.lamp_neighbours(w, ei as usize).into_iter().filter(|&x| x > ei as usize)).map(|x| self.lamp_moves(w, x as u32)).collect()
+            } else {
+                vec![]
+            };
+            out.poles.extend(s.poles.iter().enumerate().filter(|(_, p)| inside(p.pos[0], p.pos[2])).map(|(pi, p)| OverheadPole { lamp_standard: moves.iter().any(|m| m.iter().any(|m| m.pole_entry == ei && m.pole == pi)), ..p.clone() }));
             out.signs.extend(s.signs.iter().filter(|p| inside(p.pos[0], p.pos[2])).cloned());
             let r = self.rest(w, ei);
             out.signs.extend(r.picket.iter().filter(|p| inside(p.pos[0], p.pos[2])).cloned());
@@ -2603,6 +2978,60 @@ struct FBand {
     walk: f64,
     furnish_inner: f64,
     furnish_outer: f64,
+}
+
+/// A support pole a street light may stand on (`Overhead::lamp_moves`).
+struct Cand {
+    entry: usize,
+    pole: usize,
+    pos: [f64; 3],
+    side: f64,
+    seat: f64,
+}
+
+/// A wire end within this of a pole's axis is seated on that pole (a span or bracket wire ends
+/// at the shaft; the hangers stand over the contact wires, a lane or more away).
+const SEAT_REACH_M: f64 = 0.35;
+/// The highest wire seat stays this far under a lamp standard's top (the luminaire arm's root).
+const SEAT_UNDER_TOP_M: f64 = 0.3;
+
+/// Two pieces of one street meet at a plain joint when an end of each lies within this of the other's.
+const JOINT_M: f64 = 0.05;
+
+/// The pieces continuing a ribbon through a plain joint (an end with no
+/// junction node, where another ribbon's end without one lies within
+/// `JOINT_M`), at its start and its end: the lowest-numbered such piece.
+fn continuations(w: &PropsWorld, ei: usize) -> [Option<usize>; 2] {
+    let e = &w.street.plan.entries[ei];
+    let mut out = [None, None];
+    if e.points.len() < 2 {
+        return out;
+    }
+    for (end, open) in [(0usize, e.approach_start.is_none()), (1, e.approach_end.is_none())] {
+        if !open {
+            continue;
+        }
+        let p = if end == 0 { e.points[0] } else { e.points[e.points.len() - 1] };
+        let key = eo_street::tile_key(p[0], p[1]);
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                let Some(t) = w.street.tiles.get(&(key.0 + dx, key.1 + dz)) else { continue };
+                for &(c, _) in &t.spans {
+                    let c = c as usize;
+                    let ce = &w.street.plan.entries[c];
+                    if c == ei || ce.points.len() < 2 {
+                        continue;
+                    }
+                    let (a, b) = (ce.points[0], ce.points[ce.points.len() - 1]);
+                    let meets = (ce.approach_start.is_none() && (a[0] - p[0]).hypot(a[1] - p[1]) < JOINT_M) || (ce.approach_end.is_none() && (b[0] - p[0]).hypot(b[1] - p[1]) < JOINT_M);
+                    if meets && out[end].is_none_or(|o| c < o) {
+                        out[end] = Some(c);
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// A wire's owner tile: the midpoint of its end points.

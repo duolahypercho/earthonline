@@ -40,6 +40,8 @@ const HL_ROOF: u32 = 2u;
 const HL_DISTRICT: u32 = 4u;
 // a tower's wall (hlod_bake.rs VF_TOWER).
 const HL_TOWER: u32 = 8u;
+// a residential building's wall (hlod_bake.rs VF_RESIDENTIAL, `#109`).
+const HL_RESIDENTIAL: u32 = 128u;
 // a district's glass by day, the room seen through the pane (hlod_bake.rs GLASS_ROOM, glass_body).
 const HL_ROOM: vec3<f32> = vec3<f32>(0.022, 0.026, 0.030);
 // How much nearer the eye the far level draws in a cross-fade with a near
@@ -107,7 +109,15 @@ fn hlod_vs(
         // The near level draws whole in this band: the far pixels kept here win
         // the depth test, drawn a little nearer the eye (the same screen point).
         let to_eye = frame.cam_pos.xyz - pos;
+// sf:AAA_BUILDINGS-
         p = pos + to_eye * min(HL_FADE_BIAS_M / max(length(to_eye), 1.0), 0.5);
+// sf:end
+// sf:AAA_BUILDINGS+
+        // Cut near-fade pull from 2.5 m -> 0.38 m so fading HLOD cells clear Kit R2 trims
+        // without punching through touching front row houses or stamping 2.5 m SSAO depth cliffs.
+        let fade_bias = select(HL_FADE_BIAS_M, 0.38, SF_AAA_BRDF);
+        p = pos + to_eye * min(fade_bias / max(length(to_eye), 1.0), 0.5);
+// sf:end
     }
     out.clip = frame.view_proj * vec4<f32>(p, 1.0);
     out.world = pos;
@@ -130,7 +140,13 @@ fn hlod_vs(
 
 fn hl_keep(in: HlOut) {
     if (in.fade.y > 0.5) {
-        let n = hlod_dither(floor(in.clip.xy));
+        var dither_p = floor(in.clip.xy);
+// sf:AAA_BUILDINGS+
+        // Temporally jitter cross-fade dither (matching hlod_trees.wgsl) so TAA resolves
+        // Kit R2 <-> HLOD Cell and Cell <-> District transitions smoothly with zero static zebra stipple.
+        dither_p = dither_p + select(vec2<f32>(0.0), vec2<f32>(5.588238 * look.post2.w), SF_AAA_BRDF);
+// sf:end
+        let n = hlod_dither(dither_p);
         if (in.fade.y < 1.5) {
             if (n >= in.fade.x) {
                 discard;
@@ -213,6 +229,11 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
     let cell = i32(floor(along / bay));
     let hb = hl_h3(g, 0, 11u);
     let base = skyu.bloom_w2.z * 25.0 / LK_PI * dusk;
+// sf:AAA_BUILDINGS+
+    if (tower && SF_AAA_DETAIL) {
+        return hl_aaa_tower_night(in, world, n, glass, fx, fy, bay, storey, grid.z, along, fl, cell, g, gf, hb, base);
+    }
+// sf:end
     if (tower && FL_TOWER_NIGHT) {
         return hl_tower_night(in, world, n, glass, fx, fy, bay, storey, grid.z, along, fl, cell, g, gf, hb, base);
     }
@@ -241,7 +262,37 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
     let h = hl_h3(gf, fl * 977 + cell, 8u);
     let lit = step(h, occ);
     let cool = step(1.0 - look.rooms_env.w, hl_h3(gf, fl * 977 + cell, 9u));
-    let col = select(vec3<f32>(1.0, 0.62, 0.34), vec3<f32>(0.86, 0.93, 1.0), cool > 0.5);
+    var col = select(vec3<f32>(1.0, 0.62, 0.34), vec3<f32>(0.86, 0.93, 1.0), cool > 0.5);
+// sf:AAA_BUILDINGS+
+    if (SF_AAA_DETAIL) {
+        let is_res = (in.flags & HL_RESIDENTIAL) != 0u;
+        let rh = hl_h3(gf, fl * 977 + cell, 9u);
+        if (is_res) {
+            // SF hillside rowhouses & apartments (`05a`/`06a`/`09`/`10`): rich cozy 2300K-2800K golden amber
+            // + 3400K soft white + ~20% crisp 6200K-7200K cool blue-cyan TV/study rooms.
+            if (rh < 0.42) {
+                col = vec3<f32>(1.28, 0.56, 0.16);
+            } else if (rh < 0.66) {
+                col = vec3<f32>(1.12, 0.76, 0.40);
+            } else if (rh < 0.81) {
+                col = vec3<f32>(0.98, 0.94, 0.88);
+            } else {
+                col = vec3<f32>(0.54, 0.82, 1.28);
+            }
+        } else {
+            // Low/mid-rise commercial, retail & civic: crisp 5200K-6200K clean white/mint + warm cafés/lobbies.
+            if (rh < 0.38) {
+                col = vec3<f32>(0.68, 0.90, 1.24);
+            } else if (rh < 0.66) {
+                col = vec3<f32>(0.96, 0.99, 1.04);
+            } else if (rh < 0.90) {
+                col = vec3<f32>(1.20, 0.68, 0.24);
+            } else {
+                col = vec3<f32>(0.42, 0.96, 1.12);
+            }
+        }
+    }
+// sf:end
     let a = smoothstep(0.25, 0.6, max(fx / bay, fy / storey));
     let k = mix(lit, occ, a);
     let level = 0.6 + 0.8 * hl_h3(gf, fl * 977 + cell, 10u);
@@ -322,6 +373,127 @@ fn hl_tower_night(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, fx: f32
     return col * ((glass * k * profile + spandrel) * level * base);
 }
 
+// sf:AAA_BUILDINGS+
+// (`--aaa-buildings` / `SF_AAA_DETAIL`) Photoreal SF night tower office lighting:
+// replaces the full-width zebra stripes produced when `hl_tower_night` collapses
+// `v_seg -> v_floor` at 1.5-3 km with three coherent horizontal frequencies (macro
+// tenant wings 14-28 m, mid office clusters 5.5-11.5 m, individual bays + dark
+// structural column/core breaks), dark mechanical floors matching daytime louvers,
+// crisp dark floor spandrels, warm lobby/podium ground glows, and rich 2700K-5200K
+// color temperature & brightness diversity.
+fn hl_aaa_tower_night(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, fx: f32, fy: f32, bay: f32, storey: f32, phase: f32, along: f32, fl: i32, cell: i32, g: u32, gf: u32, hb: f32, base: f32) -> vec3<f32> {
+    let bt = hl_group_top[in.group];
+    let b_h = max(bt.y - bt.x, 0.0);
+    let y_rel = max(world.y - bt.x, 0.0);
+    let depth_top = max(bt.y - world.y, 0.0);
+    // Keep mechanical/refuge floors & crown screens dark (aligned with daytime louvers).
+    if (b_h > 40.0) {
+        let m_per = mix(52.0, 74.0, hl_h3(g, 0, 41u));
+        let m_h = mix(5.2, 7.6, hl_h3(g, 0, 42u));
+        let m_mid = hl_pulse(y_rel / m_per + 0.35, m_h / m_per, fy / m_per)
+            * smoothstep(16.0, 30.0, y_rel) * smoothstep(5.0, 14.0, depth_top);
+        let crown_h = clamp(b_h * mix(0.035, 0.072, hl_h3(g, 0, 43u)), 4.2, 10.5);
+        let m_crown = smoothstep(crown_h + fy, crown_h - fy, depth_top) * step(46.0, b_h);
+        if (max(m_mid, m_crown) > 0.55) {
+            return vec3<f32>(0.0);
+        }
+    }
+    let share = clamp(look.rooms_work.x / 0.7, 0.0, 1.0);
+    let act = 0.25 + 0.75 * hb;
+    let p_lit = clamp(0.14 + share * 0.52 * act + 0.14 * hb * hb, 0.08, 0.50);
+    let p_dim = clamp(0.24 * (1.0 - p_lit), 0.10, 0.28);
+    let fh = hl_h3(g, fl, 1u);
+    let floor_lit = step(fh, p_lit);
+    let floor_dim = step(p_lit, fh) * step(fh, p_lit + p_dim);
+    // Macro tenant wings (14-28 m): survive out to ~4 km so towers never turn into solid zebra bars.
+    let wing_len = mix(14.0, 28.0, hl_h3(g, fl, 61u));
+    let wing_pos = along / wing_len + hl_h3(gf, fl, 62u) * 3.7;
+    let wing_id = i32(floor(wing_pos));
+    let wk = fl * 89 + wing_id;
+    let wing_h = hl_h3(gf, wk, 63u);
+    let wing_lit = floor_lit * step(wing_h, mix(0.36, 0.62, hb)) + floor_dim * step(wing_h, 0.26);
+    // Mid office suite clusters (5.5-11.5 m) inside each wing.
+    let seg_len = mix(5.5, 11.5, hl_h3(g, fl, 2u));
+    let seg_pos = along / seg_len + hl_h3(gf, fl, 3u) * 5.3;
+    let seg_id = i32(floor(seg_pos));
+    let sk = fl * 131 + seg_id;
+    let seg_h = hl_h3(gf, sk, 4u);
+    let seg_lit = wing_lit * step(seg_h, 0.72)
+        + (1.0 - wing_lit) * (floor_lit * step(seg_h, 0.14) + (1.0 - floor_lit) * step(seg_h, 0.045));
+    // Structural dark vertical core/column breaks every 7-11 bays + per-bay occupancy.
+    let core_pitch = mix(7.0, 11.0, hl_h3(g, 0, 64u));
+    let core_u = abs(fract(along / (bay * core_pitch) + hl_h3(gf, 0, 65u)) - 0.5) * 2.0;
+    let core_dark = smoothstep(0.06, 0.16, core_u);
+    let wh = hl_h3(gf, fl * 977 + cell, 5u);
+    let win_on = (seg_lit * step(wh, 0.84) + (1.0 - seg_lit) * step(wh, 0.025)) * mix(0.28, 1.0, core_dark);
+    let a_win = smoothstep(0.25, 0.65, fx / bay);
+    let a_seg = smoothstep(0.35, 0.90, fx / seg_len);
+    let a_wing = smoothstep(0.75, 1.55, fx / wing_len);
+    let a_fl = smoothstep(0.65, 1.35, fy / storey);
+    let v_seg = seg_lit * 0.84 + (1.0 - seg_lit) * 0.025;
+    let v_wing = wing_lit * 0.54 + (1.0 - wing_lit) * (floor_lit * 0.11 + 0.032);
+    let v_floor = (floor_lit * 0.32 + floor_dim * 0.11 + 0.028) * mix(0.55, 1.15, hl_h3(gf, fl, 66u));
+    let v_bld = p_lit * 0.32 + p_dim * 0.11 + 0.028;
+    var k = mix(mix(mix(win_on, v_seg, a_win), v_wing, a_seg), v_floor, a_wing);
+    k = mix(k, v_bld, a_fl);
+    // Warm inviting ground-floor lobby & podium glow (bottom 9 m).
+    let lobby = (1.0 - smoothstep(4.5, 10.5, y_rel)) * step(22.0, b_h);
+    // Interior ceiling/desk luminance profile & crisp dark floor spandrels (zero wall-wash smearing).
+    let up = fract(world.y / storey - phase);
+    let v = clamp(up / 0.58, 0.0, 1.0);
+    let ceiling = 0.55 + 0.55 * smoothstep(0.48, 0.96, v);
+    let desks = mix(0.42 + 0.28 * hl_h3(gf, fl * 977 + cell, 13u), 1.0, smoothstep(0.18, 0.42, v));
+    let blind_to = select(0.0, mix(0.25, 0.78, hl_h3(gf, sk, 14u)), hl_h3(gf, sk, 15u) < 0.42);
+    var profile = mix(ceiling * desks, 0.34, step(1.0 - blind_to, v));
+    let slab = smoothstep(0.58, 0.66, up) * (1.0 - smoothstep(0.96, 1.0, up));
+    let slab_fade = 1.0 - smoothstep(0.30, 0.85, fy / storey);
+    profile = profile * mix(1.0, 0.06, slab * slab_fade);
+    profile = mix(profile, 0.54, smoothstep(0.18, 0.55, fy / storey));
+    // Authentic multi-temperature SF night tower palette using `HL_RESIDENTIAL` (`#109`) + `mat_cls`:
+    // FiDi glass/tech towers glow crisp 5500K-6500K ice-white/cyan + 4000K corporate + warm corners;
+    // stone/precast corporate towers balance clean white & warm gold; residential high-rises glow
+    // cozy 2400K-2900K golden amber + cool 6400K TV/study rooms.
+    let is_res = (in.flags & HL_RESIDENTIAL) != 0u;
+    let mcls_n = (in.flags >> 4u) & 7u;
+    let bld_type = hl_h3(g, 0, 71u);
+    let temp_h = mix(hl_h3(gf, sk, 7u), hl_h3(gf, wk, 67u), a_seg);
+    let c_ice = vec3<f32>(0.54, 0.84, 1.30);
+    let c_cool = vec3<f32>(0.76, 0.94, 1.18);
+    let c_neut = vec3<f32>(0.97, 0.98, 1.02);
+    let c_warm = vec3<f32>(1.14, 0.74, 0.36);
+    let c_amber = vec3<f32>(1.30, 0.56, 0.16);
+    let c_teal = vec3<f32>(0.38, 0.94, 1.14);
+    var col = c_neut;
+    if (floor_dim > 0.5) {
+        col = select(c_warm, c_amber, temp_h < 0.55);
+    } else if (is_res) {
+        if (temp_h < 0.38) { col = c_amber; }
+        else if (temp_h < 0.64) { col = c_warm; }
+        else if (temp_h < 0.80) { col = c_neut; }
+        else { col = c_ice; }
+    } else if (mcls_n == 1u || mcls_n == 2u || bld_type < 0.42) {
+        if (temp_h < 0.34) { col = c_ice; }
+        else if (temp_h < 0.60) { col = c_cool; }
+        else if (temp_h < 0.78) { col = c_neut; }
+        else if (temp_h < 0.93) { col = c_warm; }
+        else { col = c_teal; }
+    } else {
+        if (temp_h < 0.26) { col = c_cool; }
+        else if (temp_h < 0.52) { col = c_neut; }
+        else if (temp_h < 0.78) { col = c_warm; }
+        else if (temp_h < 0.92) { col = c_amber; }
+        else { col = c_ice; }
+    }
+    let lobby_col = select(vec3<f32>(1.18, 0.74, 0.34), vec3<f32>(0.68, 0.92, 1.24), !is_res && bld_type < 0.35);
+    col = mix(col, lobby_col, lobby * 0.75);
+    let s_lvl = mix(0.28, 1.08, hl_h3(gf, sk, 12u) * (0.55 + 0.45 * hl_h3(gf, wk, 68u)))
+        * mix(1.0, 0.34, floor_dim);
+    let level = mix(s_lvl, 0.52, a_wing) * mix(0.62, 0.92, lobby);
+    let k_tot = max(k * profile, lobby * 0.40 * (0.65 + 0.35 * hl_h3(gf, cell, 69u)));
+    return col * (glass * k_tot * level * base);
+}
+// sf:end
+
 // (`--tower-crowns`, hlod.rs `tower_crowns`) a tall tower's crown at night:
 // most towers over `HL_CROWN_MIN_M` floodlight their top storeys from a setback
 // (brightest low in the band, fading up it), in warm or cool white, a few in
@@ -364,6 +536,16 @@ fn hl_tower_crown(in: HlOut, world: vec3<f32>, n: vec3<f32>, fy: f32, base: f32)
     let cover2 = max(0.0, min(4.0 + 0.5 * led_w, hi) - max(4.0 - 0.5 * led_w, lo)) / max(fy, 1e-3);
     let led = led_on * min(cover1, 1.0);
     let led2 = led_on * step(hl_h3(g, 0, 25u), 0.4) * min(cover2, 1.0);
+// sf:AAA_BUILDINGS+
+    if (SF_AAA_DETAIL) {
+        var col_a = vec3<f32>(1.18, 0.76, 0.36); // warm golden crown
+        if (roll > 0.36) { col_a = vec3<f32>(0.82, 0.93, 1.12); } // crisp 5500K white
+        if (roll > 0.64) { col_a = vec3<f32>(0.24, 0.58, 1.32); } // electric sapphire
+        if (roll > 0.82) { col_a = vec3<f32>(0.22, 1.05, 0.86); } // vivid cyan-teal
+        if (roll > 0.92) { col_a = vec3<f32>(0.92, 0.38, 1.08); } // subtle violet accent
+        return col_a * base * (0.065 * wash + 1.15 * (led + 0.62 * led2));
+    }
+// sf:end
     return col * base * (0.05 * wash + 1.6 * (led + 0.7 * led2));
 }
 
@@ -671,7 +853,12 @@ fn ff_roof(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, g: u32, base: vec3<
     let tone = FF_UNIT_TONE * mix(0.8, 1.2, ff_h(cell, g, 7u));
     let ptone = base * mix(0.85, 1.25, ff_h(pcell, g, 47u));
     col = mix(mix(mix(col, tone, u), ptone, pu), FF_HATCH_TONE, ha) * (1.0 - FF_SHADOW * sh);
+// sf:AAA_BUILDINGS-
     rough = mix(mix(rough, 0.5, u), 0.25, ha);
+// sf:end
+// sf:AAA_BUILDINGS+
+    rough = mix(mix(rough, 0.68, u), select(0.25, 0.72, SF_AAA_BRDF), ha);
+// sf:end
     return vec4<f32>(col, rough);
 }
 
@@ -1233,9 +1420,12 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
     var albedo = in.color;
     var glass = 0.0;
     var roofish = (in.flags & HL_ROOF) != 0u;
+    var aaa_room = HL_ROOM;
+    var aaa_wall_raw = in.color;
     if (in.layer >= 0) {
         albedo = tex.rgb;
         glass = tex.a;
+        aaa_wall_raw = tex.rgb;
     }
     if (district) {
         roofish = abs(n.y) > 0.7;
@@ -1253,6 +1443,8 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
                 if (ff_on()) {
                     room = ff_window_room(in, n, dpx, dpy); // (`--far-facades`) each window its own room
                 }
+                aaa_room = room;
+                aaa_wall_raw = in.color;
                 albedo = mix(in.color, room, cov);
                 glass = cov;
             }
@@ -1267,6 +1459,7 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
         let fb = fb_facade(in, n, albedo, dpx, dpy);
         albedo = fb.albedo;
         glass = fb.glass;
+        aaa_wall_raw = fb.albedo;
         ff_rough = fb.rough;
         ff_n = fb.n;
         if (SF_FAR_RELIEF) {
@@ -1275,7 +1468,9 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
         }
     }
     if (wx_level() != 0u && !roofish) {
-        albedo = albedo * mix(vec3<f32>(1.0), hl_age(in.group), 1.0 - glass); // weathering (`--grime`): each building its own tone
+        let age_c = hl_age(in.group);
+        albedo = albedo * mix(vec3<f32>(1.0), age_c, 1.0 - glass); // weathering (`--grime`): each building its own tone
+        aaa_wall_raw = aaa_wall_raw * age_c;
     }
     // (`--far-relief`) a district roof under its parapet: where the eye's ray meets the roof, the parapet's face or its coping
     let relief_roof = SF_FAR_RELIEF && district && roofish && n.y > 0.7;
@@ -1347,9 +1542,199 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
         let crown_base = skyu.bloom_w2.z * 25.0 / LK_PI * look.rooms_env.x;
         rm_emit = rm_emit + hl_tower_crown(in, in.world, n, abs(dpx.y) + abs(dpy.y), crown_base);
     }
+// sf:AAA_BUILDINGS-
     if (FL_GLASS && !roofish) {
         rm_emit = rm_emit + hl_glass_sky(in, n_pane, v, glass); // the tilted pane
     }
+// sf:end
+// sf:AAA_BUILDINGS+
+    aaa_bldg_top_y = hl_group_top[in.group].y;
+    if (roofish || abs(n.y) >= 0.40) {
+        // Keep HLOD flat & pitched roofs strictly matte and apply skyline-field canyon AO.
+        s.rough = max(s.rough, 0.78);
+        aaa_bldg_on = SF_AAA_SKYLINE_FIELD;
+        aaa_glass_cov = 0.0;
+    } else if (!roofish && abs(n.y) < 0.40) {
+        let is_tower = (in.flags & HL_TOWER) != 0u;
+        let mat_cls = (in.flags >> 4u) & 7u;
+        let grid = hl_grid(in);
+        let t_ax = normalize(vec2<f32>(-n.z, n.x) + vec2<f32>(1e-5, 0.0));
+        let along_m = dot(in.world.xz, t_ax);
+        let fx_m = max(abs(dot(dpx.xz, t_ax)) + abs(dot(dpy.xz, t_ax)), 1e-3);
+        let fy_m = max(abs(dpx.y) + abs(dpy.y), 1e-3);
+        let gf = in.group ^ (hl_face(n) << 24u);
+
+        // Recover pure opaque wall albedo (for cells & untextured prisms, unmix baked dark room so
+        // dual-lobe weighting by (1 - glass) never double-darkens mullions & spandrels).
+        var wall_albedo = aaa_wall_raw;
+        if (!district && glass > 0.01) {
+            wall_albedo = clamp((aaa_wall_raw - aaa_room * glass) / max(1.0 - glass, 0.14), vec3<f32>(0.045), vec3<f32>(0.82));
+        }
+        var wall_rough = select(0.88, ff_rough, ff_rough >= 0.0);
+        var wall_metal = 0.0;
+        var glass_cov = select(0.0, glass, FL_GLASS);
+        var room_albedo = aaa_room;
+
+        // Glazing F0 & architectural coating tint from explicit material class (bits 4..6) or per-tower palette.
+        var glass_f0 = vec3<f32>(0.090);
+        if (mat_cls == 1u) {
+            glass_f0 = vec3<f32>(0.235, 0.285, 0.340); // curtain-blue low-E
+            wall_rough = min(wall_rough, 0.54);
+        } else if (mat_cls == 2u) {
+            glass_f0 = vec3<f32>(0.215, 0.310, 0.275); // curtain-emerald
+            wall_rough = min(wall_rough, 0.54);
+        } else if (mat_cls == 3u) {
+            glass_f0 = vec3<f32>(0.320, 0.260, 0.195); // curtain-bronze / champagne
+            wall_rough = min(wall_rough, 0.50);
+        } else if (mat_cls == 4u) {
+            glass_f0 = vec3<f32>(0.125, 0.135, 0.148); // granite / stone
+            wall_rough = min(wall_rough, 0.72);
+        } else if (mat_cls == 5u) {
+            glass_f0 = vec3<f32>(0.125, 0.138, 0.152); // precast concrete
+            wall_rough = max(wall_rough, 0.86);
+        } else if (mat_cls == 6u) {
+            glass_f0 = vec3<f32>(0.088, 0.094, 0.100); // brick
+            wall_rough = max(wall_rough, 0.88);
+        } else if (mat_cls == 7u) {
+            glass_f0 = vec3<f32>(0.080, 0.084, 0.088); // wood / Victorian
+            wall_rough = max(wall_rough, 0.85);
+        } else if (is_tower && FL_TOWER) {
+            let h = st_hash(vec2<f32>(f32(in.group) * 0.618, 7.31));
+            let h2 = st_hash(vec2<f32>(f32(in.group) * 1.37, 2.9));
+            let tint = mix(
+                vec3<f32>(0.78, 0.92, 1.06),
+                mix(vec3<f32>(0.78, 1.04, 0.92), vec3<f32>(1.06, 0.90, 0.72), step(0.48, h2)),
+                step(0.54, h),
+            );
+            glass_f0 = (0.190 + 0.180 * h) * tint;
+            wall_rough = min(wall_rough, mix(0.84, 0.56, step(0.45, glass_cov)));
+        } else {
+            let h = hl_h3(in.group, 1, 55u);
+            glass_f0 = vec3<f32>(0.088 + 0.052 * h) * mix(vec3<f32>(0.94, 0.98, 1.02), vec3<f32>(1.00, 0.97, 0.93), h);
+        }
+
+        if (SF_AAA_DETAIL) {
+            let bt = hl_group_top[in.group];
+            let b_h = max(bt.y - bt.x, 0.0);
+            let y_rel = max(in.world.y - bt.x, 0.0);
+            let depth_top = max(bt.y - in.world.y, 0.0);
+
+            // (1) Louvered double-height mechanical/refuge floors & crown screen on tall towers (survives at 3+ km).
+            if (b_h > 40.0 && (is_tower || b_h > 55.0)) {
+                let m_per = mix(52.0, 74.0, hl_h3(in.group, 0, 41u));
+                let m_h = mix(5.2, 7.6, hl_h3(in.group, 0, 42u));
+                let m_mid = hl_pulse(y_rel / m_per + 0.35, m_h / m_per, fy_m / m_per)
+                    * smoothstep(16.0, 30.0, y_rel) * smoothstep(5.0, 14.0, depth_top);
+                let crown_h = clamp(b_h * mix(0.035, 0.072, hl_h3(in.group, 0, 43u)), 4.2, 10.5);
+                let m_crown = smoothstep(crown_h + fy_m, crown_h - fy_m, depth_top) * step(46.0, b_h);
+                let mech = clamp(max(m_mid, m_crown * 0.85), 0.0, 1.0);
+                if (mech > 0.001) {
+                    glass_cov = glass_cov * (1.0 - 0.88 * mech);
+                    let lv = hl_pulse(y_rel / 0.70, 0.45, fy_m / 0.70);
+                    wall_albedo = mix(wall_albedo, wall_albedo * (0.28 + 0.16 * lv), mech);
+                    wall_rough = mix(wall_rough, 0.46, mech);
+                    wall_metal = mix(wall_metal, 0.34, mech);
+                }
+            }
+
+            // (2) Architectural podium tone break, parapet cap, base plinth soot & rain-wash weathering.
+            if (b_h > 10.0) {
+                if (b_h > 26.0) {
+                    let podium = 1.0 - smoothstep(9.0, 16.0, y_rel);
+                    wall_albedo = wall_albedo * mix(vec3<f32>(1.0), vec3<f32>(0.87, 0.86, 0.84), podium * 0.65);
+                }
+                let coping = smoothstep(1.8 + fy_m, 0.4, depth_top) * step(14.0, b_h);
+                wall_albedo = mix(wall_albedo, min(wall_albedo * 1.14, vec3<f32>(0.76)), coping * 0.55);
+                let base_g = mix(0.80, 1.0, smoothstep(0.0, 6.0, y_rel));
+                let drip_n = 0.55 + 0.45 * hl_h3(gf, i32(floor(along_m / 12.0)), 51u);
+                let top_g = 1.0 - 0.14 * drip_n * smoothstep(10.0, 0.0, depth_top);
+                wall_albedo = wall_albedo * (base_g * top_g);
+            }
+            let broad_g = 0.92 + 0.16 * hl_h3(gf, i32(floor(along_m / 18.0)) * 73 + i32(floor(in.world.y / 38.0)), 52u);
+            let bld_val = 0.90 + 0.22 * hl_h3(in.group, 3, 53u);
+            let bld_hue = mix(vec3<f32>(1.04, 1.00, 0.94), vec3<f32>(0.94, 0.99, 1.05), hl_h3(in.group, 5, 54u));
+            wall_albedo = wall_albedo * (broad_g * bld_val) * mix(vec3<f32>(1.0), bld_hue, 0.65);
+
+            // (3) Coherent multi-floor tenant suite blind/interior brightness bands & panel reflectance jitter.
+            let suite_h = mix(8.5, 14.0, hl_h3(in.group, 0, 44u));
+            let s_idx = i32(floor(in.world.y / suite_h));
+            let s_val = hl_h3(gf, s_idx, 45u);
+            let fl_i = i32(floor(in.world.y / grid.y - grid.z));
+            let fl_v = mix(hl_h3(gf, fl_i, 46u), 0.5, smoothstep(0.4, 1.1, fy_m / grid.y));
+            room_albedo = room_albedo * mix(0.45, 1.75, 0.65 * s_val + 0.35 * fl_v);
+            let run_i = i32(floor(along_m / (grid.x * 3.0)));
+            let pan_fade = 1.0 - smoothstep(0.35, 1.0, max(fx_m / (grid.x * 3.0), fy_m / grid.y));
+            let pan_var = (hl_h3(gf, fl_i * 389 + run_i, 47u) - 0.5) * pan_fade;
+            glass_f0 = glass_f0 * (1.0 + 0.24 * pan_var);
+
+            // (4) Subtle late-afternoon / golden-hour interior office glow on shadowed tower facades.
+            if (is_tower && glass_cov > 0.04 && frame.copy_step.z < 0.5 && skyu.atmo.y > -0.02 && skyu.atmo.y < 0.42 && look.rooms_env.x < 0.45) {
+                let late_day = smoothstep(0.42, 0.06, skyu.atmo.y) * smoothstep(-0.02, 0.03, skyu.atmo.y) * (1.0 - smoothstep(0.05, 0.45, look.rooms_env.x));
+                let shaded = 1.0 - smoothstep(-0.05, 0.35, dot(n, look.key_dir.xyz));
+                let bay_run = i32(floor(along_m / mix(12.0, 22.0, hl_h3(in.group, s_idx, 48u))));
+                let lit_suite = smoothstep(0.38, 0.78, s_val) * (0.40 + 0.60 * hl_h3(gf, s_idx * 97 + bay_run, 49u));
+                let o_col = mix(vec3<f32>(1.0, 0.80, 0.55), vec3<f32>(0.86, 0.93, 1.0), step(0.58, hl_h3(gf, s_idx, 50u)));
+                rm_emit = rm_emit + o_col * (glass_cov * lit_suite * late_day * shaded * 0.048);
+            }
+        }
+
+        if (SF_AAA_BRDF) {
+            let cw_t = select(0.0, 1.0, is_tower && glass_cov > 0.36);
+            // High-contrast PBR micro-roughness breakup on HLOD walls: honed podium plinths,
+            // crisp anodized metallic mullions on glass curtain walls, and beveled cornice/stringcourse catches.
+            let bt_b = hl_group_top[in.group];
+            let y_rel_b = max(in.world.y - bt_b.x, 0.0);
+            let d_top_b = max(bt_b.y - in.world.y, 0.0);
+            if (cw_t > 0.5) {
+                wall_rough = min(wall_rough, 0.24);
+                wall_metal = max(wall_metal, 0.72);
+            } else if (bt_b.y - bt_b.x > 12.0) {
+                let plinth_hl = 1.0 - smoothstep(4.0, 9.0, y_rel_b);
+                wall_rough = mix(wall_rough, 0.34, plinth_hl * 0.65);
+            }
+            var n_wall_hl = select(n, ff_n, dot(ff_n, ff_n) > 0.5);
+            let keep_rev = 1.0 - smoothstep(0.35, 1.25, fy_m / grid.y);
+            if (SF_AAA_DETAIL && keep_rev > 0.01) {
+                let up_fl = fract(in.world.y / grid.y - grid.z);
+                let ledge_t = (1.0 - smoothstep(0.0, 0.08, up_fl)) * keep_rev;
+                let cornice_u = smoothstep(2.2, 0.5, d_top_b) * (1.0 - smoothstep(0.5, 0.0, d_top_b)) * step(10.0, bt_b.y - bt_b.x) * keep_rev;
+                let sill_catch = (1.0 - smoothstep(0.0, 0.09, abs(up_fl - 0.14))) * (1.0 - glass_cov) * keep_rev;
+                n_wall_hl = normalize(n_wall_hl + vec3<f32>(0.0, 0.32 * (ledge_t + sill_catch) - 0.34 * cornice_u, 0.0));
+                s.ao = clamp(s.ao * (1.0 - 0.24 * cornice_u), 0.18, 1.0);
+            }
+            s.albedo = wall_albedo;
+            s.rough = wall_rough;
+            s.metal = wall_metal;
+            s.n = n_wall_hl;
+            // Distinct pane-by-pane fabrication bow/tilt faceting (`±1.4 deg`) + smooth structural
+            // curtain-wall wave + parallax interior floor slab shadow & blind stratification.
+            let bay_c = floor(vec2<f32>(along_m / grid.x, in.world.y / grid.y - grid.z));
+            let near_p = 1.0 - smoothstep(0.35, 1.25, max(fx_m / grid.x, fy_m / grid.y));
+            let pj_x = (hl_h3(gf, i32(bay_c.y) * 977 + i32(bay_c.x), 72u) - 0.5) * 0.044 * near_p;
+            let pj_y = (hl_h3(gf, i32(bay_c.y) * 977 + i32(bay_c.x), 73u) - 0.5) * 0.036 * near_p;
+            let wp_h = vec2<f32>(along_m * 0.085 + f32(in.group & 255u) * 0.71, in.world.y * 0.095);
+            let mjx = (st_noise(wp_h) - 0.5) * 0.022 + pj_x;
+            let mjy = (st_noise(wp_h + vec2<f32>(11.3, 4.7)) - 0.5) * 0.018 + pj_y + 0.044 * cw_t;
+            let gn_hl = normalize(n_pane + vec3<f32>(t_ax.x * mjx, mjy, t_ax.y * mjx));
+            let batch_h = (st_noise(wp_h * 1.4 + vec2<f32>(3.7, 8.9)) - 0.5) * 0.16;
+            let vn_hl = max(dot(v.xz, normalize(n.xz + vec2<f32>(1e-5, 0.0))), 0.14);
+            let vy_hl = fract(in.world.y / grid.y - grid.z + clamp(v.y / vn_hl * 0.20, -0.32, 0.32));
+            let slab_hl = 1.0 - 0.70 * (1.0 - smoothstep(0.06, 0.16, vy_hl) * smoothstep(0.94, 0.82, vy_hl)) * near_p;
+            aaa_bldg_on = true;
+            aaa_glass_cov = glass_cov;
+            aaa_glass_rough = mix(0.018, 0.044, smoothstep(0.45, 1.8, fy_m / grid.y));
+            aaa_glass_f0 = clamp(glass_f0 * (1.0 + batch_h), vec3<f32>(0.09), vec3<f32>(0.46));
+            aaa_glass_n = gn_hl;
+            aaa_glass_room = room_albedo * select(0.75, 0.28, is_tower && glass_cov > 0.36) * slab_hl;
+        } else {
+            aaa_bldg_on = true;
+            aaa_glass_cov = 0.0;
+            if (FL_GLASS) {
+                rm_emit = rm_emit + hl_glass_sky(in, n_pane, v, glass_cov);
+            }
+        }
+    }
+// sf:end
     // Object 0 is a building: the painted-facade environment class.
     return look_light(s, m, v, in.world, n, 0u);
 }

@@ -81,6 +81,15 @@ fn deck_lamp(at: [f64; 2], deck_y: f64) -> LandmarkLight {
     light([at[0], deck_y + head, at[1]], [at[0], deck_y, at[1]], [c[0] as f32, c[1] as f32, c[2] as f32], eo_sky::photometry::nadir_candela_for_pool(head), head * 2.6, cutoff, 1.0 - peak / cutoff)
 }
 
+/// The two amber enclosures tested in the DOE/PNNL Golden Gate roadway
+/// lighting study, appendices D and E (2012), in CIE 1931 x,y. Average at
+/// equal photopic luminance so the tint does not change the lamp's candela.
+fn golden_gate_lens() -> [f32; 3] {
+    let a = eo_sky::lights::xy_unit_color(0.5588, 0.4337);
+    let b = eo_sky::lights::xy_unit_color(0.5507, 0.4275);
+    std::array::from_fn(|i| ((a[i] + b[i]) * 0.5) as f32)
+}
+
 /// A post-top luminaire of the street slice's pool photometry from a `head` m head (the grove's parking loop).
 pub(crate) fn pool_lamp(at: [f64; 2], ground_y: f64, head: f64) -> LandmarkLight {
     let cutoff = eo_sky::lights::STREET_CUTOFF_DEG.to_radians();
@@ -110,7 +119,20 @@ pub fn bridge_lights(js: &LandmarksJs, gg_ground: &GroundGrid, bb_ground: &Groun
     let plan = crate::golden_gate::plan(js, &site, &ground);
     let half = crate::data::num(&g.dimensions, "roadwayM") / 2.0;
     let curb = crate::data::num(&g.dimensions, "curbM");
-    if crate::suspension::features().cable_detail {
+    if crate::golden_gate::surveyed_surfaces() {
+        let lens = golden_gate_lens();
+        for lamp in crate::golden_gate::lamps::fixtures(&plan, crate::data::num(&g.dimensions, "widthM")) {
+            let at = site.deck_point(lamp.station, lamp.head);
+            // A given luminaire keeps its output when mounted at a different
+            // height. Inverse-square falloff at the measured lens position
+            // adjusts the pavement illuminance. Both tested shoeboxes took S50 lamps.
+            let deck_y = plan.deck_top(lamp.station);
+            let mut light = deck_lamp(at, deck_y);
+            light.pos[1] = deck_y + lamp.lens_height();
+            if !lamp.tall { light.colour_linear = lens; }
+            out.push(light);
+        }
+    } else if crate::suspension::features().cable_detail {
         // (`cable_detail`) at the lamp standards' stations (none by the tower legs), each luminaire where its
         // standard's head holds it (golden_gate.rs `lamp_stations`, `lamp_standard`).
         let (across, up) = crate::golden_gate::lamp2_luminaire(DECK_HEAD_M);

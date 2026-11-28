@@ -18,7 +18,7 @@ pub use surfaces::Scan;
 use anyhow::{Result, ensure};
 pub use door::Door;
 use eo_assets::{AssetRef, CookedModel, KitLibrary};
-use eo_player::world::{GroundProvider, SurfaceMesh, TileKey};
+use eo_player::world::DeckPart;
 use eo_render::authored::MaterialTable;
 use eo_render::scene::{BLEND_BIT, GpuObject, ObjectKind, Scene, Vertex};
 use glam::{DVec2, DVec3, Mat3, Vec3};
@@ -39,6 +39,34 @@ pub fn owns(id: &str) -> bool {
 }
 
 type Point = [f64; 3];
+
+/// Keep the named stair meshes separate from the other oak furniture. The
+/// rounded nosing and the riser meet the tread even at its leading edge.
+fn stair_treads(
+    bytes: &[u8],
+    placements: &std::collections::HashMap<String, glam::Mat4>,
+    include: impl Fn(&str) -> bool,
+) -> Result<Vec<([Point; 3], bool)>> {
+    let omit = |name: &str| !include(name);
+    let (mesh, _, _, _) = eo_assets::glb::cook_furnished_glb_filtered(bytes, placements, false, Some(&omit))?;
+    let mut faces = Vec::new();
+    for tri in mesh.indices.chunks_exact(3) {
+        let points = [0, 1, 2].map(|i| mesh.positions[tri[i] as usize].map(f64::from));
+        let [a, b, c] = points.map(DVec3::from_array);
+        let normal = (b - a).cross(c - a);
+        if normal.length_squared() > 0. {
+            let outward: DVec3 = tri.iter().map(|&i| eo_assets::glb::unpack_normal(mesh.normals[i as usize]).as_dvec3()).sum();
+            let upper = normal.y * normal.dot(outward).signum() > 1e-6 * normal.length();
+            faces.push((points, upper));
+        }
+    }
+    ensure!(!faces.is_empty(), "no walking surfaces in the installed Beaver Street staircase");
+    Ok(faces)
+}
+
+const LOWER_TREADS: &str = "stair-flight-1 - oiled-oak@ae906f";
+const UPPER_TREADS: &str = "stair-flight-2 - oiled-oak@ae906f";
+
 #[derive(Deserialize)]
 struct Manifest {
     #[serde(flatten)]
@@ -521,7 +549,7 @@ pub struct House {
     dining_lamp: Option<[f32; 4]>,
     floor_reflections: bool,
     probes: Option<[ProbeVolume; 2]>,
-    collision: Vec<[Point; 3]>,
+    pub collision: DeckPart,
     steps: Vec<[Point; 2]>,
     pavers: Vec<([Point; 4], u32)>,
     mortar: Vec<([Point; 4], u32)>,
@@ -718,7 +746,9 @@ impl House {
         let first_stoop = garden_base + finishes.map_or(0, |f| f.garden_maps.len());
         let stoop = finishes.and_then(|f| f.stoop.as_ref()).map(|r|r.load(root,materials,first_stoop)).transpose()?;
         let first_fitted = first_stoop + finishes.map_or(0, |f| f.stoop_maps.len());
-        let fitted = fitted_recipe.map(|r| r.load(root,materials,first_fitted)).transpose()?;
+        let mut treads = stair_treads(&raw, &layout.nodes,
+            |name| name == UPPER_TREADS || (fitted_recipe.is_none() && name == LOWER_TREADS))?;
+        let fitted = fitted_recipe.map(|r| r.load(root,materials,first_fitted, &mut treads)).transpose()?;
         let mut h = Self {
             window_optics: finishes.and_then(|f| f.window_optics.clone()),
             site_camera_exposure: finishes.and_then(|f| f.site_camera_exposure),
@@ -752,7 +782,7 @@ impl House {
                 layout.probe("enamel-refrigerator", &r.manifest.probes[0]),
                 layout.probe("oven-range", &r.manifest.probes[1]),
             ]),
-            collision: vec![],
+            collision: DeckPart { name: "21 Beaver Street".into(), building_floor: true, ..Default::default() },
             steps: vec![],
             pavers: vec![],
             mortar: vec![],
@@ -773,25 +803,28 @@ impl House {
         };
         if let Some(fit) = fitted_recipe {
             for pts in &fit.boxes {
-                for face in FACES { h.solid_quad(face.map(|i| pts[i])); }
+                h.solid_box_corners(pts);
             }
         }
         for (index, ([a, b], matrix)) in manifest.boxes.into_iter().zip(layout.boxes).enumerate() {
             if fitted_recipe.is_some_and(|r|r.replaced_boxes.contains(&index)) { continue; }
             if let Some(m) = matrix {
                 let pts = corners(a, b).map(|p| m.transform_point3(DVec3::from(p)).to_array());
-                for face in FACES {
-                    h.solid_quad(face.map(|i| pts[i]));
-                }
+                h.solid_box_corners(&pts);
             } else {
                 h.solid_box(a, b);
             }
         }
         for (i,ramp) in manifest.ramps.into_iter().enumerate() {
-            if !fitted_recipe.is_some_and(|r|r.replaced_ramps.contains(&i)) { h.solid_quad(ramp); }
+            if !fitted_recipe.is_some_and(|r|r.replaced_ramps.contains(&i)) { h.solid_quad(ramp, true); }
+        }
+        h.add_floorboard_surfaces();
+        for (face, upper) in treads {
+            let surface = face.map(|[x, y, z]| h.point(x, y, z).to_array());
+            if upper { h.collision.walk.push(surface); } else { h.collision.barrier.push(surface); }
         }
         if let Some(fit) = fitted_recipe {
-            for ramp in &fit.ramps { h.solid_quad(*ramp); }
+            for ramp in &fit.ramps { h.solid_quad(*ramp, true); }
         }
         // The front stoop follows the surveyed ground at this scale.
         for i in 0..48 {
@@ -1113,7 +1146,7 @@ impl House {
         }
         self.aggregate = aggregate;
         for q in walk {
-            self.solid_quad(q);
+            self.solid_quad(q, true);
         }
         self.pavers = tiles;
         self.mortar = bedding;
@@ -1217,16 +1250,41 @@ impl House {
             && (-0.08..9.85).contains(&((feet.y - self.floor) / self.height_scale))
     }
 
-    fn solid_quad(&mut self, q: [Point; 4]) {
+    fn add_floorboard_surfaces(&mut self) {
+        // The structural slabs end under the boards. The finished faces follow
+        // the installed parcel scale and leave the stair openings clear.
+        for part in &self.model.parts {
+            if !FLOOR_MATERIALS.contains(&self.model.materials[part.material as usize].name.as_str()) {
+                continue;
+            }
+            let first = part.first_index as usize;
+            for face in self.model.indices[first..first + part.index_count as usize].chunks_exact(3) {
+                if eo_assets::glb::unpack_normal(self.model.normals[face[0] as usize]).y < 0.99 {
+                    continue;
+                }
+                let surface = [0, 1, 2].map(|i| {
+                    let [x, y, z] = self.model.positions[face[i] as usize].map(f64::from);
+                    self.point(x, y, z).to_array()
+                });
+                self.collision.walk.push(surface);
+            }
+        }
+    }
+
+    fn solid_quad(&mut self, q: [Point; 4], walkable: bool) {
         let pts = q.map(|[x, y, z]| self.point(x, y, z).to_array());
+        let faces = if walkable { &mut self.collision.walk } else { &mut self.collision.barrier };
         for tri in [[0, 1, 2], [0, 2, 3]] {
-            self.collision.push(tri.map(|i| pts[i]));
+            faces.push(tri.map(|i| pts[i]));
         }
     }
     fn solid_box(&mut self, a: Point, b: Point) {
-        let pts = corners(a, b);
+        self.solid_box_corners(&corners(a, b));
+    }
+    fn solid_box_corners(&mut self, pts: &[Point; 8]) {
+        // Corners 2, 3, 6 and 7 form the upper face in the authored box.
         for face in FACES {
-            self.solid_quad(face.map(|i| pts[i]));
+            self.solid_quad(face.map(|i| pts[i]), face == [3, 7, 6, 2]);
         }
     }
     pub fn wake_position(&self) -> DVec3 {
@@ -1697,23 +1755,4 @@ fn plaster_finish(name: &str) -> bool {
 
 fn door_paint(name: &str) -> bool {
     name.starts_with("front-door-paint@") || name.starts_with("front-door-moulding@")
-}
-
-pub struct HouseGround {
-    pub base: Arc<dyn GroundProvider>,
-    pub house: Arc<House>,
-}
-impl GroundProvider for HouseGround {
-    fn ground_y(&self, x: f64, z: f64) -> f64 {
-        self.base.ground_y(x, z)
-    }
-    fn surface_tile(&self, key: TileKey) -> Option<SurfaceMesh> {
-        let base = self.base.surface_tile(key);
-        if key != TileKey::of(self.house.origin.x, self.house.origin.y) {
-            return base;
-        }
-        let mut mesh = base.unwrap_or_default();
-        mesh.barrier.extend_from_slice(&self.house.collision);
-        Some(mesh)
-    }
 }

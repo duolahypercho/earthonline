@@ -169,6 +169,113 @@ pub fn surveyed_tree_variant(form: &str, variants: usize, station: f64, leaf: Op
     })
 }
 
+/// (`--tree-species`) The street form each of the survey's genus classes
+/// (`props-js.json.gz` `trees.species`) draws as: the nearest of the twelve
+/// street forms (`STREET_TREE_SPECIES`) by the genus's habit as SF plants it.
+/// "other" has no form of its own (`SPECIES_MODELS` or the survey's form).
+pub const GENUS_MODELS: &[(&str, &str, &str)] = &[
+    ("Platanus", "street-canopy", "London plane: broad, open spreading canopy"),
+    ("Pittosporum", "street-round", "Victorian box: small dense rounded crown"),
+    ("Ficus", "street-full", "Indian laurel fig: dense broad dome"),
+    ("Tristaniopsis", "street-ash", "water gum: narrow upright, fine leaves"),
+    ("Metrosideros", "street-full", "New Zealand Christmas tree: broad dense crown"),
+    ("Magnolia", "street-full", "southern magnolia: dense dark rounded crown"),
+    ("Lophostemon", "street-oak", "Brisbane box: upright oval"),
+    ("Prunus", "street-round", "flowering cherry and plum: small rounded"),
+    ("Eucalyptus", "street-high", "gum: tall, crown held high"),
+    ("PrunusPurple", "street-round", "purple-leaf plum: small rounded"),
+    ("Arbutus", "street-dome", "strawberry tree: small dense dome"),
+    ("Pyrus", "street-oak", "pear: upright oval"),
+    ("Olea", "street-round", "olive: small rounded"),
+    ("Ulmus", "street-elm", "Chinese elm: vase, arching"),
+    ("Ginkgo", "street-ash", "ginkgo: upright, sparse"),
+    ("Acer", "street-oak", "maple: upright oval"),
+    ("Ligustrum", "street-round", "privet: small rounded"),
+    ("Liquidambar", "street-high", "sweet gum: tall, pyramidal"),
+    ("Ceratonia", "street-dome", "carob: dense dome"),
+];
+
+/// (`--tree-species`) Full species (a prefix of the DataSF species name) whose habit
+/// differs from their genus class's form, or of the "other" class: checked first.
+pub const SPECIES_MODELS: &[(&str, &str, &str)] = &[
+    ("Magnolia grandiflora 'Little Gem'", "street-dome", "compact cultivar"),
+    ("Magnolia grandiflora 'Saint Mary'", "street-dome", "compact cultivar"),
+    ("Pittosporum crassifolium", "street-ash", "karo: narrow upright"),
+    ("Acacia melanoxylon", "street-high", "blackwood: tall, dense upright"),
+    ("Maytenus boaria", "street-round", "mayten: small weeping rounded"),
+    ("Corymbia ficifolia", "street-full", "red flowering gum: dense rounded"),
+    ("Eriobotrya", "street-dome", "loquat: dense dome"),
+    ("Cupressus", "street-high", "cypress: tall"),
+    ("Pinus", "street-high", "pine: tall, crown held high"),
+    ("Sequoia", "street-high", "redwood: tall"),
+    ("Callistemon", "street-round", "bottlebrush: small rounded, weeping"),
+    ("Melaleuca", "street-ash", "paperbark: upright"),
+    ("Lagunaria", "street-oak", "primrose tree: upright pyramidal"),
+    ("Myoporum", "street-dome", "myoporum: dense dome"),
+    ("Laurus", "street-dome", "bay laurel: dense dome"),
+    ("Jacaranda", "street-canopy", "jacaranda: open spreading"),
+    ("Schinus", "street-canopy", "pepper tree: spreading, weeping"),
+    ("Agonis", "street-round", "peppermint willow: weeping rounded"),
+    ("Quercus", "street-full", "oak: broad dense"),
+    ("Cinnamomum", "street-full", "camphor: broad dense"),
+    ("Geijera", "street-round", "Australian willow: small rounded"),
+    ("Leptospermum", "street-round", "tea tree: small rounded"),
+    ("Lagerstroemia", "street-round", "crape myrtle: small rounded"),
+    ("Crataegus", "street-round", "hawthorn: small rounded"),
+    ("Robinia", "street-ash", "locust: upright open"),
+    ("Fraxinus", "street-ash", "ash: upright open"),
+    ("Gleditsia", "street-ash", "honey locust: upright open"),
+    ("Tilia", "street-oak", "linden: upright oval"),
+    ("Juniperus", "street-ash", "juniper: narrow upright"),
+    ("Podocarpus", "street-ash", "fern pine: narrow upright"),
+];
+
+/// (`--tree-species`) The street form a surveyed tree draws as, by its full species
+/// (`SPECIES_MODELS`) or its genus class (`GENUS_MODELS`); None: by the survey's form.
+pub fn species_model(genus: &str, species: Option<&str>) -> Option<&'static str> {
+    if let Some(s) = species {
+        if let Some(m) = SPECIES_MODELS.iter().find(|(p, _, _)| s.starts_with(p)) {
+            return Some(m.1);
+        }
+    }
+    GENUS_MODELS.iter().find(|(g, _, _)| *g == genus).map(|m| m.1)
+}
+
+/// (`--tree-species`) `species_model`'s street variant, in the leaf state an overlay
+/// observed (`surveyed_tree_variant`); None where it names no model or one past `variants`.
+pub fn species_tree_variant(genus: &str, species: Option<&str>, variants: usize, leaf: Option<&str>) -> Option<usize> {
+    let d = EzData::get().ok()?;
+    let model = species_model(genus, species)?;
+    let base = d.street.species.iter().position(|s| s == model).filter(|&i| i < variants)?;
+    let alt = leaf.and_then(|l| d.species.get(&d.street.species[base]).and_then(|s| s.leaf_states.get(l)));
+    Some(alt.and_then(|a| d.street.species.iter().position(|s| s == a)).filter(|&i| i < variants).unwrap_or(base))
+}
+
+/// (`--tree-sizes`) The width of each street form's crown as drawn (its near form's leaves,
+/// the mean of their extent across x and z, metres at scale 1), in variant order: what
+/// a surveyed crown diameter divides by to give the drawn crown that diameter. The
+/// walk's own rule divides by `2 maxHalfCrownM`, wider than the leaves of every form
+/// (street-elm 8.6 m nominal, its leaves 5.9 m). Built once, on first use.
+pub fn street_crown_widths() -> &'static [f64] {
+    static W: std::sync::OnceLock<Vec<f64>> = std::sync::OnceLock::new();
+    W.get_or_init(|| {
+        let n = street_tree_species().map(|s| s.len()).unwrap_or(0);
+        (0..n)
+            .map(|v| {
+                let Ok(m) = build_street_tree_geometry(v, false, false, StreetTreeMode::default()) else { return f64::NAN };
+                let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+                for (q, &part) in m.mesh.positions.iter().zip(&m.mesh.part) {
+                    if part != 0 {
+                        lo = [lo[0].min(q[0] as f64), lo[1].min(q[2] as f64)];
+                        hi = [hi[0].max(q[0] as f64), hi[1].max(q[2] as f64)];
+                    }
+                }
+                0.5 * ((hi[0] - lo[0]) + (hi[1] - lo[1]))
+            })
+            .collect()
+    })
+}
+
 /// `streetTreeTrunkRadius(variant, lod)`: root radius of a species' trunk
 /// (its near tier), metres, before the instance scale. Builds the tree; the
 /// cooked library answers the same from its cache (`EzLibrary::street_tree_trunk_radius`).

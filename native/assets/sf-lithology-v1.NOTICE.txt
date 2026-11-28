@@ -1,0 +1,40 @@
+sf-lithology-v1.json.gz - San Francisco bedrock: mapped geologic units as rock-type classes
+
+Sources (U.S. Geological Survey; public domain, U.S. Government work):
+  Blake, M.C., Jr., Graymer, R.W., and Jones, D.L., 2000, Geologic map and map database of parts of Marin, San Francisco, Alameda, Contra Costa, and Sonoma Counties, California: U.S. Geological Survey Miscellaneous Field Studies Map MF-2337, scale 1:62,500 (digital database by A. Soule and R.W. Graymer).
+    https://pubs.usgs.gov/mf/2000/2337/
+    Archive: https://pubs.usgs.gov/mf/2000/2337/mf2337c.tgz (sha256 de531c8f0ec8f50c0a7edc62f2a0aa2ccedc3c9bc345dd15faf95cb823e10e6c, retrieved 2026-11-26T02:47:55Z)
+    Read: mageo/ma-geol.e00 (sha256 40e06cb2e4603cc3d5cb8aa60745d734ba399c70d14659a119eaa369c02019bd)
+    Licence: Public domain: a U.S. Government work (U.S. Geological Survey); see https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits. Credit the U.S. Geological Survey; no endorsement implied.
+  Graymer, R.W., 2000, Geologic map and map database of the Oakland metropolitan area, Alameda, Contra Costa, and San Francisco Counties, California: U.S. Geological Survey Miscellaneous Field Studies Map MF-2342, scale 1:50,000.
+    https://pubs.usgs.gov/mf/2000/2342/
+    Archive: https://pubs.usgs.gov/mf/2000/2342/mf2342c.tgz (sha256 9f37e8d470aaac8573105038e508f879701d859f86c6d97c6cfe9053ba4f0d1c, retrieved 2026-11-26T02:47:07Z)
+    Read: oakdb/ow-geol.e00 (sha256 ee77976b0e5a677bdf990fac1ae4016c350cb51217ec0b40b597c03eca8c49ee)
+    Licence: Public domain: a U.S. Government work (U.S. Geological Survey); see https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits. Credit the U.S. Geological Survey; no endorsement implied.
+  Bonilla, M.G., 1998, Preliminary geologic map of the San Francisco South 7.5' quadrangle and part of the Hunters Point 7.5' quadrangle, San Francisco Bay area, California: a digital database: U.S. Geological Survey Open-File Report 98-354, scale 1:24,000.
+    https://pubs.usgs.gov/of/1998/of98-354/
+    Archive: https://pubs.usgs.gov/of/1998/of98-354/sfs_data.tar.gz (sha256 13cf4c2d5440bbc2a3555dfac431b093caf928491627bf1efa7006c72a6cae57, retrieved 2026-11-26T02:48:24Z)
+    Read: sfs-geol.e00 (sha256 3f3cb3012ca9981c1234b8ffd511cb921b7d1f301dba4150fc516b39916ae768)
+    Licence: Public domain: a U.S. Government work (U.S. Geological Survey); see https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits. Credit the U.S. Geological Survey; no endorsement implied.
+
+Credit: U.S. Geological Survey. USGS does not endorse this product; the maps' use
+constraints apply: do not use the data at a scale larger than its source maps
+(1:24,000 to 1:62,500); boundaries are good to tens of metres, not to a site.
+
+Method: each map unit (PTYPE) is read to one class from the maps' own unit
+descriptions (meta.units lists every code with its description and class);
+polygons are clipped to lon -122.52..-122.35, lat 37.70..37.82, taken from
+Lambert conformal conic (NAD27) to WGS84 (NIMA TR8350.2 NAD27 western US shift)
+and to the game's surveyed plan metres, and simplified by 2 m.
+An unlabelled sliver polygon takes the unit of the neighbour it shares the most
+boundary with.
+Where MF-2337 and OF 98-354 meet (37 45' N, NAD27) vertices within 3 m of the
+seam are set on it, so the two maps close without a sliver.
+MF-2342 covers the city only at Yerba Buena and Treasure Islands (its west
+edge is 122 22' 30" W); the San Francisco peninsula comes from MF-2337 (north of
+37 45' N) and OF 98-354 (south of it).
+
+Area by class (km2, inside the box): chert 2.8137, greenstone 2.0322, other 0.7055, sandstone 10.2164, serpentinite 3.9335, surficial 107.549, water 72.3111
+
+Produced by:   scripts/world-data/build-sf-lithology.py (sf-lithology-v1)
+Output sha256: f47dfd05d1761ec15387dd8f2fe2ce22cf677d1adf4cb986190c8a025d089276 (sf-lithology-v1.json.gz)

@@ -66,8 +66,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 /// Bump when what is placed or how it is drawn changes (names the kit tile
-/// cache folder with the level). 2: the signs carry words (stage S1).
-pub const VERSION: u32 = 2;
+/// cache folder with the level). 4: keep active food & FiDi storefronts open under high detail.
+pub const VERSION: u32 = 4;
 
 static LEVEL: AtomicU8 = AtomicU8::new(0);
 
@@ -777,7 +777,8 @@ fn letter_fascia(f: &Face, sf: &SignFace, family: &[&'static str], paint: f64, l
     let ink_roll = r.next();
     let fade = sign_fade(paint, r.next());
     let mode_roll = r.next();
-    let neon = lit && neon_phrase(first) && mode_roll < 0.16;
+    let neon_p = if crate::typology::detail_enabled() { 0.38 } else { 0.16 };
+    let neon = lit && neon_phrase(first) && mode_roll < neon_p;
     // the band in sight: anything standing out in front of the panel over most of it cuts it.
     let front = sf.w + FACE_PANEL_M;
     let (mut vy0, mut vy1) = (sf.y0, sf.y1);
@@ -823,7 +824,12 @@ fn letter_fascia(f: &Face, sf: &SignFace, family: &[&'static str], paint: f64, l
     let fit = |cell: u8| -> Option<(u8, f64, bool, f64)> {
         let aspect = letter_cells()[cell as usize].aspect;
         let room = pw - 0.3 * vh;
-        let mut h = (vh * if border { 0.66 } else { 0.8 }).min(0.7);
+        let (h_frac, h_cap) = if crate::typology::detail_enabled() {
+            (if border { 0.70 } else { 0.86 }, 0.80)
+        } else {
+            (if border { 0.66 } else { 0.8 }, 0.7)
+        };
+        let mut h = (vh * h_frac).min(h_cap);
         let side = side_wanted && room > aspect * h + 1.3 * h;
         let reserve = if side { 1.25 * h } else if border { 0.55 * h } else { 0.0 };
         if aspect * h > room - reserve {
@@ -850,13 +856,19 @@ fn letter_fascia(f: &Face, sf: &SignFace, family: &[&'static str], paint: f64, l
     let (mode, field, ink) = if neon {
         (LETTER_NEON, FIELD_NEON_BOARD, neon_ink(pick(&NEON, ink_roll)))
     } else {
-        let ink = ink_for(sf.field, ink_roll);
-        let dark = luminance(sf.field) < 0.08;
+        let mut ink = ink_for(sf.field, ink_roll);
+        let lf = luminance(sf.field);
+        let dark = lf < 0.08;
+        // Under high-detail street mode, saturated/dark sign boards use high-contrast cream/gold backlit
+        // channel letters (`LETTER_LIT_LETTERS`) rather than solid over-bright glowing bars (`LETTER_LIT_FACE`).
+        if crate::typology::detail_enabled() && lit && lf < 0.30 && luminance(SIGN_INKS[ink as usize]) <= 0.12 {
+            ink = if ink_roll < 0.72 { INK_CREAM } else { INK_GOLD };
+        }
         // letters lit over a dimmer face only where they are light (a dark ink is printed on a lit face).
         let bright = luminance(SIGN_INKS[ink as usize]) > 0.12;
         let mode = if !lit {
             LETTER_PAINTED
-        } else if bright && ((dark && mode_roll < 0.72) || (!dark && mode_roll < 0.3)) {
+        } else if bright && (crate::typology::detail_enabled() && mode_roll < 0.88 || (dark && mode_roll < 0.72) || (!dark && mode_roll < 0.3)) {
             LETTER_LIT_LETTERS
         } else {
             LETTER_LIT_FACE
@@ -1734,13 +1746,15 @@ pub fn plan(planned: &Planned, level: u8) -> ClutterPlan {
     let multi = matches!(use_code, "MRES" | "COMR") || matches!(c.archetype, "bay-window-apartment" | "edwardian-flats" | "downtown-tower" | "retail-strip" | "soma-warehouse");
 
     // ---- fire escapes -----------------------------------------------------
+    let detail_on = crate::typology::detail_enabled();
     let mut rng = Rng::new(&format!("{seed}|facade-clutter|escape"));
     let roll = rng.next();
     // (Edwardian flats and SoMa warehouses carry the port's own: drawn here in their place, none added.)
+    let max_fe_storeys = if detail_on { 12 } else { 9 };
     let arch_k = match c.archetype {
         "bay-window-apartment" => 1.0,
         "downtown-tower" => {
-            if storeys <= 9 {
+            if storeys <= max_fe_storeys {
                 0.7
             } else {
                 0.0
@@ -1749,8 +1763,10 @@ pub fn plan(planned: &Planned, level: u8) -> ClutterPlan {
         "retail-strip" => 0.6,
         _ => 0.0,
     };
-    let eligible = (3..=9).contains(&storeys) && year < 1936.0 && multi && arch_k > 0.0;
-    let wants = eligible && roll < escape_share(district) * arch_k;
+    let max_fe_year = if detail_on { 1948.0 } else { 1936.0 };
+    let fe_share = if detail_on { (escape_share(district) * 1.25).min(0.92) } else { escape_share(district) };
+    let eligible = (3..=max_fe_storeys).contains(&storeys) && year < max_fe_year && multi && arch_k > 0.0;
+    let wants = eligible && roll < fe_share * arch_k;
     for fi in 0..faces.len() {
         if let Some((s0, s1, proj, decks)) = faces[fi].port_escape.clone() {
             // the port's own fire escape, drawn here in its place (kept as it was if this one does not fit).
@@ -1871,7 +1887,14 @@ pub fn plan(planned: &Planned, level: u8) -> ClutterPlan {
         let has_shade = plan.parts.iter().any(|p| p.edge == Some(ei) && matches!(p.kind.as_str(), "awning" | "canopy") && p.s1 > s0 + 0.2 && p.s0 < s1 - 0.2);
         let has_blade = plan.parts.iter().any(|p| p.edge == Some(ei) && p.kind == "blade-sign" && p.s0 > s0 - 1.0 && p.s1 < s1 + 1.0);
         // a blade sign (Chinatown, the Mission and the Castro carry the most).
-        let p_blade = (if matches!(ty, "bar" | "restaurant" | "cafe" | "studio") { 0.42 } else { 0.24 }) * density;
+        let p_blade_base = if detail_on {
+            if matches!(ty, "bar" | "restaurant" | "cafe" | "studio") { 0.68 } else { 0.46 }
+        } else if matches!(ty, "bar" | "restaurant" | "cafe" | "studio") {
+            0.42
+        } else {
+            0.24
+        };
+        let p_blade = p_blade_base * density;
         if !has_blade && srng.next() < p_blade {
             if let Some(mut bl) = fit_blade(&faces[fi], fi, s0, s1, plan, &mut srng, key) {
                 // (stage S1) the shop's words on both faces, on a stream of their own.
@@ -1886,7 +1909,13 @@ pub fn plan(planned: &Planned, level: u8) -> ClutterPlan {
             }
         }
         // an awning where the shop has no shade.
-        let p_awning = if food { 0.6 } else { 0.38 };
+        let p_awning = if detail_on {
+            if food { 0.78 } else { 0.62 }
+        } else if food {
+            0.6
+        } else {
+            0.38
+        };
         let r_aw = srng.next();
         let mut shaded = has_shade;
         if !has_shade && r_aw < p_awning {
@@ -1901,7 +1930,7 @@ pub fn plan(planned: &Planned, level: u8) -> ClutterPlan {
         let p_shutter = 0.3 * density;
         let r_sh = srng.next();
         let r_board = srng.next();
-        let down = srng.next() < 0.22;
+        let down = srng.next() < if detail_on && (food || district.contains("Financial")) { 0.0 } else { 0.22 };
         let colour = pick(&[GALV, [120, 124, 126], [70, 74, 78], [150, 154, 152]], srng.next());
         if !shaded && level >= 2 && r_board < 0.018 * density {
             if let Some(bd) = fit_boarding(&faces[fi], fi, s0, s1, fy, head) {
@@ -2115,7 +2144,14 @@ fn fit_window_sign(f: &Face, fi: usize, plan: &crate::elevation::Plan, s0: f64, 
     let at_roll = r.next();
     let ink_roll = r.next();
     let border_roll = r.next();
-    if roll >= (if neon_trade { 0.28 } else { 0.06 }) * density.min(1.3) {
+    let win_sign_p = if crate::typology::detail_enabled() {
+        if neon_trade { 0.56 } else { 0.22 }
+    } else if neon_trade {
+        0.28
+    } else {
+        0.06
+    };
+    if roll >= win_sign_p * density.min(1.3) {
         return None;
     }
     let ei = f.edge.index;
@@ -2280,11 +2316,12 @@ fn fit_escape(
     }
     // how far off the wall each deck must stand to clear its bands and sills;
     // decks are dropped from the top where a cornice or bay is in the way.
+    let max_standoff = if crate::typology::detail_enabled() { 0.36 } else { FE_MAX_STANDOFF_M };
     let deck_stand = |d: f64| f.standout(s0, s1, d - 0.09, d + FE_RAIL_M + 0.02);
-    while decks.len() >= 2 && deck_stand(*decks.last().unwrap()) > FE_MAX_STANDOFF_M {
+    while decks.len() >= 2 && deck_stand(*decks.last().unwrap()) > max_standoff {
         decks.pop();
     }
-    if decks.len() < 2 || decks.iter().any(|d| deck_stand(*d) > FE_MAX_STANDOFF_M) {
+    if decks.len() < 2 || decks.iter().any(|d| deck_stand(*d) > max_standoff) {
         return None;
     }
     let w0 = decks.iter().map(|d| deck_stand(*d)).fold(0.0, f64::max) + 0.03;
@@ -2404,7 +2441,8 @@ fn fit_sign_face(f: &Face, fi: usize, band: &Part, r: &mut Rng, key: u32) -> Opt
     let (y0, y1) = (band.y0 + 0.05, band.y1 - 0.05);
     let inset = r.next() * 0.25;
     let field = pick(&SIGN_FIELDS, r.next());
-    let lit = r.next() < 0.72;
+    let lit_share = if crate::typology::detail_enabled() { 0.86 } else { 0.72 };
+    let lit = r.next() < lit_share;
     if y1 - y0 < 0.22 {
         return None;
     }

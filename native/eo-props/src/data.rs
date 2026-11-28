@@ -98,6 +98,7 @@ impl JsProps {
     pub fn load() -> Result<Self> {
         let mut p = Self::from_gz(PROPS_JS_GZ)?;
         crate::props_v2::apply(&mut p.street_props); // street props v2 (eo-app `--no-street-props-v2`)
+        crate::signal_models::apply(&mut p.street_props); // the signal heads (eo-app `--no-signal-models`)
         // groundscale (the street size, 1.25 by default): the surveyed trees and sign
         // posts stand at their scaled positions (decimetre integers, as packed).
         let gs = eo_data::groundscale::scale();

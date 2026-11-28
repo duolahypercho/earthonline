@@ -70,6 +70,7 @@ pub mod class {
     pub const RAMP: u8 = 6;
     pub const PAINT: u8 = 7;
     pub const VERGE: u8 = 8;
+    pub const EAST_SPAN_ROAD: u8 = 9;
 }
 
 impl StreetPalette {
@@ -114,7 +115,104 @@ fn vertex_class(layer: Layer, color: u32) -> (u8, bool) {
         Layer::Sidewalk => (class::FOOTWAY, true),
         Layer::Verge => (class::VERGE, false),
         Layer::Marking => (class::PAINT, false),
+        Layer::Ground => (class::VERGE, false),
     }
+}
+
+
+/// The terrain's vertex colour at a plan point (scene.rs `colour_at`, the
+/// ground tone and the land cover), for the street ground (eo-street
+/// `ground::ground_overlay`), which is drawn as terrain. Set by eo-app once
+/// the ground's tone is known; unset, the street ground takes the built
+/// ground's grey.
+static GROUND_COLOUR: std::sync::OnceLock<Arc<dyn Fn(f32, f32) -> u32 + Send + Sync>> = std::sync::OnceLock::new();
+
+/// eo-app: the terrain's vertex colour function for the street ground (once).
+pub fn set_ground_colour(f: Arc<dyn Fn(f32, f32) -> u32 + Send + Sync>) {
+    let _ = GROUND_COLOUR.set(f);
+}
+
+fn ground_colour(x: f32, z: f32) -> u32 {
+    GROUND_COLOUR.get().map(|f| f(x, z)).unwrap_or_else(crate::scene::built_ground_color)
+}
+
+/// The terrain tiles' own vertices on the elevation grid (their final colour,
+/// the surface materials' alpha code included, and their normal's w byte, the
+/// grass share or a flora code): vertex (i, j) at (ox + (i + 0.5) cell, oz +
+/// (j + 0.5) cell), the cells split along (i + 1, j)-(i, j + 1) as the scene lays them.
+struct SceneGround {
+    ox: f32,
+    oz: f32,
+    cell: f32,
+    w: usize,
+    h: usize,
+    colour: Vec<u32>,
+    normal_w: Vec<i8>,
+    set: Vec<bool>,
+}
+
+static SCENE_GROUND: std::sync::OnceLock<SceneGround> = std::sync::OnceLock::new();
+
+/// eo-app, once the scene is built: the street ground (`ground_overlay`) takes
+/// the terrain tiles' own vertex data where it is drawn over them, as the GPU
+/// interpolates it across their triangles, so the ground shader reads the same
+/// material codes and grass share on both (the tone alone before: the street
+/// ground's ground took another shading path, angular patches against the
+/// terrain's). Copies the terrain objects as `TerrainGrid::from_scene` does.
+pub fn set_ground_from_scene(scene: &crate::scene::Scene, meta: &eo_data::ElevationMeta) {
+    let (w, h) = (meta.width + 1, meta.height + 1);
+    let mut g = SceneGround { ox: meta.origin_x as f32, oz: meta.origin_z as f32, cell: meta.cell_size as f32, w, h, colour: vec![0; w * h], normal_w: vec![0; w * h], set: vec![false; w * h] };
+    let side = crate::scene::TILE_CELLS + 1;
+    for o in &scene.objects {
+        if o.kind & 255 != ObjectKind::Terrain as u32 {
+            continue;
+        }
+        let base = o.base_vertex as usize;
+        let Some(first) = scene.vertices.get(base) else { continue };
+        let ci = ((first.pos[0] - g.ox) / g.cell - 0.5).round() as i64;
+        let cj = ((first.pos[2] - g.oz) / g.cell - 0.5).round() as i64;
+        for vz in 0..side {
+            for vx in 0..side {
+                let Some(v) = scene.vertices.get(base + vz * side + vx) else { continue };
+                let (i, j) = (ci + vx as i64, cj + vz as i64);
+                if i < 0 || j < 0 || i as usize >= w || j as usize >= h {
+                    continue;
+                }
+                let k = j as usize * w + i as usize;
+                g.colour[k] = v.color;
+                g.normal_w[k] = (v.normal >> 24) as u8 as i8;
+                g.set[k] = true;
+            }
+        }
+    }
+    let _ = SCENE_GROUND.set(g);
+}
+
+/// The terrain tiles' colour and normal w byte at (x, z), interpolated in their triangle.
+fn scene_ground(x: f32, z: f32) -> Option<(u32, i8)> {
+    let g = SCENE_GROUND.get()?;
+    let (fx, fz) = ((x - g.ox) / g.cell - 0.5, (z - g.oz) / g.cell - 0.5);
+    let (i, j) = (fx.floor() as i64, fz.floor() as i64);
+    if i < 0 || j < 0 || i as usize + 1 >= g.w || j as usize + 1 >= g.h {
+        return None;
+    }
+    let (u, v) = (fx - i as f32, fz - j as f32);
+    let at = |a: i64, b: i64| b as usize * g.w + a as usize;
+    let corners: [(usize, f32); 3] = if u + v <= 1.0 {
+        [(at(i, j), 1.0 - u - v), (at(i + 1, j), u), (at(i, j + 1), v)]
+    } else {
+        [(at(i + 1, j + 1), u + v - 1.0), (at(i + 1, j), 1.0 - v), (at(i, j + 1), 1.0 - u)]
+    };
+    if corners.iter().any(|&(k, _)| !g.set[k]) {
+        return None;
+    }
+    let mut out = 0u32;
+    for ch in 0..4 {
+        let sum: f32 = corners.iter().map(|&(k, wt)| ((g.colour[k] >> (8 * ch)) & 255) as f32 * wt).sum();
+        out |= (sum.round().clamp(0.0, 255.0) as u32) << (8 * ch);
+    }
+    let nw: f32 = corners.iter().map(|&(k, wt)| g.normal_w[k] as f32 * wt).sum();
+    Some((out, nw.round().clamp(-127.0, 127.0) as i8))
 }
 
 /// (`--street-pbr`) the carriageway drawn with smooth normals (`smooth_carriageway`).
@@ -194,8 +292,9 @@ pub fn smooth_carriageway(m: &TileMesh) -> Option<Vec<[f32; 3]>> {
 /// Split a tile mesh into the street-material part and the plain part (paint,
 /// banks), as GPU vertices: rgb the JS palette tint, alpha the street class,
 /// the normal's w the distance to the kerb line (/ 6.35 m, -1 none).
-/// Returns (vertices, indices of the street object, indices of the plain object).
-pub fn to_gpu(m: &TileMesh, pal: Option<&StreetPalette>) -> (Vec<Vertex>, Vec<u32>, Vec<u32>) {
+/// Returns (vertices, indices of the street object, of the plain object, of
+/// the street ground: drawn as terrain, in the terrain's own colours).
+pub fn to_gpu(m: &TileMesh, pal: Option<&StreetPalette>) -> (Vec<Vertex>, Vec<u32>, Vec<u32>, Vec<u32>) {
     let smooth = if SMOOTH_CARRIAGEWAY.load(Ordering::Relaxed) { smooth_carriageway(m) } else { None };
     let normals = smooth.as_deref().unwrap_or(&m.normals);
     let mut vcls: Vec<(u8, bool)> = vec![(class::PAINT, false); m.positions.len()];
@@ -206,10 +305,26 @@ pub fn to_gpu(m: &TileMesh, pal: Option<&StreetPalette>) -> (Vec<Vertex>, Vec<u3
         }
     }
     let textured = pal.is_some();
+    let mut ground_v = vec![false; m.positions.len()];
+    for (t, layer) in m.layers.iter().enumerate() {
+        if *layer == Layer::Ground {
+            for k in 0..3 {
+                ground_v[m.indices[3 * t + k] as usize] = true;
+            }
+        }
+    }
     let vertices: Vec<Vertex> = (0..m.positions.len())
         .map(|i| {
             let c = m.colors[i];
             let color = (c & 0x00ff_ffff) | ((vcls[i].0 as u32) << 24);
+            if ground_v[i] {
+                let p = m.positions[i];
+                let n = eo_assets::glb::pack_normal(Vec3::from(normals[i]));
+                return match scene_ground(p[0], p[2]) {
+                    Some((color, w)) => Vertex { pos: p, normal: n | ((w as u8 as u32) << 24), color },
+                    None => Vertex { pos: p, normal: n, color: ground_colour(p[0], p[2]) },
+                };
+            }
             let mut normal = eo_assets::glb::pack_normal(Vec3::from(normals[i]));
             let kerb = m.kerb.get(i).copied().unwrap_or(-1.0);
             let w: i8 = if kerb >= 0.0 { ((kerb / 6.35).min(1.0) * 127.0).round() as i8 } else { -127 };
@@ -217,12 +332,18 @@ pub fn to_gpu(m: &TileMesh, pal: Option<&StreetPalette>) -> (Vec<Vertex>, Vec<u3
             Vertex { pos: m.positions[i], normal, color }
         })
         .collect();
-    let (mut tex, mut plain) = (vec![], vec![]);
-    for (t, _) in m.layers.iter().enumerate() {
+    let (mut tex, mut plain, mut ground) = (vec![], vec![], vec![]);
+    for (t, layer) in m.layers.iter().enumerate() {
         let tri = &m.indices[3 * t..3 * t + 3];
-        if textured && vcls[tri[0] as usize].1 { tex.extend_from_slice(tri) } else { plain.extend_from_slice(tri) }
+        if *layer == Layer::Ground {
+            ground.extend_from_slice(tri);
+        } else if textured && vcls[tri[0] as usize].1 {
+            tex.extend_from_slice(tri)
+        } else {
+            plain.extend_from_slice(tri)
+        }
     }
-    (vertices, tex, plain)
+    (vertices, tex, plain, ground)
 }
 
 fn bounds(v: &[Vertex]) -> ([f32; 3], [f32; 3]) {
@@ -273,7 +394,7 @@ impl StreetSet {
                 if mesh.indices.is_empty() {
                     continue;
                 }
-                let (verts, tex, plain) = to_gpu(mesh, palette.as_ref());
+                let (verts, tex, plain, _) = to_gpu(mesh, palette.as_ref());
                 let base_vertex = st.vertices.len() as i32;
                 let (mn, mx) = bounds(&verts);
                 ymin = ymin.min(mn[1]);
@@ -348,6 +469,8 @@ pub struct StreetPack {
     pub vbytes: Vec<u8>,
     pub tex: Vec<u32>,
     pub plain: Vec<u32>,
+    /// the street ground's triangles (eo-street `ground_overlay`), drawn as terrain.
+    pub ground: Vec<u32>,
     pub nv: u32,
     pub min: [f32; 3],
     pub max: [f32; 3],
@@ -423,6 +546,9 @@ pub struct StreetRuntime {
     pub near_out_of_view: usize,
     /// the arena freed space since a tile was deferred.
     freed: bool,
+    /// Reusable per-frame scratch sets (`update`) to avoid heap allocations.
+    wanted_scratch: HashSet<u32>,
+    gone_scratch: HashSet<u32>,
 }
 
 fn tag_of(tile: u32) -> u64 {
@@ -432,8 +558,8 @@ fn tag_of(tile: u32) -> u64 {
 pub fn cook_pack(set: &StreetSet, tile: u32) -> StreetPack {
     let t0 = Instant::now();
     let key = set.tiles[tile as usize].key;
-    let mesh = set.world.cached_mesh(key);
-    let (verts, tex, plain) = to_gpu(&mesh, set.palette.as_ref());
+    let mesh = set.world.drawn_mesh(key);
+    let (verts, tex, plain, ground) = to_gpu(&mesh, set.palette.as_ref());
     let (min, max) = if verts.is_empty() { ([0.0; 3], [0.0; 3]) } else { bounds(&verts) };
     // the tile's wear decals, placed on the plan of it and its neighbours.
     let decals = crate::cc0::DECALS_WANTED
@@ -444,9 +570,10 @@ pub fn cook_pack(set: &StreetSet, tile: u32) -> StreetPack {
         tile,
         nv: verts.len() as u32,
         vbytes: bytemuck::cast_slice(&verts).to_vec(),
-        triangles: (tex.len() + plain.len()) as u64 / 3,
+        triangles: (tex.len() + plain.len() + ground.len()) as u64 / 3,
         tex,
         plain,
+        ground,
         min,
         max,
         ms: t0.elapsed().as_secs_f64() * 1e3,
@@ -521,6 +648,8 @@ impl StreetRuntime {
             hold: Default::default(),
             near_out_of_view: 0,
             freed: false,
+            wanted_scratch: HashSet::new(),
+            gone_scratch: HashSet::new(),
         }
     }
 
@@ -553,12 +682,12 @@ impl StreetRuntime {
         let tm = eo_street::STREET_TILE_M;
         let reach = (r.near_drop as f64 / tm).ceil() as i32 + 1;
         let (cx, cz) = eo_street::tile_key(cam.x as f64, cam.z as f64);
-        let mut wanted: HashSet<u32> = HashSet::new();
+        self.wanted_scratch.clear();
         for tz in cz - reach..=cz + reach {
             for tx in cx - reach..=cx + reach {
                 let Some(&t) = self.set.tile_of_key.get(&(tx, tz)) else { continue };
                 let d = self.set.tile_distance(t as usize, cam);
-                if d <= r.near_load || (self.slots.contains_key(&t) && d <= r.near_drop && !under) {
+                if d <= r.near_load || (!under && d <= r.near_drop && self.slots.contains_key(&t)) {
                     if let Some(c) = cone.as_ref() {
                         let (mn, mx) = self.set.tile_box(t as usize);
                         let held = self.hold.wanted(c, t, mn, mx);
@@ -567,7 +696,7 @@ impl StreetRuntime {
                             continue;
                         }
                     }
-                    wanted.insert(t);
+                    self.wanted_scratch.insert(t);
                 }
             }
         }
@@ -578,7 +707,7 @@ impl StreetRuntime {
         let gone: Vec<u32> = self
             .slots
             .iter()
-            .filter(|(k, _)| !wanted.contains(k))
+            .filter(|(k, _)| !self.wanted_scratch.contains(k))
             .filter(|(_, s)| {
                 if matches!(s, Slot::Resident(_)) {
                     evictable += 1;
@@ -590,11 +719,13 @@ impl StreetRuntime {
             .map(|(k, _)| *k)
             .collect();
         if !gone.is_empty() {
-            let gone_set: HashSet<u32> = gone.iter().copied().collect();
-            for k in &gone_set {
+            self.gone_scratch.clear();
+            self.gone_scratch.extend(gone.iter().copied());
+            for k in &self.gone_scratch {
                 self.outbox.cancel(*k); // applied without waiting for the workers' lock
             }
-            uploads.cancel(|tag| tag & TAG_STREET == 0 || tag & crate::kit::TAG_KIT != 0 || !gone_set.contains(&((tag & 0xffff_ffff) as u32)));
+            let gone_ref = &self.gone_scratch;
+            uploads.cancel(|tag| tag & TAG_STREET == 0 || tag & crate::kit::TAG_KIT != 0 || !gone_ref.contains(&((tag & 0xffff_ffff) as u32)));
             for k in gone {
                 match self.slots.remove(&k) {
                     Some(Slot::Resident(a)) => {
@@ -610,10 +741,10 @@ impl StreetRuntime {
                 self.release_decals(renderer, queue, k); // cc0
             }
         }
-        for k in &wanted {
-            if !self.slots.contains_key(k) {
-                self.slots.insert(*k, Slot::Requested);
-                self.outbox.request(*k); // hitch
+        for &k in &self.wanted_scratch {
+            if !self.slots.contains_key(&k) {
+                self.slots.insert(k, Slot::Requested);
+                self.outbox.request(k); // hitch
             }
         }
         self.outbox.flush(&self.pending); // try_lock only
@@ -647,8 +778,8 @@ impl StreetRuntime {
     }
 
     fn make_job(&mut self, p: &mut StreetPack) -> Option<(Job, Alloc)> {
-        let ni = (p.tex.len() + p.plain.len()) as u32;
-        let objects_needed = 2;
+        let ni = (p.tex.len() + p.plain.len() + p.ground.len()) as u32;
+        let objects_needed = if p.ground.is_empty() { 2 } else { 3 };
         let v = self.vtx.alloc(p.nv)?;
         let Some(i) = self.idx.alloc(ni) else {
             self.vtx.free(v, p.nv);
@@ -664,8 +795,14 @@ impl StreetRuntime {
         let group = self.set.group_base + p.tile;
         let base_vertex = (ar.vertex_base + v) as i32;
         let n_tex = p.tex.len() as u32;
+        let n_plain = p.plain.len() as u32;
         let mut objects = vec![];
-        for (first, count, kind) in [(0u32, n_tex, ObjectKind::Street), (n_tex, p.plain.len() as u32, ObjectKind::StreetPaint)] {
+        let mut parts = vec![(0u32, n_tex, ObjectKind::Street), (n_tex, n_plain, ObjectKind::StreetPaint)];
+        if !p.ground.is_empty() {
+            // the street ground, shaded as the terrain is (draw.wgsl: kind 1 with the vertex colour material)
+            parts.push((n_tex + n_plain, p.ground.len() as u32, ObjectKind::Terrain));
+        }
+        for (first, count, kind) in parts {
             let mut ob = GpuObject::new(kind, p.min, p.max, ar.index_base + i + first, count, base_vertex);
             ob.material = if kind == ObjectKind::Street { self.set.palette.map(|q| q.base).unwrap_or(MATERIAL_VERTEX_COLOUR) } else { MATERIAL_VERTEX_COLOUR };
             ob.lod_group = group;
@@ -674,6 +811,7 @@ impl StreetRuntime {
         }
         let mut idx = std::mem::take(&mut p.tex);
         idx.extend_from_slice(&p.plain);
+        idx.extend_from_slice(&p.ground);
         let vs = std::mem::size_of::<Vertex>() as u64;
         let os = std::mem::size_of::<GpuObject>() as u64;
         let mut bulk = vec![
@@ -839,7 +977,7 @@ mod tests {
         assert!(s[0][0] < -0.015, "strip A's outer corner keeps its fall: {:?}", s[0]);
         assert_eq!(s[8], [-1.0, 0.0, 0.0], "the kerb face keeps its normal");
         SMOOTH_CARRIAGEWAY.store(false, Ordering::Relaxed);
-        let (v_off, _, _) = to_gpu(&m, None);
+        let (v_off, _, _, _) = to_gpu(&m, None);
         assert_eq!(v_off[1].normal & 0x00ff_ffff, eo_assets::glb::pack_normal(Vec3::from(na)) & 0x00ff_ffff, "off: each primitive's own normal, as before");
     }
 }

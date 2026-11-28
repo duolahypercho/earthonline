@@ -192,11 +192,74 @@ pub fn lights_of(bay: &Bay, key: u32, level: u8) -> Vec<GpuShopLight> {
     lights_of_front(bay, key, level, false)
 }
 
+/// Trade-diverse night sidewalk spill tint at unit luminance (`0.2126 R + 0.7152 G + 0.0722 B == 1.0`),
+/// enabled when high-detail buildings are active so SF night corridors show warm amber cafes/diners,
+/// cool white/cyan pharmacies & markets, and colorful bars/boutiques spilling onto sidewalks.
+fn trade_spill_colour(kind: ShopKind, key: u32, base: [f64; 3]) -> [f64; 3] {
+    if !eo_kit::typology::detail_enabled() {
+        return base;
+    }
+    let h = ((key.wrapping_mul(2654435761) ^ (kind as u32).wrapping_mul(2246822519)) >> 8) as f64 / 16777216.0;
+    let raw: [f64; 3] = match kind {
+        ShopKind::Cafe | ShopKind::Restaurant => {
+            if h < 0.65 {
+                [1.48, 0.90, 0.40] // warm 2500-2700 K golden cafe/dining spill
+            } else {
+                [1.36, 0.96, 0.56] // warm 3000 K bistro
+            }
+        }
+        ShopKind::Bar => {
+            if h < 0.34 {
+                [1.60, 0.72, 0.36] // rich warm amber/coral lounge
+            } else if h < 0.62 {
+                [1.56, 0.56, 0.62] // ruby/rose neon tavern spill
+            } else if h < 0.84 {
+                [0.54, 1.18, 0.86] // emerald/teal back-bar glow
+            } else {
+                [0.58, 0.96, 1.62] // cool cobalt/cyan cocktail bar
+            }
+        }
+        ShopKind::Pharmacy | ShopKind::Laundromat => [0.76, 1.04, 1.38], // crisp 5800-6400 K cool white/cyan
+        ShopKind::Market | ShopKind::Fitness => {
+            if h < 0.65 {
+                [0.82, 1.03, 1.30] // crisp 5400-6000 K cool white LED
+            } else {
+                [0.92, 1.02, 1.12] // clean 4600 K neutral daylight
+            }
+        }
+        ShopKind::Liquor => {
+            if h < 0.50 {
+                [0.82, 1.03, 1.32] // cool bright corner liquor
+            } else {
+                [1.26, 0.94, 0.82] // warm wine/neon accent
+            }
+        }
+        ShopKind::Salon => {
+            if h < 0.55 {
+                [1.18, 0.96, 0.88] // warm rose-neutral salon
+            } else {
+                [0.84, 1.03, 1.24] // crisp clean studio white
+            }
+        }
+        ShopKind::Retail => {
+            if h < 0.40 {
+                [1.34, 0.94, 0.58] // warm boutique/bookstore
+            } else if h < 0.75 {
+                [0.94, 1.01, 1.12] // clean gallery white
+            } else {
+                [0.74, 1.06, 1.32] // cool mint-cyan storefront
+            }
+        }
+    };
+    let lum = (0.2126 * raw[0] + 0.7152 * raw[1] + 0.0722 * raw[2]).max(1e-6);
+    [raw[0] / lum, raw[1] / lum, raw[2] / lum]
+}
+
 /// `lights_of`, (stage N2) for a front the facade clutter boards up when
 /// `boarded`: placed (so every bay keeps its lights) but never lit.
 pub fn lights_of_front(bay: &Bay, key: u32, level: u8, boarded: bool) -> Vec<GpuShopLight> {
     let h = if boarded { shops::Hours { open: 0.0, span: 0.0, security: 0.0 } } else { shops::hours(bay.kind, key) };
-    let col = shops::colour(bay.kind, key);
+    let col = trade_spill_colour(bay.kind, key, shops::colour(bay.kind, key));
     let lum = shops::luminance(bay.kind, key);
     let n = if level >= 2 { ((bay.width / BAY_SPLIT_M).ceil() as usize).max(2) } else { 1 };
     let area = bay.width * bay.height / n as f64;

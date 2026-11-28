@@ -12,7 +12,9 @@ eo-assets = { path = "../eo-assets" }
 eo-data = { path = "../eo-data" }
 eo-landmarks = { path = "../eo-landmarks" } # landmark access: the decks a server and its clients share
 eo-player = { path = "../eo-player" }
+eo-sky = { path = "../eo-sky" }
 eo-structures = { path = "../eo-structures" } # structures: the handshake's world setting
+eo-street = { path = "../eo-street" } # street tapers: the handshake's world setting (`--street-tapers`)
 glam = "0.34.3"
 serde = { version = "1.0.229", features = ["derive"] } # the landmark viewpoint table
 serde_json = "1.0.154"

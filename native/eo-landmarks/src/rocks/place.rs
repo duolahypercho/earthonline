@@ -132,7 +132,7 @@ pub const GREENSTONE_TOP_M: f64 = 25.0;
 pub fn unit_srgb(u: Unit) -> [u8; 3] {
     match u {
         Unit::Chert => [98, 64, 57],
-        Unit::Greenstone => [86, 94, 84],
+        Unit::Greenstone => crate::hill_rock::GREENSTONE_SRGB,
         Unit::Serpentinite => crate::hill_rock::SERPENTINITE_SRGB,
         Unit::Sandstone => crate::hill_rock::SANDSTONE_SRGB,
     }
@@ -353,7 +353,7 @@ pub const REGIONS: [[f64; 4]; 2] = [[-122.4875, 37.7870, -122.4740, 37.8115], [-
 pub fn claim_discs(lib: &Library, pieces: &[Piece]) -> Vec<[f64; 3]> {
     pieces
         .iter()
-        .filter(|p| matches!(p.source, Source::Cliff | Source::Outcrop))
+        .filter(|p| matches!(p.source, Source::Cliff | Source::Outcrop | Source::Hill))
         .map(|p| {
             let k = &lib.kinds[p.kind as usize];
             let (c, r) = k.sphere();
@@ -428,6 +428,29 @@ pub fn seat(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64; 3], dir
 /// one lattice turned to one slope do not stand in rows.
 #[allow(clippy::too_many_arguments)]
 pub fn seat_twisted(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64; 3], dir: Option<[f64; 2]>, yaw: f64, lean: f64, sink: f64, twist: [f64; 2]) -> Option<([f64; 3], [f64; 4], f64)> {
+    seat_capped(lib, kind, w, x, z, s, dir, yaw, lean, sink, twist, FaceSeat::BLUFF)
+}
+
+/// How a face is laid (`seat_capped`): its tilt over the drawn slope's and at most, and how far it
+/// is lifted by the ground's departure from its plane (a share of the largest residual; negative: sunk).
+#[derive(Clone, Copy, Debug)]
+pub struct FaceSeat {
+    pub steepen_deg: f64,
+    pub max_tilt_deg: f64,
+    pub residual_lift: f64,
+}
+
+impl FaceSeat {
+    /// The bluffs' faces (`seat_twisted`): steeper than their slope, lifted half the residual.
+    pub const BLUFF: FaceSeat = FaceSeat { steepen_deg: FACE_STEEPEN_DEG, max_tilt_deg: FACE_MAX_TILT_DEG, residual_lift: 0.5 };
+}
+
+/// A face's tilt from the vertical's complement, at most (degrees): `seat_twisted`'s.
+pub const FACE_MAX_TILT_DEG: f64 = 75.0;
+
+/// `seat_twisted` with a face laid as `face` says (the hills' faces: rocks/hills.rs).
+#[allow(clippy::too_many_arguments)]
+pub fn seat_capped(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64; 3], dir: Option<[f64; 2]>, yaw: f64, lean: f64, sink: f64, twist: [f64; 2], face: FaceSeat) -> Option<([f64; 3], [f64; 4], f64)> {
     let k = &lib.kinds[kind as usize];
     let half = 0.5 * ((k.max[0] - k.min[0]) as f64 * s[0]).max((k.max[2] - k.min[2]) as f64 * s[2]);
     let (y, n, res) = ground_plane(w, x, z, half.max(0.5))?;
@@ -440,10 +463,10 @@ pub fn seat_twisted(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64;
             // its head out of it), turned to the DEM's downhill azimuth `d`;
             // seated uphill on that plane, lifted half the ground's departure
             // from its plane so its relief clears the drawn facets.
-            let tilt = (bb[0] * bb[0] + bb[2] * bb[2]).sqrt().atan2(bb[1]) + FACE_STEEPEN_DEG.to_radians();
-            let tilt = tilt.min(75f64.to_radians());
+            let tilt = (bb[0] * bb[0] + bb[2] * bb[2]).sqrt().atan2(bb[1]) + face.steepen_deg.to_radians();
+            let tilt = tilt.min(face.max_tilt_deg.to_radians());
             bb = [d[0] * tilt.sin(), tilt.cos(), d[1] * tilt.sin()];
-            sink -= 0.5 * res;
+            sink -= face.residual_lift * res;
             [0.0, 1.0, 0.0]
         }
         None => [yaw.sin(), 0.0, yaw.cos()],

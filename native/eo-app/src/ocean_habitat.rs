@@ -99,11 +99,17 @@ impl GroundProvider for SeaGround {
         self.water_column(x, z)
             .map_or_else(|| self.land.ground_y(x, z), |column| column.0)
     }
+    fn arrival_road_y(&self, x: f64, z: f64, near_y: f64) -> Option<f64> {
+        self.land.arrival_road_y(x, z, near_y)
+    }
     fn multi_level(&self) -> bool {
         self.land.multi_level()
     }
     fn surface_tile(&self, key: TileKey) -> Option<SurfaceMesh> {
         self.land.surface_tile(key)
+    }
+    fn terrain_cuts_in(&self, min: [f64; 2], max: [f64; 2]) -> Vec<&eo_structures::TerrainCut> {
+        self.land.terrain_cuts_in(min, max)
     }
     fn terrain_cut(&self, x: f64, z: f64) -> Option<f64> {
         self.land.terrain_cut(x, z)

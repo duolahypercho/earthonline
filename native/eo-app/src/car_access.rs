@@ -73,7 +73,11 @@ impl CarAccess {
         let body = library.and_then(|library| library.test_player.as_ref());
         if self.active.is_none() && input.vehicle_toggle && player.lift.is_none() {
             self.active = library.zip(body).and_then(|(library, body)| {
-                let model = library.model(crate::agents::PLAYER_CAR_BODY)?;
+                let vehicle = match player.mode {
+                    Mode::OnFoot => player.nearby_vehicle(world)?,
+                    Mode::Driving(i) => i,
+                };
+                let model = library.model(player.vehicles[vehicle].spec.config.model.body())?;
                 if library.models[model as usize].driver_door[3] == 0.0 {
                     return None;
                 }
@@ -102,7 +106,7 @@ impl CarAccess {
         let duration = body.rig.seconds(transfer.clip);
         if transfer.elapsed(player.ticks) >= duration {
             if transfer.entering {
-                player.enter_vehicle(transfer.vehicle);
+                player.finish_entry(world, transfer.vehicle);
             } else {
                 let frame = transfer.frame(player, world, body);
                 let facing = frame.orientation * DVec3::Z;

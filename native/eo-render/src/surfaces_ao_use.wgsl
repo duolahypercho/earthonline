@@ -47,7 +47,8 @@ fn ao_multi_bounce_albedo(v: f32, al: vec3<f32>) -> vec3<f32> {
 }
 
 // Which of the occlusion pass's additions run (look.ao_params.w: bit 0 the
-// sun bounce, bit 1 the albedo's multi-bounce).
+// sun bounce, bit 1 the albedo's multi-bounce; bit 4 the sun bounce's reach,
+// surfaces_ao_sun.wgsl).
 fn ao_run(bit: u32) -> bool {
     return (u32(look.ao_params.w + 0.5) & bit) != 0u;
 }

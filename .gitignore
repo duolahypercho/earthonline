@@ -23,6 +23,21 @@ public/data/sf/*.json.gz
 # ...and the citywide map cartography (ODbL + PDDL, 3.5 MB; provenance in
 # sf-map-citywide.NOTICE.txt beside it). The pause map and the HUD radar read it.
 !public/data/sf/sf-map-citywide.json.gz
+# ...and the SFMTA bikeway network (DataSF ygmz-vaxd, PDDL-1.0, 0.15 MB; see
+# sf-bikeways.NOTICE.txt).
+!public/data/sf/sf-bikeways.json.gz
+# ...and street pavement condition / resurfacing ages (DataSF 5aye-4rtt +
+# 78va-8dhi, PDDL-1.0, 0.40 MB; see sf-pavement.NOTICE.txt).
+!public/data/sf/sf-pavement.json.gz
+# ...and kerbside parking / mid-block crossing survey (DataSF hi6h-neyh +
+# 8vzz-qzz9 + ybh5-27n2, PDDL-1.0, 0.39 MB; see sf-street-survey.NOTICE.txt).
+!public/data/sf/sf-street-survey.json.gz
+# ...and the street tree inventory with trunk diameters (DataSF tkzw-k3nq,
+# PDDL-1.0, 1.29 MB; see sf-tree-sizes.NOTICE.txt).
+!public/data/sf/sf-tree-sizes.json.gz
+# ...and urban tree allometry equations (U.S. Government work, USDA Forest
+# Service RDS-2016-0005, 0.06 MB; see sf-tree-allometry.NOTICE.txt).
+!public/data/sf/sf-tree-allometry.json
 public/data/sf/*.geojson
 public/data/sf/*.pbf
 

@@ -25,6 +25,8 @@ pub struct TreeRecord {
     pub form: String,
     pub crown_m: Option<f64>,
     pub height_m: Option<f64>,
+    /// The list's genus class (`trees.species`: "Platanus", ..., "other").
+    pub genus: String,
 }
 
 pub fn record(w: &PropsWorld, i: u32) -> TreeRecord {
@@ -38,6 +40,7 @@ pub fn record(w: &PropsWorld, i: u32) -> TreeRecord {
         form: t.forms.get(d[o + 2] as usize).cloned().unwrap_or_else(|| "tall".into()),
         crown_m: (t.stride > 3 && d[o + 3] > 0).then(|| d[o + 3] as f64 / 10.0),
         height_m: (t.stride > 4 && d[o + 4] > 0).then(|| d[o + 4] as f64 / 10.0),
+        genus: if t.stride > 5 { t.species.get(d[o + 5] as usize).cloned().unwrap_or_default() } else { String::new() },
     }
 }
 

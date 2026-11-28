@@ -19,6 +19,33 @@ use eo_street::{BuildingIndex, StreetCity, StreetOptions, StreetWorld, Terrain};
 use std::sync::Arc;
 
 #[test]
+fn taraval_shared_mouth_has_one_continuous_carriageway() {
+    let paths = DataPaths::discover().unwrap();
+    let city = City::load(&paths).unwrap();
+    let elev = ElevationGrid::load(&paths).unwrap();
+    let o = StreetOptions::load().unwrap();
+    let lift = o.open_ground_lift;
+    let rings = city.buildings.iter().map(|b| b.ring.iter().map(|p| p.map(f64::from)).collect()).collect();
+    let w = StreetWorld::build(o, StreetCity::load().unwrap(), Terrain { grid: Arc::new(elev), carpet_lift: lift }, BuildingIndex::new(rings));
+
+    let node = w.plan.nodes.iter().find(|n| n.id == "inferred:-5716.560:4801.681").unwrap();
+    assert_eq!(node.approaches.len(), 6, "the shared pavement still carries both routes");
+
+    // Consecutive traffic positions on the west side of the junction.
+    let heights = [
+        [-4585.98959471102, 3839.315204413882],
+        [-4586.105707247667, 3839.321504368864],
+    ].map(|p| {
+        let [x, z] = eo_data::groundscale::plan(p);
+        let heights = w.paved_heights(x, z);
+        assert_eq!(heights.len(), 1, "overlapping surfaces at {x}, {z}: {heights:?}");
+        assert!(w.only_carriageway_at(x, z));
+        heights[0]
+    });
+    assert!((heights[1] - heights[0]).abs() < 0.05, "{heights:?}");
+}
+
+#[test]
 fn street_surface_is_closed_and_on_its_section() {
     let paths = DataPaths::discover().unwrap();
     let city = City::load(&paths).unwrap();
@@ -27,6 +54,18 @@ fn street_surface_is_closed_and_on_its_section() {
     let lift = o.open_ground_lift;
     let rings = city.buildings.iter().map(|b| b.ring.iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
     let w = StreetWorld::build(o, StreetCity::load().unwrap(), Terrain { grid: Arc::new(elev), carpet_lift: lift }, BuildingIndex::new(rings));
+    // Two Market Street carriageways exchange which one supplies the floor.
+    // The independently rounded edges once left a 0.09 mm slit. Sample the
+    // actual seam and adjacent representable mesh coordinates on both sides.
+    let [x, z] = eo_data::groundscale::plan([-568.730954205614, 876.533983100553]);
+    let unit = |v: f64| { let v = v.abs() as f32; f64::from(v.next_up() - v) };
+    for i in -2..=2 {
+        for j in -2..=2 {
+            let (qx, qz) = (x + f64::from(i) * unit(x), z + f64::from(j) * unit(z));
+            assert!(w.carriageway_near(qx, qz, w.ground(qx, qz)).is_some(),
+                "missing Market Street asphalt at {qx}, {qz}");
+        }
+    }
     let keys: Vec<_> = w.tile_keys().into_iter().step_by(20).collect();
     let (mut probes, mut holes, mut fights, mut off, mut ground, mut walk_probes, mut walk_holes) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
     let mut worst_off = (0.0f64, [0.0, 0.0]);

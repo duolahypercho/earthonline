@@ -16,6 +16,7 @@
 
 mod hill_rock; // the hill rock's mid ring past the props tiles
 pub(crate) mod vegetation; // the Golden Gate's coastal trees, ground cover and hill rock on the props tiles
+pub(crate) mod lidar_trees; // (`--no-lidar-trees`) the hill parks' trees from the USGS 3DEP lidar (eo-hills trees)
 
 use eo_props::{Live, Model, ParkedCar, PropsWorld, TilePlacement};
 use eo_render::props::{EMPTY, GpuLampLight, GpuPropInstance, GpuWireSeg, INSTANCE_CAPACITY, LAMP_CAPACITY, LIGHT_CAPACITY, WIRE_CAPACITY};
@@ -46,6 +47,7 @@ struct VegRing {
     pending: Arc<Mutex<Vec<Key>>>,
     outbox: eo_render::hitch::Outbox<Key>,
     slots: HashMap<Key, Slot>,
+    wanted_scratch: HashSet<Key>,
 }
 /// The moored boats' one upload (with `TAG_PROPS`): never a tile's, so never cancelled with one.
 pub const TAG_BOATS: u64 = 1 << 56;
@@ -91,14 +93,126 @@ pub struct Props2Args {
     /// (`--luminaires`, main.rs) the district lights' lamps at their GLBs' glass (a twin
     /// post's two lanterns), the glass drawn lit. Off (the default): the JS heads as before.
     pub luminaires: bool,
+    /// A street light beside a trolley support pole stands on the pole's spot and holds its
+    /// wires, one standard in place of two poles (eo-props `overhead::Overhead::lamp_moves`;
+    /// only while both the furniture and the overhead are drawn). `--no-shared-poles` stands
+    /// both, as before.
+    pub shared_poles: bool,
+    /// Where two pieces of a street meet with no junction, one trolley support station and
+    /// distribution poles at the measured spacing, not one of each piece's (eo-props
+    /// `overhead::set_joint_dedupe`). `--no-joint-dedupe` stands both pieces' poles, as before.
+    pub joint_dedupe: bool,
     /// `--poster-hoardings`: draw the furniture walk's poster hoardings again (eo-props
     /// `furniture::set_poster_hoardings`). Off (the default): they are planned but not drawn.
     pub poster_hoardings: bool,
+    /// The SFMTA sign plates draw their Blender models (eo-props `sign_models`, eo-render
+    /// `props_lib2::SIGN_MODEL_BASE`): the official face on a weathered aluminium blank with its
+    /// bolts, saddle brackets and post bands. `--no-sign-models` (or `--no-props2`) keeps the
+    /// plates built in code, as before.
+    pub sign_models: bool,
+    /// One pole per spot: an SFMTA post seated within the merge radius of one already placed
+    /// hangs its plates on that pole instead of standing its own a few centimetres away
+    /// (eo-props `signs::set_merge_posts`). `--no-sign-post-merge` stands every listed post, as before.
+    pub sign_post_merge: bool,
+    /// Each sign plate draws one of its face's wear variants (aged, rusty, battered; eo-props
+    /// `sign_models::wear_of`, by where it stands). `--no-sign-variants` draws every plate aged.
+    pub sign_variants: bool,
+    /// The vehicle and pedestrian signal heads draw the modelled McCain heads (eo-props
+    /// `signal_models`): the LED lenses and the countdown head's face lit through the LED images
+    /// the build draws. `--no-signal-models` (or `--no-props2`) keeps the v2 vehicle
+    /// head and the pedestrian head built in code, as before.
+    pub signal_models: bool,
+    /// The signal poles, mast arms and head mounts draw their Blender models (eo-props
+    /// `signal_poles`, eo-render `props_lib2::SIGNAL_POLE_BASE`): the mast pole on its base plate
+    /// and anchor bolts with its handhole and cap, the pedestal posts on their cast bases, the
+    /// arm's bolted root and end cap, a hanger for each head on an arm, pipe brackets for each
+    /// head on a pole, a clamshell for each pedestrian head; painted or galvanised, weathered. `--no-signal-poles`
+    /// (or `--no-props2`) keeps the poles and arms built in code and no mounts, as before.
+    pub signal_poles: bool,
+    /// Each signal pole and its hardware in the finish of the spot it stands on, painted or
+    /// galvanised (eo-props `signal_poles::finish_at`). `--no-signal-pole-variants` paints every one.
+    pub signal_pole_variants: bool,
+    /// (with the signal poles' models) Each mast arm the Caltrans RSP ES-7E table covers rises
+    /// from the pole to its end as that sheet draws it, its heads hung from it (eo-props
+    /// `signals::set_arm_rise`). `--no-arm-rise` keeps the arms level, as before.
+    pub arm_rise: bool,
+    /// (with the signal poles' models) A CA MUTCD D3-1 Street Name sign under each mast arm,
+    /// naming the street its traffic crosses (eo-props `signals::Fitting::NameSign`,
+    /// `sign_atlas::arm_name_signs`). `--no-arm-name-signs` draws none, as before.
+    pub arm_name_signs: bool,
+    /// (with the signal poles' models) A pedestrian push button with its R10-3e(CA) sign on the
+    /// pole at each end of each signalised crosswalk (eo-props `signals::Fitting::PushButton`).
+    /// `--no-push-buttons` draws none, as before.
+    pub push_buttons: bool,
+    /// (with the arm rise) Only the arms of a junction on a State route rise (Caltrans RSP
+    /// ES-7E); a city street's stay level (eo-props `signals::set_arm_rise_routes`,
+    /// `signal-mast-arm-sf-city-street`). `--no-arm-rise-routes` raises every arm, as before.
+    pub arm_rise_routes: bool,
+    /// (with the signal poles' models) Every level arm as low as CA MUTCD lets its heads and
+    /// Street Name sign hang (eo-props `signals::set_arm_lower`). `--no-arm-lower` keeps the
+    /// game's arm height, as before.
+    pub arm_lower: bool,
+    /// (with the route rule) A junction that meets a State route only through a freeway ramp is
+    /// a city junction, its arms level (eo-props `signals::set_ramp_level`). `--no-ramp-level`
+    /// counts the ramp, as before.
+    pub ramp_level: bool,
+    /// (with the rise) A rising arm keeps its heads and Street Name sign clear of CA MUTCD's
+    /// binding minimums over the roadway under them, the sign where it hangs highest (eo-props
+    /// `signals::set_rise_clearance`). `--no-rise-clearance` rises as before.
+    pub rise_clearance: bool,
+    /// (with the signal poles' models) A level arm drawn at Caltrans RSP ES-7E's diameter and
+    /// taper for its length (eo-props `signal_poles::ARM_LEVEL_PARTS`). `--no-arm-diameter`
+    /// draws the round 1 tube, as before.
+    pub arm_diameter: bool,
+    /// (with the signal poles' models) The rising arms drawn as far as their poles and heads
+    /// (eo-render `LibExtras::rising_arm_far`). `--no-arm-far` stops them at the hardware's
+    /// distance, as before (their heads then hang in the air past it).
+    pub arm_far: bool,
+    /// (with the signal poles' models) A mast pole of another height than its model is cut at
+    /// its shaft, its foot (base plate, bolts, handhole) and cap at their true size (eo-props
+    /// `signal_poles::Part::MastMid`). `--no-pole-cut` scales the whole model, as before.
+    pub pole_cut: bool,
+    /// (with the signal poles' models and the furniture) A district street light within the
+    /// SFPUC like-for-like distance of a mast pole stands on it, a combination pole (eo-props
+    /// `signal_lamps`). `--no-signal-luminaires` leaves every light where the walk stood it, as before.
+    pub signal_luminaires: bool,
+    /// (with the arm name signs) Their sheeting at its own roughness, matte and aged (eo-props
+    /// `signal_poles::NAME_SIGN_ROUGHNESS`, through the face colour's alpha). `--no-name-sign-matte`
+    /// shades them as the other plates, as before.
+    pub name_sign_matte: bool,
+    /// The signal lenses and pedestrian symbols lit as lights (eo-render `props::set_signal_light`):
+    /// their luminance toward the eye by the module's lobe in the frame's units, under weathered
+    /// glass that reflects the sky through the visor's mouth. `--no-signal-light` (or
+    /// `--no-props2`) keeps each lens the display value it was solved to, as before.
+    pub signal_light: bool,
+    /// (with the overhead) One controller cabinet a signalised junction, the overhead's, shared
+    /// by a divided street's nodes (eo-props `overhead::set_one_cabinet`). `--no-one-cabinet`
+    /// draws each node's and the walk's, as before.
+    pub one_cabinet: bool,
+    /// (with the signal poles' models and the overhead) The cabinet drawn as the city's MSF60
+    /// on its pad, along the kerb (eo-props `signal_poles::Part::Cabinet`,
+    /// `overhead::set_cabinet_model`). `--no-cabinet-model` draws the code-built box, as before.
+    pub cabinet_model: bool,
+    /// (with the signal poles' models) A No. 5 traffic pull box in the sidewalk beside each
+    /// signal pole (eo-props `signals::plan_pull_boxes`). `--no-pull-boxes` draws none, as before.
+    pub pull_boxes: bool,
+    /// (with the arm name signs) Two stiffener channels across each Street Name sign's back
+    /// (eo-props `signal_poles::Part::SignChannel`). `--no-sign-channels` draws none, as before.
+    pub sign_channels: bool,
+    /// `--tree-keep` (off by default): the DataSF list trees the furniture walk dropped for a
+    /// reason of the port's own making are kept (eo-props `furniture::set_tree_keep`).
+    pub tree_keep: bool,
+    /// `--tree-sizes` (off by default): a list tree's crown and height from its recorded trunk
+    /// diameter by the Urban Tree Database allometry (eo-props `furniture::set_tree_sizes`).
+    pub tree_sizes: bool,
+    /// `--tree-species` (off by default): a list tree draws as its species' or genus's street
+    /// form, not its survey form's (eo-props `furniture::set_tree_species`).
+    pub tree_species: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false, poster_hoardings: false }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true, luminaires: false, shared_poles: true, joint_dedupe: true, poster_hoardings: false, sign_models: true, sign_post_merge: true, sign_variants: true, signal_models: true, signal_poles: true, signal_pole_variants: true, arm_rise: true, arm_name_signs: true, push_buttons: true, arm_rise_routes: true, arm_lower: true, ramp_level: true, rise_clearance: true, arm_diameter: true, arm_far: true, pole_cut: true, signal_luminaires: true, name_sign_matte: true, signal_light: true, one_cabinet: true, cabinet_model: true, pull_boxes: true, sign_channels: true, tree_keep: false, tree_sizes: false, tree_species: false }
     }
 }
 
@@ -107,7 +221,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires, poster_hoardings: self.poster_hoardings };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false, luminaires: self.luminaires, shared_poles: self.shared_poles, joint_dedupe: self.joint_dedupe, poster_hoardings: self.poster_hoardings, sign_models: false, sign_post_merge: self.sign_post_merge, sign_variants: self.sign_variants, signal_models: false, signal_poles: false, signal_pole_variants: self.signal_pole_variants, arm_rise: self.arm_rise, arm_name_signs: self.arm_name_signs, push_buttons: self.push_buttons, arm_rise_routes: self.arm_rise_routes, arm_lower: self.arm_lower, ramp_level: self.ramp_level, rise_clearance: self.rise_clearance, arm_diameter: self.arm_diameter, arm_far: self.arm_far, pole_cut: self.pole_cut, signal_luminaires: self.signal_luminaires, name_sign_matte: self.name_sign_matte, signal_light: false, one_cabinet: self.one_cabinet, cabinet_model: self.cabinet_model, pull_boxes: self.pull_boxes, sign_channels: self.sign_channels, tree_keep: self.tree_keep, tree_sizes: self.tree_sizes, tree_species: self.tree_species };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -116,6 +230,36 @@ impl Props2Args {
                 self.wires = false;
             }
             "--no-wires" => self.wires = false,
+            "--no-shared-poles" => self.shared_poles = false,
+            "--no-joint-dedupe" => self.joint_dedupe = false,
+            "--no-sign-models" => self.sign_models = false,
+            "--no-sign-post-merge" => self.sign_post_merge = false,
+            "--no-sign-variants" => self.sign_variants = false,
+            "--no-signal-models" => self.signal_models = false,
+            "--no-signal-poles" => self.signal_poles = false,
+            "--no-signal-pole-variants" => self.signal_pole_variants = false,
+            "--no-arm-rise" => self.arm_rise = false,
+            "--no-arm-name-signs" => self.arm_name_signs = false,
+            "--no-push-buttons" => self.push_buttons = false,
+            "--no-arm-rise-routes" => self.arm_rise_routes = false,
+            "--no-arm-lower" => self.arm_lower = false,
+            "--no-ramp-level" => self.ramp_level = false,
+            "--no-rise-clearance" => self.rise_clearance = false,
+            "--no-arm-diameter" => self.arm_diameter = false,
+            "--no-arm-far" => self.arm_far = false,
+            "--no-pole-cut" => self.pole_cut = false,
+            "--no-signal-luminaires" => self.signal_luminaires = false,
+            "--no-name-sign-matte" => self.name_sign_matte = false,
+            "--no-signal-light" => self.signal_light = false,
+            "--no-one-cabinet" => self.one_cabinet = false,
+            "--no-cabinet-model" => self.cabinet_model = false,
+            "--no-pull-boxes" => self.pull_boxes = false,
+            "--no-sign-channels" => self.sign_channels = false,
+            "--no-retro-viewer" => self.features &= !eo_render::props::F_RETRO_VIEWER,
+            "--no-sign-back-aged" => self.features &= !eo_render::props::F_SIGN_BACK_AGED,
+            "--signal-light" => self.signal_light = true,
+            "--poster-hoardings" => self.poster_hoardings = true,
+            "--no-poster-hoardings" => self.poster_hoardings = false,
             "--no-boats" => self.boats = false,
             "--no-boat-motion" => self.features &= !eo_render::props::F_AFLOAT,
             "--no-street-props-v2" => self.street_v2 = false,
@@ -123,8 +267,12 @@ impl Props2Args {
             "--no-fade" => self.features &= !eo_render::props::F_FADE,
             "--no-wind" => self.features &= !eo_render::props::F_WIND,
             "--capture-props2" => self.capture = true,
-            "--poster-hoardings" => self.poster_hoardings = true,
-            "--no-poster-hoardings" => self.poster_hoardings = false,
+            "--tree-keep" => self.tree_keep = true,
+            "--no-tree-keep" => self.tree_keep = false,
+            "--tree-sizes" => self.tree_sizes = true,
+            "--no-tree-sizes" => self.tree_sizes = false,
+            "--tree-species" => self.tree_species = true,
+            "--no-tree-species" => self.tree_species = false,
             _ => return false,
         }
         true
@@ -142,6 +290,22 @@ const SIGNAL_SPILL_NEAR_M: f32 = 250.0;
 const SIGNAL_LENS_Y_M: [f32; 3] = [0.35, 0.0, -0.35];
 const SIGNAL_LENS_Z_M: f32 = 0.3;
 
+/// A district light's unit seed (`eo_sky::lamp_units::seed_of` of its post's foot), as its
+/// prop instance word and its light both carry it: without the afloat bit, which in an
+/// instance word means a moored boat (eo-render props_types.wgsl `pr_afloat_on`), so the
+/// props shader never rolls and pitches a lamp post by its seed's bits.
+/// `EO_SIGNAL_CLOCK_S` (captures): the signal controllers' clock moved on by this many seconds
+/// (the lamps only; the wind keeps the simulation's), so a shot can show a head's other aspects:
+/// `--shots` steps every run's agents from the same clock, so every capture lands on one phase.
+fn signal_clock_offset() -> f64 {
+    static OFFSET: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    *OFFSET.get_or_init(|| std::env::var("EO_SIGNAL_CLOCK_S").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0))
+}
+
+fn lamp_seed(foot: [f64; 3]) -> u32 {
+    eo_sky::lamp_units::seed_of(foot) & !eo_props::boats::AFLOAT_BIT
+}
+
 /// the library facts the tile workers need.
 #[derive(Clone, Default)]
 struct LibFacts {
@@ -153,6 +317,27 @@ struct LibFacts {
     /// (`--luminaires`) the district lights' sockets by model (eo-render
     /// `props_lib::district_light_sockets`; empty without the switch).
     sockets: Vec<(Model, Vec<([f32; 3], [f32; 4])>)>,
+    /// Per inventory face, how many of its wear variants its sign plates draw from
+    /// (`lib2::sign_model_id`; 0: the plate built in code, as with `--no-sign-models`).
+    sign_faces: Vec<u8>,
+    /// The signal poles' parts' dimensions when every part cooked (`lib2::SIGNAL_POLE_BASE`;
+    /// None: the poles and arms built in code, as with `--no-signal-poles`).
+    signal_poles: Option<eo_props::signal_poles::Dims>,
+    /// (`--no-signal-pole-variants` off) each pole in the finish of its spot.
+    signal_pole_variants: bool,
+    /// (`--no-arm-name-signs` off) the arms' Street Name signs the library drew, by legend.
+    name_signs: Option<eo_props::signal_poles::NameSigns>,
+    /// (`--no-push-buttons` off) the push buttons drawn.
+    push_buttons: bool,
+    /// (`--no-pole-cut` off) a mast pole of another height cut at its shaft.
+    pole_cut: bool,
+    /// (`--no-arm-diameter` off) a level arm at its length class's diameter.
+    level_arm_diameter: bool,
+    /// (`--no-cabinet-model` off) the overhead's cabinets drawn as the MSF60 part.
+    cabinet_model: bool,
+    /// (`--no-pull-boxes`, `--no-sign-channels` off) the pull boxes and the sign channels drawn.
+    pull_boxes: bool,
+    sign_channels: bool,
 }
 
 #[derive(Clone)]
@@ -162,6 +347,12 @@ enum LiveRef {
     Pedestrian { j: Arc<SignalJunction>, crossed: Option<usize>, length: f64 },
 }
 
+struct GroundedParkedCar {
+    car: ParkedCar,
+    y: f32,
+    rot: [f32; 4],
+}
+
 struct TilePack {
     key: Key,
     /// 0 a props tile, else the vegetation ring (`RING_FINE`, `RING_MID`) the cell is of.
@@ -169,7 +360,7 @@ struct TilePack {
     instances: Vec<GpuPropInstance>,
     /// Index into `instances` and its live source.
     lives: Vec<(u32, LiveRef)>,
-    parked: Vec<ParkedCar>,
+    parked: Vec<GroundedParkedCar>,
     counts: HashMap<Model, usize>,
     ms: f64,
     /// the overhead's wire segments and the district lights' luminaires.
@@ -185,7 +376,7 @@ enum Slot {
         at: u32,
         n: u32,
         lamps: Vec<u32>,
-        parked: Arc<Vec<ParkedCar>>,
+        parked: Arc<Vec<GroundedParkedCar>>,
         counts: HashMap<Model, usize>,
         // wire and light ranges, extra counts.
         wire_at: u32,
@@ -220,6 +411,8 @@ struct Loaded {
     facts: LibFacts,
     wire_look: eo_render::props::WireLook,
     boats: Vec<GpuPropInstance>,
+    /// The measured rear-yard fences (`--yard-detail`, yards.rs; none without it).
+    fences: Vec<GpuPropInstance>,
 }
 
 pub struct PropsRuntime {
@@ -256,6 +449,14 @@ pub struct PropsRuntime {
     /// (`--signal-spill`) a vehicle signal head's channel: its instance's position, yaw and scale.
     lamp_heads: HashMap<u32, ([f32; 3], f32, [f32; 3])>,
     lamp_words: Vec<u32>,
+    last_lamp_words: Vec<u32>,
+    tiles_dirty: bool,
+    evicting: bool,
+    empty_instances: Vec<GpuPropInstance>,
+    empty_wires: Vec<GpuWireSeg>,
+    empty_lights: Vec<GpuLampLight>,
+    wanted_scratch: HashSet<Key>,
+    vehicle_rings: Vec<(f64, usize)>,
     parked_cam: Option<Vec3>,
     parked_dirty: bool,
     pub parked: Vec<eo_agents::GpuAgent>,
@@ -268,10 +469,11 @@ pub struct PropsRuntime {
     boat_block: (u32, u32),
     /// The boats' poses each frame (boats.rs; None with `--no-boat-motion` or no fleet: at rest).
     boat_motion: Option<crate::boats::BoatMotion>,
-    /// The tiles holding a tunnel bore's lamps (`--tunnels`; empty
-    /// otherwise): planned with the street's tiles (a bore runs under tiles
-    /// with no street), by their distance along the bore as well as over the ground.
-    bore_tiles: HashSet<Key>,
+    /// Mounted lights in tiles without an ordinary street. A tunnel uses its
+    /// plan distance. A sea crossing uses the height of its deck and lamps.
+    structure_light_heights: HashMap<Key, [f32; 2]>,
+    /// The measured rear-yard fences' block of the arena (`--yard-detail`, yards.rs).
+    yards: crate::yards::FenceBlock,
 }
 
 impl PropsRuntime {
@@ -304,6 +506,14 @@ impl PropsRuntime {
             lamp_src: HashMap::new(),
             lamp_heads: HashMap::new(),
             lamp_words: vec![],
+            last_lamp_words: vec![],
+            tiles_dirty: false,
+            evicting: false,
+            empty_instances: vec![],
+            empty_wires: vec![],
+            empty_lights: vec![],
+            wanted_scratch: HashSet::new(),
+            vehicle_rings: vec![],
             parked_cam: None,
             parked_dirty: true,
             parked: vec![],
@@ -311,10 +521,11 @@ impl PropsRuntime {
             errors: vec![],
             started: Instant::now(),
             clock: 0.0,
-            bore_tiles: HashSet::new(),
+            structure_light_heights: HashMap::new(),
             boats_pending: vec![],
             boat_block: (0, 0),
             boat_motion: None,
+            yards: Default::default(),
         };
         if let (Some(f), Some(w)) = (&world.fleet, &world.water) {
             if args.props2.boats && args.props2.features & eo_render::props::F_AFLOAT != 0 {
@@ -373,8 +584,93 @@ impl PropsRuntime {
                     let bodies = (p2.boats && fleet.is_some())
                         .then(|| eo_props::boats::load_bodies(&paths.repo_root).map_err(|e| eprintln!("props: boats not drawn ({e:#})")).ok())
                         .flatten();
-                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins, boats: bodies.as_deref(), luminaires: p2.luminaires };
+                    // the SFMTA sign plates' Blender models (`--no-sign-models`: none, the library as before them).
+                    let sign_models = p2
+                        .sign_models
+                        .then(|| eo_props::sign_models::load(&paths.repo_root, &js.signs.faces).map_err(|e| eprintln!("props: sign models not drawn ({e:#}); plates built in code")).ok())
+                        .flatten();
+                    // (with the signal poles) the arms rise (`--no-arm-rise`): set before any junction is planned.
+                    eo_props::signals::set_arm_rise(p2.signal_poles && p2.arm_rise);
+                    // (with the rise) only a State route's junctions rise (`--no-arm-rise-routes`).
+                    eo_props::signals::set_arm_rise_routes(p2.arm_rise_routes);
+                    // (with the poles) level arms as low as they may hang (`--no-arm-lower`); a ramp
+                    // makes no State-route junction (`--no-ramp-level`).
+                    eo_props::signals::set_arm_lower(p2.signal_poles && p2.arm_lower);
+                    eo_props::signals::set_ramp_level(p2.ramp_level);
+                    eo_props::signals::set_rise_clearance(p2.signal_poles && p2.rise_clearance);
+                    // (with the signal poles) the arms' Street Name signs (`--no-arm-name-signs`):
+                    // every legend a junction's arm may carry, drawn into the sign face atlas.
+                    let name_atlas = (p2.signal_poles && p2.arm_name_signs && signs.is_some())
+                        .then(|| {
+                            let legends = eo_props::signals::name_sign_legends(&street);
+                            let art = eo_props::sign_atlas::art::SignArt::load_default()?;
+                            eo_props::sign_atlas::arm_name_signs(&legends, &art, js.signs.faces.len(), std.overhead_name_cap).map_err(|e| eprintln!("props: arm name signs not drawn ({e:#})")).ok()
+                        })
+                        .flatten()
+                        // (`--no-name-sign-matte` off) their sheeting's own roughness in their colours' alpha
+                        .map(|mut n| {
+                            if p2.name_sign_matte {
+                                for c in &mut n.colours {
+                                    c[3] = eo_props::signal_poles::NAME_SIGN_ROUGHNESS;
+                                }
+                            }
+                            n
+                        });
+                    // the signal poles' Blender models (`--no-signal-poles`: none, the library as before them).
+                    let signal_poles = p2
+                        .signal_poles
+                        .then(|| eo_props::signal_poles::load(&paths.repo_root).map_err(|e| eprintln!("props: signal pole models not drawn ({e:#}); poles and arms built in code")).ok())
+                        .flatten();
+                    // `--tree-crowns` (main's `roofs_flags`): the trees' window and far forms take a crown core.
+                    let tree_crowns = eo_props::eztree::tree_crowns_enabled();
+                    let extras = lib2::LibExtras {
+                        ez: ez.as_deref(),
+                        signs: signs.as_ref(),
+                        overhead: overhead_js.as_ref(),
+                        stand_ins: p2.stand_ins,
+                        tree_crowns,
+                        boats: bodies.as_deref(),
+                        luminaires: p2.luminaires,
+                        sign_models: sign_models.as_ref(),
+                        signal_poles: signal_poles.as_ref(),
+                        name_signs: name_atlas.as_ref(),
+                        pole_lamps: p2.signal_poles && p2.signal_luminaires && p2.furniture,
+                        rising_arm_far: p2.signal_poles && p2.arm_far,
+                    };
                     let lib = PropLibrary::load_full(&paths.repo_root, &js, lens, &extras, dome, cache.as_deref())?;
+                    // per face, how many of its wear variants cooked, in order (0: the code-built plate;
+                    // `--no-sign-variants`: at most the first).
+                    let wears = if p2.sign_variants { lib2::SIGN_WEARS } else { 1 };
+                    let cooked = |f: u32, w: u32| lib.models.get(lib2::sign_model_id(f, w) as usize).is_some_and(|m| m.meshes[0] != eo_render::props_lib::NONE);
+                    let sign_faces: Vec<u8> = (0..lib2::MAX_SIGN_FACES).map(|f| (0..wears).take_while(|&w| cooked(f, w)).count() as u8).collect();
+                    // the signal poles drawn only when every part cooked (else all built in code).
+                    let part_cooked = |k: u32| lib.models.get((lib2::SIGNAL_POLE_BASE + k) as usize).is_some_and(|m| m.meshes[0] != eo_render::props_lib::NONE);
+                    let signal_poles = signal_poles.filter(|_| (0..lib2::SIGNAL_POLE_MODELS).all(part_cooked)).map(|s| s.dims);
+                    // (`--no-signal-luminaires` off) the street lights stand on the mast poles only
+                    // where the poles and both pole lamps drew (set before any junction is planned).
+                    let pole_lamps = signal_poles.is_some() && (0..lib2::SIGNAL_LAMP_MODELS).all(|k| part_cooked(lib2::SIGNAL_LAMP_BASE - lib2::SIGNAL_POLE_BASE + k));
+                    eo_props::signal_lamps::set_signal_luminaires(p2.signal_luminaires && p2.furniture && pole_lamps);
+                    // the name signs' faces follow the inventory's in the library's face list
+                    let inventory = js.signs.faces.len();
+                    let name_signs = name_atlas.as_ref().filter(|n| lib.face_count as usize == inventory + n.legends.len()).map(|n| eo_props::signal_poles::NameSigns {
+                        faces: n.legends.iter().enumerate().map(|(i, l)| (l.clone(), ((inventory + i) as u32, n.sizes[i]))).collect(),
+                    });
+                    // (`--no-arm-lower`, `--no-rise-clearance` off) how far a drawn name sign's bottom hangs
+                    // under its arm's axis: the thickest arm's radius at the pole, the sign's hang, the
+                    // tallest blade (0: none drawn); and each legend's width, for a rising arm's sign
+                    let blade = name_signs.as_ref().and_then(|n| n.faces.values().map(|f| f.1[1]).reduce(f64::max));
+                    eo_props::signals::set_name_sign_drop(match (blade, signal_poles.as_ref()) {
+                        (Some(h), Some(d)) => d.arms.iter().map(|a| a.root_radius_m).fold(d.arm_root_radius_m, f64::max) + eo_props::signal_poles::SIGN_HANG_M + h,
+                        _ => 0.0,
+                    });
+                    eo_props::signals::set_name_sign_widths(name_signs.as_ref().map(|n| n.faces.iter().map(|(l, f)| (l.clone(), f.1[0])).collect()));
+                    // (`--no-one-cabinet`, `--no-cabinet-model`, `--no-pull-boxes` off) the corner hardware:
+                    // the junction's one cabinet (the overhead's), drawn as the MSF60 along the kerb, and
+                    // a pull box beside each signal pole (set before any junction is planned)
+                    eo_props::overhead::set_one_cabinet(p2.one_cabinet && p2.overhead);
+                    let cabinet_model = p2.cabinet_model && p2.overhead && signal_poles.is_some();
+                    eo_props::overhead::set_cabinet_model(signal_poles.as_ref().filter(|_| cabinet_model).map(|d| [d.cabinet_m[0], d.cabinet_m[1], d.cabinet_m[2], d.cabinet_pad_m[0], d.cabinet_pad_m[1]]));
+                    eo_props::signals::set_pull_boxes(signal_poles.as_ref().filter(|_| p2.pull_boxes).map(|d| d.pull_box_m));
                     // (`--luminaires`) the district lights' sockets from their GLBs' glass.
                     let sockets = if p2.luminaires { eo_render::props_lib::district_light_sockets(&paths.repo_root, &js) } else { vec![] };
                     // what stands in for an absent GLB: the procedural model (`--stand-ins`) or the grey proxy.
@@ -385,13 +681,28 @@ impl PropsRuntime {
                     let library_ms = t_lib.elapsed().as_secs_f64() * 1e3;
                     // The same structure levels as the sim, so the signal junctions match it (`--structures`).
                     let levels = structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
-                    let source = Arc::new(eo_sim::native::load(&paths)?.with_levels(levels));
+                    let mut source = eo_sim::native::load(&paths)?.with_levels(levels);
+                    if crate::agents::traffic_street_plan_on() {
+                        source = source.with_traffic_plan(street.traffic_plan());
+                        if let Some(decks) = &structures {
+                            source = source.with_deck_surfaces(decks.traffic_surfaces());
+                        }
+                    }
+                    let source = Arc::new(source);
                     // the tree basins (`--tree-basins`), read when the world is made, and the furniture
                     // walk's mode (`--surveyed-furniture`), read when its furniture is installed.
                     eo_props::basins::set_tree_basins(p2.tree_basins);
                     let world = Arc::new(PropsWorld::new(street, js, std).with_structures(structures));
                     eo_props::furniture::set_surveyed_first(p2.surveyed_furniture);
                     eo_props::furniture::set_poster_hoardings(p2.poster_hoardings);
+                    eo_props::overhead::set_lamp_standards(p2.shared_poles && p2.furniture && p2.overhead);
+                    eo_props::overhead::set_joint_dedupe(p2.joint_dedupe);
+                    eo_props::signs::set_merge_posts(p2.sign_post_merge);
+                    // the street trees' switches (`--tree-keep`, `--tree-sizes`, `--tree-species`), read
+                    // when the furniture is installed.
+                    eo_props::furniture::set_tree_keep(p2.tree_keep);
+                    eo_props::furniture::set_tree_sizes(p2.tree_sizes);
+                    eo_props::furniture::set_tree_species(p2.tree_species);
                     if p2.furniture || p2.eztree {
                         world.install_furniture(&city.buildings)?;
                     }
@@ -413,9 +724,10 @@ impl PropsRuntime {
                         .unwrap_or_default();
                     let veg = veg_grid.map(|g| {
                         let land = eo_data::LandCover::load(&paths).map_err(|e| eprintln!("vegetation: land cover not read ({e:#}); classes from the greens only")).ok();
-                        Arc::new(vegetation::VegGround::new(g, world.street.clone(), land, veg_water, veg_switches, &paths.repo_root))
+                        let cuts = vegetation::portal_ground(world.structures.as_ref()).cloned();
+                        Arc::new(vegetation::VegGround::new(g, world.street.clone(), cuts, land, veg_water, veg_switches, &paths.repo_root))
                     });
-                    let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg, sockets };
+                    let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg, sockets, sign_faces, signal_poles, signal_pole_variants: p2.signal_pole_variants, name_signs, push_buttons: p2.push_buttons, pole_cut: p2.pole_cut, level_arm_diameter: p2.arm_diameter, cabinet_model, pull_boxes: p2.pull_boxes, sign_channels: p2.sign_channels };
                     // one boat per occupied berth, its waterline on the still sea (where the docks float),
                     // bow along the berth's heading (the model's +Z turned by yaw lies along (sin yaw, cos yaw)).
                     // the fleet at rest, in its order (eo-app boats.rs poses it each frame unless `--no-boat-motion`);
@@ -431,7 +743,8 @@ impl PropsRuntime {
                         eprintln!("props2: {} boats moored", boats.len());
                     }
                     eprintln!("props2: library ready in {library_ms:.0} ms ({} meshes, {} tree species, {} sign variants)", lib.meshes.len(), facts.species, facts.sign_variants);
-                    Ok(Loaded { world, lib, source, facts, wire_look, boats })
+                    let fences = crate::yards::fence_instances(&world); // `--yard-detail`
+                    Ok(Loaded { world, lib, source, facts, wire_look, boats, fences })
                 })();
                 let _ = tx.send(r.map_err(|e| format!("{e:#}")));
             })
@@ -524,6 +837,7 @@ impl PropsRuntime {
                 && self.outbox.is_empty()
                 && self.pending.lock().unwrap().is_empty()
                 && self.in_flight.load(Ordering::SeqCst) == 0
+                && !self.evicting
                 && self.veg_epoch == veg_epoch()
                 && self.slots.values().all(|s| matches!(s, Slot::Resident { .. }))
                 && self.rings.iter().all(|r| r.outbox.is_empty() && r.pending.lock().unwrap().is_empty() && r.slots.values().all(|s| matches!(s, Slot::Resident { .. }))))
@@ -548,9 +862,16 @@ impl PropsRuntime {
                         // built on a thread of its own, never on this one.
                         let init = renderer.props_init(ctx);
                         let (tx, rx) = std::sync::mpsc::channel();
-                        let Loaded { world, lib, source, facts, wire_look, boats } = l;
+                        let Loaded { world, lib, source, facts, wire_look, boats, fences } = l;
                         self.boats_pending = boats;
+                        self.yards.pending = fences;
                         let features = self.p2.features;
+                        // (`--no-pull-boxes` off) the pull box's lid takes the sidewalk's grade
+                        let grade = if facts.pull_boxes && facts.signal_poles.is_some() {
+                            lib2::SIGNAL_POLE_BASE + eo_props::signal_poles::Piece { part: eo_props::signal_poles::Part::PullBox, finish: 0, pos: [0.0; 3], yaw: 0.0, scale: [1.0; 3] }.model()
+                        } else {
+                            u32::MAX
+                        };
                         std::thread::Builder::new()
                             .name("eo-props-gpu".into())
                             .spawn(move || {
@@ -559,6 +880,7 @@ impl PropsRuntime {
                                 let _ = tx.send(r.map(|mut g| {
                                     g.set_wire_look(wire_look);
                                     g.set_features(features);
+                                    g.set_grade_model(grade);
                                     (g, world, source, facts)
                                 }));
                             })
@@ -580,8 +902,25 @@ impl PropsRuntime {
                 match r {
                     Ok((g, world, source, facts)) => {
                         renderer.attach_props_gpu(g);
-                        self.bore_tiles = world.clear_structures().map(|s| s.all_tunnel_lights().iter().map(|l| eo_street::tile_key(l.pos[0], l.pos[2])).collect()).unwrap_or_default();
+                        if let Some(s) = world.clear_structures() {
+                            // A tunnel can be visible down the bore beneath the terrain.
+                            for lamp in s.all_tunnel_lights() {
+                                self.structure_light_heights.insert(eo_street::tile_key(lamp.pos[0], lamp.pos[2]),
+                                    [f32::NEG_INFINITY, f32::INFINITY]);
+                            }
+                            // A light mounted on a sea crossing can be the only content
+                            // of its tile. Its vertical range follows the elevated road.
+                            for (key, heights) in s.skyway_light_tiles() {
+                                self.structure_light_heights.entry(key).or_insert(heights);
+                            }
+                        }
                         self.veg = facts.veg.clone();
+                        self.vehicle_rings = world
+                            .js
+                            .value("vehicleRings")
+                            .as_array()
+                            .map(|arr| arr.iter().map(|r| (r["radius"].as_f64().unwrap_or(0.0), r["maxVehicles"].as_u64().unwrap_or(0) as usize)).collect())
+                            .unwrap_or_default();
                         self.start_workers(world.clone(), source.clone(), facts);
                         self.world = Some(world);
                         self.source = Some(source);
@@ -613,6 +952,20 @@ impl PropsRuntime {
                 None => self.errors.push("props: instance arena full (boats)".into()),
             }
         }
+        // The measured rear-yard fences (`--yard-detail`): one block too, drawn past the tiles' reach.
+        if !self.yards.pending.is_empty() {
+            let fences = std::mem::take(&mut self.yards.pending);
+            let n = fences.len() as u32;
+            match self.alloc.alloc(n) {
+                Some(at) => {
+                    let job = Job::new(TAG_PROPS | TAG_BOATS, vec![Write { target: Target::PropInstances, offset: at as u64 * 48, data: Data::Bytes(bytemuck::cast_slice(&fences).to_vec()) }], vec![]);
+                    self.stats.bytes_queued += job.bytes();
+                    uploads.push(job);
+                    self.yards.block = (at, n);
+                }
+                None => self.errors.push("props: instance arena full (yard fences)".into()),
+            }
+        }
         if self.boat_block.1 > 0 {
             if let Some(bm) = self.boat_motion.as_mut() {
                 bm.update(ctx, renderer, self.boat_block, eye);
@@ -624,29 +977,58 @@ impl PropsRuntime {
         let tm = eo_street::STREET_TILE_M as f32;
         let reach = (DROP_M / tm).ceil() as i32 + 1;
         let (cx, cz) = eo_street::tile_key(eye.x as f64, eye.z as f64);
-        let mut wanted: HashSet<Key> = HashSet::new();
+        self.wanted_scratch.clear();
+        let drop2 = DROP_M * DROP_M;
         for tz in cz - reach..=cz + reach {
+            let z0 = tz as f32 * tm;
+            let dz = (z0 - eye.z).max(eye.z - (z0 + tm)).max(0.0);
+            let dz2 = dz * dz;
+            if dz2 > drop2 {
+                continue;
+            }
             for tx in cx - reach..=cx + reach {
+                let x0 = tx as f32 * tm;
+                let dx = (x0 - eye.x).max(eye.x - (x0 + tm)).max(0.0);
+                if dx * dx + dz2 > drop2 {
+                    continue;
+                }
                 let k = (tx, tz);
-                let bore = self.bore_tiles.contains(&k);
-                // a street tile, a tunnel's bore, or (the vegetation) land without one.
-                if !world.street.tiles.contains_key(&k) && !bore && !self.veg.as_ref().is_some_and(|v| v.tiles.contains(&k)) {
+                let structure_lights = self.structure_light_heights.get(&k);
+                // A street, lights on a structure, or vegetation away from a street.
+                if !world.street.tiles.contains_key(&k) && structure_lights.is_none() && !self.veg.as_ref().is_some_and(|v| v.tiles.contains(&k)) {
                     continue;
                 }
                 // the true 3D distance to the tile's ground (nothing in a tile farther
                 // than the longest draw distance, 360 m in 3D, can be drawn; from the elevated
                 // path most of a 300 m horizontal disc is past it and was planned for nothing).
                 let mut d = tile_distance_3d(k, eye, |x, z| world.street.terrain.ground(x as f64, z as f64) as f32);
-                if bore {
-                    d = d.min(tile_distance_3d(k, eye, |_, _| eye.y)); // a bore's lamps, seen along the bore under the ground
+                if let Some(&[low, high]) = structure_lights {
+                    d = d.min(tile_distance_3d(k, eye, |_, _| eye.y.clamp(low, high)));
                 }
-                if d <= LOAD_M || (self.slots.contains_key(&k) && d <= DROP_M) {
-                    wanted.insert(k);
+                if d <= LOAD_M || (d <= DROP_M && self.slots.contains_key(&k)) {
+                    self.wanted_scratch.insert(k);
                 }
             }
         }
-        let gone: Vec<Key> = self.slots.keys().filter(|k| !wanted.contains(k)).copied().collect();
-        if !gone.is_empty() {
+        self.evicting = false;
+        const EVICTIONS_PER_FRAME: usize = 8;
+        let gone_all: Vec<Key> = self.slots.keys().filter(|k| !self.wanted_scratch.contains(k)).copied().collect();
+        if !gone_all.is_empty() {
+            // Cancel pending worker/upload work for all unwanted tiles immediately,
+            // and spread the synchronous zero-writes of resident evictions across frames.
+            let mut resident_budget = EVICTIONS_PER_FRAME;
+            let mut gone = Vec::with_capacity(gone_all.len().min(EVICTIONS_PER_FRAME + 8));
+            for k in gone_all {
+                let is_res = matches!(self.slots.get(&k), Some(Slot::Resident { .. }));
+                if is_res {
+                    if resident_budget == 0 {
+                        self.evicting = true;
+                        continue;
+                    }
+                    resident_budget -= 1;
+                }
+                gone.push(k);
+            }
             let gone_set: HashSet<Key> = gone.iter().copied().collect();
             for k in &gone_set {
                 self.outbox.cancel(*k);
@@ -654,16 +1036,24 @@ impl PropsRuntime {
             uploads.cancel(|tag| tag & TAG_PROPS == 0 || tag & (eo_render::kit::TAG_KIT | eo_render::street::TAG_STREET | (1 << 60) | (1 << 61) | TAG_FINE | TAG_MID | TAG_BOATS) != 0 || !gone_set.contains(&untag(tag)));
             for k in gone {
                 if let Some(Slot::Resident { at, n, lamps, wire_at, wire_n, light_at, light_n, .. }) = self.slots.remove(&k) {
-                    let empty = vec![EMPTY; n as usize];
-                    renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&empty));
+                    if self.empty_instances.len() < n as usize {
+                        self.empty_instances.resize(n as usize, EMPTY);
+                    }
+                    renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&self.empty_instances[..n as usize]));
                     self.alloc.free(at, n);
                     // the tile's wire segments and lamp lights.
                     if wire_n > 0 {
-                        renderer.write(&ctx.queue, Target::PropWires, wire_at as u64 * 32, bytemuck::cast_slice(&vec![GpuWireSeg::default(); wire_n as usize]));
+                        if self.empty_wires.len() < wire_n as usize {
+                            self.empty_wires.resize(wire_n as usize, GpuWireSeg::default());
+                        }
+                        renderer.write(&ctx.queue, Target::PropWires, wire_at as u64 * 32, bytemuck::cast_slice(&self.empty_wires[..wire_n as usize]));
                         self.wire_alloc.free(wire_at, wire_n);
                     }
                     if light_n > 0 {
-                        renderer.write(&ctx.queue, Target::PropLights, light_at as u64 * 64, bytemuck::cast_slice(&vec![GpuLampLight::default(); light_n as usize]));
+                        if self.empty_lights.len() < light_n as usize {
+                            self.empty_lights.resize(light_n as usize, GpuLampLight::default());
+                        }
+                        renderer.write(&ctx.queue, Target::PropLights, light_at as u64 * 64, bytemuck::cast_slice(&self.empty_lights[..light_n as usize]));
                         self.light_alloc.free(light_at, light_n);
                     }
                     for l in lamps {
@@ -672,10 +1062,11 @@ impl PropsRuntime {
                         self.lamp_free.push(l);
                     }
                     self.parked_dirty = true;
+                    self.tiles_dirty = true;
                 }
             }
         }
-        for k in &wanted {
+        for k in &self.wanted_scratch {
             if !self.slots.contains_key(k) {
                 self.slots.insert(*k, Slot::Requested);
                 self.outbox.request(*k);
@@ -766,6 +1157,9 @@ impl PropsRuntime {
                     pack.key,
                     Slot::Resident { at, n, lamps, parked: Arc::new(pack.parked), counts: pack.counts, wire_at: wat, wire_n: wn, light_at: lat, light_n: ln, extra: pack.extra_counts },
                 );
+                if pack.ring == 0 {
+                    self.tiles_dirty = true;
+                }
                 self.parked_dirty = true;
             }
         }
@@ -792,7 +1186,10 @@ impl PropsRuntime {
         gpu.set_high_water(end);
         gpu.set_wire_high_water(wend);
         // the city lights take these tiles' lamps; the fallback placement stands down in them.
-        renderer.look.sky.set_props_tiles(&ctx.queue, self.slots.iter().filter(|(_, s)| matches!(s, Slot::Resident { .. })).map(|(k, _)| *k));
+        if self.tiles_dirty {
+            renderer.look.sky.set_props_tiles(&ctx.queue, self.slots.iter().filter(|(_, s)| matches!(s, Slot::Resident { .. })).map(|(k, _)| *k));
+            self.tiles_dirty = false;
+        }
         if self.light_count_written != Some(lend) {
             gpu.set_light_count(&ctx.queue, lend);
             self.light_count_written = Some(lend);
@@ -804,6 +1201,7 @@ impl PropsRuntime {
         self.clock += dt;
         let t = sim_time.unwrap_or(self.clock);
         gpu.set_time(t); // the wind runs on the simulation clock
+        let t = t + signal_clock_offset();
         let timing = self.source.as_ref().map(|s| s.timing.clone());
         let len = self.lamp_next as usize;
         self.lamp_words.resize(len, 3);
@@ -821,8 +1219,9 @@ impl PropsRuntime {
                 },
             };
         }
-        if len > 0 {
+        if len > 0 && self.lamp_words != self.last_lamp_words {
             gpu.write_lamps(&ctx.queue, &self.lamp_words);
+            self.last_lamp_words.clone_from(&self.lamp_words);
         }
         if renderer.look.sky.options().signal_spill {
             // (`--signal-spill`) the lit lens of each vehicle signal head near the eye as a light
@@ -872,38 +1271,65 @@ impl PropsRuntime {
         let (load, drop) = if fine { (vegetation::FINE_LOAD_M, vegetation::FINE_DROP_M) } else { (hill_rock::MID_LOAD_M, hill_rock::MID_DROP_M) };
         let reach = (drop / c).ceil() as i32 + 1;
         let (cx, cz) = ((eye.x / c).floor() as i32, (eye.z / c).floor() as i32);
-        let mut wanted: HashSet<Key> = HashSet::new();
+        r.wanted_scratch.clear();
+        let drop2 = drop * drop;
         for tz in cz - reach..=cz + reach {
+            let z0 = tz as f32 * c;
+            let dz = (z0 - eye.z).max(eye.z - (z0 + c)).max(0.0);
+            let dz2 = dz * dz;
+            if dz2 > drop2 {
+                continue;
+            }
             for tx in cx - reach..=cx + reach {
-                let k = (tx, tz);
-                let resident = r.slots.contains_key(&k);
-                let land = if fine {
-                    let (x0, z0) = (tx as f64 * c as f64, tz as f64 * c as f64);
-                    [(0.5, 0.5), (0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)].iter().any(|(u, v)| veg.grid.height(x0 + u * c as f64, z0 + v * c as f64).is_some_and(|y| y > eo_water::SEA_LEVEL_Y + 0.3))
-                } else {
-                    veg.tiles.contains(&k)
-                };
-                if !land {
+                let x0 = tx as f32 * c;
+                let dx = (x0 - eye.x).max(eye.x - (x0 + c)).max(0.0);
+                let h2 = dx * dx + dz2;
+                if h2 > drop2 {
                     continue;
                 }
+                let k = (tx, tz);
                 let want = if fine {
                     let (gx, gz) = ((tx as f32 + 0.5) * c, (tz as f32 + 0.5) * c);
                     let gy = veg.grid.height(gx as f64, gz as f64).unwrap_or(eye.y as f64) as f32;
-                    let d = fine_distance(k, eye).hypot((eye.y - gy).abs());
-                    d <= load || (resident && d <= drop)
+                    let d = h2.sqrt().hypot((eye.y - gy).abs());
+                    if d > drop {
+                        false
+                    } else if d <= load || r.slots.contains_key(&k) {
+                        let (x0d, z0d) = (tx as f64 * c as f64, tz as f64 * c as f64);
+                        [(0.5, 0.5), (0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)].iter().any(|(u, v)| veg.grid.height(x0d + u * c as f64, z0d + v * c as f64).is_some_and(|y| y > eo_water::SEA_LEVEL_Y + 0.3))
+                    } else {
+                        false
+                    }
                 } else {
+                    if !veg.tiles.contains(&k) {
+                        continue;
+                    }
                     let d = tile_distance_3d(k, eye, |x, z| veg.grid.height(x as f64, z as f64).unwrap_or(0.0) as f32);
                     // from just inside the props tiles' reach (an overlap of identical rocks while they hand over).
-                    (d > LOAD_M - 20.0 && d <= load) || (resident && d > LOAD_M - 60.0 && d <= drop)
+                    (d > LOAD_M - 20.0 && d <= load) || (d > LOAD_M - 60.0 && d <= drop && r.slots.contains_key(&k))
                 };
                 if want {
-                    wanted.insert(k);
+                    r.wanted_scratch.insert(k);
                 }
             }
         }
         let tag_bit = if fine { TAG_FINE } else { TAG_MID };
-        let gone: Vec<Key> = r.slots.keys().filter(|k| evict_all || !wanted.contains(k)).copied().collect();
-        if !gone.is_empty() {
+        const RING_EVICTIONS_PER_FRAME: usize = 16;
+        let gone_all: Vec<Key> = r.slots.keys().filter(|k| evict_all || !r.wanted_scratch.contains(k)).copied().collect();
+        if !gone_all.is_empty() {
+            let mut resident_budget = if evict_all { usize::MAX } else { RING_EVICTIONS_PER_FRAME };
+            let mut gone = Vec::with_capacity(gone_all.len().min(RING_EVICTIONS_PER_FRAME + 8));
+            for k in gone_all {
+                let is_res = matches!(r.slots.get(&k), Some(Slot::Resident { .. }));
+                if is_res {
+                    if resident_budget == 0 {
+                        self.evicting = true;
+                        continue;
+                    }
+                    resident_budget -= 1;
+                }
+                gone.push(k);
+            }
             let gone_set: HashSet<Key> = gone.iter().copied().collect();
             for k in &gone_set {
                 r.outbox.cancel(*k);
@@ -912,13 +1338,16 @@ impl PropsRuntime {
             for k in gone {
                 if let Some(Slot::Resident { at, n, .. }) = r.slots.remove(&k) {
                     if n > 0 {
-                        renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&vec![EMPTY; n as usize]));
+                        if self.empty_instances.len() < n as usize {
+                            self.empty_instances.resize(n as usize, EMPTY);
+                        }
+                        renderer.write(&ctx.queue, Target::PropInstances, at as u64 * 48, bytemuck::cast_slice(&self.empty_instances[..n as usize]));
                         self.alloc.free(at, n);
                     }
                 }
             }
         }
-        for k in &wanted {
+        for k in &r.wanted_scratch {
             if !r.slots.contains_key(k) {
                 r.slots.insert(*k, Slot::Requested);
                 r.outbox.request(*k);
@@ -945,6 +1374,10 @@ impl PropsRuntime {
         self.clock = t;
     }
 
+    pub fn parked_spec(&self, name: &str) -> Option<&eo_props::data::VehicleSpec> {
+        self.world.as_ref()?.js.spec(name)
+    }
+
     /// The parked cars to draw this frame, nearest first within the JS rings'
     /// radii and caps, as agent instances (rebuilt when the camera moved 4 m
     /// or tiles changed).
@@ -963,17 +1396,23 @@ impl PropsRuntime {
         }
         self.parked_cam = Some(eye);
         self.parked_dirty = false;
-        let Some(world) = &self.world else { return &self.parked };
-        let rings = world.js.value("vehicleRings").as_array().cloned().unwrap_or_default();
-        let ring: Vec<(f64, usize)> = rings.iter().map(|r| (r["radius"].as_f64().unwrap_or(0.0), r["maxVehicles"].as_u64().unwrap_or(0) as usize)).collect();
+        if self.world.is_none() {
+            return &self.parked;
+        }
+        if self.slots.is_empty() || self.vehicle_rings.is_empty() {
+            self.parked.clear();
+            return &self.parked;
+        }
+        let ring = &self.vehicle_rings;
         let far = ring.last().map(|r| r.0).unwrap_or(0.0);
-        let mut cars: Vec<(f64, &ParkedCar)> = vec![];
+        let mut cars: Vec<(f64, &GroundedParkedCar)> = vec![];
         for s in self.slots.values() {
             if let Slot::Resident { parked, .. } = s {
-                for c in parked.iter() {
+                for g in parked.iter() {
+                    let c = &g.car;
                     let d = ((c.pos[0] - eye.x as f64).powi(2) + (c.pos[2] - eye.z as f64).powi(2)).sqrt();
                     if d <= far {
-                        cars.push((d, c));
+                        cars.push((d, g));
                     }
                 }
             }
@@ -984,7 +1423,9 @@ impl PropsRuntime {
         let mut taken = 0usize;
         let mut cap = 0usize;
         let mut ri = 0;
-        for (d, c) in cars {
+        let veh_scale = eo_data::groundscale::vehicles() as f32;
+        for (d, g) in cars {
+            let c = &g.car;
             while ri < ring.len() && d > ring[ri].0 {
                 ri += 1;
             }
@@ -997,15 +1438,15 @@ impl PropsRuntime {
             }
             let Some(model) = lib.model(&c.spec).or_else(|| lib.model("sedan")) else { continue };
             out.push(eo_agents::GpuAgent {
-                pos: [c.pos[0] as f32, c.pos[1] as f32, c.pos[2] as f32],
+                pos: [c.pos[0] as f32, g.y, c.pos[2] as f32],
                 model,
-                rot: glam::Quat::from_rotation_y(c.yaw as f32).to_array(),
+                rot: g.rot,
                 color: (c.paint >> 16 & 255) | ((c.paint >> 8 & 255) << 8) | ((c.paint & 255) << 16) | (255 << 24),
                 flags: eo_sim::output::FLAG_STOPPED as u32,
                 anim: 0.0,
                 steer: 0.0,
                 speed: 0.0,
-                scale: eo_data::groundscale::vehicles() as f32, // the trial's visual vehicle scale, 1.0 unless set
+                scale: veh_scale, // the trial's visual vehicle scale, 1.0 unless set
                 clip_phase: 0.0,
                 clip: 0,
             });
@@ -1039,6 +1480,131 @@ impl Drop for PropsRuntime {
             let _ = h.join();
         }
     }
+}
+
+/// Front axle z (`> 0`), rear axle z (`< 0`), and half track width (`> 0`) in world
+/// metres for a parked vehicle's `VehicleSpec` (falling back to typical sedan spacing).
+fn parked_wheel_footprint(spec: Option<&eo_props::data::VehicleSpec>, scale: f64) -> (f64, f64, f64) {
+    let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    if let Some(s) = spec {
+        let half_base = if s.length.is_finite() && s.length > 1.0 { 0.30 * s.length } else { 1.4 };
+        let half_track = if s.width.is_finite() && s.width > 0.8 { 0.42 * s.width } else { 0.78 };
+        (half_base * scale, -half_base * scale, half_track * scale)
+    } else {
+        (1.4 * scale, -1.4 * scale, 0.78 * scale)
+    }
+}
+
+/// Ground a parked vehicle onto the sloped carriageway beneath its four wheels, returning
+/// `(datum_y, rot)` where `rot = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-pitch) * Quat::from_rotation_z(roll)`
+/// matches `eo_agents`' body frame (`+Y` up, `+Z` nose, `+X` left, tyres touching `y = 0`).
+///
+/// Only carriageway samples (`carriageway_near`) within a continuous grade bound are used
+/// so a wheel close to a curb never steps up onto the raised sidewalk and tips the car.
+fn parked_car_pose(
+    x: f64,
+    ref_y: f64,
+    z: f64,
+    yaw: f64,
+    z_front: f64,
+    z_rear: f64,
+    half_track: f64,
+    carriageway_at: impl Fn(f64, f64, f64) -> Option<f64>,
+) -> (f64, glam::Quat) {
+    const MAX_PITCH_RAD: f64 = 0.45; // ~26 deg (covers SF's steepest hills)
+    const MAX_ROLL_RAD: f64 = 0.22; // ~12.6 deg (covers steep cross-streets & crown)
+    let wheelbase = (z_front - z_rear).max(0.5);
+    let track = (2.0 * half_track).max(0.4);
+    let (sy, cy) = yaw.sin_cos();
+    // Body +Z (nose) -> (sin yaw, cos yaw); body +X (left) -> (cos yaw, -sin yaw).
+    let fwd = [sy, cy];
+    let left = [cy, -sy];
+
+    let max_dh = (wheelbase * 0.55 + 0.20).max(0.5);
+    let sample = |px: f64, pz: f64, near_y: f64| -> Option<f64> {
+        carriageway_at(px, pz, near_y).filter(|&h| h.is_finite() && (h - near_y).abs() <= max_dh)
+    };
+
+    let y_mid = sample(x, z, ref_y).unwrap_or(ref_y);
+
+    // Front and rear axle centerline heights on the carriageway.
+    let (fx, fz) = (x + fwd[0] * z_front, z + fwd[1] * z_front);
+    let (rx, rz) = (x + fwd[0] * z_rear, z + fwd[1] * z_rear);
+    let y_fc = sample(fx, fz, y_mid);
+    let y_rc = sample(rx, rz, y_mid);
+
+    // Four wheel contact patch samples (left = +X, right = -X).
+    let y_fl = sample(fx + left[0] * half_track, fz + left[1] * half_track, y_fc.unwrap_or(y_mid));
+    let y_fr = sample(fx - left[0] * half_track, fz - left[1] * half_track, y_fc.unwrap_or(y_mid));
+    let y_rl = sample(rx + left[0] * half_track, rz + left[1] * half_track, y_rc.unwrap_or(y_mid));
+    let y_rr = sample(rx - left[0] * half_track, rz - left[1] * half_track, y_rc.unwrap_or(y_mid));
+
+    // Axle heights: prefer mean of both wheels when both lie on the carriageway, else centerline
+    // (never average an asymmetric single wheel onto an axle without cross-slope cancellation).
+    let axle_y = |yl: Option<f64>, yr: Option<f64>, yc: Option<f64>| -> Option<f64> {
+        match (yl, yr, yc) {
+            (Some(a), Some(b), _) => Some(0.5 * (a + b)),
+            (_, _, Some(c)) => Some(c),
+            (Some(a), None, None) => Some(a),
+            (None, Some(b), None) => Some(b),
+            (None, None, None) => None,
+        }
+    };
+    let y_front = axle_y(y_fl, y_fr, y_fc);
+    let y_rear = axle_y(y_rl, y_rr, y_rc);
+
+    let (y_datum, pitch) = match (y_front, y_rear) {
+        (Some(yf), Some(yr)) => {
+            let p = ((yf - yr) / wheelbase).atan().clamp(-MAX_PITCH_RAD, MAX_PITCH_RAD);
+            // Exact height of the front-rear axle line at local z = 0.
+            let y0 = (yr * z_front - yf * z_rear) / wheelbase;
+            (y0, p)
+        }
+        (Some(yf), None) => {
+            let p = ((yf - y_mid) / z_front.abs().max(0.25)).atan().clamp(-MAX_PITCH_RAD, MAX_PITCH_RAD);
+            (y_mid, p)
+        }
+        (None, Some(yr)) => {
+            let p = ((y_mid - yr) / z_rear.abs().max(0.25)).atan().clamp(-MAX_PITCH_RAD, MAX_PITCH_RAD);
+            (y_mid, p)
+        }
+        (None, None) => (y_mid, 0.0),
+    };
+
+    // Lateral cross-slope (positive roll lifts local +X / left side).
+    // When both left & right wheels on an axle are on the carriageway, use their full-track delta;
+    // if the curb-side wheels step off the carriageway onto the kerb, derive cross-slope cleanly
+    // from the street-side wheel relative to the carriageway centerline.
+    let mut lat_slope_sum = 0.0;
+    let mut lat_count = 0.0;
+    for (yl, yr, yc) in [(y_fl, y_fr, y_fc), (y_rl, y_rr, y_rc)] {
+        match (yl, yr, yc) {
+            (Some(a), Some(b), _) => {
+                lat_slope_sum += (a - b) / track;
+                lat_count += 1.0;
+            }
+            (Some(a), None, Some(c)) => {
+                lat_slope_sum += (a - c) / half_track;
+                lat_count += 1.0;
+            }
+            (None, Some(b), Some(c)) => {
+                lat_slope_sum += (c - b) / half_track;
+                lat_count += 1.0;
+            }
+            _ => {}
+        }
+    }
+    let roll = if lat_count > 0.0 {
+        let slope = lat_slope_sum / lat_count;
+        (slope / pitch.cos().max(0.5)).atan().clamp(-MAX_ROLL_RAD, MAX_ROLL_RAD)
+    } else {
+        0.0
+    };
+
+    let rot = glam::Quat::from_rotation_y(yaw as f32)
+        * glam::Quat::from_rotation_x(-pitch as f32)
+        * glam::Quat::from_rotation_z(roll as f32);
+    (y_datum, rot)
 }
 
 fn tag_of(k: Key) -> u64 {
@@ -1147,6 +1713,7 @@ fn cook_fine(veg: Option<&vegetation::VegGround>, key: Key) -> TilePack {
         let mut plants = vec![];
         eo_landmarks::vegetation::plant_fine_with(x0, z0, x0 + c, z0 + c, &|x, z| v.site(x, z), eo_look::sun::day_of_year(), v.switches, &v.extra(), &mut plants);
         trace_near(v, &plants);
+        v.fine_root_clearance(&mut plants);
         vegetation::instances(&plants, &mut instances, &mut extra_counts);
         if std::env::var("EO_TRACE_VEG").is_ok() {
             eprintln!("vegetation: fine cell {key:?} {extra_counts:?}");
@@ -1161,7 +1728,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     // a tile with no street tile is the vegetation's alone (land beyond the street world),
     // unless a tunnel's bore runs under it (`--tunnels`): its lamps come through `plan_tile`.
     let planned = world.street.tiles.contains_key(&key) || !world.tunnel_lights(key).is_empty();
-    let TilePlacement { mut props, parked, lights } = if planned { world.plan_tile(key) } else { TilePlacement { props: vec![], parked: vec![], lights: vec![] } }; // mut
+    let TilePlacement { mut props, parked, lights, fittings } = if planned { world.plan_tile(key) } else { TilePlacement::default() }; // mut
     let veg = facts.veg.as_deref();
     let mut plants: Vec<eo_landmarks::vegetation::Plant> = vec![];
     // the park trees (tile-trees.js `plantTileTrees` over the
@@ -1179,6 +1746,14 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
         let (oak, ash, high) = (variant_of("street-oak"), variant_of("street-ash"), variant_of("street-high"));
         let blocked = |x: f64, z: f64| sw.buildings.contains(x, z) || sw.paved_at(x, z).is_some() || world.ground(x, z) < sea + 0.3;
         for tr in cover.park_trees(x0, z0, x0 + t, z0 + t, &|x, z| world.ground(x, z), &blocked) {
+            // (`--no-city-canopy-trees`) a park tree only under the aerial image's canopy
+            if !vegetation::park_tree_canopy_ok(tr.x, tr.z) {
+                continue;
+            }
+            // (`--no-lidar-trees`) where the lidar measured the park's trees, they stand instead (below).
+            if lidar_trees::covers(tr.x, tr.z) {
+                continue;
+            }
             // a mapped wood's tree as a mature coastal tree (the Presidio forest's species), on the drawn ground.
             if let Some(v) = veg.filter(|v| v.switches.coastal_trees && (cover.tree_class_at(tr.x, tr.z) == 1 || v.in_presidio(tr.x, tr.z))) {
                 let site = v.site(tr.x, tr.z);
@@ -1210,6 +1785,77 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 props.push(tree);
             }
         }
+        // (`--no-lidar-trees`, Docs/HILLS-PLAN.md H6c) the hill parks' trees as the USGS 3DEP lidar
+        // measured them (position, height, crown), in the lattice's place; the distant cards
+        // (main.rs `hlod_trees`) read the same trees.
+        for p in lidar_trees::placed_in(x0, z0, x0 + t, z0 + t, &|x, z| world.ground(x, z), &blocked, true) {
+            match p.form {
+                lidar_trees::Form::Coastal(sp) => {
+                    let k = 0.85 + 0.3 * p.draw as f32;
+                    let hue = if lidar_trees::variety_on() { eo_landmarks::vegetation::tree_hue(p.x, p.z) } else { [1.0; 3] };
+                    let base = eo_landmarks::vegetation::TREE_LEAF_TINT[sp as usize];
+                    let tint = [base[0] * k * hue[0], base[1] * k * hue[1], base[2] * k * hue[2]];
+                    // its lean rides in the slope's slot (a tree's: props_types.wgsl `pr_tree_lean`)
+                    plants.push(eo_landmarks::vegetation::Plant { kind: eo_landmarks::vegetation::Kind::Tree(sp), pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), rank: 0.0, tint, grad: p.lean, tip: eo_landmarks::vegetation::TIP_NONE });
+                }
+                lidar_trees::Form::Broadleaf => {
+                    let tree = eo_props::Prop { model: Model::Tree, pos: [p.x, p.y, p.z], yaw: p.yaw, scale: p.scale(), variant: variant_of(lidar_trees::legacy::BROADLEAF_SPECIES), live: Live::None };
+                    if let Some(tree) = world.clear_prop(tree) {
+                        props.push(tree);
+                    }
+                }
+            }
+        }
+    }
+    // `--yard-lidar-trees`: residential trees measured from the USGS lidar (eo-props
+    // lidar_trees.rs) where nothing else stands: off the footprints and the
+    // drawn street, clear of the trees planted above, outside the hill parks'
+    // lidar areas and the parks' tree classes; nothing without the switch.
+    if eo_props::lidar_trees::enabled() {
+        let t = eo_street::STREET_TILE_M;
+        let (x0, z0) = (key.0 as f64 * t, key.1 as f64 * t);
+        let sw = &world.street;
+        let sea = eo_water::SEA_LEVEL_Y;
+        let species = eo_props::eztree::street_tree_species().ok();
+        let cover = eo_landmarks::ground_cover::installed();
+        let planted: Vec<[f64; 2]> = props.iter().filter(|p| p.model == Model::Tree).map(|p| [p.pos[0], p.pos[2]]).collect();
+        let clear2 = eo_props::lidar_trees::CLEAR_OF_PLANTED_M * eo_props::lidar_trees::CLEAR_OF_PLANTED_M;
+        let trace = std::env::var_os("EO_LIDAR_TREES_TRACE").is_some();
+        let mut why = [0usize; 6]; // building, paved, water, park class, near planted, placed
+        for lt in eo_props::lidar_trees::in_box(x0, z0, x0 + t, z0 + t) {
+            let (x, z) = (lt.x, lt.z);
+            if eo_props::yards::in_yard(x, z) || lidar_trees::covers(x, z) {
+                continue; // `--yard-detail` with the canopy map: the yards draw it (eo-app yards.rs); hill parks use props/lidar_trees.rs
+            }
+            let reason = if sw.buildings.contains(x, z) {
+                Some(0)
+            } else if sw.paved_at(x, z).is_some() {
+                Some(1)
+            } else if world.ground(x, z) < sea + 0.3 {
+                Some(2)
+            } else if cover.as_ref().is_some_and(|c| c.tree_class_at(x, z) != 0) {
+                Some(3)
+            } else if planted.iter().any(|p| (p[0] - x).powi(2) + (p[1] - z).powi(2) < clear2) {
+                Some(4)
+            } else {
+                None
+            };
+            if let Some(r) = reason {
+                why[r] += 1;
+                continue;
+            }
+            why[5] += 1;
+            let Some((id, sx, sy)) = eo_props::lidar_trees::model_for(lt) else { continue };
+            let variant = species.and_then(|s| s.iter().position(|v| v == id)).unwrap_or(0) as u16;
+            let yaw = ((x * 12.9898 + z * 78.233).sin() * 43758.5453).fract().abs() * std::f64::consts::TAU;
+            let tree = eo_props::Prop { model: Model::Tree, pos: [x, world.ground(x, z) - 0.08, z], yaw, scale: [sx as f32, sy as f32, sx as f32], variant, live: Live::None };
+            if let Some(tree) = world.clear_prop(tree) {
+                props.push(tree);
+            }
+        }
+        if trace && why.iter().any(|&n| n > 0) {
+            eprintln!("yard lidar trees tile {key:?}: {} on a building, {} on the street, {} in water, {} in a park class, {} beside a planted tree, {} placed", why[0], why[1], why[2], why[3], why[4], why[5]);
+        }
     }
     // the coarse vegetation layer: coastal stands, scrub, hill rock.
     if let Some(v) = veg {
@@ -1217,6 +1863,10 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
         let (x0, z0) = (key.0 as f64 * t, key.1 as f64 * t);
         eo_landmarks::vegetation::plant_coarse_with(x0, z0, x0 + t, z0 + t, &|x, z| v.site(x, z), v.switches, &v.extra(), &mut plants);
         trace_near(v, &plants);
+    }
+    if let Some(roads) = vegetation::portal_ground(world.structures.as_ref()) {
+        vegetation::retain_rooted(roads, &mut plants);
+        props.retain(|p| !matches!(p.model, Model::Tree | Model::Palm) || roads.terrain_cut_at(p.pos[0], p.pos[2]).is_none());
     }
     if std::env::var("EO_TRACE_VEG").is_ok() && !plants.is_empty() {
         let mut by: std::collections::BTreeMap<String, usize> = Default::default();
@@ -1230,7 +1880,23 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     let mut counts: HashMap<Model, usize> = HashMap::new();
     let mut extra_counts: HashMap<&'static str, usize> = HashMap::new();
     vegetation::instances(&plants, &mut instances, &mut extra_counts);
-    for p in &props {
+    // the street overhead of this tile (planned first: a pull box keeps off its cabinets)
+    let t1 = Instant::now();
+    let oh = (p2.overhead || p2.wires).then(|| eo_props::overhead::plan_tile(world, key));
+    let overhead_plan_ms = t1.elapsed().as_secs_f64() * 1e3;
+    // (`--no-signal-poles` off) the signal poles' and arms' models, and the pieces they add.
+    let hw_options = eo_props::signal_poles::Options {
+        variants: facts.signal_pole_variants,
+        name_signs: facts.name_signs.as_ref(),
+        push_buttons: facts.push_buttons,
+        pole_cut: facts.pole_cut,
+        level_arm_diameter: facts.level_arm_diameter,
+        pull_boxes: facts.pull_boxes,
+        sign_channels: facts.sign_channels,
+        cabinets: oh.as_ref().map_or(&[], |o| o.cabinets.as_slice()),
+    };
+    let signal_hw = facts.signal_poles.as_ref().map(|d| eo_props::signal_poles::hardware(&props, &fittings, d, &hw_options));
+    for (pi, p) in props.iter().enumerate() {
         // the walk's kinds (hydrants ... signal cabinets) are `--no-furniture`'s.
         if (p.model as u32) >= Model::Hydrant as u32 && p.model != Model::TreeBasin && !p2.furniture {
             continue;
@@ -1245,6 +1911,11 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             // a species' ez-tree (scale = the JS item's scale, heightScale, scale on the metre mesh), or
             // with `--no-eztree` the card tree at that species' size (crown diameter, height, crown diameter).
             Model::Tree if p2.eztree && facts.species > 0 => (lib2::TREE_BASE + (p.variant as u32 % facts.species as u32), p.scale),
+            // a sign plate whose face has a Blender model draws it (same scale: the plate's size).
+            Model::SignPlate if facts.sign_faces.get(p.variant as usize).copied().unwrap_or(0) > 0 => {
+                let wears = facts.sign_faces[p.variant as usize] as usize;
+                (lib2::sign_model_id(p.variant as u32, eo_props::sign_models::wear_of(p.pos, wears) as u32), p.scale)
+            }
             Model::Tree => {
                 let d = facts.tree_dims.get(p.variant as usize % facts.tree_dims.len().max(1)).copied().unwrap_or([9.0, 3.0]);
                 let crown = 2.0 * d[1] * p.scale[0];
@@ -1252,19 +1923,25 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             }
             _ => (p.model as u32, p.scale),
         };
+        // a signal pole or mast arm drawn as its part (its own yaw: the pole turned to its arm)
+        let piece = signal_hw.as_ref().and_then(|h| h.replace[pi]);
+        let (model, scale) = piece.map_or((model, scale), |pc| (lib2::SIGNAL_POLE_BASE + pc.model(), pc.scale));
+        // (`--no-signal-luminaires` off) a street light on a mast pole: its post inside the pole, no base
+        let model = if signal_hw.as_ref().is_some_and(|h| h.pole_lamps.contains(&pi)) { lib2::SIGNAL_LAMP_BASE + u32::from(p.model == Model::LampBanner) } else { model };
+        let yaw = piece.map_or(p.yaw, |pc| pc.yaw);
         let i = instances.len() as u32;
         // (`--lamp-units`, `--luminaires`) a district light's unit seed (its lights carry the same):
         // its glass is lit as its lamp is (props_draw.wgsl `pr_lamp_glass`); 0 for every other kind.
         let district = matches!(p.model, Model::LampCobra | Model::LampBanner | Model::LampHistoric);
         instances.push(GpuPropInstance {
             pos: [p.pos[0] as f32, p.pos[1] as f32, p.pos[2] as f32],
-            yaw: p.yaw as f32,
+            yaw: yaw as f32,
             scale,
             model,
             variant: p.variant as u32,
             lamp: 0,
             slope,
-            pad: if district { eo_sky::lamp_units::seed_of(p.pos) } else { 0 },
+            pad: if district { lamp_seed(p.pos) } else { 0 },
         });
         match p.live {
             Live::None => {}
@@ -1284,11 +1961,49 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             }
         }
     }
+    // the signal poles' added pieces: the arms' roots and end caps, the heads' mounts.
+    for pc in signal_hw.iter().flat_map(|h| h.added.iter()) {
+        *extra_counts.entry("signal pole hardware").or_insert(0) += 1;
+        // a pull box's lid lies on the sidewalk's plane: the ground's gradient under it (props_types.wgsl
+        // `pr_veg_grad` shears it so, its model `props::set_grade_model`)
+        let pad = if pc.part == eo_props::signal_poles::Part::PullBox {
+            let g = |x: f64, z: f64| world.ground(x, z);
+            let e = 0.3;
+            let (x, z) = (pc.pos[0], pc.pos[2]);
+            vegetation::pack_grad([((g(x + e, z) - g(x - e, z)) / (2.0 * e)) as f32, ((g(x, z + e) - g(x, z - e)) / (2.0 * e)) as f32])
+        } else {
+            0
+        };
+        instances.push(GpuPropInstance {
+            pos: [pc.pos[0] as f32, pc.pos[1] as f32, pc.pos[2] as f32],
+            yaw: pc.yaw as f32,
+            scale: pc.scale,
+            model: lib2::SIGNAL_POLE_BASE + pc.model(),
+            variant: 0,
+            lamp: 0,
+            slope: 0.0,
+            pad,
+        });
+    }
+    // the arms' Street Name signs: the plates' own model, their faces past the inventory's.
+    for pl in signal_hw.iter().flat_map(|h| h.plates.iter()) {
+        *extra_counts.entry("arm name sign").or_insert(0) += 1;
+        instances.push(GpuPropInstance {
+            pos: [pl.pos[0] as f32, pl.pos[1] as f32, pl.pos[2] as f32],
+            yaw: pl.yaw as f32,
+            scale: pl.scale,
+            model: Model::SignPlate as u32,
+            variant: pl.face,
+            lamp: 0,
+            slope: 0.0,
+            pad: 0,
+        });
+    }
     // the district lights' luminaires (kept for the night lighting), and a
     // tunnel bore's lamps (`--tunnels`, eo-props `PropsWorld::tunnel_lights`;
     // none otherwise): lit round the clock in the tunnel lamps' colour
     // (eo-render structures.rs `TUNNEL_LAMP_FLAG`), kept with `--no-furniture` too.
-    let bore: Vec<[f64; 3]> = world.tunnel_lights(key).iter().map(|l| l.pos).collect();
+    let bore = world.clear_structures().map(|s| s.tunnel_lights(key)).unwrap_or_default();
     // (`--luminaires`) a district light's post (its yaw and scale) by its foot, for its sockets.
     let posts: Vec<&eo_props::Prop> = if facts.sockets.is_empty() { vec![] } else { props.iter().filter(|p| matches!(p.model, Model::LampCobra | Model::LampBanner | Model::LampHistoric)).collect() };
     let gpu = |l: &eo_props::furniture::LampLight, in_bore: bool, share: f32| GpuLampLight {
@@ -1303,13 +2018,14 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
         kind: l.kind as u32,
         // the tunnel flag; (`--lamp-units`) the unit's seed from its post's foot; (`--luminaires`)
         // the lantern's share of the post's light (f32 bits, 0: the whole), read only with their switches.
-        pad: [if in_bore { eo_render::structures::TUNNEL_LAMP_FLAG } else { 0 }, if in_bore { 0 } else { eo_sky::lamp_units::seed_of(l.base) }, if share < 1.0 { share.to_bits() } else { 0 }],
+        pad: [if in_bore { eo_render::structures::TUNNEL_LAMP_FLAG } else { 0 }, if in_bore { 0 } else { lamp_seed(l.base) }, if share < 1.0 { share.to_bits() } else { 0 }],
     };
-    let lights: Vec<GpuLampLight> = lights
+    let mut lights: Vec<GpuLampLight> = lights
         .iter()
-        .map(|l| (l, bore.contains(&l.pos)))
-        .filter(|(_, in_bore)| p2.furniture || *in_bore)
-        .flat_map(|(l, in_bore)| {
+        .map(|l| (l, bore.iter().find(|h| h.pos == l.pos).map(|h| h.flux_share)))
+        .filter(|(_, share)| p2.furniture || share.is_some())
+        .flat_map(|(l, bore_share)| {
+            let in_bore = bore_share.is_some();
             // (`--luminaires`) the lamp at each socket of its post's GLB glass (a twin post's two
             // lanterns, each with its share), the light's optics from the socket's height.
             let post = (!in_bore).then(|| posts.iter().find(|p| (p.pos[0] - l.base[0]).abs() < 0.05 && (p.pos[2] - l.base[2]).abs() < 0.05)).flatten();
@@ -1325,15 +2041,32 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                         gpu(&world.furniture().luminaire(head, l.base, y, l.kind), false, params[3])
                     })
                     .collect::<Vec<_>>(),
-                None => vec![gpu(l, in_bore, 1.0)],
+                None => vec![gpu(l, in_bore, bore_share.unwrap_or(1.0))],
             }
         })
         .collect();
+    if let Some(structures) = world.clear_structures() {
+        for pole in structures.skyway_standards(key) {
+            let optics = pole.optics();
+            let count = optics.len() as f32;
+            for optic in optics {
+                let h = (optic.face[1] - pole.road_y) as f32;
+                // One post's roadway illuminance is divided among its lenses.
+                // Its source and forward axis coincide with the visible glass.
+                lights.push(GpuLampLight {
+                    pos: optic.face.map(|v| v as f32), range: h * 3.,
+                    colour: [1.; 3], intensity: h * h / count,
+                    angle: 0.58, penumbra: 0.4, decay: 2., source_lift: 0.,
+                    kind: Model::LampCobra as u32,
+                    pad: [2, (optic.axis[0].atan2(optic.axis[2]) as f32).to_bits(), (optic.axis[1] as f32).to_bits()],
+                });
+            }
+        }
+    }
     // the street overhead of this tile.
     let t1 = Instant::now();
     let mut wires = vec![];
-    if p2.overhead || p2.wires {
-        let oh = eo_props::overhead::plan_tile(world, key);
+    if let Some(oh) = &oh {
         let mut put = |model: u32, pos: [f64; 3], yaw: f64, scale: [f32; 3], name: &'static str| {
             *extra_counts.entry(name).or_insert(0) += 1;
             instances.push(GpuPropInstance { pos: [pos[0] as f32, pos[1] as f32, pos[2] as f32], yaw: yaw as f32, scale, model, variant: 0, lamp: 0, slope: 0.0, pad: 0 });
@@ -1342,6 +2075,8 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             for pole in &oh.poles {
                 match pole.kind {
                     eo_props::overhead::PoleKind::Distribution => put(lib2::OH_DIST_POLE, pole.pos, pole.yaw, [1.0; 3], "overhead distribution pole"),
+                    // a street lamp stands here and holds the wires (`--no-shared-poles`).
+                    _ if pole.lamp_standard => {}
                     _ => {
                         let wood = pole.material == eo_props::overhead::PoleMaterial::Wood;
                         put(if wood { lib2::OH_POLE_WOOD } else { lib2::OH_POLE_STEEL }, pole.pos, pole.yaw, [1.0, pole.height as f32, 1.0], "overhead span/support pole");
@@ -1352,6 +2087,12 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 }
             }
             for c in &oh.cabinets {
+                // (`--no-cabinet-model` off) the MSF60 on its pad, as modelled
+                if facts.cabinet_model {
+                    let pc = eo_props::signal_poles::Piece { part: eo_props::signal_poles::Part::Cabinet, finish: 0, pos: c.pos, yaw: c.yaw, scale: [1.0; 3] };
+                    put(lib2::SIGNAL_POLE_BASE + pc.model(), c.pos, c.yaw, [1.0; 3], "overhead signal cabinet");
+                    continue;
+                }
                 let n = lib2::CABINET_NOMINAL;
                 put(lib2::OH_CABINET, c.pos, c.yaw, [c.size[0] as f32 / n[0], c.size[2] as f32 / n[1], c.size[1] as f32 / n[2]], "overhead signal cabinet");
             }
@@ -1377,7 +2118,25 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             *extra_counts.entry("wires").or_insert(0) += oh.wires.len();
         }
     }
-    let overhead_ms = t1.elapsed().as_secs_f64() * 1e3;
+    let overhead_ms = overhead_plan_ms + t1.elapsed().as_secs_f64() * 1e3;
+    let veh_scale = eo_data::groundscale::vehicles();
+    let parked: Vec<GroundedParkedCar> = parked
+        .into_iter()
+        .map(|car| {
+            let (z_front, z_rear, half_track) = parked_wheel_footprint(world.js.spec(&car.spec), veh_scale);
+            let (y, rot) = parked_car_pose(
+                car.pos[0],
+                car.pos[1],
+                car.pos[2],
+                car.yaw,
+                z_front,
+                z_rear,
+                half_track,
+                |px, pz, ref_y| world.street.carriageway_near(px, pz, ref_y),
+            );
+            GroundedParkedCar { car, y: y as f32, rot: rot.to_array() }
+        })
+        .collect();
     TilePack { key, ring: 0, instances, lives, parked, counts, ms: t0.elapsed().as_secs_f64() * 1e3, wires, lights, overhead_ms, extra_counts }
 }
 
@@ -1508,6 +2267,22 @@ pub struct CapturePose {
     pub name: String,
     pub camera: eo_render::camera::Camera,
     pub player: Option<ScaleReference>,
+    pub vehicles: Option<Vec<CaptureVehicle>>,
+}
+
+/// A held vehicle from a Traffic Lab frame, in world metres.
+#[derive(serde::Deserialize)]
+pub struct CaptureVehicle {
+    pub id: u32,
+    pub model: String,
+    pub datum: [f64; 3],
+    pub yaw: f32,
+    #[serde(default)]
+    pub pitch: f32,
+    #[serde(default)]
+    pub speed: f64,
+    #[serde(default)]
+    pub braking: bool,
 }
 
 pub fn read_poses(path: &std::path::Path) -> anyhow::Result<Vec<CapturePose>> {
@@ -1516,12 +2291,14 @@ pub fn read_poses(path: &std::path::Path) -> anyhow::Result<Vec<CapturePose>> {
     v.as_array().ok_or_else(|| anyhow::anyhow!("expected an array of capture poses"))?.iter().map(|p| {
         let e = &p["eye"];
         let player = p.get("player").map(|value| serde_json::from_value(value.clone())).transpose()?;
+        let vehicles = p.get("vehicles").map(|value| serde_json::from_value(value.clone())).transpose()?;
         let projection_shift = p.get("projection_shift_ndc")
             .map(|v| serde_json::from_value::<[f32; 2]>(v.clone())).transpose()?.unwrap_or([0.; 2]);
         Ok(CapturePose {
             name: p["name"].as_str().unwrap_or("pose").to_string(),
             camera: eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: projection_shift, roll: 0.0 },
             player,
+            vehicles,
         })
     }).collect()
 }
@@ -1895,5 +2672,83 @@ mod tests {
         assert_eq!(veg_epoch_on(103.0, g3), veg_epoch_on(103.0, g3));
         // the bloom alone (same season step) changes it too: 1 June, the window just shut.
         assert_ne!(veg_epoch_on(140.0, g3), veg_epoch_on(160.0, g3));
+    }
+
+    #[test]
+    fn signal_light_is_on_by_default_and_its_switches_turn_it_off() {
+        assert!(Props2Args::default().signal_light);
+        for flag in ["--no-signal-light", "--no-props2"] {
+            let mut a = Props2Args::default();
+            assert!(a.parse_flag(flag));
+            assert!(!a.signal_light, "{flag}");
+        }
+        let mut a = Props2Args::default();
+        assert!(a.parse_flag("--no-signal-light") && a.parse_flag("--signal-light") && a.signal_light);
+    }
+
+    #[test]
+    fn parked_car_pose_sits_flush_on_steep_hill_and_cross_slope() {
+        // Plane y(x, z) = 57.2 - 0.14 * x + 0.05 * z (steep uphill toward -X, like Liberty St,
+        // plus a 5% cross-slope toward +Z).
+        let plane = |x: f64, z: f64| 57.2 - 0.14 * x + 0.05 * z;
+        let (x0, z0) = (-725.0, 2848.0);
+        let ref_y = plane(x0, z0);
+        let yaw = -1.64_f64; // facing uphill west-southwest
+        let (zf, zr, ht) = (1.45, -1.35, 0.82); // asymmetric wheelbase
+        let (y, rot) = parked_car_pose(x0, ref_y, z0, yaw, zf, zr, ht, |px, pz, _| Some(plane(px, pz)));
+        assert!((y - ref_y).abs() < 1e-3, "datum y {y} != plane {ref_y}");
+        // Every one of the four tyre contact patches must sit flush on the inclined plane (< 2 mm).
+        for &(lx, lz) in &[(ht, zf), (-ht, zf), (ht, zr), (-ht, zr)] {
+            let p = Vec3::new(x0 as f32, y as f32, z0 as f32) + rot * Vec3::new(lx as f32, 0.0, lz as f32);
+            let want_y = plane(p.x as f64, p.z as f64);
+            assert!(
+                (p.y as f64 - want_y).abs() < 2e-3,
+                "wheel ({lx}, {lz}) at ({:.2}, {:.4}, {:.2}) misses road {:.4} by {:.4} m",
+                p.x, p.y, p.z, want_y, (p.y as f64 - want_y).abs()
+            );
+        }
+    }
+
+    #[test]
+    fn parked_car_pose_ignores_curb_step_when_curbside_wheel_leaves_carriageway() {
+        // Road runs along +Z with +10% uphill grade and -2% cross-fall toward the right kerb (x < 0).
+        // For x < -0.5 the sample leaves Layer::Carriageway (returns None because of the raised sidewalk).
+        let road = |x: f64, z: f64| 10.0 + 0.10 * z + 0.02 * x;
+        let (y, rot) = parked_car_pose(0.0, 10.0, 0.0, 0.0, 1.4, -1.4, 0.8, |px, pz, _| {
+            (px >= -0.5).then(|| road(px, pz))
+        });
+        assert!((y - 10.0).abs() < 1e-3, "curbside None must not lift datum y ({y})");
+        // Verify all four wheel contact points still match the carriageway plane (not the raised sidewalk!).
+        for &(lx, lz) in &[(0.8, 1.4), (-0.8, 1.4), (0.8, -1.4), (-0.8, -1.4)] {
+            let p = Vec3::new(0.0, y as f32, 0.0) + rot * Vec3::new(lx as f32, 0.0, lz as f32);
+            let want_y = road(p.x as f64, p.z as f64);
+            assert!(
+                (p.y as f64 - want_y).abs() < 2e-3,
+                "curb-adjacent wheel ({lx}, {lz}) landed at {:.4} vs carriageway {:.4}",
+                p.y, want_y
+            );
+        }
+    }
+
+    #[test]
+    fn parked_car_pose_level_street_is_identity_pitch_and_roll() {
+        let (y, rot) = parked_car_pose(12.0, 5.5, -8.0, 1.2, 1.4, -1.4, 0.8, |_, _, _| Some(5.5));
+        assert!((y - 5.5).abs() < 1e-6);
+        let want = glam::Quat::from_rotation_y(1.2);
+        assert!(rot.dot(want).abs() > 0.999999, "rot {rot:?} != yaw-only {want:?}");
+    }
+
+    #[test]
+    fn parked_wheel_footprint_uses_vehicle_spec_and_scale() {
+        assert_eq!(parked_wheel_footprint(None, 1.0), (1.4, -1.4, 0.78));
+        let spec = eo_props::data::VehicleSpec {
+            id: "sedan".into(),
+            length: 4.8,
+            width: 1.9,
+            height: 1.45,
+            paint_set: "sedan".into(),
+        };
+        let (zf, zr, ht) = parked_wheel_footprint(Some(&spec), 1.0);
+        assert!((zf - 1.44).abs() < 1e-9 && (zr + 1.44).abs() < 1e-9 && (ht - 0.798).abs() < 1e-9);
     }
 }

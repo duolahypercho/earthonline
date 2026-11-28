@@ -320,7 +320,11 @@ pub fn parse_posted_speed_mps(tag: &str) -> Option<f64> {
     } else {
         return None;
     };
-    (speed > 0.0).then_some(speed)
+    (speed.is_finite() && speed > 0.0).then_some(speed)
+}
+
+pub(crate) fn freeway(highway: &str) -> bool {
+    matches!(highway, "motorway" | "motorway_link")
 }
 
 /// `autonomousTrafficSpeedMps({ edge })`: the speed target of a lane.
@@ -331,15 +335,17 @@ pub fn autonomous_speed(highway: &str, maxspeed: &str, maxspeed_kmh: Option<f64>
             speed = Some(kmh * (1.0 / 3.6));
         }
     }
-    let speed = speed.unwrap_or_else(|| match highway {
+    if let Some(posted) = speed {
+        return if freeway(highway) { posted } else { posted.min(AUTONOMOUS_TRAFFIC_CEILING_MPS) };
+    }
+    match highway {
         "motorway" | "trunk" | "primary" => AUTONOMOUS_TRAFFIC_CEILING_MPS,
         "secondary" => 10.5,
         "tertiary" => 9.0,
         "unclassified" | "residential" => 7.2,
         "living_street" | "service" => 15.0 * METRES_PER_SECOND_PER_MPH,
         _ => 25.0 * METRES_PER_SECOND_PER_MPH,
-    });
-    speed.min(AUTONOMOUS_TRAFFIC_CEILING_MPS)
+    }
 }
 
 // ---------------------------------------------------------------- plans
@@ -370,6 +376,8 @@ pub struct Plan {
     g: [f64; 8],
     /// Merge only: cumulative Gauss-Legendre arc length at the 65 knots.
     lengths: Option<Box<[f64; MERGE_SAMPLES + 1]>>,
+    /// Stations where this path meets its drawn junction surface, with heights.
+    pub(crate) junction_grade_seams: std::sync::OnceLock<Box<[[f64; 2]]>>,
 }
 
 fn straight_join(p_in: P2, p_out: P2, yaw_in: f64, yaw_out: f64) -> Plan {
@@ -392,6 +400,7 @@ fn straight_join(p_in: P2, p_out: P2, yaw_in: f64, yaw_out: f64) -> Plan {
         lateral_step: lateral,
         g: [p_in[0], p_in[1], dx, dz, yaw_in, dyaw, 0.0, 0.0],
         lengths: None,
+        junction_grade_seams: Default::default(),
     }
 }
 
@@ -465,6 +474,7 @@ pub fn corner_fillet(inp: &[P2], in_len: f64, out: &[P2], out_len: f64, tangent_
         lateral_step: f64::NAN,
         g: [cx, cz, ax - cx, az - cz, sign, yaw_in, 0.0, 0.0],
         lengths: None,
+        junction_grade_seams: Default::default(),
     })
 }
 
@@ -525,6 +535,41 @@ fn smooth_through_merge(inp: &[P2], in_len: f64, out: &[P2], out_len: f64, strai
     }
     let p0 = [in_end[0] - d_in[0] * entry_setback, in_end[1] - d_in[1] * entry_setback];
     let p3 = [out_start[0] + d_out[0] * exit_arc, out_start[1] + d_out[1] * exit_arc];
+    let mut plan = straight.clone();
+    plan.entry_setback = entry_setback;
+    plan.exit_arc = exit_arc;
+    merge_curve(p0, p3, d_in, d_out, plan)
+}
+
+/// A mid-block transition between parallel lanes, tangent at both ends.
+pub(crate) fn passing_plan(from: P2, to: P2, heading: P2, entry_setback: f64, exit_arc: f64) -> Option<Plan> {
+    let template = Plan {
+        kind: PlanKind::Merge,
+        turn_side: 1,
+        theta: 0.0,
+        radius: 0.0,
+        arc_len: 0.0,
+        tangent: f64::NAN,
+        along_in: 0.0,
+        entry_setback,
+        exit_arc,
+        speed_cap: 0.0,
+        lateral_step: (to[0] - from[0]) * heading[1] - (to[1] - from[1]) * heading[0],
+        g: [0.0; 8],
+        lengths: None,
+        junction_grade_seams: Default::default(),
+    };
+    merge_curve(from, to, heading, heading, template)
+}
+
+const MERGE_HEADING_LIMIT_RAD: f64 = 0.4;
+
+pub(crate) fn passing_distance(lateral: f64) -> f64 {
+    // Give the cubic room to turn back to parallel within the merge heading cap.
+    2.0 * lateral / MERGE_HEADING_LIMIT_RAD.tan()
+}
+
+fn merge_curve(p0: P2, p3: P2, d_in: P2, d_out: P2, mut plan: Plan) -> Option<Plan> {
     let chord = hypot(p3[0] - p0[0], p3[1] - p0[1]);
     if !(chord >= 8.0) {
         return None;
@@ -542,7 +587,7 @@ fn smooth_through_merge(inp: &[P2], in_len: f64, out: &[P2], out_len: f64, strai
             lengths[index] = lengths[index - 1] + cubic_arc(&g, (index - 1) as f64 / MERGE_SAMPLES as f64, t);
         }
         let speed = hypot(point.2, point.3);
-        if !(speed > 1e-6) || (point.2 * d_in[0] + point.3 * d_in[1]) / speed < 0.4f64.cos() {
+        if !(speed > 1e-6) || (point.2 * d_in[0] + point.3 * d_in[1]) / speed < MERGE_HEADING_LIMIT_RAD.cos() {
             return None;
         }
         max_curv = max_curv.max((point.2 * point.5 - point.3 * point.4).abs() / (speed * speed * speed));
@@ -551,21 +596,15 @@ fn smooth_through_merge(inp: &[P2], in_len: f64, out: &[P2], out_len: f64, strai
         return None;
     }
     let radius = 1.0 / max_curv;
-    Some(Plan {
-        kind: PlanKind::Merge,
-        turn_side: 0,
-        theta: straight.theta,
-        radius,
-        arc_len: lengths[MERGE_SAMPLES],
-        tangent: f64::NAN,
-        along_in: 0.0,
-        entry_setback,
-        exit_arc,
-        speed_cap: (TURN_LATERAL_ACCEL * radius).sqrt(),
-        lateral_step: straight.lateral_step,
-        g,
-        lengths: Some(lengths),
-    })
+    plan.kind = PlanKind::Merge;
+    plan.radius = radius;
+    plan.arc_len = lengths[MERGE_SAMPLES];
+    plan.tangent = f64::NAN;
+    plan.along_in = 0.0;
+    plan.speed_cap = (TURN_LATERAL_ACCEL * radius).sqrt();
+    plan.g = g;
+    plan.lengths = Some(lengths);
+    Some(plan)
 }
 
 /// What `buildJunctionPlan` needs to know about the lane's other exits.
@@ -639,6 +678,9 @@ impl Plan {
         let g = &self.g;
         match self.kind {
             PlanKind::Line => {
+                if self.arc_len == 0.0 {
+                    return (g[0], g[1], g[4]);
+                }
                 let t = js_clamp(s / self.arc_len, 0.0, 1.0);
                 (g[0] + g[2] * t, g[1] + g[3] * t, g[4] + g[5] * t)
             }
@@ -726,12 +768,71 @@ pub fn obb_penetration(a: (f64, f64, f64, f64, f64), b: (f64, f64, f64, f64, f64
 
 /// Clearance from a point to a ground rectangle (`obbClearance`): 0 on or inside.
 pub fn obb_clearance(x: f64, z: f64, b: (f64, f64, f64, f64, f64)) -> f64 {
+    let [forward, lateral] = obb_face_distances(x, z, b);
+    hypot(forward.max(0.0), lateral.max(0.0))
+}
+
+pub(crate) fn obb_signed_clearance(x: f64, z: f64, b: (f64, f64, f64, f64, f64)) -> f64 {
+    let [forward, lateral] = obb_face_distances(x, z, b);
+    hypot(forward.max(0.0), lateral.max(0.0)) + forward.max(lateral).min(0.0)
+}
+
+fn obb_face_distances(x: f64, z: f64, b: (f64, f64, f64, f64, f64)) -> P2 {
     let dx = x - b.0;
     let dz = z - b.1;
     let (s, c) = b.2.sin_cos();
     let forward = dx * s + dz * c;
     let lateral = dx * c - dz * s;
-    hypot((forward.abs() - b.3 / 2.0).max(0.0), (lateral.abs() - b.4 / 2.0).max(0.0))
+    [forward.abs() - b.3 / 2.0, lateral.abs() - b.4 / 2.0]
+}
+
+/// First fraction of a ground-disc sweep that touches a rotated vehicle box.
+pub(crate) fn disc_sweep_hit(start: P2, end: P2, radius: f64, body: (f64, f64, f64, f64, f64), allow_escape: bool) -> Option<f64> {
+    let (sin, cos) = body.2.sin_cos();
+    let local = |[x, z]: P2| {
+        let (dx, dz) = (x - body.0, z - body.1);
+        [dx * sin + dz * cos, dx * cos - dz * sin]
+    };
+    let (from, to) = (local(start), local(end));
+    let delta = [to[0] - from[0], to[1] - from[1]];
+    let half = [body.3 / 2.0, body.4 / 2.0];
+    let signed_clearance = |p: P2| {
+        let (x, z) = (p[0].abs() - half[0], p[1].abs() - half[1]);
+        x.max(0.0).hypot(z.max(0.0)) + x.max(z).min(0.0)
+    };
+    let clearance = signed_clearance(from);
+    if clearance <= radius {
+        return if allow_escape && signed_clearance(to) > clearance { None } else { Some(0.0) };
+    }
+    let slab = |bounds: P2| {
+        let (mut enter, mut exit) = (0.0_f64, 1.0_f64);
+        for axis in 0..2 {
+            if delta[axis] == 0.0 {
+                if from[axis].abs() > bounds[axis] { return None; }
+                continue;
+            }
+            let a = (-bounds[axis] - from[axis]) / delta[axis];
+            let b = (bounds[axis] - from[axis]) / delta[axis];
+            enter = enter.max(a.min(b));
+            exit = exit.min(a.max(b));
+        }
+        (enter <= exit).then_some(enter)
+    };
+    slab([half[0] + radius, half[1] + radius])?;
+    // The box expanded by a disc is two strips and four circular corners.
+    let strips = [slab([half[0] + radius, half[1]]), slab([half[0], half[1] + radius])];
+    let speed_sq = delta[0] * delta[0] + delta[1] * delta[1];
+    let corners = [-1.0, 1.0].into_iter().flat_map(|x| [-1.0, 1.0].map(|z| [x * half[0], z * half[1]]));
+    let circles = corners.filter_map(|corner| {
+        if speed_sq == 0.0 { return None; }
+        let m = [from[0] - corner[0], from[1] - corner[1]];
+        let towards = m[0] * delta[0] + m[1] * delta[1];
+        let discriminant = towards * towards - speed_sq * (m[0] * m[0] + m[1] * m[1] - radius * radius);
+        if towards >= 0.0 || discriminant < 0.0 { return None; }
+        let t = (-towards - discriminant.sqrt()) / speed_sq;
+        (0.0..=1.0).contains(&t).then_some(t)
+    });
+    strips.into_iter().flatten().chain(circles).min_by(f64::total_cmp)
 }
 
 /// Do segments ab and cd cross?

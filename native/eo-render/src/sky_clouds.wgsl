@@ -32,8 +32,9 @@
 // `--volumetric-clouds` high-definition cauliflower detail (64^3) and meteorological weather/cirrus map (512^2)
 @group(0) @binding(23) var vc_detail: texture_3d<f32>;
 @group(0) @binding(24) var vc_weather: texture_2d<f32>;
-// `--volumetric-clouds` hemispherical off-screen cloud reflection dome (64^2 RGBA16F, hemi-octahedral)
+// `--volumetric-clouds` hemispherical off-screen cloud reflection dome (128^2 RGBA16F, 5 mips, hemi-octahedral)
 @group(0) @binding(25) var cl_refl_out: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(26) var cl_refl_src: texture_2d<f32>;
 
 const CL_EARTH_R: f32 = 6371000.0;
 /// The base-shape noise's tile (m): divides the low deck's drift wrap (3.2 km), so a wrap is seamless.
@@ -692,7 +693,12 @@ fn vc_shape(p: vec3<f32>, fp: f32, lod: f32) -> vec4<f32> {
 /// Every cascade is mutually unaligned (>= 27 deg) and exact integer-periodic at 51.2 km, eliminating
 /// repetitive Voronoi balls while keeping overhead cloud undersides crisp, fibrous, and sculpted.
 fn vc_density(p: vec3<f32>, t: f32, fp: f32, lod: f32, want_fine: bool, allow_micro: bool) -> vec4<f32> {
-    var s = vc_shape(p, fp, lod);
+    let s0 = vc_shape(p, fp, lod);
+    return vc_density_from_shape(s0, p, t, fp, want_fine, allow_micro);
+}
+
+fn vc_density_from_shape(s0: vec4<f32>, p: vec3<f32>, t: f32, fp: f32, want_fine: bool, allow_micro: bool) -> vec4<f32> {
+    var s = s0;
     if (s.x <= 0.001) {
         return s;
     }
@@ -1191,30 +1197,14 @@ fn vc_ambient(top_col: vec3<f32>, side_col: vec3<f32>, bot_col: vec3<f32>, sun_u
     return (a * cav_shade * dir_amb + under_lit + c2c_lit) * mix(1.0, 0.90, clamp(d, 0.0, 1.0));
 }
 
-/// the cloud-shadow map (clouds.rs, before the city pass): for the sea-level point
-/// each texel stands for (a 32 km window about the eye, wrapped, so it is anchored to the
-/// world), the transmittance of the low deck along the key, through the same shape the
-/// march draws. The city, the water and the volume read it (`sky_cloud_transmittance`,
-/// `vol_cloud_t`) at the point their own key ray reaches sea level.
-/// Under `--volumetric-clouds`, `.r` carries Cascade-1 detail-carved ground/water
-/// transmittance while `.gba` (on all texels outside `(0..4, 0)`) pack cumulative physical
-/// optical depth above slab heights `h = 0.20, 0.45, 0.72` for single-fetch cloud-to-cloud
-/// shadow projection (`vc_cloud_cast_tau`).
-@compute @workgroup_size(8, 8)
-fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let res = i32(SKY_CSHADOW_RES);
-    let ij = vec2<i32>(gid.xy);
-    if (ij.x >= res || ij.y >= res) {
-        return;
-    }
-    let l = look.key_dir.xyz;
+/// One texel of the cloud-shadow map (`.r` transmittance, `.gba` cumulative optical depth above
+/// `h = 0.20, 0.45, 0.72` under `--volumetric-clouds`).
+fn cl_shadow_texel(ij: vec2<i32>, res: i32, k0: vec2<i32>, l: vec3<f32>, vc_on: bool) -> vec4<f32> {
     var tr = 1.0;
     var gba = vec3<f32>(0.0);
-    let vc_on = sky_vol_clouds_on(skyu.cirrus);
     if (vc_on) {
         let st = vc_stratus();
         if (skyu.cloud0.z > 0.0 && l.y > 0.02 && st < 0.85) {
-            let k0 = vec2<i32>(floor((look.cam_pos.xz - 0.5 * SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL) / SKY_CSHADOW_TEXEL));
             let wi = k0 + (((ij - k0) % res) + res) % res;
             let g = (vec2<f32>(wi) + 0.5) * SKY_CSHADOW_TEXEL;
             let base = skyu.cloud0.x;
@@ -1299,7 +1289,6 @@ fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     } else if (cl_low_deck_on() && l.y > 0.02 && cl_stratus() < 0.999) {
         // The window's first texel (world index), and this texel's world index in it.
-        let k0 = vec2<i32>(floor((look.cam_pos.xz - 0.5 * SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL) / SKY_CSHADOW_TEXEL));
         let wi = k0 + (((ij - k0) % res) + res) % res;
         let g = (vec2<f32>(wi) + 0.5) * SKY_CSHADOW_TEXEL;
         let base = skyu.cloud0.x;
@@ -1325,15 +1314,69 @@ fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
         tr = exp(-tau);
     }
-    // the sky's light on the clouds, once a frame: texels (0..4, 0) carry it in
-    // their g, b, a (amb, zen, top, sun, anti; sky_volume `cl_sky_light`); the receivers read r
-    // alone. The volume pass reads these five texels instead of the sky table per pixel.
-    if (ij.y == 0 && ij.x < 5) {
-        let sk = cl_sky_light();
-        var parts = array<vec3<f32>, 5>(sk.amb, sk.zen, sk.top, sk.sun, sk.anti);
-        gba = parts[ij.x];
+    return vec4<f32>(tr, gba);
+}
+
+/// the cloud-shadow map (clouds.rs, before the city pass): for the sea-level point
+/// each texel stands for (a 32 km window about the eye, wrapped, so it is anchored to the
+/// world), the transmittance of the low deck along the key, through the same shape the
+/// march draws. The city, the water and the volume read it (`sky_cloud_transmittance`,
+/// `vol_cloud_t`) at the point their own key ray reaches sea level.
+/// Dispatched at half-res (`SHADOW_RES / 2`, 2x2 blocks): fills all 4 texels on cuts, wrap-seam
+/// bands, the `ClSky` row `(0..4, 0)`, and non-marching regimes; on steady frames refines 1/4
+/// texels per frame (full 32 km world-anchored refresh every 4 frames, ~0.004 texel cloud drift).
+@compute @workgroup_size(8, 8)
+fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let res = i32(SKY_CSHADOW_RES);
+    let base_ij = vec2<i32>(gid.xy) * 2;
+    if (base_ij.x >= res || base_ij.y >= res) {
+        return;
     }
-    textureStore(cl_shadow_out, ij, vec4<f32>(tr, gba));
+    let l = look.key_dir.xyz;
+    let vc_on = sky_vol_clouds_on(skyu.cirrus);
+    let is_sky_row = base_ij.y == 0 && base_ij.x < 6;
+    let marching = select(
+        cl_low_deck_on() && l.y > 0.02 && cl_stratus() < 0.999,
+        skyu.cloud0.z > 0.0 && l.y > 0.02 && vc_stratus() < 0.85,
+        vc_on,
+    );
+    var offs = array<vec2<i32>, 4>(vec2<i32>(0, 0), vec2<i32>(1, 1), vec2<i32>(1, 0), vec2<i32>(0, 1));
+    if (!marching) {
+        let tr = select(1.0, skyu.cloud1.w, vc_on && skyu.cloud0.z > 0.0 && l.y > 0.02);
+        var parts = array<vec3<f32>, 5>(vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0));
+        if (is_sky_row) {
+            let sk = cl_sky_light();
+            parts = array<vec3<f32>, 5>(sk.amb, sk.zen, sk.top, sk.sun, sk.anti);
+        }
+        for (var k = 0; k < 4; k = k + 1) {
+            let ij = base_ij + offs[k];
+            let gba = select(vec3<f32>(0.0), parts[min(ij.x, 4)], is_sky_row && ij.y == 0 && ij.x < 5);
+            textureStore(cl_shadow_out, ij, vec4<f32>(tr, gba));
+        }
+        return;
+    }
+    let k0 = vec2<i32>(floor((look.cam_pos.xz - 0.5 * SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL) / SKY_CSHADOW_TEXEL));
+    let d0 = (((base_ij - k0) % res) + res) % res;
+    let on_seam = d0.x < 2 || d0.x >= res - 2 || d0.y < 2 || d0.y >= res - 2;
+    let fill_all = skyu.taa.y < 0.5 || on_seam || is_sky_row;
+    var parts = array<vec3<f32>, 5>(vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0));
+    if (is_sky_row) {
+        // the sky's light on the clouds, once a frame: texels (0..4, 0) carry it in
+        // their g, b, a (amb, zen, top, sun, anti; sky_volume `cl_sky_light`); the receivers read r
+        // alone. The volume pass reads these five texels instead of the sky table per pixel.
+        let sk = cl_sky_light();
+        parts = array<vec3<f32>, 5>(sk.amb, sk.zen, sk.top, sk.sun, sk.anti);
+    }
+    let slot = i32(skyu.flags.y % 4u);
+    let n_iter = select(1, 4, fill_all);
+    for (var k = 0; k < n_iter; k = k + 1) {
+        let ij = base_ij + offs[select(slot, k, fill_all)];
+        var v = cl_shadow_texel(ij, res, k0, l, vc_on);
+        if (is_sky_row && ij.y == 0 && ij.x < 5) {
+            v = vec4<f32>(v.r, parts[ij.x]);
+        }
+        textureStore(cl_shadow_out, ij, v);
+    }
 }
 
 /// Seamless hemi-octahedral decode (`uv` in `[0, 1]^2` -> unit upper-hemisphere direction, `d.y > 0`).
@@ -1346,25 +1389,34 @@ fn vc_hemi_oct_decode(uv: vec2<f32>) -> vec3<f32> {
     return normalize(vec3<f32>(px, py, pz));
 }
 
-/// (`--volumetric-clouds`) Fast barrier-free time-sliced `64 x 64` RGBA16F hemispherical cloud
+/// (`--volumetric-clouds`) Fast barrier-free time-sliced `128 x 128` RGBA16F hemispherical cloud
 /// reflection dome (dispatched at `32 x 32` = 1,024 threads): reads precomputed `ClSky` from
-/// `cl_shadow`, fills 2x2 blocks on cut frames and refines 1/4 texels per steady frame (~0.04 ms).
+/// `cl_shadow`, fills 4x4 blocks on cut frames and refines in 4x4 Bayer order (effective 64^2 in
+/// 4 frames, full 128^2 in 16 frames) at ~0.03 ms steady-state GPU cost.
 @compute @workgroup_size(8, 8)
 fn cl_refl_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dim = vec2<i32>(textureDimensions(cl_refl_out));
-    let base_ij = vec2<i32>(gid.xy) * 2;
+    let base_ij = vec2<i32>(gid.xy) * 4;
     if (base_ij.x >= dim.x || base_ij.y >= dim.y) {
         return;
     }
     let fill_all = skyu.taa.y < 0.5;
-    var offs = array<vec2<i32>, 4>(vec2<i32>(0, 0), vec2<i32>(1, 1), vec2<i32>(1, 0), vec2<i32>(0, 1));
-    let off = select(offs[skyu.flags.y % 4u], vec2<i32>(0, 0), fill_all);
+    // 4x4 Bayer traversal: every 4 frames visits all four 2x2 quadrants evenly.
+    var offs = array<vec2<i32>, 16>(
+        vec2<i32>(0, 0), vec2<i32>(2, 2), vec2<i32>(2, 0), vec2<i32>(0, 2),
+        vec2<i32>(1, 1), vec2<i32>(3, 3), vec2<i32>(3, 1), vec2<i32>(1, 3),
+        vec2<i32>(1, 0), vec2<i32>(3, 2), vec2<i32>(3, 0), vec2<i32>(1, 2),
+        vec2<i32>(0, 1), vec2<i32>(2, 3), vec2<i32>(2, 1), vec2<i32>(0, 3),
+    );
+    let off = select(offs[skyu.flags.y % 16u], vec2<i32>(0, 0), fill_all);
     let ij = min(base_ij + off, dim - 1);
     let bits = skyu.flags.x;
     if (!sky_vol_clouds_on(skyu.cirrus) || !sky_on(bits, SKY_CLOUDS) || skyu.cloud0.z <= 0.0) {
         if (fill_all) {
-            for (var k = 0; k < 4; k = k + 1) {
-                textureStore(cl_refl_out, min(base_ij + offs[k], dim - 1), vec4<f32>(0.0));
+            for (var y = 0; y < 4; y = y + 1) {
+                for (var x = 0; x < 4; x = x + 1) {
+                    textureStore(cl_refl_out, min(base_ij + vec2<i32>(x, y), dim - 1), vec4<f32>(0.0));
+                }
             }
         } else {
             textureStore(cl_refl_out, ij, vec4<f32>(0.0));
@@ -1372,7 +1424,7 @@ fn cl_refl_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
-    let uv = (vec2<f32>(ij) + select(0.5, 1.0, fill_all)) / vec2<f32>(dim);
+    let uv = (vec2<f32>(ij) + select(0.5, 2.0, fill_all)) / vec2<f32>(dim);
     let dir = vc_hemi_oct_decode(uv);
     let base = skyu.cloud0.x;
     let top = vc_slab_top();
@@ -1440,61 +1492,79 @@ fn cl_refl_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var L_out = vec3<f32>(0.0);
     var T_out = 1.0;
 
-    // (1) Primary volumetric low cloud slab: ultra-low-latency 12-step `vc_shape` + 1-tap sun march
-    // (texels span ~2.8 deg on rippled water, so `vc_shape` resolves full 3D canopies cleanly in ~0.03 ms).
+    // (1) Primary volumetric low cloud slab: 14-step `vc_shape` + 2-tap sun march with full
+    // `vc_ms` physical multi-scattering so reflected clouds match main-sky cumulus luminance & sunset fire.
     var t0 = cl_hit(eye.y, dir, base, false);
     var t1 = cl_hit(eye.y, dir, top, false);
     if (eye.y >= base && eye.y < top) {
         t0 = 0.0;
     }
-    let refl_far = mix(82000.0, 38000.0, night_w);
+    let refl_far = mix(92000.0, 38000.0, night_w);
     if (t0 >= 0.0 && t0 < refl_far - 4000.0) {
         if (t1 <= t0) {
-            t1 = t0 + 20000.0;
+            t1 = t0 + 22000.0;
         }
-        t1 = min(min(t1, t0 + 28000.0), refl_far);
+        t1 = min(min(t1, t0 + 30000.0), refl_far);
         let hl = length(dir.xz);
         let sig_max = skyu.cloud1.x * skyu.cloud0.w * VC_DENSITY * mix(1.0, 0.64, night_w * (1.0 - strat * 0.7));
         let moon_key_w = clamp(skyu.sun_rad.w, 0.0, 1.0) * night_w;
         let moon_tint = mix(vec3<f32>(1.0), vec3<f32>(1.95, 2.15, 2.65), moon_key_w);
-        let ph_r0 = 0.68 * cl_hg(cl_cs, 0.60) + 0.32 * cl_hg(cl_cs, -0.22);
-        let ph_r1 = 0.68 * cl_hg(cl_cs, 0.28) + 0.32 * cl_hg(cl_cs, -0.10);
-        let warm_r = mix(vec3<f32>(1.0), vec3<f32>(1.18, 0.96, 0.56), low_sun);
+        let twi_spike_soft = 1.0 - 0.72 * night_w;
         var Tc = 1.0;
         var Lc = vec3<f32>(0.0);
         var tw = 0.0;
         var twt = 0.0;
-        let dt_span = (t1 - t0) / 8.0;
+        let dt_span = (t1 - t0) / 14.0;
         var t = t0 + 0.5 * dt_span;
-        for (var i = 0; i < 8; i = i + 1) {
-            if (t >= t1 || Tc < 0.07) {
+        for (var i = 0; i < 14; i = i + 1) {
+            if (t >= t1 || Tc < 0.05) {
                 break;
             }
             let pp = eye + dir * t;
             let ht = t * hl;
             let pc = vec3<f32>(pp.x, pp.y + ht * ht / (2.0 * CL_EARTH_R), pp.z);
-            let fp = max(t * 0.045, 36.0);
+            let fp = max(t * 0.040, 32.0);
             if (vc_envelope(pc, fp, 0.14) > 0.001) {
-                let lod = clamp(log2(fp / 20.0), 0.5, 2.6);
+                let lod = clamp(log2(fp / 20.0), 0.4, 2.5);
                 let sh = vc_shape(pc, fp, lod);
-                if (sh.x > 0.003) {
+                if (sh.x > 0.0025) {
                     let bh = smoothstep(0.08, 0.34, sh.y);
                     let d = vc_vapor_curve(sh.x, sh.z, sh.y, bh, sh.w, strat, t);
                     let sig = sig_max * d;
-                    let e_sun = cl_sun(pc.y) * vc_beam * moon_tint;
+                    let alt_grad = mix(vec3<f32>(1.26, 0.90, 0.38), vec3<f32>(1.12, 1.05, 0.80), smoothstep(0.12, 0.78, sh.y));
+                    let sun_alt_tint = mix(vec3<f32>(1.0), alt_grad, low_sun * (1.0 - strat * 0.85));
+                    let e_sun = cl_sun(pc.y) * vc_beam * sun_alt_tint * moon_tint;
                     var sun = vec3<f32>(0.0);
+                    var sun_slope = 0.28;
                     if (any(e_sun > vec3<f32>(0.0))) {
-                        var tau_l = 95.0 * d;
-                        let q = pc + cl_l * 340.0;
-                        if (q.y < top && vc_envelope(q, fp + 60.0, 0.12) > 0.001) {
-                            let sq = vc_shape(q, fp + 60.0, min(lod + 0.7, 2.4));
-                            if (sq.x > 0.003) {
-                                tau_l = tau_l + 460.0 * vc_vapor_curve(sq.x, sq.z, sq.y, smoothstep(0.08, 0.34, sq.y), sq.w, strat, t);
+                        var tau_n = 55.0 * d;
+                        var tau_l = tau_n;
+                        var d_near = d;
+                        let q1 = pc + cl_l * 160.0;
+                        if (q1.y < top && vc_envelope(q1, fp + 32.0, 0.12) > 0.001) {
+                            let sq1 = vc_shape(q1, fp + 32.0, min(lod + 0.45, 2.3));
+                            if (sq1.x > 0.002) {
+                                d_near = vc_vapor_curve(sq1.x, sq1.z, sq1.y, smoothstep(0.08, 0.34, sq1.y), sq1.w, strat, t);
+                                tau_l = tau_l + 190.0 * d_near;
+                                tau_n = tau_n + 65.0 * d_near;
+                            } else {
+                                d_near = 0.0;
+                            }
+                        } else {
+                            d_near = 0.0;
+                        }
+                        let q2 = pc + cl_l * 520.0;
+                        if (q2.y < top && vc_envelope(q2, fp + 95.0, 0.14) > 0.001) {
+                            let sq2 = vc_shape(q2, fp + 95.0, min(lod + 0.95, 2.4));
+                            if (sq2.x > 0.002) {
+                                tau_l = tau_l + 460.0 * vc_vapor_curve(sq2.x, sq2.z, sq2.y, smoothstep(0.08, 0.34, sq2.y), sq2.w, strat, t);
                             }
                         }
-                        let ts = tau_l * sig_max;
-                        let ms_r = vec3<f32>(exp(-ts) * ph_r0) + warm_r * (0.58 * exp(-0.36 * ts) * ph_r1 + 0.18 * exp(-0.08 * ts) / 12.566371);
-                        sun = e_sun * ms_r * (VC_SUN_GAIN * (1.0 + 0.30 * low_sun));
+                        sun_slope = mix(0.28, clamp((d - d_near) * 1.35 + 0.18, -0.65, 0.90), 1.0 - strat);
+                        let cav_r = clamp(0.48 + 0.40 * sh.y + 0.14 * sh.z, 0.28, 0.96);
+                        let top_sun_r = max(cl_l.y, 0.12) * (0.42 + 0.58 * smoothstep(0.0, 0.82, sh.y));
+                        let spike_w = twi_spike_soft * (1.0 - 0.58 * smoothstep(32000.0, 74000.0, t));
+                        sun = e_sun * vc_ms(tau_l * sig_max, tau_n * sig_max, sun_slope, cav_r, top_sun_r, spike_w, cl_cs, low_sun, strat) * (VC_SUN_GAIN * (1.08 + 0.16 * day_hi));
                     }
                     var extra_a = vol_extra_amb(pc, dir);
                     if (night_w > 0.01) {
@@ -1504,7 +1574,7 @@ fn cl_refl_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     }
                     let twi_dir = 0.32 + 0.68 * max(cl_cs, 0.0);
                     let alpen = skyu.twi.xyz * mix(vec3<f32>(1.06, 0.94, 0.88), vec3<f32>(1.12, 0.96, 0.72), low_sun) * smoothstep(0.0, 0.65, sh.y) * twi_dir * 0.24;
-                    let amb = vc_ambient(vc_top + alpen, vc_side + alpen * 0.72, vc_bot + extra_a, sun_under, c2c_bounce, sh.y, sh.z, d, 0.5 + 0.5 * sh.z, 0.24, 0.76, low_sun, night_w, strat);
+                    let amb = vc_ambient(vc_top + alpen, vc_side + alpen * 0.72, vc_bot + extra_a, sun_under, c2c_bounce, sh.y, sh.z, d, 0.52 + 0.44 * sh.z, sun_slope, 0.78, low_sun, night_w, strat);
                     let ext = exp(-sig * dt_span);
                     let wgt = Tc * (1.0 - ext);
                     Lc = Lc + wgt * (sun + amb);
@@ -1523,11 +1593,11 @@ fn cl_refl_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let dh_c = dir.y * t_m;
             let air_d = sky_path_density(dh_c);
             let ray_c = AT_RAY * 0.001 * exp(-max(eye.y + 0.5 * dh_c, 0.0) / 8000.0);
-            let graze_h = mix(0.75, 1.25, smoothstep(0.16, 0.02, abs(dir.y)));
-            let aer_c = max(skyu.atmo3.y, 0.000028) * air_d * mix(graze_h, 1.05, strat);
-            let marine_hz = exp(-t_m * (1.0 - 0.88 * abs(dir.y)) / mix(58000.0, 28000.0, night_w));
-            let far_rgb = exp(-(ray_c * mix(0.58, 0.36, low_sun) + vec3<f32>(aer_c)) * t_m) * marine_hz;
-            let hor_fade = 1.0 - smoothstep(mix(42000.0, 18000.0, night_w), mix(86000.0, 48000.0, night_w), t_m);
+            let graze_h = mix(0.68, 1.12, smoothstep(0.16, 0.02, abs(dir.y)));
+            let aer_c = max(skyu.atmo3.y, 0.000024) * air_d * mix(graze_h, 1.05, strat);
+            let marine_hz = exp(-t_m * (1.0 - 0.88 * abs(dir.y)) / mix(64000.0, 28000.0, night_w));
+            let far_rgb = exp(-(ray_c * mix(0.52, 0.34, low_sun) + vec3<f32>(aer_c)) * t_m) * marine_hz;
+            let hor_fade = 1.0 - smoothstep(mix(48000.0, 18000.0, night_w), mix(92000.0, 48000.0, night_w), t_m);
             let alpha_h = alpha * hor_fade;
             let Lc_h = Lc * hor_fade;
             var behind = lk_sky_dome(dir);
@@ -1582,10 +1652,30 @@ fn cl_refl_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         out_v = vec4<f32>(0.0);
     }
     if (fill_all) {
-        for (var k = 0; k < 4; k = k + 1) {
-            textureStore(cl_refl_out, min(base_ij + offs[k], dim - 1), out_v);
+        for (var y = 0; y < 4; y = y + 1) {
+            for (var x = 0; x < 4; x = x + 1) {
+                textureStore(cl_refl_out, min(base_ij + vec2<i32>(x, y), dim - 1), out_v);
+            }
         }
     } else {
         textureStore(cl_refl_out, ij, out_v);
     }
+}
+
+/// 2x2 box-filter mip downsample for the 128^2 RGBA16F hemispherical cloud reflection dome.
+/// Because `cl_refl` stores premultiplied `(radiance, alpha)`, linear averaging preserves energy.
+@compute @workgroup_size(8, 8)
+fn cl_refl_down_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dim = textureDimensions(cl_refl_out);
+    if (gid.x >= dim.x || gid.y >= dim.y) {
+        return;
+    }
+    let p = vec2<i32>(gid.xy) * 2;
+    let c = 0.25 * (
+        textureLoad(cl_refl_src, p, 0) +
+        textureLoad(cl_refl_src, p + vec2<i32>(1, 0), 0) +
+        textureLoad(cl_refl_src, p + vec2<i32>(0, 1), 0) +
+        textureLoad(cl_refl_src, p + vec2<i32>(1, 1), 0)
+    );
+    textureStore(cl_refl_out, vec2<i32>(gid.xy), c);
 }

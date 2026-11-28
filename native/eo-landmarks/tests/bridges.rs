@@ -432,11 +432,28 @@ fn the_concrete_colours_have_their_cited_luminance() {
     assert!((warmth(r3.south) - warmth(grey)).abs() < 1e-9);
 }
 
-/// Every Golden Gate deck luminaire hangs in a lamp standard's head
-/// (`cable_detail`): its station is one the standards stand at
-/// (golden_gate.rs `lamp_stations`), none by the tower legs, two a station.
+/// Each Golden Gate deck light belongs to one standard in its selected layout.
 #[test]
 fn every_deck_lamp_has_its_standard() {
+    // The runtime selects a layout once per process. Exercise both ordinary
+    // entry points even when the developer runs this suite with a preview on.
+    const CASE: &str = "EO_TEST_GOLDEN_GATE_LAMP_LAYOUT";
+    let Ok(layout) = std::env::var(CASE) else {
+        for mode in ["off", "on"] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "every_deck_lamp_has_its_standard", "--nocapture"])
+                .env(CASE, mode)
+                .env("EO_GOLDEN_GATE_SURFACES", mode)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(), "lamp layout {mode}: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+        return;
+    };
     if !eo_landmarks::suspension::features().cable_detail {
         return;
     }
@@ -450,6 +467,36 @@ fn every_deck_lamp_has_its_standard() {
     let g = eo_landmarks::golden_gate::data(js);
     let site = eo_landmarks::golden_gate::Site::new(&g);
     let plan = eo_landmarks::golden_gate::plan(js, &site, &|x, z| gg.at(x, z));
+    if layout == "on" {
+        // The approach poles are staggered. Match each surveyed row to one
+        // emitter on its own side and at its measured lens elevation.
+        let survey: Vec<(f64, i8, f64, u8)> =
+            serde_json::from_str(include_str!("../data/golden-gate-lamps.json")).unwrap();
+        assert_eq!(survey.len(), 122);
+        let half_width = num(&g.dimensions, "widthM") / 2.;
+        let mut lamps: Vec<_> = lights.iter().filter(|light| {
+            let c = site.chainage(light.pos[0], light.pos[2]);
+            let [x, z] = site.deck_point(c, 0.);
+            light.angle < 1.5 && (plan.c_south..=plan.c_north).contains(&c)
+                && (light.pos[0] - x).hypot(light.pos[2] - z) < half_width
+        }).collect();
+        assert_eq!(lamps.len(), survey.len());
+        for (station, side, crown, kind) in survey {
+            let c = station * eo_data::groundscale::scale();
+            let [x, z] = site.deck_point(c, 0.);
+            let height = plan.deck_top(c) + crown - if kind == 1 { 0.20 } else { 0.30 };
+            let found = lamps.iter().position(|light| {
+                let offset = (light.pos[0] - x) * site.across[0] + (light.pos[2] - z) * site.across[1];
+                (site.chainage(light.pos[0], light.pos[2]) - c).abs() < 0.01
+                    && offset.signum() == f64::from(side)
+                    && (light.pos[1] - height).abs() < 0.01
+            });
+            let index = found.unwrap_or_else(|| panic!("missing surveyed lens at station {c}, side {side}"));
+            lamps.swap_remove(index);
+        }
+        assert!(lamps.is_empty());
+        return;
+    }
     let stations = eo_landmarks::golden_gate::lamp_stations(&g, &plan);
     let zone = eo_landmarks::golden_gate::tower_zone_half(&g);
     let o = site.axis_point(0.0, 0.0);

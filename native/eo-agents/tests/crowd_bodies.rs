@@ -100,6 +100,16 @@ fn decks_lift_walkers_onto_their_paving() {
     assert_eq!(far.top(15.0, 0.5), Some(1.0));
 }
 
+#[test]
+fn overlapping_decks_keep_a_walker_on_the_reachable_level() {
+    use eo_agents::feed::Decks;
+    let tri = |y| [[0.0, y, 0.0], [10.0, y, 0.0], [0.0, y, 10.0]];
+    let decks = Decks::new(vec![tri(5.0), tri(1.0)]);
+    assert_eq!(decks.support(2.0, 2.0, 1.3), Some(1.0));
+    assert_eq!(decks.support(2.0, 2.0, 5.3), Some(5.0));
+    assert_eq!(decks.support(2.0, 2.0, 0.3), None);
+}
+
 /// (`--people-capsules`) A capsule fitted to a limb's surface: its axis along
 /// the limb, its radius the limb's, its ends drawn in from the limb's ends by
 /// that radius; a part shorter than its width a sphere.
@@ -230,4 +240,74 @@ fn a_group_keeps_its_own_spacing() {
     let mut strangers = vec![[0.0, 0.0], [0.75, 0.0]];
     keep_personal_space_with(&mut strangers, &[3, 4]);
     assert!((d(strangers[0], strangers[1]) - 2.0 * PERSONAL_RADIUS_M).abs() < 1e-9);
+}
+
+#[test]
+fn a_reordered_crowd_keeps_the_body_ids_of_its_regions_and_corridor() {
+    use eo_agents::feed::{FeedThread, Feeder, Ground};
+    use eo_agents::library::Library;
+    use eo_sim::output::{AgentBuffer, AgentInstance, CorridorInstance, KIND_WALKER_BASE};
+    use eo_sim::world::Frame;
+    use std::time::{Duration, Instant};
+
+    let mut lib = Library::default();
+    lib.models.push(eo_agents::GpuModel::default());
+    lib.meta.people_models.push(0);
+    let feed = FeedThread::start(Feeder::new(lib.into(), Ground::Flat, None, 7).unwrap());
+    let walker = |id, x| AgentInstance { id, kind: KIND_WALKER_BASE, pos: [x, 0., 3.], ..Default::default() };
+    let mut frame = Frame {
+        regions: vec![
+            AgentBuffer { walkers: vec![walker(9, 1.), walker(10, 2.)], ..Default::default() },
+            AgentBuffer { walkers: vec![walker(9, 11.)], ..Default::default() },
+        ],
+        corridor: vec![CorridorInstance { id: 9, kind: KIND_WALKER_BASE, pos: [19., 7., 3.], ..Default::default() }],
+        ..Default::default()
+    };
+    for before_swap in [true, false] {
+        if !before_swap {
+            frame.regions[0].walkers.swap(0, 1);
+        }
+        let posted = feed.post(frame.clone());
+        let start = Instant::now();
+        let output = loop {
+            if let Some((out, seq)) = feed.take_with_walkers().0 {
+                assert_eq!(seq, posted);
+                break out;
+            }
+            assert!(start.elapsed() < Duration::from_secs(5), "waiting for the posted crowd frame");
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        let expected = [(9u64, [1., 0., 3.]), (10, [2., 0., 3.]),
+            ((1u64 << 32) | 9, [11., 0., 3.]), ((1u64 << 63) | 9, [19., 7., 3.])];
+        assert_eq!(output.walkers.len(), expected.len());
+        for (id, feet) in expected {
+            let slot = output.walkers.iter().find(|slot| slot.id == id).unwrap();
+            assert_eq!(slot.feet, feet);
+            assert_eq!(output.agents[slot.index].pos, feet);
+            if id == 9 { assert_eq!(slot.index, usize::from(!before_swap)); }
+        }
+    }
+}
+
+/// (`--crowd`) Walkers inside a building footprint or grazing a wall (including
+/// beside a shared party wall) are pushed outside to `WALL_CLEARANCE_M`, while
+/// walkers already in the open are untouched.
+#[test]
+fn walkers_are_kept_clear_of_buildings() {
+    use eo_agents::feed::{WALL_CLEARANCE_M, keep_out_of_buildings};
+    // Two touching buildings sharing a party wall at x = 10.
+    let a = vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]];
+    let b = vec![[10.0, 0.0], [20.0, 0.0], [20.0, 10.0], [10.0, 10.0]];
+    let ix = eo_street::BuildingIndex::new(vec![a, b]);
+    let mut pos = vec![
+        [5.0, 0.2],   // inside building A near z=0 wall
+        [5.0, -0.15], // outside A, too close to z=0 wall
+        [9.8, 1.5],   // inside A closest to shared party wall x=10, must exit to z=0 outside both
+        [5.0, -2.0],  // already well clear
+    ];
+    keep_out_of_buildings(&mut pos, &ix, WALL_CLEARANCE_M);
+    assert!(!ix.contains(pos[0][0], pos[0][1]) && (pos[0][1] + WALL_CLEARANCE_M).abs() < 1e-6, "inside -> {:?}", pos[0]);
+    assert!(!ix.contains(pos[1][0], pos[1][1]) && (pos[1][1] + WALL_CLEARANCE_M).abs() < 1e-6, "grazing -> {:?}", pos[1]);
+    assert!(!ix.contains(pos[2][0], pos[2][1]) && (pos[2][1] + WALL_CLEARANCE_M).abs() < 1e-6, "party wall -> {:?}", pos[2]);
+    assert_eq!(pos[3], [5.0, -2.0], "clear walker untouched");
 }

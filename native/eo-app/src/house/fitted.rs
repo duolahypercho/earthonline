@@ -197,8 +197,10 @@ impl Recipe {
         Ok((spec, pages))
     }
 
-    pub fn load(&self, root: &Path, table: &mut MaterialTable, first_layer: usize) -> Result<Room> {
+    pub fn load(&self, root: &Path, table: &mut MaterialTable, first_layer: usize, treads: &mut Vec<([Point; 3], bool)>) -> Result<Room> {
         let data = glb::read_verified(&self.geometry.path(root), &self.geometry)?;
+        treads.extend(super::stair_treads(&data, &Default::default(), |name|
+            matches!(name, super::LOWER_TREADS | "Bound wool runner over twenty nosings"))?);
         let (mut model, mut uv) = if self.window.is_some() {
             let (model, uv, _, _) =
                 glb::cook_furnished_glb(&data, &Default::default(), false, Some(Window::replaces))?;

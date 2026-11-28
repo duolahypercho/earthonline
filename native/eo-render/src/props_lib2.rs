@@ -16,7 +16,8 @@
 //! * Street trees: one render model per `STREET_TREE_SPECIES` entry, levels
 //!   near / window / far from `eo_props::eztree` (`buildStreetTreeGeometry`;
 //!   window and far by the species' silhouette, as the JS rings draw them),
-//!   bark opaque and leaves alpha-tested on the JS vegetation atlas.
+//!   bark opaque and leaves alpha-tested on the JS vegetation atlas; under
+//!   `--tree-crowns` the window and far forms add a crown core (`CrownCores`).
 //! * The overhead (`street-overhead.js`): span and support poles (tapered
 //!   tubes at `STREET_OVERHEAD`'s radii), the distribution pole and cobra arm
 //!   GLBs, the controller cabinet, the corner sign cluster, the lantern GLB
@@ -36,6 +37,9 @@ use eo_props::{JsProps, Model};
 
 /// Street furniture drawn in code where a kind's GLB is missing (`--no-furniture-models`: boxes).
 pub mod furniture_models;
+pub mod yard_items;
+/// The backs of the houses round the rear yards: back stairs, doors, downspouts (`--no-yard-stairs` off).
+pub mod yard_backs;
 /// The Golden Gate's coastal trees, scrub, grass, wildflowers and hill rock (render ids from `VEG_BASE`).
 pub mod vegetation_models;
 
@@ -54,11 +58,56 @@ pub const OH_SIGN_BASE: u32 = OH_BASE + 7;
 pub const MAX_SIGN_VARIANTS: u32 = 32;
 /// The moored boats (`eo_props::boats::BODIES` order), after the vegetation models
 /// (which follow the sign variants).
+/// (props_types.wgsl `pr_afloat_on` checks `BOAT_BASE .. BOAT_BASE + BODIES.len()`.)
 pub const BOAT_BASE: u32 = vegetation_models::VEG_BASE + vegetation_models::COUNT;
-pub const RENDER_MODEL_COUNT: usize = (BOAT_BASE + eo_props::boats::BODIES.len() as u32) as usize;
+/// The SFMTA sign plates' Blender models (`eo_props::sign_models`), one per inventory face and
+/// wear variant: `sign_model_id(face, wear)` for a `Model::SignPlate` instance of that face
+/// (eo-app `--no-sign-models`: none).
+pub const SIGN_MODEL_BASE: u32 = BOAT_BASE + eo_props::boats::BODIES.len() as u32;
+pub const MAX_SIGN_FACES: u32 = 32;
+/// Wear variants per face (`eo_props::sign_models::WEAR`).
+pub const SIGN_WEARS: u32 = eo_props::sign_models::WEAR.len() as u32;
+/// The signal poles' Blender models (`eo_props::signal_poles`), one per finish and part: render
+/// model `SIGNAL_POLE_BASE + Piece::model()` (eo-app `--no-signal-poles`: none, the poles and
+/// arms built in code).
+pub const SIGNAL_POLE_BASE: u32 = SIGN_MODEL_BASE + MAX_SIGN_FACES * SIGN_WEARS;
+pub const SIGNAL_POLE_MODELS: u32 = (eo_props::signal_poles::FINISHES.len() * eo_props::signal_poles::PARTS.len()) as u32;
+/// (`--no-signal-luminaires` off) the cobra and banner street lights standing on a signal mast
+/// pole (`eo_props::signal_lamps`): their own meshes without their post's base, the post inside
+/// the pole. `SIGNAL_LAMP_BASE + 0` the cobra light, `+ 1` the banner light.
+pub const SIGNAL_LAMP_BASE: u32 = SIGNAL_POLE_BASE + SIGNAL_POLE_MODELS;
+pub const SIGNAL_LAMP_MODELS: u32 = 2;
+/// The rear-yard fence (props_yards.rs, eo-app `--yard-detail`), after the signal lamps.
+pub const YARD_FENCE: u32 = SIGNAL_LAMP_BASE + SIGNAL_LAMP_MODELS;
+/// The rear yards' objects (`yard_items.rs`; `--yard-detail` with the canopy map, off with `--no-yard-objects`).
+pub const YARD_ITEM_BASE: u32 = YARD_FENCE + 1;
+/// The backs of the yards' houses (`yard_backs.rs`; with the objects' switch's plants, off with `--no-yard-stairs`).
+pub const YARD_BACK_BASE: u32 = YARD_ITEM_BASE + yard_items::COUNT;
+pub const RENDER_MODEL_COUNT: usize = (YARD_BACK_BASE + yard_backs::COUNT) as usize;
+/// A pole lamp leaves out the triangles of its light's mesh wholly below this (m over its foot):
+/// the district lights' base cover (`lampCobra-v2`, `lampBanner-v2`: 0.185 m round to 0.39 m
+/// up, wider than the mast pole). The post (one tube from 0.3 m inside the cover to its top)
+/// is kept: it stands inside the pole.
+pub const SIGNAL_LAMP_CUT_M: f32 = 0.385;
+
+/// The render model of an inventory face's wear variant.
+pub fn sign_model_id(face: u32, wear: u32) -> u32 {
+    SIGN_MODEL_BASE + face * SIGN_WEARS + wear
+}
+/// The sign models' level edges (metres): the plates with their bolts and brackets to 25 m,
+/// the plates to 90 m, their outlines to the code-built plate's 180 m.
+pub const SIGN_MODEL_LOD: [f32; 4] = [25.0, 90.0, 180.0, 180.0];
 /// The boats' level edges (metres): full body to 70 m, the reduced one to 260 m, the
 /// silhouette to 3 km (a 10 m hull is a few pixels there).
 pub const BOAT_LOD: [f32; 4] = [70.0, 260.0, 0.0, 3000.0];
+/// The signal poles' level edges (metres): the poles and the arm tube as the code-built ones
+/// (their bolts, handholes and caps to 40 m); the arm's root, its end cap and the head mounts at
+/// their full detail to 40 m, reduced to 120 m, gone past 220 m.
+pub const SIGNAL_POLE_LOD: [f32; 4] = [40.0, 160.0, 400.0, 400.0];
+pub const SIGNAL_HARDWARE_LOD: [f32; 4] = [40.0, 120.0, 220.0, 220.0];
+/// The pull box's (one level, flush with the sidewalk): gone past 90 m, where its lid is under
+/// a pixel or two at the play camera's field of view.
+pub const PULL_BOX_LOD: [f32; 4] = [90.0, 90.0, 90.0, 90.0];
 /// Nominal size of the cabinet mesh (width X, height, depth Z), the JS `signalCabinetNear` shell.
 pub const CABINET_NOMINAL: [f32; 3] = [0.74, 1.43, 0.5];
 /// The fraction of a level's edge distance over which two levels cross-fade (dithered).
@@ -90,6 +139,11 @@ pub struct LibExtras<'a> {
     /// With every GLB present it changes nothing. `PropLibrary::key_with`
     /// hashes it only when on.
     pub stand_ins: bool,
+    /// The street trees' window and far forms take a crown core
+    /// (`eo_props::eztree::crown_core`, eo-app `--tree-crowns`): an opaque leaf
+    /// mass inside their cards, so a crown past 70 m reads full. Off (the
+    /// default): the forms as before. `PropLibrary::key_with` hashes it only when on.
+    pub tree_crowns: bool,
     /// The moored boats' bodies (`eo_props::boats`; eo-app `--no-boats` leaves them out):
     /// render models `BOAT_BASE + i`, the three levels from the body's three GLBs.
     pub boats: Option<&'a [eo_props::boats::Body]>,
@@ -97,6 +151,28 @@ pub struct LibExtras<'a> {
     /// material of its own (`P_LAMP_GLOW`). Off (the default): one material as
     /// before; `PropLibrary::key_with` hashes it only when on.
     pub luminaires: bool,
+    /// The SFMTA sign plates' Blender models (`eo_props::sign_models`; eo-app
+    /// `--no-sign-models` leaves them out): render models `SIGN_MODEL_BASE + face`.
+    /// None (the default): no such models; `PropLibrary::key_with` hashes them only when given.
+    pub sign_models: Option<&'a eo_props::sign_models::SignModels>,
+    /// The signal poles' Blender models (`eo_props::signal_poles`; eo-app `--no-signal-poles`
+    /// leaves them out): render models `SIGNAL_POLE_BASE + Piece::model()`. None (the default): no such
+    /// models; `PropLibrary::key_with` hashes them only when given.
+    pub signal_poles: Option<&'a eo_props::signal_poles::SignalPoles>,
+    /// The mast arms' Street Name signs (`eo_props::sign_atlas::arm_name_signs`; eo-app
+    /// `--no-arm-name-signs` leaves them out): their cells drawn into the sign face atlas's free
+    /// rows (big layer 1) and their faces appended to the plates' face list (after the
+    /// inventory's). None (the default): the face atlas and list as before; the key hashes them
+    /// only when given.
+    pub name_signs: Option<&'a eo_props::sign_atlas::ArmNameSigns>,
+    /// (with the signal poles; eo-app `--no-signal-luminaires` leaves them out) the street lights
+    /// standing on a mast pole: render models `SIGNAL_LAMP_BASE + k` from the district lights'
+    /// own meshes. Off (the default): none; `PropLibrary::key_with` hashes it only when on.
+    pub pole_lamps: bool,
+    /// (with the signal poles; eo-app `--no-arm-far` leaves it off) the rising arms drawn as far
+    /// as the poles and the heads they carry (`SIGNAL_POLE_LOD`); off, to the hardware's
+    /// `SIGNAL_HARDWARE_LOD` as before. `PropLibrary::key_with` hashes it only when on.
+    pub rising_arm_far: bool,
 }
 
 /// What `cook_extras` reports back to the library.
@@ -616,7 +692,7 @@ fn cascades_for(height: f32) -> u32 {
 /// layers (0 the vegetation atlas, 1 the sign faces, 2 the printed faces).
 pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x: &LibExtras, m_bark: u32, m_leaf: u32, alpha_test: f32) -> ExtraInfo {
     let mut info = ExtraInfo::default();
-    let _ = alpha_test;
+    // `alpha_test`: the leaf texels a crown core takes its colour from (`--tree-crowns`).
     // Plain response materials (base colour is the vertex colour).
     let white = [255u8; 3];
     let m_paint = push_mat(out.materials, white, 0.62, 0.1, 0, 0);
@@ -906,6 +982,7 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
         let mode = eo_props::eztree::StreetTreeMode::default();
         let species = eo_props::eztree::street_tree_species().map(|s| s.to_vec()).unwrap_or_default();
         let mut cache: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let crowns = x.tree_crowns.then(|| CrownCores::new(repo, js, alpha_test, out.materials));
         for (si, sp) in species.iter().enumerate().take(MAX_TREE_SPECIES as usize) {
             let sil = eo_props::eztree::street_tree_silhouette_for(si, mode).unwrap_or(0);
             let forms = [ez.street_tree(si, false, false, mode), ez.street_tree(sil, true, false, mode), ez.street_tree(sil, true, true, mode)];
@@ -922,6 +999,10 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
                     continue;
                 }
                 tree_mesh(&mut out.b, &f.mesh, m_bark, m_leaf);
+                // `--tree-crowns`: the window and far forms' crown core.
+                if let Some(c) = crowns.as_ref().filter(|_| k > 0) {
+                    c.add(&mut out.b, &f.species, &f.mesh, k);
+                }
                 let id = out.finish();
                 cache.insert(key, id);
                 ids[k] = id;
@@ -931,7 +1012,9 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
                 continue;
             }
             // JS streamed rings: near 120 m, window 260 m, far silhouettes beyond (tiles drop at 360 m).
-            out.set(TREE_BASE + si as u32, ids, [70.0, 200.0, 0.0, 360.0], 3, 0.15);
+            // `--tree-crowns`: to `CROWN_FAR_M`, where the distant cards take over (hlod_trees.rs).
+            let far = if x.tree_crowns { crate::hlod_trees::CROWN_FAR_M } else { 360.0 };
+            out.set(TREE_BASE + si as u32, ids, [TREE_NEAR_M, 200.0, 0.0, far], 3, 0.15);
             let s = eo_props::eztree::ez_species(sp).ok();
             info.tree_dims.push([s.map(|s| s.height_m as f32).unwrap_or(9.0), s.map(|s| s.max_half_crown_m as f32).unwrap_or(3.0)]);
         }
@@ -1060,7 +1143,182 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
     if let Some(bodies) = x.boats {
         cook_boats(out, repo, bodies);
     }
+    if let Some(signs) = x.sign_models {
+        cook_sign_models(out, repo, signs);
+    }
+    if let Some(sp) = x.signal_poles {
+        cook_signal_poles(out, repo, sp, x.rising_arm_far);
+        if x.pole_lamps {
+            cook_pole_lamps(out);
+        }
+    }
     info
+}
+
+/// The street lights on the mast poles: the cobra and banner lights' own meshes (their
+/// vertices, materials and lit glass), each level's triangles reaching above `SIGNAL_LAMP_CUT_M`
+/// (the base cover left out: the post stands inside the pole), at the light's level edges and
+/// shadow cascades. A light not cooked (its GLB absent) has none (eo-app then draws the light).
+fn cook_pole_lamps(out: &mut Out) {
+    for (k, model) in [eo_props::Model::LampCobra, eo_props::Model::LampBanner].into_iter().enumerate() {
+        let src = out.models[model as usize];
+        if src.meshes[0] == NONE {
+            out.missing.push(format!("pole lamp {model:?}: the light is not cooked"));
+            continue;
+        }
+        let mut ids = [NONE; 3];
+        let mut done: Vec<(u32, u32)> = vec![];
+        for l in 0..3 {
+            let mi = src.meshes[l];
+            if mi == NONE {
+                continue;
+            }
+            if let Some(&(_, id)) = done.iter().find(|d| d.0 == mi) {
+                ids[l] = id;
+                continue;
+            }
+            let g = out.meshes[mi as usize];
+            let keep = |first: u32, count: u32| -> Vec<u32> {
+                out.i[first as usize..(first + count) as usize]
+                    .chunks_exact(3)
+                    .filter(|t| t.iter().any(|&v| out.v[(g.base_vertex + v as i32) as usize].pos[1] >= SIGNAL_LAMP_CUT_M))
+                    .flatten()
+                    .copied()
+                    .collect()
+            };
+            let (opaque, cut) = (keep(g.first, g.count), keep(g.cut_first, g.cut_count));
+            let first = out.i.len() as u32;
+            out.i.extend_from_slice(&opaque);
+            let cut_first = out.i.len() as u32;
+            out.i.extend_from_slice(&cut);
+            out.meshes.push(GpuPropMesh { first, count: opaque.len() as u32, cut_first, cut_count: cut.len() as u32, base_vertex: g.base_vertex, pad: [0; 3] });
+            ids[l] = out.meshes.len() as u32 - 1;
+            done.push((mi, ids[l]));
+        }
+        let (c, r) = out.sphere(&ids);
+        out.models[(SIGNAL_LAMP_BASE + k as u32) as usize] = GpuPropModel { meshes: [ids[0], ids[1], ids[2], NONE], lod: src.lod, center: c, radius: r, cast: src.cast };
+        out.sources.push(format!("pole lamp {model:?}: the light's meshes without what lies below {SIGNAL_LAMP_CUT_M} m"));
+    }
+}
+
+/// The signal poles' models: per finish and part, its three GLBs (each digest-checked) as levels
+/// 0..2 on the level-0 file's maps (one texture layer per atlas: the parts of a family and finish
+/// share its bytes; the far levels, shared by the finishes, cooked once per atlas).
+/// The poles and the arm tube at the code-built ones' level edges, casting into two cascades;
+/// the rest at `SIGNAL_HARDWARE_LOD`, casting into the first. A part with a file missing or
+/// refused is left out (eo-app then keeps the code-built poles and arms).
+fn cook_signal_poles(out: &mut Out, repo: &std::path::Path, sp: &eo_props::signal_poles::SignalPoles, rising_arm_far: bool) {
+    use eo_props::signal_poles::{FINISHES, PARTS, Part};
+    let mut atlases: Vec<(Vec<u8>, u32)> = vec![]; // (albedo bytes, material)
+    let mut cooked: std::collections::HashMap<(String, u32), u32> = std::collections::HashMap::new();
+    for (k, lods) in sp.parts.iter().enumerate().take(SIGNAL_POLE_MODELS as usize) {
+        let (part, name) = PARTS[k % PARTS.len()];
+        let finish = FINISHES[k / PARTS.len()];
+        let read: Result<Vec<Glb>, String> = lods.iter().map(|l| read_glb(repo, l).map_err(|e| format!("{} ({e:#})", l.path))).collect();
+        let glbs = match read {
+            Ok(g) => g,
+            Err(e) => {
+                out.missing.push(format!("signal pole part {finish} {name}: {e}"));
+                continue;
+            }
+        };
+        let albedo = glbs[0].maps[0].as_ref().map(|m| m.2.clone()).unwrap_or_default();
+        let m = match atlases.iter().find(|a| a.0 == albedo) {
+            Some(a) => a.1,
+            None => {
+                let g = &glbs[0];
+                let flat_n = flat_layer([128, 128, 255, 255], AUX_RES);
+                let flat_orm = flat_layer([255, 255, 0, 255], AUX_RES);
+                let white = flat_layer([255; 4], ALBEDO_RES);
+                let map = |k: usize, res: u32, d: &Vec<u8>| match &g.maps[k] {
+                    Some((w, h, rgb)) => resample(*w, *h, rgb, 3, res),
+                    None => d.clone(),
+                };
+                out.layers.push([map(0, ALBEDO_RES, &white), map(1, AUX_RES, &flat_n), map(2, AUX_RES, &flat_orm)]);
+                let m = glb_mat(out.materials, out.layers.len() as i32 - 1);
+                atlases.push((albedo, m));
+                m
+            }
+        };
+        let mut ids = [0u32; 3];
+        for (l, g) in glbs.iter().enumerate() {
+            // a file two parts or finishes share is one mesh per atlas (its vertices name the material)
+            let key = (lods[l].sha256.clone(), m);
+            if let Some(&id) = cooked.get(&key) {
+                ids[l] = id;
+                continue;
+            }
+            add_mesh(&mut out.b, m, &g.positions, &g.normals, &g.uvs, &g.indices);
+            ids[l] = out.finish();
+            cooked.insert(key, ids[l]);
+        }
+        let (lod, cast) = match part {
+            Part::MastPole | Part::PedestalPole | Part::PedPost | Part::ArmTube | Part::MastFoot | Part::MastMid | Part::MastTop => (SIGNAL_POLE_LOD, 2),
+            // the level arms at their class's diameter as the tube they replace
+            Part::ArmLevel0 | Part::ArmLevel1 | Part::ArmLevel2 | Part::ArmLevel3 | Part::ArmLevel4 | Part::ArmLevel5 | Part::ArmLevel6 => (SIGNAL_POLE_LOD, 2),
+            // round 5: the cabinet as far as the poles; the pull box flush with the walk (no shadow)
+            Part::Cabinet => (SIGNAL_POLE_LOD, 2),
+            Part::PullBox => (PULL_BOX_LOD, 0),
+            // (`--no-arm-far` off) the rising arms as far as their poles and heads
+            _ if rising_arm_far && eo_props::signal_poles::ARM_RISE_PARTS.contains(&part) => (SIGNAL_POLE_LOD, 2),
+            _ => (SIGNAL_HARDWARE_LOD, 1),
+        };
+        out.set(SIGNAL_POLE_BASE + k as u32, ids, lod, cast, 0.0);
+        out.sources.push(format!("signal pole part {finish} {name}: {} (sha256 {})", lods[0].path, &lods[0].sha256[..12]));
+    }
+}
+
+/// The SFMTA sign plates' models: per inventory face, its three GLBs (each digest-checked) as
+/// levels 0..2 on the first file's maps, in the frame of the plate built in code: the plate
+/// frame scaled to a unit square centred on the origin (an instance's scale is its plate's
+/// size, as for that plate), the post axis `post_radius_m` behind it (the instance stands on
+/// the post's face). Normals take the inverse of that scaling (the shader divides them by the
+/// instance's). A face with a file missing or refused keeps the plate built in code.
+fn cook_sign_models(out: &mut Out, repo: &std::path::Path, signs: &eo_props::sign_models::SignModels) {
+    for f in &signs.faces {
+        if f.face_index as u32 >= MAX_SIGN_FACES {
+            out.missing.push(format!("sign model {}: face {} past MAX_SIGN_FACES", f.face, f.face_index));
+            continue;
+        }
+        let (fw, fh) = (f.frame_m[0] as f32, f.frame_m[1] as f32);
+        let post = signs.post_radius_m as f32;
+        // a level two variants share (the far one) is cooked once, on the first variant's maps.
+        let mut cooked: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        for (wear, v) in f.variants.iter().enumerate().take(SIGN_WEARS as usize) {
+            let read: Result<Vec<Glb>, String> = v.lods.iter().map(|l| read_glb(repo, l).map_err(|e| format!("{} ({e:#})", l.path))).collect();
+            let glbs = match read {
+                Ok(g) => g,
+                Err(e) => {
+                    out.missing.push(format!("sign model {} {}: {e}", f.face, v.name));
+                    continue;
+                }
+            };
+            let g0 = &glbs[0];
+            let flat_n = flat_layer([128, 128, 255, 255], AUX_RES);
+            let flat_orm = flat_layer([255, 255, 0, 255], AUX_RES);
+            let white = flat_layer([255; 4], ALBEDO_RES);
+            let map = |k: usize, res: u32, d: &Vec<u8>| match &g0.maps[k] {
+                Some((w, h, rgb)) => resample(*w, *h, rgb, 3, res),
+                None => d.clone(),
+            };
+            out.layers.push([map(0, ALBEDO_RES, &white), map(1, AUX_RES, &flat_n), map(2, AUX_RES, &flat_orm)]);
+            let m = glb_mat(out.materials, out.layers.len() as i32 - 1);
+            let mut ids = [0u32; 3];
+            for (k, g) in glbs.iter().enumerate() {
+                if let Some(&id) = cooked.get(&v.lods[k].sha256) {
+                    ids[k] = id;
+                    continue;
+                }
+                let pos: Vec<[f32; 3]> = g.positions.iter().map(|p| [p[0] / fw, (p[1] - fh / 2.0) / fh, p[2] - post]).collect();
+                let nrm: Vec<[f32; 3]> = g.normals.iter().map(|n| glam::Vec3::new(n[0] * fw, n[1] * fh, n[2]).normalize_or_zero().to_array()).collect();
+                add_mesh(&mut out.b, m, &pos, &nrm, &g.uvs, &g.indices);
+                ids[k] = out.finish();
+                cooked.insert(v.lods[k].sha256.clone(), ids[k]);
+            }
+            out.set(sign_model_id(f.face_index as u32, wear as u32), ids, SIGN_MODEL_LOD, 1, 0.0);
+            out.sources.push(format!("sign model {} {}: {} (sha256 {})", f.face, v.name, v.lods[0].path, &v.lods[0].sha256[..12]));
+        }
+    }
 }
 
 /// The moored boats: per body, its three GLBs as levels 0..2 (each file digest-checked),
@@ -1145,6 +1403,12 @@ fn sign_plate(b: &mut Builder, m: u32, p: &PlateSpec, face_z: f32, plate: [u8; 3
 /// vertex colours (linear tint x tone) to sRGB, UV v flipped (rows top first),
 /// and a wind weight per vertex (height fraction; leaves more than wood).
 fn tree_mesh(b: &mut Builder, m: &eo_props::eztree::EzMesh, m_bark: u32, m_leaf: u32) {
+    tree_mesh_bark(b, m, m_bark, m_leaf, f32::INFINITY);
+}
+
+/// `tree_mesh` keeping only the bark under `bark_to` of the build's height (a far
+/// level: its limbs are hidden in the leaves; 0 keeps none, a shrub's stems).
+pub(crate) fn tree_mesh_bark(b: &mut Builder, m: &eo_props::eztree::EzMesh, m_bark: u32, m_leaf: u32, bark_to: f32) {
     let base = b.v.len() as u32;
     let height = m.positions.iter().map(|p| p[1]).fold(1.0f32, f32::max);
     for k in 0..m.positions.len() {
@@ -1156,9 +1420,104 @@ fn tree_mesh(b: &mut Builder, m: &eo_props::eztree::EzMesh, m_bark: u32, m_leaf:
         let w = if leaf { 0.15 + 0.85 * f.powf(1.5) } else { 0.6 * f * f };
         b.v[id as usize].pad = w.to_bits();
     }
+    let cut = bark_to * height;
     for t in m.indices.chunks_exact(3) {
         let leaf = t.iter().any(|&v| m.part.get(v as usize).copied().unwrap_or(0) != 0);
+        if !leaf && t.iter().any(|&v| m.positions[v as usize][1] > cut) {
+            continue;
+        }
         b.tri(leaf, base + t[0], base + t[1], base + t[2]);
+    }
+}
+
+/// A crown core's material flag (props_draw.wgsl `PR_CROWN`: the leaves drawn on the hull).
+pub const P_CROWN: u32 = 1 << 26;
+
+/// The street trees' near ring: their near form to here, the window form past it.
+const TREE_NEAR_M: f32 = 70.0;
+
+/// `--tree-crowns` (`LibExtras::tree_crowns`): the crown core of a window or
+/// far form (`eo_props::eztree::crown_core`) on the atlas's white cell in its
+/// own material (`P_CROWN`: props_draw.wgsl draws its leaves and frays its
+/// outline, so it is in the cutout part; props_shadow.wgsl dapples its
+/// shadow), its colour the cards' tint times the mean of the species' leaf cell
+/// over the texels that pass the alpha test, so the core is the colour the
+/// cards are where they stand. Leafless species take none.
+struct CrownCores {
+    material: u32,
+    /// Mean linear colour of the opaque texels, by atlas cell.
+    leaf_mean: std::collections::HashMap<String, [f32; 3]>,
+    /// The white cell's centre (rows top first, as `tree_mesh` writes UVs).
+    white_uv: [f32; 2],
+}
+
+impl CrownCores {
+    /// The core's roughness (the leaf cards' material has 0.7; a mass of leaves seen whole is duller).
+    const ROUGHNESS: f32 = 0.85;
+
+    fn new(repo: &std::path::Path, js: &JsProps, alpha_test: f32, materials: &mut Vec<PropMaterial>) -> Self {
+        // the big array's layer 0, the vegetation atlas (its white cell). params.w: the
+        // distance (to the trunk) inside which the core casts no sun shadow (props_shadow.wgsl):
+        // a tree there draws its near form, whose cards cast their own, and its sun-cascade
+        // caster, the window form, would shade them as a solid crown.
+        let material = push_mat(materials, [255; 3], Self::ROUGHNESS, 0.0, P_TEX | P_BIG | P_CROWN, 0);
+        materials[material as usize].params[3] = TREE_NEAR_M;
+        let mut leaf_mean = std::collections::HashMap::new();
+        let mut white_uv = [0.5, 0.5];
+        let atlas = &js.consts["vegetationAtlas"];
+        let path = repo.join("public").join(atlas["url"].as_str().unwrap_or("assets/vegetation/ez-vegetation-atlas-v1.png"));
+        let img = std::fs::read(&path).map_err(anyhow::Error::from).and_then(|b| decode_png(&b));
+        if let (Ok(d), Ok((w, h, rgba))) = (eo_props::eztree::EzData::get(), img) {
+            for (name, c) in &d.cells {
+                // UVs y-up; the PNG rows top first.
+                let (x0, x1) = ((c.u0 * w as f64) as usize, ((c.u1 * w as f64) as usize).min(w));
+                let (y0, y1) = (((1.0 - c.v1) * h as f64) as usize, (((1.0 - c.v0) * h as f64) as usize).min(h));
+                let (mut s, mut n) = ([0f64; 3], 0f64);
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        let p = &rgba[(y * w + x) * 4..][..4];
+                        if p[3] as f32 / 255.0 >= alpha_test {
+                            for k in 0..3 {
+                                s[k] += lin(p[k]) as f64;
+                            }
+                            n += 1.0;
+                        }
+                    }
+                }
+                if n > 0.0 {
+                    leaf_mean.insert(name.clone(), [(s[0] / n) as f32, (s[1] / n) as f32, (s[2] / n) as f32]);
+                }
+            }
+            if let Some(c) = d.cells.get("white") {
+                white_uv = [((c.u0 + c.u1) / 2.0) as f32, 1.0 - ((c.v0 + c.v1) / 2.0) as f32];
+            }
+        }
+        CrownCores { material, leaf_mean, white_uv }
+    }
+
+    /// Add the core of `form` (form `k`: 1 window, 2 far) of `species` to the builder's cutout part.
+    fn add(&self, b: &mut Builder, species: &str, form: &eo_props::eztree::EzMesh, k: usize) {
+        let Ok(sp) = eo_props::eztree::ez_species(species) else { return };
+        if !sp.crown_cover {
+            return;
+        }
+        let sub = if k == 1 { eo_props::eztree::crown::WINDOW_SUBDIVISIONS } else { eo_props::eztree::crown::FAR_SUBDIVISIONS };
+        let core = eo_props::eztree::crown_core(form, sub, eo_props::eztree::crown::INSET);
+        let mean = self.leaf_mean.get(&sp.leaf).copied().unwrap_or([1.0; 3]);
+        // the form's height, for the sway weight (as `tree_mesh` takes it).
+        let height = form.positions.iter().map(|p| p[1]).fold(1.0f32, f32::max);
+        let base = b.v.len() as u32;
+        for (i, p) in core.positions.iter().enumerate() {
+            let c = core.colors[i];
+            let col = [to_srgb8(c[0] * mean[0]), to_srgb8(c[1] * mean[1]), to_srgb8(c[2] * mean[2])];
+            let id = b.vert(*p, core.normals[i], self.white_uv, col, self.material);
+            let f = (p[1] / height).clamp(0.0, 1.0);
+            b.v[id as usize].pad = (0.15 + 0.85 * f.powf(1.5)).to_bits();
+        }
+        // the cutout part: its outline frays into leaves (props_draw.wgsl `pr_crown_edge`).
+        for t in core.indices.chunks_exact(3) {
+            b.tri(true, base + t[0], base + t[1], base + t[2]);
+        }
     }
 }
 
@@ -2580,9 +2939,13 @@ mod stand_in_tests {
     #[test]
     fn the_shaders_model_ids_are_the_enums() {
         let src = include_str!("props_types.wgsl");
-        for (name, m) in [("PR_TACTILE_PAD", Model::TactilePad), ("PR_TREE_BASIN", Model::TreeBasin)] {
+        for (name, m) in [("PR_TREE", Model::Tree), ("PR_PALM", Model::Palm), ("PR_TACTILE_PAD", Model::TactilePad), ("PR_TREE_BASIN", Model::TreeBasin)] {
             assert!(src.contains(&format!("const {name}: u32 = {}u;", m as u32)), "{name} is not Model::{m:?}");
         }
+        assert!(src.contains(&format!("const PR_TREE_BASE: u32 = {}u;", TREE_BASE)), "PR_TREE_BASE is not TREE_BASE");
+        assert!(src.contains(&format!("const PR_OH_BASE: u32 = {}u;", OH_BASE)), "PR_OH_BASE is not OH_BASE");
+        assert!(include_str!("props_draw.wgsl").contains(&format!("const PR_CROWN: u32 = {}u;", P_CROWN)), "PR_CROWN is not P_CROWN");
+        assert!(include_str!("props_shadow.wgsl").contains(&format!("const PR_S_CROWN: u32 = {}u;", P_CROWN)), "PR_S_CROWN is not P_CROWN");
         // the basin's trunk offset the shader decodes is the one eo-props encodes.
         let draw = include_str!("props_draw.wgsl");
         assert!(draw.contains(&format!("const PR_BASIN_TRUNK_STEP_M: f32 = {};", eo_props::basins::TRUNK_STEP_M)), "PR_BASIN_TRUNK_STEP_M is not basins::TRUNK_STEP_M");

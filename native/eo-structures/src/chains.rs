@@ -32,6 +32,7 @@ pub(crate) struct RawPiece {
 impl RawPiece {
     fn same_road(&self, o: &RawPiece) -> bool {
         self.level == o.level && self.kind == o.kind && self.class == o.class && self.landmark == o.landmark
+            && eo_data::movable_spans::is_leaf(&self.way) == eo_data::movable_spans::is_leaf(&o.way)
     }
 }
 

@@ -1,0 +1,26 @@
+[package]
+name = "eo-hills"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+description = "Earth Online native (hills): the hill builder, offline cooks for the city's open ground, and the readers of what they write"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+eo-data = { path = "../eo-data" } # the city's plan frame, footprints, elevation grid and native/ folder
+eo-landmarks = { path = "../eo-landmarks" } # planting: the vegetation planting's NAIP rules (naip_shares) and their shares
+flate2 = "1.1.11" # planting: the map's texels are gzipped
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+# the cooks (examples/cook.rs): the NAIP tiles' JPEGs and digests, the BC7 blocks, the preview PNG;
+# the 1 m DEM's GeoTIFF tiles and UTM projection (eo_farshore::survey)
+eo-farshore = { path = "../eo-farshore" }
+intel_tex_2 = "0.5.0"
+jpeg-decoder = { version = "0.3.2", default-features = false }
+png = "0.18.1"
+sha2 = "0.11.1"
+# trees (examples/cook/trees.rs): the USGS 3DEP point cloud's LAZ files (the lidar pilot's reader, eo-kit lidar_survey)
+las = { version = "0.11.2", features = ["laz"] }

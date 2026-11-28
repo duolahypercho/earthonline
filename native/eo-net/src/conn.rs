@@ -89,6 +89,9 @@ pub struct Connection {
 
 /// The most reliable-message bytes one packet carries.
 pub const RELIABLE_BUDGET: usize = 400;
+/// The reliable-message byte budget leaves the high count bit free.
+/// On a new connection, no packet has been seen and even seq 0 is unacked.
+const ACK_PRESENT: u8 = 0x80;
 
 impl Default for Connection {
     fn default() -> Self {
@@ -143,7 +146,7 @@ impl Connection {
         out.put_u8(0);
         let mut bytes = 0;
         for m in self.out.iter_mut() {
-            if ids.len() >= 255 || bytes + m.data.len() > RELIABLE_BUDGET {
+            if ids.len() >= usize::from(ACK_PRESENT - 1) || bytes + m.data.len() > RELIABLE_BUDGET {
                 break;
             }
             if m.last_sent.is_some_and(|t| now - t < resend) {
@@ -159,7 +162,7 @@ impl Connection {
             bytes += m.data.len() + 4;
             ids.push(m.id);
         }
-        out[count_at] = ids.len() as u8;
+        out[count_at] = ids.len() as u8 | if self.recv_seq.is_some() { ACK_PRESENT } else { 0 };
         self.sent.push_back(Sent { seq, at: now, acked: false, messages: ids });
         while self.sent.len() > 256 {
             let s = self.sent.pop_front().unwrap();
@@ -177,7 +180,8 @@ impl Connection {
     /// or stale packet (whose payload must be ignored).
     pub fn receive(&mut self, r: &mut ByteReader) -> Result<Option<(Header, Vec<Vec<u8>>)>, Truncated> {
         let h = Header::read(r)?;
-        let n = r.u8()? as usize;
+        let flags = r.u8()?;
+        let n = usize::from(flags & !ACK_PRESENT);
         let mut msgs = Vec::with_capacity(n);
         for _ in 0..n {
             let id = r.u16()?;
@@ -213,7 +217,7 @@ impl Connection {
         self.stats.packets_received += 1;
         self.last_recv = Instant::now();
         // Acks of our packets.
-        self.process_ack(h.ack, h.ack_bits);
+        if flags & ACK_PRESENT != 0 { self.process_ack(h.ack, h.ack_bits); }
         // Reliable delivery in order.
         let mut ready = vec![];
         for (id, data) in msgs {
@@ -269,6 +273,25 @@ impl Connection {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_peer_with_no_received_packets_cannot_ack_the_first_roster_message() {
+        let mut server = Connection::new();
+        let mut client = Connection::new();
+        server.send_reliable(b"roster".to_vec());
+        let mut first = vec![];
+        assert_eq!(server.begin_packet(&mut first), 0);
+        let mut before_delivery = vec![];
+        client.begin_packet(&mut before_delivery);
+        server.receive(&mut ByteReader::new(&before_delivery)).unwrap();
+        assert_eq!(server.reliable_pending(), 1);
+        let (_, delivered) = client.receive(&mut ByteReader::new(&first)).unwrap().unwrap();
+        assert_eq!(delivered, [b"roster".to_vec()]);
+        let mut ack = vec![];
+        client.begin_packet(&mut ack);
+        server.receive(&mut ByteReader::new(&ack)).unwrap();
+        assert_eq!(server.reliable_pending(), 0);
+    }
 
     #[test]
     fn acks_and_ordered_reliable_delivery_survive_loss_and_reorder() {

@@ -911,6 +911,42 @@ fn add_entry_stoop(plan: &mut Plan, basis: &Basis, common: &Common, op: &Opening
             PartArgs::new("entry-stoop-cheek", "recess", s0, s1, bottom, op.y0, back, 0.0).common(&c).meta(meta.clone()),
         );
     }
+    if crate::typology::detail_enabled() {
+        // Crisp cast-stone step nosings and wrought-iron side handrails along recessed entry stoops
+        let mut step_i = 0.0;
+        while step_i < risers {
+            let ty = foot + (step_i + 1.0) * riser;
+            let tw1 = -(step_i * tread) + 0.025;
+            let tw0 = -((step_i + 1.0).min(risers) * tread);
+            plan.add_box_to(
+                Sink::Stoop,
+                basis,
+                PartArgs::new("stoop-tread", "trim", op.s0, op.s1, ty - 0.035, ty + 0.008, tw0, tw1).common(&c).meta(meta.clone()),
+            );
+            step_i += 1.0;
+        }
+        let rail_y0 = foot + 0.88;
+        let rail_y1 = op.y0 + 0.88;
+        let run = risers * tread;
+        for rs in [op.s0 + 0.04, op.s1 - 0.08] {
+            let rail_prof = vec![
+                [0.0, rail_y0],
+                [-run.max(0.25), rail_y1],
+                [-run.max(0.25), rail_y1 + 0.045],
+                [0.0, rail_y0 + 0.045],
+            ];
+            plan.add_profile_to(
+                Sink::Stoop,
+                basis,
+                PartArgs::profile("stoop-rail", "metal", rs, rs + 0.04, rail_prof).common(&c).meta(meta.clone()),
+            );
+            plan.add_box_to(
+                Sink::Stoop,
+                basis,
+                PartArgs::new("stoop-rail", "metal", rs, rs + 0.04, foot, rail_y0 + 0.04, -0.05, -0.01).common(&c).meta(meta.clone()),
+            );
+        }
+    }
     plan.door_notches.push(json!({
         "s0": op.s0 - STOOP_CHEEK_M, "s1": op.s1 + STOOP_CHEEK_M, "depth": recess + 0.1,
         "origin": basis.origin, "u": basis.u, "n": basis.n,
@@ -998,8 +1034,9 @@ fn emit_frame_and_glass(
 fn emit_opening(plan: &mut Plan, ctx: &Ctx, edge: &Edge, op: &Opening, storey: &Storey, bay: &Bay, elev: &J, defaults: &J) {
     let basis = edge.basis;
     let mut common = Common { edge: Some(edge.index), storey: Some(storey.index as i64), bay: Some(bay.index as i64), meta: None };
+    let detail = crate::typology::detail_enabled();
     let reveal_pref = bay.spec.f("reveal").or(elev.f("reveal")).unwrap_or(defaults.num("reveal"));
-    let reveal = reveal_pref.min(ctx.wall_thickness - 0.02);
+    let reveal = (if detail && op.type_ == "punched" { reveal_pref.max(0.24) } else { reveal_pref }).min(ctx.wall_thickness - 0.02);
     match op.type_.as_str() {
         "punched" | "ribbon" => {
             let w = &op.spec;
@@ -1012,6 +1049,9 @@ fn emit_opening(plan: &mut Plan, ctx: &Ctx, edge: &Edge, op: &Opening, storey: &
             };
             let transoms = if ribbon { 0 } else { so.f("transoms").or(bay.spec.f("transoms")).or(w.f("transoms")).unwrap_or(0.0) as i64 };
             let transom_at = if ribbon { None } else { so.get_nn("transomAt").or(bay.spec.get_nn("transomAt")).or(w.get_nn("transomAt")) };
+            // Classic double-hung meeting rail on tall plain punched windows under high detail
+            let meeting_rail = (detail && !ribbon && transoms == 0 && transom_at.is_none() && (op.y1 - op.y0) >= 1.25 && (op.s1 - op.s0) >= 0.65)
+                .then(|| json!((op.y1 - op.y0) * 0.54));
             let glass_slot = bay.spec.s("glassSlot").filter(|s| !s.is_empty()).unwrap_or("glass").to_string();
             emit_frame_and_glass(
                 plan,
@@ -1025,23 +1065,32 @@ fn emit_opening(plan: &mut Plan, ctx: &Ctx, edge: &Edge, op: &Opening, storey: &
                 -reveal,
                 mullions,
                 transoms,
-                transom_at,
+                transom_at.or(meeting_rail.as_ref()),
                 &glass_slot,
                 "",
                 None,
             );
             let sill_over = if ribbon { Some(json!({ "height": 0.06, "projection": 0.03, "overhang": 0.02 })) } else { elev.at("sill").cloned() };
             let sill = merge(&defaults["sill"], sill_over.as_ref());
+            let mut sill_h = 0.0;
             if let Some(sill) = &sill {
                 let slot = elev.s("sillSlot").filter(|s| !s.is_empty()).unwrap_or("trim");
+                let extra_p = if detail && !ribbon { 0.045 } else { 0.0 };
+                let extra_o = if detail && !ribbon { 0.03 } else { 0.0 };
+                sill_h = sill.num("height");
                 let profile = trim_profile(
                     sill.s("profile").filter(|s| !s.is_empty()).unwrap_or("sloped"),
-                    sill.num("projection").min(edge.allowance),
-                    sill.num("height"),
-                    op.y0 - sill.num("height"),
+                    (sill.num("projection") + extra_p).min(edge.allowance),
+                    sill_h,
+                    op.y0 - sill_h,
                     -reveal,
                 );
-                plan.add_profile(&basis, PartArgs::profile("sill", slot, op.s0 - sill.num("overhang"), op.s1 + sill.num("overhang"), profile).common(&common));
+                plan.add_profile(&basis, PartArgs::profile("sill", slot, op.s0 - sill.num("overhang") - extra_o, op.s1 + sill.num("overhang") + extra_o, profile).common(&common));
+            } else if detail && !ribbon && edge.allowance >= 0.02 {
+                // Cast-stone projecting sill on punched openings that previously had none (`midcentury-stucco`, `bay-window-apartment`)
+                sill_h = 0.085;
+                let profile = trim_profile("sloped", 0.08f64.min(edge.allowance), sill_h, op.y0 - sill_h, -reveal);
+                plan.add_profile(&basis, PartArgs::profile("sill", "trim", op.s0 - 0.06, op.s1 + 0.06, profile).common(&common));
             }
             if truthy(elev.at("lintel")) {
                 let l = spread(Some(&json!({ "height": 0.25, "projection": 0.05, "overhang": 0.12 })), elev.at("lintel"));
@@ -1054,13 +1103,27 @@ fn emit_opening(plan: &mut Plan, ctx: &Ctx, edge: &Edge, op: &Opening, storey: &
             }
             if truthy(elev.at("surround")) {
                 let sr = spread(Some(&json!({ "width": 0.18, "projection": 0.05 })), elev.at("surround"));
-                let p = sr.num("projection").min(edge.allowance);
+                let p = (sr.num("projection") + if detail && !ribbon { 0.015 } else { 0.0 }).min(edge.allowance);
                 let slot = sr.s("slot").filter(|s| !s.is_empty()).unwrap_or("trim").to_string();
-                let sh = sill.as_ref().map(|s| s.num("height")).unwrap_or(0.0);
+                let sh = sill.as_ref().map(|s| s.num("height")).unwrap_or(sill_h);
                 let wd = sr.num("width");
                 plan.add_box(&basis, PartArgs::new("jamb", &slot, op.s0 - wd, op.s0, op.y0 - sh, op.y1 + wd, -0.02, p).common(&common));
                 plan.add_box(&basis, PartArgs::new("jamb", &slot, op.s1, op.s1 + wd, op.y0 - sh, op.y1 + wd, -0.02, p).common(&common));
                 plan.add_box(&basis, PartArgs::new("jamb", &slot, op.s0 - wd, op.s1 + wd, op.y1, op.y1 + wd, -0.02, p).common(&common));
+            } else if detail && !ribbon && !truthy(elev.at("lintel")) && !truthy(elev.at("pilasters")) && edge.allowance >= 0.02 {
+                // Molded 3D window casings + projecting shadow hood on residential/stucco punched windows
+                let wd = 0.095;
+                let cp = 0.048f64.min(edge.allowance);
+                plan.add_box(&basis, PartArgs::new("jamb", "trim", op.s0 - wd, op.s0, op.y0 - sill_h, op.y1 + wd, -0.02, cp).common(&common));
+                plan.add_box(&basis, PartArgs::new("jamb", "trim", op.s1, op.s1 + wd, op.y0 - sill_h, op.y1 + wd, -0.02, cp).common(&common));
+                plan.add_box(&basis, PartArgs::new("jamb", "trim", op.s0 - wd, op.s1 + wd, op.y1, op.y1 + wd, -0.02, cp).common(&common));
+                let hp = 0.095f64.min(edge.allowance);
+                plan.add_profile(
+                    &basis,
+                    PartArgs::profile("window-head", "trim", op.s0 - 0.13, op.s1 + 0.13, trim_profile_d("cove", hp, 0.13, op.y1 + wd * 0.85))
+                        .common(&common)
+                        .shadow(true),
+                );
             }
         }
         "storefront" => {
@@ -1107,8 +1170,18 @@ fn emit_opening(plan: &mut Plan, ctx: &Ctx, edge: &Edge, op: &Opening, storey: &
         }
         "roller" => {
             let rd = &op.spec;
-            let w_at = -(rd.num("inset").min(ctx.wall_thickness - 0.05));
+            let detail = crate::typology::detail_enabled();
+            let base_inset = rd.num("inset");
+            let want_inset = if detail { base_inset.max(0.24) } else { base_inset };
+            let w_at = -(want_inset.min(ctx.wall_thickness - 0.04));
             let rail = 0.08;
+            if detail {
+                // Deep shadowed garage-opening reveal jambs & lintel head soffit
+                let rev = 0.055;
+                plan.add_box(&basis, PartArgs::new("recess", "recess", op.s0, op.s0 + rev, op.y0, op.y1, w_at - 0.02, -0.008).common(&common));
+                plan.add_box(&basis, PartArgs::new("recess", "recess", op.s1 - rev, op.s1, op.y0, op.y1, w_at - 0.02, -0.008).common(&common));
+                plan.add_box(&basis, PartArgs::new("recess", "recess", op.s0, op.s1, op.y1 - rev, op.y1, w_at - 0.02, -0.008).common(&common));
+            }
             plan.add_box(&basis, PartArgs::new("roller-guide", "metal", op.s0, op.s0 + rail, op.y0, op.y1, w_at - 0.06, w_at + 0.06).common(&common));
             plan.add_box(&basis, PartArgs::new("roller-guide", "metal", op.s1 - rail, op.s1, op.y0, op.y1, w_at - 0.06, w_at + 0.06).common(&common));
             plan.add_box(
@@ -1123,6 +1196,52 @@ fn emit_opening(plan: &mut Plan, ctx: &Ctx, edge: &Edge, op: &Opening, storey: &
                     PartArgs::new("roller-slat", "roller", op.s0 + rail, op.s1 - rail, y - 0.02, y + 0.02, w_at + 0.02, w_at + 0.05).common(&common).shadow(false),
                 );
                 y += slat;
+            }
+            if detail && (op.y1 - op.y0) <= 2.75 && (op.s1 - op.s0) <= 3.85 {
+                // SF residential carriage/sectional garage relief: top transom glazing row,
+                // recessed panel stiles/rails, and wrought-iron pull handles
+                let ds0 = op.s0 + rail + 0.05;
+                let ds1 = op.s1 - rail - 0.05;
+                let dw = ds1 - ds0;
+                if dw >= 1.4 {
+                    let lite_y1 = op.y1 - 0.14;
+                    let lite_y0 = (lite_y1 - 0.30).max(op.y0 + 1.45);
+                    if lite_y1 - lite_y0 >= 0.20 {
+                        let cols = if dw >= 2.4 { 4usize } else { 3usize };
+                        let cw = dw / cols as f64;
+                        for ci in 0..cols {
+                            let ls0 = ds0 + ci as f64 * cw + 0.06;
+                            let ls1 = ds0 + (ci + 1) as f64 * cw - 0.06;
+                            if ls1 - ls0 >= 0.18 {
+                                plan.add_box(
+                                    &basis,
+                                    PartArgs::new("frame", "frame", ls0 - 0.025, ls1 + 0.025, lite_y0 - 0.025, lite_y1 + 0.025, w_at + 0.015, w_at + 0.048).common(&common).shadow(false),
+                                );
+                                plan.add_box(
+                                    &basis,
+                                    PartArgs::new("glass", "glass", ls0, ls1, lite_y0, lite_y1, w_at + 0.022, w_at + 0.036).common(&common).shadow(false),
+                                );
+                            }
+                        }
+                    }
+                    // Vertical raised panel stiles framing carriage panels across the lower sections
+                    let panel_top = (lite_y0 - 0.08).max(op.y0 + 0.5);
+                    let stile_n = if dw >= 2.4 { 3usize } else { 2usize };
+                    for si in 1..stile_n {
+                        let sx = ds0 + dw * (si as f64 / stile_n as f64);
+                        plan.add_box(
+                            &basis,
+                            PartArgs::new("roller-slat", "roller", sx - 0.04, sx + 0.04, op.y0 + 0.12, panel_top, w_at + 0.018, w_at + 0.048).common(&common).shadow(false),
+                        );
+                    }
+                    let mid = (ds0 + ds1) * 0.5;
+                    for hx in [mid - 0.11, mid + 0.11] {
+                        plan.add_box(
+                            &basis,
+                            PartArgs::new("roller-hardware", "metal", hx - 0.018, hx + 0.018, op.y0 + 0.96, op.y0 + 1.16, w_at + 0.02, w_at + 0.075).common(&common).shadow(false),
+                        );
+                    }
+                }
             }
             plan.add_box(&basis, PartArgs::new("roller-bar", "metal", op.s0 + rail, op.s1 - rail, op.y0 + 0.02, op.y0 + 0.1, w_at - 0.03, w_at + 0.05).common(&common));
             let hood = rd.num("hood");
@@ -1209,6 +1328,41 @@ fn emit_opening(plan: &mut Plan, ctx: &Ctx, edge: &Edge, op: &Opening, storey: &
                     ] {
                         plan.add_box(&basis, PartArgs::new("door-leaf", "door", a, b, c, d, w_leaf - 0.025, w_leaf + 0.025).common(&common).meta(leaf_meta(false)));
                     }
+                } else if detail && ls1 - ls0 >= 0.55 && door_top - op.y0 >= 1.8 {
+                    // Molded panel rails & metal kickplate on solid residential entry doors
+                    let mid_y = op.y0 + (door_top - op.y0) * 0.46;
+                    plan.add_box(&basis, PartArgs::new("door-leaf", "door", ls0 + 0.11, ls1 - 0.11, op.y0 + 0.24, mid_y - 0.06, w_leaf + 0.015, w_leaf + 0.042).common(&common).meta(leaf_meta(false)));
+                    plan.add_box(&basis, PartArgs::new("door-leaf", "door", ls0 + 0.11, ls1 - 0.11, mid_y + 0.06, door_top - 0.14, w_leaf + 0.015, w_leaf + 0.042).common(&common).meta(leaf_meta(false)));
+                    plan.add_box(&basis, PartArgs::new("door-leaf", "metal", ls0 + 0.02, ls1 - 0.02, op.y0 + 0.02, op.y0 + 0.18, w_leaf + 0.016, w_leaf + 0.036).common(&common).shadow(false).meta(leaf_meta(false)));
+                }
+            }
+            // Recessed wrought-iron residential porch sconce lantern (strictly inside vestibule, w < 0, zero clutter conflict)
+            if detail
+                && storey.index == 0
+                && recess >= 0.28
+                && (op.s1 - op.s0) >= 0.85
+                && (op.s1 - op.s0) <= 2.35
+                && (op.y1 - op.y0) >= 2.0
+                && (op.y1 - op.y0) <= 3.1
+                && en.num("width") < 50.0
+            {
+                let sm = (op.s0 + op.s1) * 0.5;
+                let ly1 = op.y1 - 0.06;
+                let ly0 = ly1 - 0.30;
+                if ly0 > op.y0 + 1.55 {
+                    let lw0 = -0.14;
+                    let lw1 = -0.02;
+                    plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm - 0.15, sm + 0.15, ly1, op.y1 - 0.01, lw0, lw1).common(&common));
+                    plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm - 0.14, sm + 0.14, ly0 - 0.03, ly0 + 0.01, lw0, lw1).common(&common));
+                    plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm - 0.15, sm - 0.125, ly0, ly1, lw0, lw1).common(&common));
+                    plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm + 0.125, sm + 0.15, ly0, ly1, lw0, lw1).common(&common));
+                    plan.add_box(
+                        &basis,
+                        PartArgs::new("glass", "glass", sm - 0.135, sm + 0.135, ly0, ly1, -0.055, -0.043)
+                            .common(&Common { meta: None, ..common.clone() })
+                            .shadow(false)
+                            .meta(json!({ "opening": op.id, "porchLantern": true })),
+                    );
                 }
             }
             plan.apertures.push(json!({ "id": op.id, "edge": edge.index, "storey": storey.index, "bay": bay.index, "s0": op.s0, "s1": op.s1 }));

@@ -28,6 +28,7 @@
 use crate::geometry::{MeshArrays, Rgb, V3};
 use std::sync::OnceLock;
 
+pub mod hills; // (`--no-hill-outcrops`) the scanned rock on the city's hills
 pub mod place; // where the scanned rock stands (slope, geology, imagery)
 pub mod scan; // the scanned rock library (the survey set's S1 scans) and what is placed
 

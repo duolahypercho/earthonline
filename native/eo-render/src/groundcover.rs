@@ -23,7 +23,7 @@ use crate::look::LookGpu;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, OnceLock};
 
-pub use rock::{CAST_DISTANCE_M, MAX_DISTANCE_M, MIN_PX};
+pub use rock::{CAST_DISTANCE_M, MAX_DISTANCE_M, MIN_PX, drawn_rocks};
 
 /// The ground cover's renderer state.
 #[derive(Default)]
@@ -79,21 +79,36 @@ impl GroundCover {
     /// Whether everything placed so far is attached: no placement yet, or
     /// its GPU state built (false while the worker runs).
     pub fn settled(&self) -> bool {
+        // (`--no-hill-outcrops`) not while the hills' pieces wait for the drawn ground
+        if eo_landmarks::rocks::scan::hills_pending() {
+            return false;
+        }
         !self.started.load(Ordering::Acquire) || self.rock.get().is_some()
     }
 
     /// Per frame, before the passes: the camera and the look (beside the props' `update`).
-    pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, look: &LookGpu, occlusion: bool) {
+    pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, look: &LookGpu, occlusion: bool, roads: Option<&Arc<eo_structures::StructureWorld>>) {
         if !self.started.load(Ordering::Acquire) {
             // start the build once the landmark build has placed the scans (polled: a cheap read until then)
-            if let Some(placed) = eo_landmarks::rocks::scan::placed() {
+            // (`--no-hill-outcrops`) not while the hills' pieces wait for the drawn ground (rocks/hills.rs `late_pass`)
+            if let Some(placed) = eo_landmarks::rocks::scan::placed().filter(|_| !eo_landmarks::rocks::scan::hills_pending()) {
                 self.started.store(true, Ordering::Release);
                 let setup = rock::RockSetup::new(&look.device, queue, look, self.debug_ids());
+                let mut clearance = false;
+                let mut disabled = false;
+                for arg in std::env::args() {
+                    match arg.as_str() {
+                        "--tunnel-rock-clearance" => clearance = true,
+                        "--no-tunnel-rock-clearance" => disabled = true,
+                        _ => {}
+                    }
+                }
+                let traffic = roads.filter(|w| clearance && !disabled && !w.road_openings().is_empty()).cloned();
                 let slot = self.rock.clone();
                 let h = std::thread::Builder::new()
                     .name("gc-rock-build".into())
                     .spawn(move || {
-                        let gpu = eo_landmarks::rocks::scan::library().filter(|_| !placed.pieces.is_empty()).map(|lib| rock::RockGpu::new(&setup, &lib, &placed));
+                        let gpu = eo_landmarks::rocks::scan::library().filter(|_| !placed.pieces.is_empty()).and_then(|lib| rock::RockGpu::new(&setup, &lib, &placed, traffic.as_ref().map(|w| w.road_openings())));
                         let _ = slot.set(gpu);
                     })
                     .ok();

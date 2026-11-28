@@ -9,7 +9,7 @@
 
 use crate::bits::{BitReader, BitWriter, ByteReader, PutLe, Truncated};
 use eo_player::character::CharacterState;
-use eo_player::vehicle::VehicleState;
+use eo_player::vehicle::{VehicleState, VehicleConfig, VehicleModel};
 use eo_player::{PlayerState, StepInput};
 
 pub mod button {
@@ -23,8 +23,9 @@ pub mod button {
     pub const LOOK_BEHIND: u16 = 128;
     /// A tap: ride a landmark lift (eo-player lift.rs).
     pub const INTERACT: u16 = 256;
+    pub const SHIFT_DIRECTION: u16 = 512;
     /// The taps (act on one step; a stood-in input drops them).
-    pub const TAPS: u16 = JUMP | VEHICLE_TOGGLE | INTERACT;
+    pub const TAPS: u16 = JUMP | VEHICLE_TOGGLE | INTERACT | SHIFT_DIRECTION;
 }
 
 /// One fixed step's input as sent (9 bytes).
@@ -65,6 +66,7 @@ impl NetInput {
             (s.crouch, button::CROUCH),
             (s.jump, button::JUMP),
             (s.aim, button::AIM),
+            (s.shift_direction, button::SHIFT_DIRECTION),
             (s.vehicle_toggle, button::VEHICLE_TOGGLE),
             (s.analog_steer, button::ANALOG_STEER),
             (s.handbrake, button::HANDBRAKE),
@@ -87,6 +89,7 @@ impl NetInput {
             crouch: b(button::CROUCH),
             jump: b(button::JUMP),
             aim: b(button::AIM),
+            shift_direction: b(button::SHIFT_DIRECTION),
             vehicle_toggle: b(button::VEHICLE_TOGGLE),
             throttle: self.throttle as f64 / 255.0,
             brake: self.brake as f64 / 255.0,
@@ -242,6 +245,17 @@ fn put_opt2(out: &mut Vec<u8>, v: Option<(f64, f64)>) {
 
 /// The whole player state, every float bit for bit (a correction must put
 /// the client exactly where the server is).
+pub(crate) fn put_vehicle_config(out: &mut Vec<u8>, c: VehicleConfig) {
+    out.put_u8(c.model as u8);
+    out.put_u16(c.occupants_kg);
+    out.put_u16(c.cargo_kg);
+}
+
+pub(crate) fn get_vehicle_config(r: &mut ByteReader) -> Result<VehicleConfig, Truncated> {
+    let model = VehicleModel::from_code(r.u8()?).ok_or(Truncated)?;
+    VehicleConfig { model, occupants_kg: r.u16()?, cargo_kg: r.u16()? }.validated().map_err(|_| Truncated)
+}
+
 pub fn write_player_state(s: &PlayerState, out: &mut Vec<u8>) {
     let c = &s.character;
     for v in c.position {
@@ -270,7 +284,7 @@ pub fn write_player_state(s: &PlayerState, out: &mut Vec<u8>) {
         for x in v.translation.iter().chain(v.rotation.iter()).chain(v.linvel.iter()).chain(v.angvel.iter()) {
             out.put_f32(*x);
         }
-        out.put_u8(v.sleeping as u8 | (v.handbrake as u8) << 1);
+        out.put_u8(v.sleeping as u8 | (v.handbrake as u8) << 1 | (v.transmission.reverse_selected as u8) << 2);
         out.put_f32(v.time_since_can_sleep);
         out.put_f64(v.steer_normalized);
         for x in v.controls {
@@ -286,6 +300,18 @@ pub fn write_player_state(s: &PlayerState, out: &mut Vec<u8>) {
         }
         None => out.put_u8(0),
     }
+    // Legacy state blobs end at the lift. Attach the model and load only
+    // when needed, retaining byte-identical legacy sedan checkpoints.
+    let moving_support = c.support_velocity != [0.0; 3];
+    let flooding = s.vehicles.iter().any(|v| v.flood_ticks != 0);
+    let gearbox = s.vehicles.iter().any(|v| v.transmission.gear != 0 || v.transmission.shift_left != 0);
+    if gearbox || flooding || moving_support || s.vehicles.iter().any(|v| v.config != VehicleConfig::default()) {
+        out.put_u8(if gearbox { 4 } else if flooding { 3 } else if moving_support { 2 } else { 1 });
+        for v in &s.vehicles { put_vehicle_config(out, v.config); }
+        if moving_support || flooding || gearbox { for v in c.support_velocity { out.put_f64(v); } }
+        if flooding || gearbox { for v in &s.vehicles { out.put_u16(v.flood_ticks); } }
+        if gearbox { for v in &s.vehicles { out.put_u8(v.transmission.gear); out.put_u8(v.transmission.shift_left); } }
+    }
 }
 
 pub fn read_player_state(data: &[u8]) -> Result<PlayerState, Truncated> {
@@ -294,7 +320,8 @@ pub fn read_player_state(data: &[u8]) -> Result<PlayerState, Truncated> {
     let position = [r.f64()?, r.f64()?, r.f64()?];
     let vertical_velocity = r.f64()?;
     let gc = r.u8()?;
-    let character = CharacterState {
+    let mut character = CharacterState {
+        support_velocity: [0.0; 3],
         position,
         vertical_velocity,
         grounded: gc & 1 != 0,
@@ -324,6 +351,9 @@ pub fn read_player_state(data: &[u8]) -> Result<PlayerState, Truncated> {
         }
         let flags = r.u8()?;
         vehicles.push(VehicleState {
+            flood_ticks: 0,
+            transmission: eo_player::vehicle::Transmission { reverse_selected: flags & 4 != 0, ..Default::default() },
+            config: VehicleConfig::default(),
             translation: [x[0], x[1], x[2]],
             rotation: [x[3], x[4], x[5], x[6]],
             linvel: [x[7], x[8], x[9]],
@@ -337,6 +367,15 @@ pub fn read_player_state(data: &[u8]) -> Result<PlayerState, Truncated> {
     }
     let lf = r.u8()?;
     let lift = if lf & 1 != 0 { Some(eo_player::lift::LiftRide { up: lf & 2 != 0, lift: r.u32()?, step: r.u32()? }) } else { None };
+    if r.remaining() > 0 {
+        let version = r.u8()?;
+        if !matches!(version, 1..=4) { return Err(Truncated); }
+        for v in &mut vehicles { v.config = get_vehicle_config(&mut r)?; }
+        if version >= 2 { character.support_velocity = [r.f64()?, r.f64()?, r.f64()?]; }
+        if version >= 3 { for car in &mut vehicles { car.flood_ticks = r.u16()?; } }
+        if version >= 4 { for car in &mut vehicles { car.transmission.gear = r.u8()?; car.transmission.shift_left = r.u8()?; } }
+        if r.remaining() != 0 { return Err(Truncated); }
+    }
     Ok(PlayerState {
         character,
         momentum,
@@ -361,12 +400,13 @@ mod tests {
 
     #[test]
     fn inputs_round_trip_and_quantise_exactly() {
-        let s = StepInput { move_x: -1.0, move_y: 1.0, sprint: true, throttle: 0.5, steer: 0.3, ..Default::default() };
+        let s = StepInput { move_x: -1.0, move_y: 1.0, sprint: true, shift_direction: true, throttle: 0.5, steer: 0.3, ..Default::default() };
         let q = NetInput::quantize(&s, -2.5);
         let back = q.step_input();
         assert_eq!(back.move_x, -1.0);
         assert_eq!(back.move_y, 1.0);
-        assert!(back.sprint);
+        assert!(back.sprint && back.shift_direction);
+        assert!(!NetInput { buttons: q.buttons & !button::TAPS, ..q }.step_input().shift_direction);
         assert_eq!(NetInput::quantize(&back, q.yaw()), q, "quantising a dequantised input is the identity");
         let mut p = InputPacket { ack_snapshot: 9, correction_applied: 2, check: Some(Check { seq: 41, pos_mm: [-1, 2, 3_000_000], driving: true }), first_seq: 40, inputs: vec![], ping_ms: 65530 };
         for k in 0..20 {
@@ -381,6 +421,33 @@ mod tests {
         p.write(&mut b);
         assert_eq!(InputPacket::read(&b).unwrap(), p);
         assert!(b.len() < 120, "20 inputs in {} bytes", b.len());
+    }
+
+    #[test]
+    fn checkpoints_keep_each_loaded_vehicle_and_the_riders_launch_velocity() {
+        let van = VehicleConfig { model: VehicleModel::DeliveryVan, occupants_kg: 80, cargo_kg: 600 };
+        let mut state = PlayerState { vehicles: vec![VehicleState::default(), VehicleState { config: van, ..Default::default() }], ..Default::default() };
+        for velocity in [[0.0; 3], [1.5, 0.12, -0.25]] {
+            state.character.support_velocity = velocity;
+            let mut bytes = vec![];
+            write_player_state(&state, &mut bytes);
+            assert_eq!(read_player_state(&bytes).unwrap(), state);
+            assert!(read_player_state(&bytes[..bytes.len()-1]).is_err());
+            bytes.push(0);
+            assert!(read_player_state(&bytes).is_err());
+        }
+        state.vehicles[0].transmission.reverse_selected = true;
+        let mut reverse = Vec::new();
+        write_player_state(&state, &mut reverse);
+        assert_eq!(read_player_state(&reverse).unwrap(), state);
+        state.vehicles[1].flood_ticks = 90;
+        state.vehicles[1].transmission = eo_player::vehicle::Transmission { gear: 2, shift_left: 5, reverse_selected: false };
+        let mut flooded = Vec::new();
+        write_player_state(&state, &mut flooded);
+        assert_eq!(read_player_state(&flooded).unwrap(), state);
+        for invalid in [[4, 0, 0, 0, 0], [3, 0, 0, 255, 255]] {
+            assert!(get_vehicle_config(&mut ByteReader::new(&invalid)).is_err());
+        }
     }
 
     #[test]

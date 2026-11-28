@@ -695,6 +695,37 @@ const VOL_STRATUS_SIGMA: f64 = 0.028;
 /// Deck parameters for `--volumetric-clouds`: deep vertical slabs for cumulus humilis,
 /// mediocris and towering congestus, balanced synoptic coverage under clear skies, and
 /// a 7.8 km fibrous ice-cirrus layer. Existing `decks()` is unchanged for default runs.
+/// The volumetric cloudscape's cumulus cover by the weather (before the day's sky state).
+pub fn volumetric_cover(kind: Kind) -> f64 {
+    match kind {
+        Kind::Clear => 0.40,
+        Kind::Damp => 0.56,
+        Kind::SunRain => 0.58,
+        Kind::Overcast => 0.86,
+        Kind::Fog => 0.92,
+        Kind::Drizzle => 0.88,
+        Kind::LightRain => 0.86,
+        Kind::Rain => 0.94,
+        Kind::HeavyRain => 0.96,
+        Kind::Storm => 0.98,
+    }
+}
+
+/// (`--vol-sky-state`) the share of the low deck a weather's day leaves
+/// (`decks` over `raw_decks`: a cloudless or cirrus day takes it away by how
+/// much the weather is the clear rung, `with_sky_mix`), 1 where the weather
+/// draws no low deck. The volumetric cumulus took the weather's cover whatever
+/// the day's sky, so a clear cirrus day (no cumulus in its observation) drew 40 %
+/// cumulus, and their shadows put most of the city under cloud at noon.
+pub fn sky_state_kept(w: &WeatherState) -> f64 {
+    kept_share(raw_decks(w, eo_look::features::daylight().clear_sky_state).coverage, decks(w).coverage)
+}
+
+/// The share of a raw cover `raw` that a faded cover `faded` keeps (1 where there was none).
+fn kept_share(raw: f64, faded: f64) -> f64 {
+    if raw > 1e-9 { (faded / raw).clamp(0.0, 1.0) } else { 1.0 }
+}
+
 pub fn volumetric_decks(w: &WeatherState) -> Decks {
     let mut d = decks(w);
     let s = w.severity.clamp(0.0, 4.0);
@@ -719,18 +750,11 @@ pub fn volumetric_decks(w: &WeatherState) -> Decks {
     let stratus = (p.overcast - 0.5).max(0.0) * 2.0;
     d.low_base_m = h[0];
     d.low_top_m = h[1];
-    d.coverage = match w.kind {
-        Kind::Clear => 0.40,
-        Kind::Damp => 0.56,
-        Kind::SunRain => 0.58,
-        Kind::Overcast => 0.86,
-        Kind::Fog => 0.92,
-        Kind::Drizzle => 0.88,
-        Kind::LightRain => 0.86,
-        Kind::Rain => 0.94,
-        Kind::HeavyRain => 0.96,
-        Kind::Storm => 0.98,
-    };
+    // (`--vol-sky-state`) the volumetric cumulus at the share of the low deck the
+    // day's sky state leaves (`sky_state_kept`); without it the weather's cover
+    // whatever the day's sky.
+    let kept = if eo_look::features::daylight().vol_sky_state { sky_state_kept(w) } else { 1.0 };
+    d.coverage = kept * volumetric_cover(w.kind);
     d.low_opacity = match w.kind {
         Kind::Overcast => 0.88,
         _ => p.deck_low.max(0.92),
@@ -1175,6 +1199,23 @@ mod tests {
         assert!(d_edge < d_in * 3.0 + 0.05, "edge step {d_edge} inside {d_in}");
     }
 
+    /// (`--vol-sky-state`) a clear day's sky state takes the volumetric cumulus as
+    /// it takes the low deck: none on a cirrus or a cloudless day, the weather's
+    /// whole cover on a fair-cumulus day.
+    #[test]
+    fn the_day_sky_state_takes_the_volumetric_cumulus() {
+        let w = crate::weather::preset(Kind::Clear);
+        let raw = raw_decks(&w, true);
+        let wc = clear_weight(w.profile.overcast);
+        let cover = |state: SkyState| kept_share(raw.coverage, raw.with_sky_mix(wc, SkyMix::pure(state, 3.5), true).coverage) * volumetric_cover(Kind::Clear);
+        assert!(raw.coverage > 0.0 && wc > 0.99, "{} {wc}", raw.coverage);
+        assert!(cover(SkyState::Cirrus) < 0.01, "cirrus {}", cover(SkyState::Cirrus));
+        assert!(cover(SkyState::Cloudless) < 0.01, "cloudless {}", cover(SkyState::Cloudless));
+        assert!((cover(SkyState::FairCumulus) - volumetric_cover(Kind::Clear)).abs() < 1e-12, "fair {}", cover(SkyState::FairCumulus));
+        // a weather with no low deck keeps the volumetric cover whole
+        assert_eq!(kept_share(0.0, 0.0), 1.0);
+    }
+
     #[test]
     fn volumetric_decks_preserve_slab_order_and_wrap_period() {
         for kind in [Kind::Clear, Kind::Damp, Kind::Overcast, Kind::Fog, Kind::Drizzle, Kind::LightRain, Kind::SunRain, Kind::Rain, Kind::HeavyRain, Kind::Storm] {
@@ -1182,7 +1223,10 @@ mod tests {
             let d = volumetric_decks(&w);
             assert!(d.low_top_m > d.low_base_m + 200.0, "{kind:?}: thin slab {}..{}", d.low_base_m, d.low_top_m);
             assert!(d.high_alt_m > d.low_top_m, "{kind:?}: cirrus below low top");
-            assert!(d.coverage > 0.3 && d.coverage <= 1.0, "{kind:?}: coverage {}", d.coverage);
+            // the weather's cover, at the share the day's sky state leaves (`--vol-sky-state`)
+            let full = volumetric_cover(kind);
+            assert!(full > 0.3 && full <= 1.0, "{kind:?}: coverage {full}");
+            assert!((d.coverage - full * sky_state_kept(&w)).abs() < 1e-12, "{kind:?}: coverage {} of {full}", d.coverage);
             assert!(d.extinction > 0.02 && d.extinction < 0.1, "{kind:?}: extinction {}", d.extinction);
         }
         // Every volumetric noise tile divides VOL_WRAP_TILE_M evenly for seamless drift wrapping.

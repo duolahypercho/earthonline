@@ -203,7 +203,7 @@ pub struct RegionStats {
     pub car_recycles: u64,
     pub focus_updates: u64,
     pub focus_cuts: u64,
-    /// cars a shared region added to its fleet because it had no donor.
+    /// Cars added to the fleet because there was no donor.
     pub cars_grown: u64,
 }
 
@@ -263,7 +263,14 @@ fn visible_from(f: &Focus, horizon: f64, half: f64, x: f64, z: f64) -> bool {
     (dx * f.yaw.sin() + dz * f.yaw.cos()) / d >= half.cos()
 }
 
+fn traffic_protected(f: &Focus, horizon: f64, half: f64, x: f64, z: f64) -> bool {
+    (x - f.x).hypot(z - f.z) < POP_IN_GUARD_METRES || visible_from(f, horizon, half, x, z)
+}
+
 pub struct Region {
+    pub traffic_obstacle: Option<crate::vehicles::TrafficObstacle>,
+    pub on_foot_player: Option<crate::vehicles::TrafficObstacle>,
+    pub traffic_observations: Vec<crate::vehicles::TrafficObservation>,
     pub id: u32,
     pub cfg: RegionConfig,
     pub focus: Focus,
@@ -277,6 +284,7 @@ pub struct Region {
     last_focus: Option<[f64; 2]>,
     cold_seed: bool,
     walker_grid: Grid,
+    following_gaps: Vec<crate::pedestrians::WalkClearance>,
     bands: Vec<Band>,
     placements: Vec<(f64, LaneId, f64)>,
     foot_scratch: Vec<(FootwayId, f64)>,
@@ -307,6 +315,9 @@ impl Region {
         // Region 0 replays the JS fleet seed (`mulberry32(seedInt + 77)`); others are decorrelated by id.
         let car_seed = cfg.seed_int.wrapping_add(77).wrapping_add(id.wrapping_mul(0x9e37_79b9));
         let mut r = Region {
+            traffic_obstacle: None,
+            on_foot_player: None,
+            traffic_observations: vec![],
             id,
             cfg,
             focus,
@@ -320,6 +331,7 @@ impl Region {
             last_focus: None,
             cold_seed: true,
             walker_grid: Grid::new(PERSON_CELL_M),
+            following_gaps: vec![],
             bands: vec![],
             placements: vec![],
             foot_scratch: vec![],
@@ -342,22 +354,19 @@ impl Region {
     }
 
     fn spawn_fleet(&mut self, net: &Network) {
+        let near = self.cfg.spawn_radius.map(|radius| ([self.focus.x, self.focus.z], radius));
         let lanes: Vec<LaneId> = match self.cfg.spawn_radius {
             None => net.alive_lanes().collect(),
             Some(radius) => {
-                let mut v: Vec<LaneId> = net
-                    .tiles_near(self.focus.x, self.focus.z, radius)
-                    .flat_map(|t| t.lanes.iter().copied())
+                net.alive_lanes()
                     .filter(|&l| {
                         let lane = &net.lanes[l as usize];
                         lane.alive
+                            && !lane.terminus
                             && geom::dist_to_polyline(&lane.pts, self.focus.x, self.focus.z) <= radius
                             && lane.length > 8.0
                     })
-                    .collect();
-                v.sort_unstable();
-                v.dedup();
-                v
+                    .collect()
             }
         };
         if let Some(t) = self.cfg.traffic {
@@ -370,7 +379,7 @@ impl Region {
             // pool). A busy hour fills every street to its density; a quiet one
             // still fills an arterial the pool's even spread left short.
             for _ in 0..VEHICLE_POOL.min(self.cfg.vehicle_pool) {
-                let _ = self.fleet.spawn(net, &lanes, &mut self.car_rng, self.cfg.seed_int);
+                let _ = self.fleet.spawn_near(net, &lanes, &mut self.car_rng, self.cfg.seed_int, near);
             }
             let focus = [self.focus.x, self.focus.z];
             let mut on_lane: std::collections::HashMap<LaneId, f64> = std::collections::HashMap::new();
@@ -391,17 +400,21 @@ impl Region {
             let count = (self.fleet.len() + short.round() as usize).min(self.cfg.vehicle_pool);
             let mut extra = Mulberry32::new(self.cfg.seed_int.wrapping_add(77).wrapping_add(self.id.wrapping_mul(0x9e37_79b9)) ^ DENSE_EXTRA_SEED);
             for _ in self.fleet.len()..count {
-                let _ = self.fleet.spawn(net, &weighted, &mut extra, self.cfg.seed_int);
+                let _ = self.fleet.spawn_near(net, &weighted, &mut extra, self.cfg.seed_int, near);
             }
-            self.fleet.separate(net);
+            if near.is_none() {
+                self.fleet.separate(net);
+            }
             return;
         }
         for _ in 0..self.cfg.vehicle_pool {
-            if !self.fleet.spawn(net, &lanes, &mut self.car_rng, self.cfg.seed_int) {
+            if !self.fleet.spawn_near(net, &lanes, &mut self.car_rng, self.cfg.seed_int, near) {
                 continue;
             }
         }
-        self.fleet.separate(net);
+        if near.is_none() {
+            self.fleet.separate(net);
+        }
     }
 
     /// One group of ambient walkers (`spawnAmbientCrowd`'s inner body).
@@ -409,6 +422,11 @@ impl Region {
         let rng = &mut self.walker_rng;
         let f = &net.footways[footway as usize];
         let total = f.length;
+        let [lo, hi] = [f.ends[0].kerb_trim, total - f.ends[1].kerb_trim];
+        if lo >= hi {
+            return 0;
+        }
+        let first = self.crowd.walkers.len();
         let as_group = rng.next_f64() < GROUP_SHARE;
         let members = if as_group {
             GROUP_SIZE[1].min(GROUP_SIZE[0] + (rng.next_f64() * (GROUP_SIZE[1] - GROUP_SIZE[0] + 1) as f64) as u32)
@@ -416,7 +434,10 @@ impl Region {
             1
         };
         let dir: i8 = if rng.next_f64() < 0.5 { 1 } else { -1 };
-        let base = base_arc.unwrap_or_else(|| rng.next_f64() * total);
+        // Keep the sampled fraction of the usable walk. Clamping every
+        // sample from a trimmed approach to its kerb bunches walkers there.
+        let fraction = base_arc.map_or_else(|| rng.next_f64(), |arc| (arc / total).clamp(0.0, 1.0));
+        let base = lo + (hi - lo) * fraction;
         let _ = base_arc.is_some() || true;
         let speed = pedestrian_cruise_speed(rng.next_f64());
         let side = f.road_side as f64;
@@ -434,25 +455,47 @@ impl Region {
                 Some(u) => solo_cruise_speed(speed, u),
                 None => speed,
             };
-            let s = js_clamp(base + (m as f64 - (members - 1) as f64 / 2.0) * 0.9, 0.0, total);
+            let s = js_clamp(base + (m as f64 - (members - 1) as f64 / 2.0) * 0.9, lo, hi);
             let key = self.crowd.next_key;
             self.crowd.next_key += 1;
             self.crowd.push(Walker::new(key, footway, s, dir, walker_speed, lateral, f.road_side, as_group, gait));
-            self.crowd.stats.spawned += 1;
         }
         // (`--people-groups`) the group keeps together: its first member leads
         // from the group's middle (its station and mean lateral), the others
         // keep their places about it (`Crowd::keep_parties`).
         if self.cfg.groups && members > 1 {
-            let first = self.crowd.walkers.len() - members as usize;
             let leader = self.crowd.walkers[first].key;
             let mean = self.crowd.walkers[first..].iter().map(|w| w.lateral).sum::<f64>() / members as f64;
-            self.crowd.walkers[first].s = js_clamp(base, 0.0, total);
+            self.crowd.walkers[first].s = base;
             self.crowd.walkers[first].lateral = mean;
             for (k, w) in self.crowd.walkers[first..].iter_mut().enumerate() {
                 w.party = Some(crate::pedestrians::Party { leader, slot: k as u8, size: members as u8, at: [f64::NAN; 2], frame: f64::NAN, yaw: f64::NAN });
             }
         }
+        // Admit the whole group only when its actual spawn poses are clear.
+        // A kerb trim can move the nominal spawn right up to a queued car.
+        if self.crowd.walkers[first..].iter().any(|w| {
+            let [x, z] = crate::pedestrians::position_at(net, w, w.s.clamp(lo, hi));
+            let blocked = |cx: f64, cz: f64, yaw, length: f64, width: f64| {
+                (cx - x).hypot(cz - z) <= (length + width) / 2.0 + PERSON_CAPSULE_R_M
+                    && geom::obb_clearance(x, z, (cx, cz, yaw, length, width)) < PERSON_CAPSULE_R_M
+            };
+            let observed = |car: crate::vehicles::TrafficObstacle| {
+                car.level == 0 && blocked(car.pos[0], car.pos[1], car.yaw, car.length, car.width)
+            };
+            self.fleet.cars.iter().enumerate().any(|(i, car)| {
+                self.fleet.level[i] == 0
+                    && blocked(self.fleet.x[i], self.fleet.z[i], self.fleet.yaw[i], car.len, car.wid)
+                    && !self.traffic_observations.iter().any(|o| o.fleet_id == Some(car.id))
+            }) || self.traffic_obstacle.is_some_and(observed)
+                || self.traffic_observations.iter().any(|o| observed(o.obstacle))
+        }) {
+            self.crowd.walkers.truncate(first);
+            self.crowd.x.truncate(first);
+            self.crowd.z.truncate(first);
+            return 0;
+        }
+        self.crowd.stats.spawned += u64::from(members);
         members as usize
     }
 
@@ -516,7 +559,6 @@ impl Region {
         self.local_timer = 1.0;
         self.local_focus = Some(focus);
         self.stats.focus_updates += 1;
-        let first = self.stats.focus_updates == 1;
         let footfall = hour_footfall(hour);
         let mut car_target = crate::standards::js_round(LOCAL_CAR_TARGET * (0.55 + 0.45 * footfall)) as usize;
         if let Some(t) = self.cfg.traffic {
@@ -530,18 +572,12 @@ impl Region {
         }
         let n = self.fleet.len();
         let mut local = 0;
-        let mut on_screen = 0;
         for i in 0..n {
             let (x, z) = (self.fleet.x[i], self.fleet.z[i]);
             if geom::hypot(x - focus[0], z - focus[1]) <= LOCAL_LIFE_RADIUS {
                 local += 1;
-                if self.visible(x, z) {
-                    on_screen += 1;
-                }
             }
         }
-        let starved = (local as f64) < car_target as f64 * LOCAL_STARVATION_RATIO;
-        let allow_visible = first || starved || on_screen < LOCAL_ONSCREEN_CAR_TARGET;
         let needed = car_target.saturating_sub(local);
         if needed == 0 {
             return;
@@ -569,7 +605,7 @@ impl Region {
                         best_arc = lane.cum[k] + t * (lane.cum[k + 1] - lane.cum[k]);
                     }
                 }
-                if best_d <= max_d {
+                if best_d <= max_d && !lane.terminus {
                     self.placements.push((best_d, l, best_arc));
                 }
             }
@@ -588,41 +624,50 @@ impl Region {
         }
         self.donors.sort_by(|a, b| b.0.total_cmp(&a.0));
         let mut placed = 0usize;
-        for di in 0..self.donors.len() {
-            if placed >= needed {
+        for di in 0..needed.min(self.donors.len() + self.cfg.vehicle_pool.saturating_sub(n)) {
+            let (car, grown) = if let Some(&(_, i)) = self.donors.get(di) {
+                (i, false)
+            } else {
+                let lane = self.placements[(di * 7) % self.placements.len()].1;
+                if !self.fleet.spawn(net, &[lane], &mut self.car_rng, self.cfg.seed_int) {
+                    continue;
+                }
+                (self.fleet.len() - 1, true)
+            };
+            let landing = self.fleet.prepare_landing(net, car, (!grown).then_some(self.cfg.seed_int));
+            let mut selected = None;
+            for attempt in 0..self.placements.len() {
+                let (_, lane_id, arc0) = self.placements[(placed * 7 + attempt) % self.placements.len()];
+                let lane = &net.lanes[lane_id as usize];
+                let jitter = ((placed % 5) as f64 - 2.0) * 5.5;
+                let Some(arc) = landing.arc(lane, arc0 + jitter) else { continue };
+                let (x, z, _, _, _) = geom::at_arc(&lane.pts, &lane.cum, arc);
+                if traffic_protected(&self.focus, self.cfg.draw_horizon, self.cfg.view_half_angle, x, z) {
+                    continue;
+                }
+                if self.fleet.landing_blocked(net, lane_id, arc, landing) || landing.unfit(net, lane_id, arc, 4.5) {
+                    continue;
+                }
+                if !self.crowd.traffic_landing_clear(landing.body(lane, arc), self.on_foot_player) {
+                    continue;
+                }
+                selected = Some((lane_id, arc));
                 break;
             }
-            let car = self.donors[di].1;
-            let passes: &[bool] = if allow_visible { &[true, false] } else { &[false] };
-            let mut selected = None;
-            'passes: for &prefer_visible in passes {
-                for attempt in 0..self.placements.len() {
-                    let (_, lane_id, arc0) = self.placements[(placed * 7 + attempt) % self.placements.len()];
-                    let lane = &net.lanes[lane_id as usize];
-                    let jitter = ((placed % 5) as f64 - 2.0) * 5.5;
-                    let arc = js_clamp(arc0 + jitter, 2.0, (lane.length - 2.0).max(2.0));
-                    let (x, z, _, _, _) = geom::at_arc(&lane.pts, &lane.cum, arc);
-                    let visible_after = self.visible(x, z);
-                    if visible_after && geom::hypot(x - focus[0], z - focus[1]) < POP_IN_GUARD_METRES {
-                        continue;
-                    }
-                    if prefer_visible && !visible_after {
-                        continue;
-                    }
-                    if !(allow_visible || !visible_after) {
-                        continue;
-                    }
-                    if self.fleet.insert_blocked(net, lane_id, arc, car) || self.fleet.landing_unfit(net, lane_id, arc, car, 4.5) {
-                        continue;
-                    }
-                    selected = Some((lane_id, arc));
-                    break 'passes;
+            let Some((lane, arc)) = selected else {
+                if grown {
+                    self.fleet.take(car);
                 }
-            }
-            let Some((lane, arc)) = selected else { continue };
+                continue;
+            };
             let speed = 2.0 + self.car_rng.next_f64() * 2.5;
-            self.fleet.place(net, car, lane, arc, speed);
-            self.stats.car_recycles += 1;
+            if grown {
+                self.fleet.place(net, car, lane, arc, speed);
+                self.stats.cars_grown += 1;
+            } else {
+                self.fleet.replace(net, car, lane, arc, speed, self.cfg.seed_int);
+                self.stats.car_recycles += 1;
+            }
             placed += 1;
         }
     }
@@ -926,20 +971,17 @@ impl Region {
             let focus = [f.x, f.z];
             let share = self.claim.map_or(1.0, |c| c.disc_share(f.x, f.z, LOCAL_LIFE_RADIUS));
             let target = (car_target * share).round() as usize;
-            let (mut local, mut on_screen) = (0usize, 0usize);
+            let mut local = 0;
             for i in 0..self.fleet.len() {
                 let (x, z) = (self.fleet.x[i], self.fleet.z[i]);
                 if geom::hypot(x - focus[0], z - focus[1]) <= LOCAL_LIFE_RADIUS {
                     local += 1;
-                    on_screen += visible_from(f, horizon, half, x, z) as usize;
                 }
             }
             let needed = target.saturating_sub(local);
             if needed == 0 {
                 continue;
             }
-            let starved = (local as f64) < target as f64 * LOCAL_STARVATION_RATIO;
-            let allow_visible = first || starved || on_screen < LOCAL_ONSCREEN_CAR_TARGET;
             self.placements.clear();
             let max_d = LOCAL_LIFE_RADIUS - 8.0;
             for t in net.tiles_near(focus[0], focus[1], max_d) {
@@ -962,7 +1004,7 @@ impl Region {
                             best_arc = lane.cum[k] + t * (lane.cum[k + 1] - lane.cum[k]);
                         }
                     }
-                    if best_d <= max_d {
+                    if best_d <= max_d && !lane.terminus {
                         self.placements.push((best_d, l, best_arc));
                     }
                 }
@@ -989,42 +1031,37 @@ impl Region {
                 } else {
                     break;
                 };
-                let passes: &[bool] = if allow_visible { &[true, false] } else { &[false] };
+                let landing = self.fleet.prepare_landing(net, car, (!grown).then_some(self.cfg.seed_int));
                 let mut selected = None;
-                'passes: for &prefer_visible in passes {
-                    for attempt in 0..self.placements.len() {
-                        let (_, lane_id, arc0) = self.placements[(placed * 7 + attempt) % self.placements.len()];
-                        let lane = &net.lanes[lane_id as usize];
-                        let jitter = ((placed % 5) as f64 - 2.0) * 5.5;
-                        let arc = js_clamp(arc0 + jitter, 2.0, (lane.length - 2.0).max(2.0));
-                        let (x, z, _, _, _) = geom::at_arc(&lane.pts, &lane.cum, arc);
-                        if self.claim.is_some_and(|c| !c.contains(x, z)) {
-                            continue;
-                        }
-                        let visible_after = seen(&vs, x, z);
-                        if visible_after && vs.iter().any(|u| geom::hypot(x - u.x, z - u.z) < POP_IN_GUARD_METRES) {
-                            continue;
-                        }
-                        if prefer_visible && !visible_after {
-                            continue;
-                        }
-                        if !(allow_visible || !visible_after) {
-                            continue;
-                        }
-                        if self.fleet.insert_blocked(net, lane_id, arc, car) || self.fleet.landing_unfit(net, lane_id, arc, car, 4.5) {
-                            continue;
-                        }
-                        selected = Some((lane_id, arc));
-                        break 'passes;
+                for attempt in 0..self.placements.len() {
+                    let (_, lane_id, arc0) = self.placements[(placed * 7 + attempt) % self.placements.len()];
+                    let lane = &net.lanes[lane_id as usize];
+                    let jitter = ((placed % 5) as f64 - 2.0) * 5.5;
+                    let Some(arc) = landing.arc(lane, arc0 + jitter) else { continue };
+                    let (x, z, _, _, _) = geom::at_arc(&lane.pts, &lane.cum, arc);
+                    if self.claim.is_some_and(|c| !c.contains(x, z)) {
+                        continue;
                     }
+                    if !(first && grown) && vs.iter().any(|u| traffic_protected(u, horizon, half, x, z)) {
+                        continue;
+                    }
+                    if self.fleet.landing_blocked(net, lane_id, arc, landing) || landing.unfit(net, lane_id, arc, 4.5) {
+                        continue;
+                    }
+                    if !self.crowd.traffic_landing_clear(landing.body(lane, arc), self.on_foot_player) {
+                        continue;
+                    }
+                    selected = Some((lane_id, arc));
+                    break;
                 }
                 match selected {
                     Some((lane, arc)) => {
                         let speed = 2.0 + self.car_rng.next_f64() * 2.5;
-                        self.fleet.place(net, car, lane, arc, speed);
                         if grown {
+                            self.fleet.place(net, car, lane, arc, speed);
                             self.stats.cars_grown += 1;
                         } else {
+                            self.fleet.replace(net, car, lane, arc, speed, self.cfg.seed_int);
                             self.stats.car_recycles += 1;
                         }
                         placed += 1;
@@ -1135,21 +1172,12 @@ impl Region {
     /// Tiles streamed in or out: re-decide claims and exits, and retire walkers
     /// whose pavement (or the pavement their leg leads to) has left.
     pub fn network_changed(&mut self, net: &Network) {
-        // A car on a lane that left is set down elsewhere now, before its slot can be reused.
-        let invisible = |_: f64, _: f64| false;
-        let homing_focus = self.cfg.local_life.then_some([self.focus.x, self.focus.z]);
-        let ctx = StepCtx { net, time: 0.0, seed_int: self.cfg.seed_int, homing_focus, visible: &invisible };
-        for i in 0..self.fleet.cars.len() {
+        // Retire trips whose route left the loaded world before a lane slot can be reused.
+        for i in (0..self.fleet.len()).rev() {
             let c = &self.fleet.cars[i];
             let gone = !net.lanes[c.lane as usize].alive || (c.cornering() && !net.lanes[c.corner_from as usize].alive);
             if gone {
-                self.fleet.cars[i].corner_from = crate::network::NONE;
-                if !self.fleet.respawn(&ctx, i, &mut self.car_rng) {
-                    // Nowhere to go yet: park it on any live lane's start; the recycler moves it on.
-                    if let Some(l) = net.alive_lanes().next() {
-                        self.fleet.place(net, i, l, 0.0, 0.0);
-                    }
-                }
+                self.fleet.take(i);
             }
         }
         self.fleet.network_changed(net);
@@ -1218,49 +1246,58 @@ impl Region {
         let parity = self.step_index;
         // SENSE: people index and occupied crossings, then every car's gaps.
         self.walker_grid.build(&self.crowd.x, &self.crowd.z, PERSON_CELL_M, |_| true);
+        self.following_gaps.clear();
+        if self.cfg.crowd.is_some() {
+            self.following_gaps.extend((0..self.crowd.walkers.len()).map(|i| self.crowd.following_gap(i, net, &self.walker_grid, self.on_foot_player)));
+        }
         self.crowd.bands(&mut self.bands);
+        self.fleet.set_pass_bounds(self.claim.map(|claim| [claim.min, claim.max]));
         self.fleet.sense(net, &self.crowd.x, &self.crowd.z, &self.walker_grid, &self.bands);
+        if let Some(obstacle) = self.traffic_obstacle {
+            self.fleet.sense_obstacle(net, obstacle);
+        }
+        for &observation in &self.traffic_observations {
+            self.fleet.sense_traffic_observation(net, observation);
+        }
+        if let Some(person) = self.on_foot_player { self.fleet.sense_person(net, person); }
         // ACT: cars in id order, then walkers.
+        let landing_clear = |body| self.crowd.traffic_landing_clear(body, self.on_foot_player);
         if let Some(vs) = &self.viewers {
             // a shared region: seen by any viewer, homing on the first.
             let (horizon, half) = (self.cfg.draw_horizon, self.cfg.view_half_angle);
-            let visible = |x: f64, z: f64| vs.iter().any(|f| visible_from(f, horizon, half, x, z));
+            // Keep nearby network entities stable across region handoffs and
+            // camera turns. An unviewed cell has no population to refill for.
+            let visible = |x: f64, z: f64| vs.is_empty() || vs.iter().any(|f| {
+                (x - f.x).hypot(z - f.z) < LOCAL_LIFE_RADIUS / 2.0 || traffic_protected(f, horizon, half, x, z)
+            });
             let homing_focus = if self.cfg.local_life { vs.first().map(|f| [f.x, f.z]) } else { None };
-            let ctx = StepCtx { net, time, seed_int: self.cfg.seed_int, homing_focus, visible: &visible };
+            let ctx = StepCtx { net, time, seed_int: self.cfg.seed_int, homing_focus, visible: &visible, landing_clear: &landing_clear };
             self.fleet.act(&ctx, dt, &mut self.car_rng, parity);
         } else {
             let focus = self.local_focus.or(if self.cfg.local_life { Some([self.focus.x, self.focus.z]) } else { None });
             let fcopy = self.focus;
             let horizon = self.cfg.draw_horizon;
             let half = self.cfg.view_half_angle;
-            let visible = move |x: f64, z: f64| -> bool {
-                let (dx, dz) = (x - fcopy.x, z - fcopy.z);
-                let d = geom::hypot(dx, dz);
-                if d > horizon + 14.0 {
-                    return false;
-                }
-                if !fcopy.yaw.is_finite() || d < 1e-3 {
-                    return true;
-                }
-                (dx * fcopy.yaw.sin() + dz * fcopy.yaw.cos()) / d >= half.cos()
-            };
-            let ctx = StepCtx { net, time, seed_int: self.cfg.seed_int, homing_focus: focus, visible: &visible };
+            let visible = |x, z| traffic_protected(&fcopy, horizon, half, x, z);
+            let ctx = StepCtx { net, time, seed_int: self.cfg.seed_int, homing_focus: focus, visible: &visible, landing_clear: &landing_clear };
             self.fleet.act(&ctx, dt, &mut self.car_rng, parity);
         }
         self.fleet.settle_claims(net);
         {
+            let obstacle_reach = (!self.crowd.walkers.is_empty() && !self.fleet.cars.is_empty())
+                .then(|| self.fleet.index_walker_obstacles());
             let wctx = WalkCtx {
                 net,
                 time,
                 hour,
-                car_x: &self.fleet.x,
-                car_z: &self.fleet.z,
-                car_yaw: &self.fleet.yaw,
-                car_speed: &self.fleet.spd,
-                car_level: &self.fleet.level,
+                fleet: &self.fleet,
+                obstacle_grid: self.fleet.walker_obstacle_grid().zip(obstacle_reach),
+                vehicle: self.traffic_obstacle,
+                traffic_observations: &self.traffic_observations,
                 groups: self.cfg.groups,
                 windows: self.cfg.windows,
                 stagger: self.cfg.stagger,
+                following_gaps: &self.following_gaps,
             };
             self.crowd.step(&wctx, dt, parity);
         }
@@ -1291,13 +1328,23 @@ impl Region {
             if c.cornering() {
                 flags |= FLAG_CORNERING;
             }
+            if self.fleet.horn_active(i, time) {
+                flags |= crate::output::FLAG_HORN;
+            }
             if c.far {
                 flags |= FLAG_FAR;
             }
             // (its structure level, 0 at grade: no bits without a level table.)
             flags |= crate::output::level_flags(self.fleet.level[i]);
+            let height = self.fleet.surface_y[i];
+            let y = if height.is_finite() {
+                flags |= crate::output::FLAG_SURFACE_Y;
+                height as f32
+            } else {
+                0.0
+            };
             out.vehicles.push(AgentInstance {
-                pos: [(self.fleet.x[i] - origin[0]) as f32, 0.0, (self.fleet.z[i] - origin[1]) as f32],
+                pos: [(self.fleet.x[i] - origin[0]) as f32, y, (self.fleet.z[i] - origin[1]) as f32],
                 heading: self.fleet.yaw[i] as f32,
                 speed: c.speed as f32,
                 anim: (c.travelled % 10_000.0) as f32,

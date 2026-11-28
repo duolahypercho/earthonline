@@ -403,7 +403,12 @@ impl UploadQueue {
                 let arc = job.cur.get_or_insert_with(|| Arc::new(std::mem::replace(&mut job.bulk[job.next].data, Data::Bytes(Vec::new())))).clone();
                 let tw = std::time::Instant::now();
                 let src = matches!(target, Target::Object).then(|| arc.clone()); // the renderer's CPU copy of the table follows
-                if !stager.stage(job.id, arc, rows, dst) {
+                let vis_added = match target {
+                    Target::Object => (take / std::mem::size_of::<crate::scene::GpuObject>() as u64).max(1),
+                    Target::Group => (take / std::mem::size_of::<crate::GpuLodGroup>() as u64).max(1).saturating_mul(2),
+                    _ => 0,
+                };
+                if !stager.stage(job.id, arc, rows, dst, vis_added) {
                     break 'jobs; // every chunk is in flight: the rest waits for a later pump
                 }
                 if let Some(src) = src {
@@ -466,6 +471,8 @@ struct Piece {
     /// Payload bytes (a texture band's row padding not counted).
     len: u64,
     void: bool,
+    /// Upper bound on newly visible objects written by this piece (0 for non-cull targets).
+    vis_added: u64,
 }
 
 /// Where a piece's GPU copy lands.
@@ -580,7 +587,7 @@ impl Stager {
 
     /// Hand `rows` of `src` to the copier, bound for `dst`. False: no chunk
     /// has room (try again next pump).
-    fn stage(&mut self, job: u64, src: Arc<Data>, rows: Rows, dst: Dst) -> bool {
+    fn stage(&mut self, job: u64, src: Arc<Data>, rows: Rows, dst: Dst, vis_added: u64) -> bool {
         let span = rows.span();
         // a texture piece starts at TEXTURE_PIECE_ALIGN (BC copies need 16-byte offsets).
         let align = if matches!(dst, Dst::Texture { .. }) { TEXTURE_PIECE_ALIGN } else { wgpu::MAP_ALIGNMENT };
@@ -614,7 +621,7 @@ impl Stager {
             return false;
         }
         let len = rows.bytes();
-        pieces.push(Piece { job, done, view: Some(view), src: at, dst, len, void: false });
+        pieces.push(Piece { job, done, view: Some(view), src: at, dst, len, void: false, vis_added });
         self.bytes += len;
         crate::hitch::mark(crate::hitch::Mark::RingBytes, len);
         true
@@ -662,6 +669,7 @@ impl Stager {
         }
         let mut enc = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("upload-stager") });
         let mut bytes = 0;
+        let mut vis_added = 0u64;
         for (k, pieces) in &mut ready {
             for p in pieces.iter_mut() {
                 p.view = None;
@@ -681,12 +689,14 @@ impl Stager {
                         ),
                     }
                     bytes += p.len;
+                    vis_added = vis_added.saturating_add(p.vis_added);
                 }
                 jobs.push(p.job);
             }
         }
         crate::pace::submit(queue, [enc.finish()]); // counted (the driver's submission spike, `pace`)
-        renderer.note_streamed(bytes);
+        renderer.note_streamed_bytes(bytes);
+        renderer.note_vis_added(vis_added);
         for (k, _) in ready {
             let c = &mut self.chunks[k];
             c.used = 0;

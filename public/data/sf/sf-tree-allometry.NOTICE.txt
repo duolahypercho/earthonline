@@ -1,0 +1,18 @@
+sf-tree-allometry.json - urban tree allometry: crown diameter and tree height from trunk diameter (DBH)
+
+Source: McPherson, E. Gregory; van Doorn, Natalie S.; Peper, Paula J. 2016. Urban tree database. Fort Collins, CO: Forest Service Research Data Archive. Updated 21 January 2020. https://doi.org/10.2737/RDS-2016-0005
+Report: McPherson, E. Gregory; van Doorn, Natalie S.; Peper, Paula J. 2016. Urban tree database and allometric equations. Gen. Tech. Rep. PSW-GTR-253. Albany, CA: U.S. Department of Agriculture, Forest Service, Pacific Southwest Research Station. https://doi.org/10.2737/PSW-GTR-253
+Use: These data were collected using funding from the U.S. Government and can be used without additional permissions or fees. (RDS-2016-0005 metadata, Use_Constraints.)
+      U.S. Government work; credit the citation above.
+Retrieved: 2026-11-26T21:19:55Z from https://www.fs.usda.gov/rds/archive/products/RDS-2016-0005/RDS-2016-0005.zip
+Archive SHA-256: c0c888e2531ca58b673b7c18a30a01cbd33e90bd8b041fb3483e394bd8664faf (as the archive's catalogue page states)
+  Data/TS1_Regional_information.csv SHA-256 4a57afd4703eb30d1f44bf974b2dc77cd8afd5dc09960524aa7661cf513aba47
+  Data/TS2_Regional_species_and_counts.csv SHA-256 5e47dca7d3ebd9d8a84c7b314d814c24af9dba12ed79ab4bfd154a0d0fbffc04
+  Data/TS6_Growth_coefficients.csv SHA-256 85829e053d29a1ecdc272f7153d9309983a32c1cac3bc51accd022df28806b76
+Produced by:   scripts/world-data/build-sf-tree-sizes.py
+Output sha256: 6d76e67f4f8db51e9aaf1bb65d63a8ddcbb73cf0cfcd966fe2f9a84168b58a85 (sf-tree-allometry.json)
+
+Equations kept: 95 (the records the list's species match, and the NoCalC broadleaf species for the median).
+Rule: A list species is sized with the database record of the same species in NoCalC (Berkeley, CA: San Francisco's region), else the same species in the nearest other region (order: regionOrder), else the genus (its most-measured species) in that order, else for a Myrtaceae genus Melaleuca quinquenervia (SoCalC), for a conifer genus Pinus radiata (NoCalC), else the median over the NoCalC broadleaf species (broadleaf); palms and palm-like monocots are not sized.
+List species by match: broadleaf-median 180, conifer 17, family-myrtaceae 19, genus 221, no-name 3, palm 32, species 186
+Trees by match: broadleaf-median 19501, conifer 2211, family-myrtaceae 11872, genus 22005, no-name 1270, palm 4712, species 75024

@@ -15,8 +15,9 @@ fn validate(name: &str, src: &str) {
 #[test]
 fn the_far_layers_shader_with_its_grime_tone_validates() {
     let o = HlodOptions::from_env();
-    let src = format!("{}\n{}{}", eo_render::look::city_shader_source_far(), hlod::far_constants_wgsl(&o), hlod::DRAW_WGSL);
+    let draw = hlod::draw_wgsl();
+    let src = format!("{}\n{}{}", eo_render::look::city_shader_source_far(), hlod::far_constants_wgsl(&o), draw);
     // the tone is reached only behind the weathering level (default frames unchanged)
-    assert!(hlod::DRAW_WGSL.contains("if (wx_level() != 0u && !roofish) {"), "hl_age behind wx_level()");
+    assert!(draw.contains("if (wx_level() != 0u && !roofish) {"), "hl_age behind wx_level()");
     validate("hlod_draw", &src);
 }

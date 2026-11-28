@@ -47,24 +47,32 @@ impl TerrainGrid {
                 continue;
             }
             let base = o.base_vertex as usize;
-            let Some(first) = scene.vertices.get(base) else { continue };
-            let ci = ((first.pos[0] as f64 - g.ox) / g.cell - 0.5).round() as i64;
-            let cj = ((first.pos[2] as f64 - g.oz) / g.cell - 0.5).round() as i64;
-            for vz in 0..side {
-                for vx in 0..side {
-                    let Some(v) = scene.vertices.get(base + vz * side + vx) else { continue };
-                    let (i, j) = (ci + vx as i64, cj + vz as i64);
-                    if i < 0 || j < 0 || i as usize >= w || j as usize >= h {
-                        continue;
-                    }
-                    let k = j as usize * w + i as usize;
-                    g.y[k] = v.pos[1];
-                    g.rgba[k] = v.color;
-                }
-            }
+            let Some(tile) = scene.vertices.get(base..base + side * side) else { continue };
+            g.copy_lattice_vertices(tile, side);
             tiles += 1;
         }
         (tiles > 0).then_some(g)
+    }
+
+    fn copy_lattice_vertices(&mut self, tile: &[eo_render::scene::Vertex], side: usize) {
+        // The renderer reuses the 33-by-33 topology for coarse tiles and
+        // quarter-spacing relief patches. Only copy vertices on the elevation
+        // lattice, at their actual coordinates. A fine patch occupies eight
+        // coarse cells and must never move props in the next three patches.
+        let first = tile[0].pos;
+        let cx = ((f64::from(first[0]) - self.ox) / self.cell - 0.5).round() as i64;
+        let cz = ((f64::from(first[2]) - self.oz) / self.cell - 0.5).round() as i64;
+        let step = f64::from(tile[1].pos[0] - first[0]);
+        let stride = (self.cell / step).round().max(1.) as usize;
+        for (j, vz) in (0..side).step_by(stride).enumerate() {
+            for (i, vx) in (0..side).step_by(stride).enumerate() {
+                if let Some(k) = self.at(cx + i as i64, cz + j as i64) {
+                    let v = tile[vz * side + vx];
+                    self.y[k] = v.pos[1];
+                    self.rgba[k] = v.color;
+                }
+            }
+        }
     }
 
     fn at(&self, i: i64, j: i64) -> Option<usize> {
@@ -171,6 +179,13 @@ pub fn naip_box(side: f64, scale: f64) -> (i64, i64) {
 /// columns and rows ([`naip_box`]) about the pixel holding (x, z), with the
 /// two-pixel margin the classifier's 5 x 5 brightness reads (None outside the
 /// image). The planting reads it; so can the terrain's tone.
+/// (`--no-city-planting`) A park's open share (low plus bare) in the image over which its
+/// ground is unmown grassland, not lawn, when it is not green either (INFERRED: the cured
+/// summer grass of the hills' parks reads 0.9-1.0 low or bare, a watered lawn's lush and
+/// green shares 0.3 and more).
+const WILD_PARK_OPEN: f32 = 0.6;
+const WILD_PARK_LUSH: f32 = 0.3;
+
 pub fn naip_shares_at(n: &eo_farshore::survey::naip::Naip, x: f64, z: f64, side: f64, slope_deg: f64) -> Option<eo_landmarks::vegetation::Naip> {
     let (lon, lat) = lon_lat(x, z);
     let (c0, r0) = naip_pixel(lon, lat)?;
@@ -254,10 +269,17 @@ const BAKER_STRIP_SOUTH_LAT: f64 = 37.7885;
 /// -122.4770, north of Baker Beach's south end (`BAKER_STRIP_SOUTH_LAT`) and
 /// within `SERPENTINE_SHORE_M` of the shore (the bluff band, INFERRED).
 /// Elsewhere south of the strait the rock is the Franciscan sandstone.
+/// (`--no-city-lithology`) These boxes are the fallback: where the city's bedrock map
+/// has a bedrock unit, it decides ([`VegGround::lithology_at`]).
 fn serpentine_bound() -> (f64, f64) {
     (game_xz(37.80, -122.4770).0, game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1)
 }
-pub const SERPENTINE_SHORE_M: f64 = 200.0;
+pub const SERPENTINE_SHORE_M: f64 = eo_landmarks::flora::BLUFF_SHORE_M;
+
+/// (Docs/HILLS-PLAN.md H7) The switch that keeps the boxes alone for the rock: without
+/// it the city's bedrock map (`native/assets/sf-lithology-v1.json.gz`, the USGS geologic
+/// maps' units) decides wherever it maps bedrock.
+pub const CITY_LITHOLOGY_SWITCH: &str = "--no-city-lithology";
 
 /// The Presidio's mapped park polygon: the largest park green holding
 /// `PRESIDIO_POINT` (None when the greens cannot be read).
@@ -272,11 +294,73 @@ fn presidio_ring(repo_root: &std::path::Path) -> Option<Vec<[f64; 2]>> {
         .map(|g| g.polygon)
 }
 
+/// The source footprint where a portal or an open approach replaces soil.
+pub(crate) fn portal_ground(roads: Option<&Arc<eo_structures::StructureWorld>>) -> Option<&Arc<eo_structures::StructureWorld>> {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let enabled = *ENABLED.get_or_init(|| !std::env::args().any(|a| a == "--no-tunnel-plant-clearance"));
+    roads.filter(|w| enabled && !w.terrain_cuts().is_empty())
+}
+
+pub(crate) fn retain_rooted(roads: &eo_structures::StructureWorld, plants: &mut Vec<Plant>) {
+    plants.retain(|p| roads.terrain_cut_at(p.pos[0], p.pos[2]).is_none());
+}
+
 /// What the plants read: the drawn terrain, the street world (footprints,
 /// paved surfaces), the open spaces' greens, the land cover, the shore field.
+/// (`--no-city-planting`, Docs/HILLS-PLAN.md H6a) The hill builder's planting map
+/// (eo-hills `planting`), read once for every reader: the vegetation's ground
+/// ([`VegGround`]) and the park trees of both tiers ([`park_tree_canopy_ok`]).
+/// None with `--no-naip-planting` or `--no-city-planting`, or without the map.
+pub fn city_planting() -> Option<&'static eo_hills::planting::Planting> {
+    static P: std::sync::OnceLock<Option<eo_hills::planting::Planting>> = std::sync::OnceLock::new();
+    P.get_or_init(|| {
+        if !eo_landmarks::vegetation::gg3().naip_planting || std::env::args().any(|a| a == "--no-city-planting") {
+            return None;
+        }
+        let p = eo_hills::planting::file_path(&eo_hills::cache_dir());
+        if !p.is_file() {
+            eprintln!("vegetation: no city planting map at {} (eo-hills cook planting)", p.display());
+            return None;
+        }
+        match eo_hills::planting::Planting::open(&p) {
+            Ok(c) => {
+                eprintln!("vegetation: the city planting map (eo-hills planting) plants by the NAIP rules outside the survey");
+                Some(c)
+            }
+            Err(e) => {
+                eprintln!("vegetation: the city planting map is not used ({e:#})");
+                None
+            }
+        }
+    })
+    .as_ref()
+}
+
+/// The switch of [`park_tree_canopy_ok`].
+pub const CITY_CANOPY_TREES_SWITCH: &str = "--no-city-canopy-trees";
+
+/// (`--no-city-canopy-trees`, Docs/HILLS-PLAN.md H6c) Whether a park tree of the
+/// greens' lattice may stand at (x, z) (game metres): where the city planting map
+/// has the aerial image, only under its canopy (the share of canopy pixels in the
+/// [`NAIP_TREE_BOX_M`](eo_landmarks::vegetation::NAIP_TREE_BOX_M) box round the
+/// trunk at least [`NAIP_TREE_CANOPY`](eo_landmarks::vegetation::NAIP_TREE_CANOPY),
+/// the coastal trees' rule), so a park's open grassland (McLaren's, Bernal's
+/// slopes) carries no tree the photograph does not show; elsewhere, and with the
+/// switch, the lattice as it was. The near tier and the distant trees both read it.
+pub fn park_tree_canopy_ok(x: f64, z: f64) -> bool {
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *OFF.get_or_init(|| std::env::args().any(|a| a == CITY_CANOPY_TREES_SWITCH)) {
+        return true;
+    }
+    let Some(c) = city_planting() else { return true };
+    let gs = eo_data::groundscale::scale();
+    c.shares(x / gs, z / gs, eo_landmarks::vegetation::NAIP_TREE_BOX_M / gs).is_none_or(|n| n.canopy >= eo_landmarks::vegetation::NAIP_TREE_CANOPY)
+}
+
 pub struct VegGround {
     pub grid: TerrainGrid,
     pub street: Arc<eo_street::StreetWorld>,
+    portal_ground: Option<Arc<eo_structures::StructureWorld>>,
     pub land: Option<eo_data::LandCover>,
     pub water: Option<Arc<eo_water::WaterData>>,
     pub switches: Switches,
@@ -285,6 +369,13 @@ pub struct VegGround {
     /// The 0.6 m NAIP image (survey group A1, read through `EO_SURVEY_ROOT`;
     /// None without it or with `--no-naip-planting`: the round-2 rules).
     naip: Option<eo_farshore::survey::naip::Naip>,
+    /// (`--no-city-planting`, Docs/HILLS-PLAN.md H6a) the hill builder's planting map: the
+    /// same NAIP rules' class counts from the citywide 0.3 m tiles (eo-hills `planting`),
+    /// read wherever the survey's image is not.
+    city: Option<&'static eo_hills::planting::Planting>,
+    /// (`--no-city-lithology`, Docs/HILLS-PLAN.md H7) the city's bedrock map (eo-data
+    /// `lithology`), in surveyed plan metres.
+    bedrock: Option<eo_data::lithology::LithologyMap>,
     presidio: (f64, f64, f64, f64),
     /// The Presidio's mapped park polygon (game metres), if the greens were read.
     presidio_ring: Option<Vec<[f64; 2]>>,
@@ -295,7 +386,7 @@ pub struct VegGround {
 }
 
 impl VegGround {
-    pub fn new(grid: TerrainGrid, street: Arc<eo_street::StreetWorld>, land: Option<eo_data::LandCover>, water: Option<Arc<eo_water::WaterData>>, switches: Switches, repo_root: &std::path::Path) -> Self {
+    pub fn new(grid: TerrainGrid, street: Arc<eo_street::StreetWorld>, portal_ground: Option<Arc<eo_structures::StructureWorld>>, land: Option<eo_data::LandCover>, water: Option<Arc<eo_water::WaterData>>, switches: Switches, repo_root: &std::path::Path) -> Self {
         let tm = eo_street::STREET_TILE_M;
         let mut tiles = HashSet::new();
         for j in 0..grid.h {
@@ -329,7 +420,23 @@ impl VegGround {
         } else {
             None
         };
-        let g = VegGround { grid, street, land, water, switches, g3, naip, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
+        let city = city_planting();
+        let bedrock = if std::env::args().any(|a| a == CITY_LITHOLOGY_SWITCH) {
+            None
+        } else {
+            let t = std::time::Instant::now();
+            match eo_data::lithology::LithologyMap::load(&eo_data::DataPaths { repo_root: repo_root.to_path_buf() }) {
+                Ok(m) => {
+                    eprintln!("vegetation: the rock by the city's bedrock map ({}, USGS geologic maps; read in {:.0} ms)", m.version, t.elapsed().as_secs_f64() * 1e3);
+                    Some(m)
+                }
+                Err(e) => {
+                    eprintln!("vegetation: the city's bedrock map is not used ({e:#}); the rock by its boxes");
+                    None
+                }
+            }
+        };
+        let g = VegGround { grid, street, portal_ground, land, water, switches, g3, naip, city, bedrock, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
         g.probe_from_env();
         g
     }
@@ -381,9 +488,12 @@ impl VegGround {
     }
 
     /// The drawn ground's height at (x, z): the detail ground where one is
-    /// set (`eo_data::detail_ground`, none yet), else the terrain triangle.
+    /// set (`eo_data::detail_ground`, none yet), else the terrain triangle,
+    /// or the street ground's triangle where it is drawn over it (eo-street
+    /// `ground`, `--street-ground`: the terrain is lower and hidden there).
     pub fn ground_y(&self, x: f64, z: f64) -> Option<f64> {
-        eo_data::detail_ground::height(x, z).or_else(|| self.grid.height(x, z))
+        let y = eo_data::detail_ground::height(x, z).or_else(|| self.grid.height(x, z))?;
+        Some(self.street.overlay_height(x, z).map_or(y, |o| y.max(o)))
     }
 
     /// The cliff over a beach (`--no-cliff-rock-cover`: never): the ground the
@@ -409,14 +519,35 @@ impl VegGround {
     /// is centred on the pixel holding (x, z), at most 15 a side, with the two-pixel
     /// margin the classifier's 5 x 5 brightness reads.
     pub fn naip_at(&self, x: f64, z: f64, side: f64) -> Option<eo_landmarks::vegetation::Naip> {
-        let n = self.naip.as_ref()?;
-        naip_shares_at(n, x, z, side, self.site_slope_deg(x, z).unwrap_or(0.0))
+        if let Some(n) = self.naip.as_ref().filter(|_| self.in_survey(x, z)) {
+            return naip_shares_at(n, x, z, side, self.site_slope_deg(x, z).unwrap_or(0.0));
+        }
+        // (`--no-city-planting`) the city planting map, in surveyed plan metres
+        let gs = eo_data::groundscale::scale();
+        self.city?.shares(x / gs, z / gs, side / gs)
     }
 
-    /// Whether (x, z) is inside the NAIP image and the image is read (`--no-naip-planting`: never).
-    pub fn in_naip(&self, x: f64, z: f64) -> bool {
+    /// Whether (x, z) is inside the survey's NAIP image and the image is read.
+    fn in_survey(&self, x: f64, z: f64) -> bool {
         let (lon, lat) = lon_lat(x, z);
         self.naip.is_some() && naip_pixel(lon, lat).is_some()
+    }
+
+    /// Whether (x, z) is inside a NAIP image that is read (`--no-naip-planting`: never): the
+    /// survey's, or (`--no-city-planting`) the city planting map's.
+    pub fn in_naip(&self, x: f64, z: f64) -> bool {
+        self.in_survey(x, z) || self.city.is_some_and(|c| {
+            let gs = eo_data::groundscale::scale();
+            c.shares(x / gs, z / gs, 2.0).is_some()
+        })
+    }
+
+    /// (`--no-city-planting`) A mapped park's ground the image shows as cured or bare open
+    /// ground, not an irrigated lawn: in the summer image the annual grass has cured, so
+    /// a park lawn that is not green is unmown grassland (Bernal Heights, McLaren, the
+    /// hills' parks), which the parks' "grass" tone otherwise plants as a mown lawn.
+    fn wild_park(&self, x: f64, z: f64) -> bool {
+        self.city.is_some() && self.naip_at(x, z, eo_landmarks::vegetation::NAIP_TREE_BOX_M).is_some_and(|n| n.low + n.bare >= WILD_PARK_OPEN && n.lush < WILD_PARK_LUSH && n.green < WILD_PARK_LUSH)
     }
 
     /// The drawn ground's slope at (x, z) across one grid cell (degrees).
@@ -428,9 +559,28 @@ impl VegGround {
         Some((gx * gx + gz * gz).sqrt().atan().to_degrees())
     }
 
+    /// (`--no-city-grass`, Docs/HILLS-PLAN.md H6b) Whether (x, z) is the city's ground for
+    /// the annual grassland's canopy (`eo_landmarks::vegetation::MEADOW_ANNUAL`): the city
+    /// planting map is read (`--no-city-planting` off) and the point is outside the survey's
+    /// image box, whether or not the survey is read, so the Golden Gate keeps its own meadow.
+    fn city_grass_at(&self, x: f64, z: f64) -> bool {
+        if self.city.is_none() || !eo_landmarks::vegetation::city_grass() {
+            return false;
+        }
+        let (lon, lat) = lon_lat(x, z);
+        naip_pixel(lon, lat).is_none()
+    }
+
     /// The round-3 planting context for `plant_coarse_with` / `plant_fine_with`.
     pub fn extra(&self) -> eo_landmarks::vegetation::Extra<'_> {
-        eo_landmarks::vegetation::Extra { g3: self.g3, g2: eo_landmarks::vegetation::grass2(), g3x: eo_landmarks::vegetation::grass3(), fl: eo_landmarks::flora::flora(), naip: Box::new(move |x, z, side| self.naip_at(x, z, side)) }
+        eo_landmarks::vegetation::Extra {
+            g3: self.g3,
+            g2: eo_landmarks::vegetation::grass2(),
+            g3x: eo_landmarks::vegetation::grass3(),
+            fl: eo_landmarks::flora::flora(),
+            naip: Box::new(move |x, z, side| self.naip_at(x, z, side)),
+            annual: Box::new(move |x, z| self.city_grass_at(x, z)),
+        }
     }
 
     /// Whether a park tree may stand at (x, z) (round 3): on plantable ground
@@ -440,6 +590,39 @@ impl VegGround {
             return false;
         }
         eo_landmarks::vegetation::naip_tree_ok(&self.extra(), x, z)
+    }
+
+    /// The rock at (x, z) (`far`: the land north of the strait; `s` the signed shore
+    /// distance): (`--no-city-lithology`, Docs/HILLS-PLAN.md H7) the city's bedrock map
+    /// where it maps a bedrock unit (its chert, serpentinite and greenstone as they are,
+    /// its sandstone, melange and other bedrock as sandstone), else the boxes: chert
+    /// north of the strait, the Presidio's serpentinite bluff band, sandstone elsewhere
+    /// (on the map's Quaternary deposits, whose blocks are the rock under them, and off it).
+    pub fn lithology_at(&self, x: f64, z: f64, far: bool, s: f64) -> Lithology {
+        use eo_data::lithology::RockClass;
+        let gs = eo_data::groundscale::scale();
+        match self.bedrock.as_ref().and_then(|m| m.class_at(x / gs, z / gs)) {
+            Some(RockClass::Chert) => return Lithology::Chert,
+            Some(RockClass::Serpentinite) => return Lithology::Serpentinite,
+            Some(RockClass::Greenstone) => return Lithology::Greenstone,
+            Some(RockClass::Sandstone | RockClass::Other) => return Lithology::Sandstone,
+            Some(RockClass::Surficial | RockClass::Water) | None => {}
+        }
+        if far {
+            Lithology::Chert
+        } else if x < self.serpentine.0 && z < self.serpentine.1 && s.abs() < SERPENTINE_SHORE_M {
+            Lithology::Serpentinite
+        } else {
+            Lithology::Sandstone
+        }
+    }
+
+    /// The road and portal structure replace the soil in an excavation.
+    /// The land over the enclosed bore remains available for planting.
+    pub fn fine_root_clearance(&self, plants: &mut Vec<Plant>) {
+        if let Some(roads) = &self.portal_ground {
+            retain_rooted(roads, plants);
+        }
     }
 
     /// The drawn ground at (x, z) and what grows there (None: nothing can).
@@ -505,6 +688,7 @@ impl VegGround {
                     "grass" if self.in_presidio(x, z) && class == 10 => Some(Cover::Wood),
                     "grass" if self.in_presidio(x, z) && (class == 20 || class == 90) => Some(Cover::Scrub),
                     "grass" if slope > 18.0 || (self.in_presidio(x, z) && class == 60) => Some(Cover::WildGrass),
+                    "grass" if self.wild_park(x, z) => Some(Cover::WildGrass),
                     "grass" => Some(Cover::Lawn),
                     "understory" if tc == 1 => Some(Cover::WoodGreen),
                     "understory" => Some(Cover::Scrub),
@@ -530,13 +714,7 @@ impl VegGround {
         let normal = [-gx / l, 1.0 / l, -gz / l];
         let r = 12.0;
         let ring: f64 = (0..8).map(|k| (k as f64 * std::f64::consts::FRAC_PI_4).sin_cos()).map(|(sn, cs)| h(cs * r, sn * r)).sum::<f64>() / 8.0;
-        let lithology = if far {
-            Lithology::Chert
-        } else if x < self.serpentine.0 && z < self.serpentine.1 && s.abs() < SERPENTINE_SHORE_M {
-            Lithology::Serpentinite
-        } else {
-            Lithology::Sandstone
-        };
+        let lithology = self.lithology_at(x, z, far, s);
         // round 3 (`--no-naip-planting`): on the open ground the NAIP image plants, the blades
         // take the season's grass (eo_look::season on the day, the far layer's green and
         // cured-grass albedos, which the terrain's far land uses too), not the drawn
@@ -589,7 +767,7 @@ pub fn instances(plants: &[Plant], out: &mut Vec<GpuPropInstance>, counts: &mut 
             Kind::Tuft => "grass tuft",
             Kind::Flower(_) => "wildflowers",
             Kind::Rock(_) => "hill rock",
-            Kind::Meadow(i) => ["meadow sward", "meadow wild oats", "meadow fescue", "meadow clover and forbs", "meadow ice plant", "meadow thatch", "scrub coyote brush", "scrub sagebrush", "scrub bush lupine", "bare soil", "scrub poison oak", "scrub monkeyflower", "scrub coffeeberry", "scrub toyon", "seed stalks", "bluff buckwheat", "bluff herbs", "mustard", "bloom"][(i as usize).min(18)],
+            Kind::Meadow(i) => ["meadow sward", "meadow wild oats", "meadow fescue", "meadow clover and forbs", "meadow ice plant", "meadow thatch", "scrub coyote brush", "scrub sagebrush", "scrub bush lupine", "bare soil", "scrub poison oak", "scrub monkeyflower", "scrub coffeeberry", "scrub toyon", "seed stalks", "bluff buckwheat", "bluff herbs", "mustard", "bloom", "annual grassland"][(i as usize).min(19)],
         };
         *counts.entry(name).or_insert(0) += 1;
         out.push(GpuPropInstance {
@@ -609,6 +787,21 @@ pub fn instances(plants: &[Plant], out: &mut Vec<GpuPropInstance>, counts: &mut 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fine_patch_heights_stay_inside_the_patch_footprint() {
+        let mut ground = TerrainGrid { ox: 0., oz: 0., cell: 8., w: 40, h: 40,
+            y: vec![f32::NAN; 1600], rgba: vec![0; 1600] };
+        let side = eo_render::scene::TILE_CELLS + 1;
+        let tile: Vec<_> = (0..side*side).map(|i| {
+            let (x,z) = (4.+2.*(i%side) as f32, 4.+2.*(i/side) as f32);
+            eo_render::scene::Vertex { pos: [x, x+z, z], normal: 0, color: 0xffffffff }
+        }).collect();
+        ground.copy_lattice_vertices(&tile, side);
+        assert_eq!(ground.y[8*40+8], 136.);
+        assert!(ground.y[8*40+9].is_nan());
+        assert_eq!(ground.height(32., 32.), Some(64.));
+    }
 
     #[test]
     fn tint_packs_as_the_shader_unpacks() {

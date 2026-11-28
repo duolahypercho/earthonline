@@ -1,0 +1,7 @@
+{
+  "width": 2048,
+  "bands": [
+    {"west": -7648, "north": -6240, "metresPerTexel": 1.5},
+    {"west": -6080, "north": -6224, "metresPerTexel": 0.6}
+  ]
+}

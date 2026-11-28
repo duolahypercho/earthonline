@@ -18,6 +18,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 static PLAY_STREET_DEFAULTS: AtomicBool = AtomicBool::new(false);
+static PLAY_ROAD_WEAR: AtomicBool = AtomicBool::new(false);
+static PLAY_PAVEMENT_AGE: AtomicBool = AtomicBool::new(false);
 
 /// Enable the street PBR & round-2 street detail passes by default in interactive
 /// play (`--play`), while still letting every `--no-<feature>` switch turn any off.
@@ -25,13 +27,27 @@ pub fn set_play_street_defaults(on: bool) {
     PLAY_STREET_DEFAULTS.store(on, Ordering::Relaxed);
 }
 
-fn street_switch(name: &str, explicit: bool) -> bool {
+/// Set interactive `--play` default for `--road-wear` (`--no-road-wear` overrides).
+pub fn set_play_road_wear(on: bool) {
+    PLAY_ROAD_WEAR.store(on, Ordering::Relaxed);
+}
+
+/// Set interactive `--play` default for `--pavement-age` (`--no-pavement-age` overrides).
+pub fn set_play_pavement_age(on: bool) {
+    PLAY_PAVEMENT_AGE.store(on, Ordering::Relaxed);
+}
+
+fn opt_street_switch(name: &str, default: bool) -> bool {
     let (on, off) = (format!("--{name}"), format!("--no-{name}"));
     let last = std::env::args().rev().find(|a| *a == on || *a == off);
     match last.as_deref() {
         Some(s) => s == on,
-        None => explicit || PLAY_STREET_DEFAULTS.load(Ordering::Relaxed),
+        None => default,
     }
+}
+
+fn street_switch(name: &str, explicit: bool) -> bool {
+    opt_street_switch(name, explicit || PLAY_STREET_DEFAULTS.load(Ordering::Relaxed))
 }
 
 pub struct Bases {
@@ -55,7 +71,9 @@ pub struct Bases {
 }
 
 /// Slice 4 street arena (near packs): vertices, indices, objects.
-pub const STREET_ARENA: (u32, u32, u32) = (1_500_000, 2_250_000, 1024);
+/// (the street ground, eo-street `ground`, adds up to 4,225 vertices, 24,576
+/// indices and an object a tile: the sizes below make room for it.)
+pub const STREET_ARENA: (u32, u32, u32) = (2_200_000, 5_000_000, 1536);
 
 /// The kit arena's sizes without `--kit-arena-*` (main.rs defaults).
 const KIT_ARENA_DEFAULT: (u32, u32, u32) = (16_000_000, 26_000_000, 32_768);
@@ -74,7 +92,7 @@ const KIT_ARENA_DEFAULT: (u32, u32, u32) = (16_000_000, 26_000_000, 32_768);
 /// Sized at about 1.33x (mid), 1.4x (near) and 2.5x (street).
 pub const VD_KIT_MID: (u32, u32, u32) = (11_000_000, 17_000_000, 4_608);
 pub const VD_KIT_NEAR: (u32, u32, u32) = (3_500_000, 5_400_000, 640);
-pub const VD_STREET_ARENA: (u32, u32, u32) = (400_000, 600_000, 256);
+pub const VD_STREET_ARENA: (u32, u32, u32) = (640_000, 1_400_000, 384); // with the street ground (eo-street `ground`): up to 4,225 vertices, 24,576 indices and one more object a tile
 
 /// the most model vertices and indices that can stand within
 /// MODEL_DROP_M of any point (a 40 m grid over the models, each counted
@@ -273,6 +291,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "probe_sky" => features.probe_sky = true, // (`--probe-sky`)
             "wet_relief" => features.wet_relief = true, // (`--wet-relief`)
             "lamp_streaks" => features.lamp_streaks = true, // (`--lamp-streaks`)
+            "aaa_buildings" => features.aaa_buildings = eo_render::look::AAA_ALL, // (`--aaa-buildings`)
             _ => {}
         }
     }
@@ -298,6 +317,21 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     }
     if street_switch("walk-relief", crate::walk_relief()) {
         features.street |= eo_render::look::WALK_RELIEF; // (`--walk-relief`)
+    }
+    if street_switch("matte-wheel-paths", crate::matte_wheel_paths()) {
+        features.street |= eo_render::look::MATTE_WHEEL_PATHS; // (`--matte-wheel-paths`)
+    }
+    if street_switch("aged-aggregate", crate::aged_aggregate()) {
+        features.street |= eo_render::look::AGED_AGGREGATE; // (`--aged-aggregate`)
+    }
+    // (`--road-wear`, `--pavement-age`) opt-in in bench/fly-through/online, on by default in interactive `--play` (`--no-*` overrides)
+    let road_wear = opt_street_switch("road-wear", PLAY_ROAD_WEAR.load(Ordering::Relaxed));
+    let pavement_age = opt_street_switch("pavement-age", PLAY_PAVEMENT_AGE.load(Ordering::Relaxed));
+    if road_wear {
+        features.street |= eo_render::look::ROAD_WEAR;
+    }
+    if pavement_age {
+        features.street |= eo_render::look::PAVEMENT_AGE;
     }
     eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(
@@ -383,6 +417,9 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     r.look.set_options(&ctx.device, args.look);
     // surface weathering (`--grime`): its street decals (kerb paint, building-line dirt) placed from the first tile on.
     eo_render::cc0_decals::set_weathering(args.look.grime > 0);
+    // (`--road-wear`, `--pavement-age`) the lanes' wear and the pavement's age, placed from the first tile on.
+    eo_render::cc0_decals::set_road_wear(road_wear);
+    eo_render::cc0_decals::set_pavement_age(pavement_age);
     // street life (`--street-life`): its level, and the land-use survey its decals place by (read beside the load).
     crate::street_life::start(args.look.street_life, world.city.clone(), world.paths.repo_root.clone(), world.structures.clone());
     // the street's scanned sets (written once, before the first frame).
@@ -458,6 +495,21 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
         let inputs = eo_render::ambient::AmbientInputs::city(world.city.clone(), lift, std::sync::Arc::new(world.elevation.clone()), world.structures.clone(), cache_dir(args), AMBIENT_THREADS);
         r.bytes.textures += r.ambient.attach(ctx, &r.look, inputs, [0.0, 0.0]);
+    }
+    // citywide 2.5D skyline heightfield + horizon sky-vis / bent normal (`--skyline-field`, group 1 binding 24).
+    if (args.look.aaa_buildings & eo_render::look::AAA_SKYLINE_FIELD) != 0 {
+        let t_sf = std::time::Instant::now();
+        let baked = eo_render::skyline_field::load_or_bake(&world.city, &world.elevation, &[], cache_dir(args).as_deref(), AMBIENT_THREADS);
+        let b = r.attach_skyline_field(ctx, &baked);
+        r.bytes.textures += b;
+        eprintln!(
+            "skyline field: {}x{} ({} mips, {:.1} MB, {:.0} ms)",
+            baked.bounds.size,
+            baked.bounds.size,
+            baked.mips.len(),
+            b as f64 / 1e6,
+            t_sf.elapsed().as_secs_f64() * 1e3
+        );
     }
     // the far sun shadow maps (`--far-shadows`): a ring (two at level 2) past the cascades (lighting).
     if args.look.lighting.far_shadows > 0 {
@@ -1067,7 +1119,11 @@ impl ModelRuntime {
                         }
                     }
                     if self.hlod_trees == 2 {
-                        renderer.note_streamed(t.pump(&ctx.queue));
+                        let before = t.block_count();
+                        renderer.note_streamed_bytes(t.pump(&ctx.queue));
+                        if t.block_count() != before {
+                            renderer.note_vis_write();
+                        }
                         if t.idle() {
                             self.hlod_trees = 0;
                         }
@@ -1275,7 +1331,7 @@ impl ModelRuntime {
     /// which part of `settled` is not true (for a settle that timed out).
     pub fn unsettled(&self) -> String {
         format!(
-            "kit maps ready {}, models done {}, uploads pending {}, kit settled {}, street settled {}, structures settled {}, far settled {}, far trees state {} (0 done), cc0 settled {}, {}",
+            "kit maps ready {}, models done {}, uploads pending {}, kit settled {}, street settled {}, structures settled {}, far settled {}, far trees state {} (0 done), cc0 settled {}, shop lights pending {}, {}",
             self.kit_ready,
             self.done(),
             self.uploads.pending(),
@@ -1285,6 +1341,7 @@ impl ModelRuntime {
             !self.hlod_drawn || self.hlod.as_ref().is_none_or(|h| h.settled()),
             self.hlod_trees,
             self.cc0.as_ref().map(|c| c.settled()).unwrap_or(true),
+            self.shop_rx.is_some(),
             self.hlod.as_ref().filter(|_| self.hlod_drawn).map(|h| h.unsettled()).unwrap_or_default() // hlod
         )
     }

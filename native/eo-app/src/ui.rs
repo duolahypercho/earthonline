@@ -190,7 +190,7 @@ impl Flags {
                 }
                 "--low-camera" | "--default-camera" => {}
                 "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
-                "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
+                "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--yard-lidar-trees" | "--no-yard-lidar-trees" | "--yard-detail" | "--no-yard-detail" | "--no-yard-plants" | "--no-yard-objects" | "--no-yard-stairs" | "--no-yard-wood" | "--tree-crowns" | "--no-tree-crowns" => {} // main's `roofs_flags`
                 s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
                 "--no-external" => {} // main's `external_flag`
                 other => anyhow::bail!("unknown argument {other} with --ui (see native/eo-app/src/ui.rs)"),
@@ -231,7 +231,14 @@ pub(crate) fn live_look(start: &eo_render::look::LookOptions, wanted: &eo_render
     l.lighting.probe_grid = attached(start.lighting.probe_grid, wanted.lighting.probe_grid);
     l.lighting.ground_bounce = start.lighting.ground_bounce && l.lighting.ambient_volume > 0;
     // (stage P1) a feature off at start has its shader code compiled out: it comes on after a restart.
-    eo_render::look::shader_features().limit(&l)
+    let aaa_buildings = start.aaa_buildings & wanted.aaa_buildings;
+    let aaa_aerial = start.sky.aaa_aerial && wanted.sky.aaa_aerial;
+    let mut out = eo_render::look::shader_features().limit(&l);
+    // `aaa_buildings` is compile-time gated (omitted from `ShaderFeatures::ALL` like `street_pbr`/`nature`),
+    // so gate it directly against `start` (what the process compiled in at startup).
+    out.aaa_buildings = aaa_buildings;
+    out.sky.aaa_aerial = aaa_aerial;
+    out
 }
 
 /// The app's defaults (`parse_args` in main.rs with no flags).
@@ -325,6 +332,7 @@ fn default_args() -> Args {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        kit_detail: false, // `--kit-detail` (quality::Switches)
         player_contact: false, // set by net.rs (`--connect`)
         landmark_access: true,
         car_detail: 0, // `--car-detail` (quality::Switches)
@@ -525,9 +533,9 @@ fn gpu() -> Result<GpuContext> {
     GpuContext::new(GpuContext::create_instance(&opts), None, opts)
 }
 
-fn make_ui(ctx: &GpuContext, city: &eo_data::City, land: Option<&eo_data::LandCover>, repo_root: &std::path::Path, settings: Option<PathBuf>) -> Ui {
+fn make_ui(ctx: &GpuContext, city: &eo_data::City, land: Option<&eo_data::LandCover>, repo_root: &std::path::Path, settings: Option<PathBuf>, tunnels: bool) -> Ui {
     let t = Instant::now();
-    let ui = Ui::new(&ctx.device, &ctx.queue, Some(repo_root), settings, Some(eo_ui::MapInputs { city, land, backdrop_centre: crate::bench::spawn() }));
+    let ui = Ui::new(&ctx.device, &ctx.queue, Some(repo_root), settings, Some(eo_ui::MapInputs { city, land, tunnels, backdrop_centre: crate::bench::spawn() }));
     eprintln!("ui: ready in {:.0} ms (map mesh {:.0} ms)", t.elapsed().as_secs_f64() * 1e3, ui.map_mesh_ms().unwrap_or(0.0));
     ui
 }
@@ -562,7 +570,7 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
     };
     let land = eo_data::LandCover::load(&paths).ok();
     // Captures never touch the player's settings file.
-    let mut ui = make_ui(&ctx, city, land.as_ref(), &paths.repo_root, None);
+    let mut ui = make_ui(&ctx, city, land.as_ref(), &paths.repo_root, None, args.structures.is_some_and(|o| o.tunnels));
     let heading = street.as_ref().map(|s| yaw_of(s.heading)).unwrap_or(1.2);
     ui.hud = demo_hud(crate::bench::spawn(), heading);
     let format = wgpu::TextureFormat::Rgba8Unorm;
@@ -842,7 +850,7 @@ fn bench(args: &Args, process_start: Instant) -> Result<()> {
     let mut street = Street::new(&ctx, args, process_start)?;
     let paths = eo_data::DataPaths::discover()?;
     let land = eo_data::LandCover::load(&paths).ok();
-    let mut ui = make_ui(&ctx, &street.world.city, land.as_ref(), &paths.repo_root, None);
+    let mut ui = make_ui(&ctx, &street.world.city, land.as_ref(), &paths.repo_root, None, args.structures.is_some_and(|o| o.tunnels));
     let heading = yaw_of(street.heading);
     ui.hud = demo_hud(crate::bench::spawn(), heading);
     ui.warm(&ctx.device, wgpu::TextureFormat::Rgba8Unorm);
@@ -1070,7 +1078,7 @@ mod window {
                 &ctx.queue,
                 Some(&self.world.paths.repo_root),
                 eo_ui::settings::default_path(),
-                Some(eo_ui::MapInputs { city: &self.world.city, land: land.as_ref(), backdrop_centre: crate::bench::spawn() }),
+                Some(eo_ui::MapInputs { city: &self.world.city, tunnels: self.args.structures.is_some_and(|o| o.tunnels), land: land.as_ref(), backdrop_centre: crate::bench::spawn() }),
             );
             let props = crate::props::PropsRuntime::start(&self.world, &self.args);
             let mut audio = crate::audio::AudioRuntime::start(&self.world, eo_audio::Output::Device); // audio

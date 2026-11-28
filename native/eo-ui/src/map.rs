@@ -11,7 +11,8 @@ use eo_data::{City, LandCover};
 /// Mesh layers, in draw order: footprints, then road classes (path, alley,
 /// residential, collector, arterial, freeway).
 pub const LAYER_BUILDINGS: usize = 0;
-pub const LAYERS: usize = 7;
+const TUNNELS: usize = 7;
+pub const LAYERS: usize = TUNNELS + 1;
 const CHUNK_M: f32 = 1000.0;
 
 #[repr(C)]
@@ -54,6 +55,10 @@ pub struct MapMesh {
 
 impl MapMesh {
     pub fn build(city: &City) -> MapMesh {
+        Self::build_with_tunnels(city, false)
+    }
+
+    pub fn build_with_tunnels(city: &City, tunnels: bool) -> MapMesh {
         let t = std::time::Instant::now();
         // Bucket every primitive by (layer, chunk) first.
         let chunk_of = |x: f32, z: f32| ((x / CHUNK_M).floor() as i32, (z / CHUNK_M).floor() as i32);
@@ -87,7 +92,7 @@ impl MapMesh {
             e.1.extend(tri.iter().map(|i| base + i));
         }
         for r in &city.roads {
-            if r.tunnel {
+            if r.tunnel && !(tunnels && eo_data::standards::is_vehicle_way(&r.highway)) {
                 continue;
             }
             let cls = road_class(&r.highway);
@@ -102,9 +107,10 @@ impl MapMesh {
                 grow(a[0], a[1]);
                 grow(b[0], b[1]);
                 let key = chunk_of((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5);
-                let e = buckets.entry((1 + cls, key.0, key.1)).or_default();
+                let layer = if r.tunnel { TUNNELS } else { 1 + cls };
+                let e = buckets.entry((layer, key.0, key.1)).or_default();
                 let base = e.0.len() as u32;
-                let c = (1 + cls) as u32;
+                let c = (1 + cls) as u32 | if r.tunnel { 8 } else { 0 };
                 // Square caps: the quad runs half a width past each end, so
                 // consecutive segments overlap at their joints.
                 e.0.push(MapVertex { pos: a, dir, ext: [-1.0, -1.0], class: c });
@@ -533,19 +539,46 @@ impl MapGpu {
             }
         };
         draw_layer(&mut pass, LAYER_BUILDINGS);
+        draw_layer(&mut pass, TUNNELS);
         pass.set_bind_group(1, &t.bind_pal[1], &[]);
         match t.style {
             Style::Hud => {
-                for layer in 1..LAYERS {
+                for layer in 1..TUNNELS {
                     draw_layer(&mut pass, layer);
                 }
             }
             Style::Pause => draw_layer(&mut pass, 6),
         }
         pass.set_bind_group(1, &t.bind_pal[0], &[]);
-        for layer in 1..LAYERS {
+        for layer in 1..TUNNELS {
             draw_layer(&mut pass, layer);
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_underground_map_layer_contains_every_vehicle_tunnel_span() {
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let city = City::load(&paths).unwrap();
+        let spans = city.roads.iter()
+            .filter(|r| r.tunnel && eo_data::standards::is_vehicle_way(&r.highway))
+            .flat_map(|r| r.points.windows(2))
+            .filter(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]) >= 1e-3)
+            .count();
+        assert!(spans > 0);
+        assert!(MapMesh::build(&city).ranges[TUNNELS].is_empty());
+        let mesh = MapMesh::build_with_tunnels(&city, true);
+        let indices: usize = mesh.ranges[TUNNELS].iter().map(|r| r.2 as usize).sum();
+        assert_eq!(indices, 6 * spans);
+        for &(_, first, len) in &mesh.ranges[TUNNELS] {
+            for &i in &mesh.idx[first as usize..(first + len) as usize] {
+                assert_ne!(mesh.verts[i as usize].class & 8, 0);
+            }
+        }
     }
 }

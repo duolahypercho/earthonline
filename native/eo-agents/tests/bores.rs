@@ -20,9 +20,12 @@ fn library() -> Arc<Library> {
     let mut m = GpuModel::default();
     m.wheel = [[0.8, 0.33, 1.4, 0.0], [-0.8, 0.33, 1.4, 0.0], [0.8, 0.33, -1.4, 0.0], [-0.8, 0.33, -1.4, 0.0]];
     m.wheel_radius = 0.33;
+    m.center[1] = 0.75;
     lib.models.push(m);
     lib.meta.model_names.push("sedan".into());
     lib.meta.vehicle_models.insert("sedan".into(), 0);
+    lib.models.push(GpuModel { class: eo_agents::CLASS_PERSON, ..Default::default() });
+    lib.meta.people_models.push(1);
     Arc::new(lib)
 }
 
@@ -68,7 +71,10 @@ fn a_car_in_a_bore_is_marked_with_its_depth_and_nothing_else_is() {
         let lerp = |a: f64, b: f64| a + (b - a) * t;
         ([lerp(w[0].x, w[1].x), lerp(w[0].z, w[1].z)], lerp(w[0].y, w[1].y), [w[1].x - w[0].x, w[1].z - w[0].z])
     };
-    let (p, y, dir) = at(bore.s0 + 40.0);
+    let station = bore.s0 + 40.0;
+    let (p, y, dir) = at(station);
+    let piece = tunnels.chain(bore.chain).unwrap().pieces.iter().find(|s| s.s0 <= station && station <= s.s1).unwrap();
+    println!("traffic contact site: {}, way {}, station {:.1} m", piece.name, piece.way, station);
     let hit = tunnels.bore_at(p[0], y + 1.0, p[1]).expect("the station is inside the bore");
     println!("bore of chain {} ({:.0}-{:.0} m, portals {:?}); car 40 m in at ({:.1}, {:.1}, {:.1}): depth {:.2} m", bore.chain, bore.s0, bore.s1, bore.portal, p[0], y, p[1], hit.depth);
     assert!((hit.depth - 40.0).abs() < 1.0, "depth {}", hit.depth);
@@ -100,6 +106,28 @@ fn a_car_in_a_bore_is_marked_with_its_depth_and_nothing_else_is() {
     assert!((d - hit.depth).abs() <= 1.0, "fed depth {d} vs {}", hit.depth);
     assert_eq!(fed[0].flags & 0xffff, 1, "the simulation's flags kept (braking), the level taken off");
     assert_eq!(fed[1].flags & AGENT_IN_BORE, 0, "a car at grade over the bore is not in it");
+    // The same map position has a real surface route above the traffic lane.
+    // Ground the pedestrian independently before enabling the crowd solver.
+    let mut crossing = frame.clone();
+    crossing.regions[0].vehicles.truncate(1);
+    crossing.regions[0].walkers.push(AgentInstance {
+        kind: eo_sim::output::KIND_WALKER_BASE, flags: eo_sim::output::FLAG_CROSSING,
+        id: 3, pos: car(1, level, 0).pos, ..Default::default()
+    });
+    fed.clear();
+    feeder.build(&crossing, &mut fed);
+    let street = fed[1].pos;
+    assert!(street[1] - fed[0].pos[1] > 3.0, "walker {street:?} above car {:?}", fed[0].pos);
+    feeder.separate = true;
+    fed.clear();
+    feeder.build(&crossing, &mut fed);
+    println!("street walker {street:?}, crowd position {:?}, tunnel car {:?}", fed[1].pos, fed[0].pos);
+    assert_eq!(fed[1].pos, street, "traffic inside a tunnel moved a walker on the surface");
+    crossing.regions[0].vehicles[0] = car(1, 0, 0);
+    fed.clear();
+    feeder.build(&crossing, &mut fed);
+    assert!((fed[1].pos[0] - street[0]).hypot(fed[1].pos[2] - street[2]) > 0.5,
+        "a vehicle on the surface must still occupy the walker's position");
     // without the tunnels, the same frame: nothing is marked and the flags are as before.
     let mut feeder = Feeder::new(library(), ground, Some(plain), 7).unwrap();
     let mut before = vec![];

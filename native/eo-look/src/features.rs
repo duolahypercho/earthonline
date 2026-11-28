@@ -17,11 +17,25 @@ pub struct DaylightFeatures {
     pub clear_sky_state: bool,
     /// A cirrus day's high deck is fibrous ice cloud at cirrus height. `--no-cirrus`.
     pub cirrus: bool,
+    /// The volumetric cloudscape's cumulus cover takes the day's sky state as the
+    /// low deck does (eo-sky `clouds::volumetric_decks`): a cloudless or cirrus
+    /// day leaves it as little cumulus as it leaves the low deck.
+    /// `--no-vol-sky-state` (the weather's cover whatever the day's sky).
+    pub vol_sky_state: bool,
+    /// The clear day's aerosol is San Francisco's measured column (eo-sky
+    /// `frame::CLEAR_DAY_AOD_550`, 0.087 at 550 nm) instead of the clean
+    /// coastal medium's 0.048. `--no-measured-aerosol`.
+    pub measured_aerosol: bool,
+    /// The camera's white balance (`--white-balance`) takes a high sun's warmth
+    /// out as a camera's daylight balance does (eo-render `cine_post::wb_warm_degree`):
+    /// sunlit grey reads neutral at noon, a golden hour keeps its warmth.
+    /// `--no-wb-high-sun`.
+    pub wb_high_sun: bool,
 }
 
 impl DaylightFeatures {
-    pub const ALL: Self = Self { ground_albedo: true, photo_date: true, clear_sky_state: true, cirrus: true };
-    pub const NONE: Self = Self { ground_albedo: false, photo_date: false, clear_sky_state: false, cirrus: false };
+    pub const ALL: Self = Self { ground_albedo: true, photo_date: true, clear_sky_state: true, cirrus: true, vol_sky_state: true, measured_aerosol: true, wb_high_sun: true };
+    pub const NONE: Self = Self { ground_albedo: false, photo_date: false, clear_sky_state: false, cirrus: false, vol_sky_state: false, measured_aerosol: false, wb_high_sun: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
@@ -33,6 +47,9 @@ impl DaylightFeatures {
             photo_date: !has("--no-photo-date"),
             clear_sky_state: !has("--no-clear-sky-state"),
             cirrus: !has("--no-cirrus"),
+            vol_sky_state: !has("--no-vol-sky-state"),
+            measured_aerosol: !has("--no-measured-aerosol"),
+            wb_high_sun: !has("--no-wb-high-sun"),
         }
     }
 }
@@ -51,7 +68,7 @@ pub fn pin_daylight(f: DaylightFeatures) -> bool {
 }
 
 /// The switches `daylight` reads (eo-app accepts them).
-pub const SWITCHES: &[&str] = &["--no-gg2-daylight", "--no-ground-albedo", "--no-photo-date", "--no-clear-sky-state", "--no-cirrus"];
+pub const SWITCHES: &[&str] = &["--no-gg2-daylight", "--no-ground-albedo", "--no-photo-date", "--no-clear-sky-state", "--no-cirrus", "--no-vol-sky-state", "--no-measured-aerosol", "--no-wb-high-sun"];
 
 /// The colour and camera track's switch names (the roll-up first, then the
 /// kill switches); eo-app accepts them. `--no-gg3` (every round-3 track's

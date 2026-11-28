@@ -1,43 +1,29 @@
-//! The player's car: Rapier's raycast vehicle, built as
-//! `createCatalogueVehicleController` builds the occupied car
-//! (src/simulation/physics/cars/catalogue-vehicle-controller.js with
-//! `createFourWheelRaycastCar` / `updateFourWheelCar` in vehicle-mechanics.js),
-//! for the catalogue `sedan` (src/vehicles/vehicle-catalogue.js) on the
-//! player's `arcade` handling profile (src/simulation/physics/cars/arcade-handling.js,
-//! `PLAYER_HANDLING_PROFILE` in traffic-vehicle-physics.js):
-//!
-//! * chassis: a box from the sill to the roof, 1600 kg, the class centre of mass
-//!   and principal inertia (`vehicleDrivingDynamics`);
-//! * wheels: four rays at the catalogue track and axles, mounted at the design
-//!   gap with the free length carrying the static deflection (`2.18 / k`),
-//!   arcade spring 22, damping 1.4 / 2.3, tyre friction 1.3, travel 0.3 m;
-//! * longitudinal: the catalogue tractive envelope (plateau, then power over
-//!   speed) with the arcade 2x scale faded out toward top speed, rolling, aero
-//!   and engine-brake resistance as a per-wheel retarding impulse, the service
-//!   brake (x1.6 arcade), the rear-axle handbrake, and the JS netting of drive
-//!   against brake on the driven (rear) wheels; a sleeping, undemanded chassis
-//!   is not solved (the JS `preStep` rule);
-//! * steering: the drive-feel shaper (src/player/drive-feel.js): the digital
-//!   ramp (rise 0.16 s, release 0.125 s at the sedan's wheelbase), the speed-
-//!   sensitive authority curve, analog pass-through, the pedal / reverse logic.
-//!
-//! Not ported: the tyre-grip lateral pass and its solver hand-off, the arcade
-//! yaw assist, slide regulator, anti-roll, air control and drift handbrake
-//! retention, the automatic gearbox, ABS/TC, damage, counter-steer assist,
-//! steering feel and Ackermann per-wheel angles (both front wheels take the
-//! rack angle). Rapier's own side friction carries the lateral axis here.
+//! Four-wheel rigid-body vehicles on the fixed simulation clock.
+//! Fleet vehicles use axle-specific suspension, Ackermann steering, geared
+//! engine torque and load-limited tire impulses. The catalogue sedan retains
+//! its original drive envelope, rack steering and Rapier side friction.
 
-use glam::{DQuat, DVec3};
+mod fleet;
+mod tires;
+mod water;
+mod peer;
+pub use peer::resolve_peer_contact;
+pub(crate) use peer::approaching_traffic;
+pub use fleet::{Transmission, VehicleConfig, VehicleModel};
+
+use glam::{DMat3, DQuat, DVec3};
 use rapier3d::control::{DynamicRayCastVehicleController, WheelTuning};
 use rapier3d::prelude::*;
 
 use crate::tuning;
 use crate::world::{CollisionWorld, layer};
 
-/// The sedan as the JS resolves it for the player (values checked against
-/// node in tests/js_oracle.rs).
+/// Dimensions, loaded mass properties and mechanical settings for one chassis.
 #[derive(Clone, Copy, Debug)]
 pub struct VehicleSpec {
+    pub config: VehicleConfig,
+    powertrain: Option<&'static fleet::Powertrain>,
+    pub com_offset_z: f64,
     pub length: f64,
     pub width: f64,
     pub height: f64,
@@ -49,6 +35,9 @@ pub struct VehicleSpec {
     pub rear_axle_z: f64,
     pub sill_y: f64,
     pub mass_kg: f64,
+    pub curb_mass_kg: f64,
+    pub(crate) curb_front_share: f64,
+    pub(crate) front_torque_share: f64,
     pub com_offset_y: f64,
     pub yaw_inertia: f64,
     pub pitch_inertia: f64,
@@ -90,6 +79,7 @@ impl VehicleSpec {
         let peak = (base_peak * tractive_scale).min(mass * accel_ceiling * tractive_scale);
         let power = base_power * tractive_scale;
         Self {
+            config: VehicleConfig::default(), powertrain: None, com_offset_z: 0.0,
             length: 4.85,
             width: 1.84,
             height: 1.45,
@@ -101,6 +91,9 @@ impl VehicleSpec {
             rear_axle_z: -1.355,
             sill_y: 0.205,
             mass_kg: mass,
+            curb_mass_kg: mass,
+            curb_front_share: 0.5,
+            front_torque_share: 0.0,
             com_offset_y: -0.1885,
             yaw_inertia: 2798.4424,
             pitch_inertia: 2733.333333333333,
@@ -141,8 +134,30 @@ impl VehicleSpec {
         self.wheel_radius + self.design_gap() - self.height / 2.0
     }
 
+    /// Chassis pose with the wheel datum at the requested point and the nose
+    /// facing the requested map heading. Used for both spawn and fast travel.
+    pub fn ground_pose(&self, world: &CollisionWorld, datum: DVec3, yaw: f64) -> (DVec3, DQuat) {
+        // Starting horizontal on a grade buries one axle and leaves the
+        // other beyond suspension travel. Probe only at the chosen level.
+        let level = DQuat::from_rotation_y(yaw);
+        let reach = tuning::kerb::GROUND_CONTACT_TOLERANCE_M;
+        let hit = world.raycast(datum + DVec3::Y * reach, DVec3::NEG_Y, 2.0 * reach, layer::WORLD | layer::STREET, None);
+        let rot = match hit {
+            Some(hit) if hit.normal.y >= tuning::capsule::MAX_SLOPE_DEGREES.to_radians().cos() => {
+                let up = hit.normal.normalize();
+                let forward = ((level * DVec3::X).cross(up)).normalize();
+                DQuat::from_mat3(&DMat3::from_cols(up.cross(forward), up, forward))
+            }
+            _ => level,
+        };
+        (datum + rot * (DVec3::Y * (self.height / 2.0)), rot)
+    }
+
     /// `vehicleTractiveForceN` x the arcade power fade.
     pub fn tractive_force(&self, speed: f64, reverse: bool) -> f64 {
+        if let Some(engine) = self.powertrain {
+            return engine.wheel_force(speed, self.wheel_radius, reverse);
+        }
         let s = speed.abs();
         if reverse {
             return if s >= self.reverse_top_speed_mps { 0.0 } else { self.reverse_tractive_force_n };
@@ -180,7 +195,7 @@ pub mod feel {
     pub const STEER_RELEASE_SECONDS: f64 = 0.125;
     pub const STEER_RACK_REFERENCE_WHEELBASE_M: f64 = 2.82;
     pub const STEER_RACK_WHEELBASE_EXPONENT: f64 = 0.6;
-    pub const REVERSE_HANDOVER_SPEED_MPS: f64 = 0.25;
+    pub const MAX_RANGE_SHIFT_SPEED_MPS: f64 = 0.25;
     pub const MAX_DELTA_SECONDS: f64 = 0.1;
 }
 
@@ -246,31 +261,16 @@ impl DriveShaper {
         }
         self.steer_normalized = self.steer_normalized.clamp(-1.0, 1.0);
         let steer = (self.steer_normalized * self.authority_at(speed)).clamp(-1.0, 1.0);
-        let t = throttle_in.clamp(0.0, 1.0);
-        let b = brake_in.clamp(0.0, 1.0);
-        let (mut throttle, mut brake) = (0.0, 0.0);
-        let h = feel::REVERSE_HANDOVER_SPEED_MPS;
-        if t > 0.0 && b > 0.0 {
-            brake = t.max(b);
-        } else if t > 0.0 {
-            if speed < -h {
-                brake = t;
-            } else {
-                throttle = t;
-            }
-        } else if b > 0.0 {
-            if speed > h {
-                brake = b;
-            } else {
-                throttle = -b;
-            }
-        }
+        let brake = brake_in.clamp(0.0, 1.0);
+        let throttle = if brake > 0.0 { 0.0 } else { throttle_in.clamp(0.0, 1.0) };
         Controls { throttle, brake, steer, handbrake }
     }
 }
 
 /// One car in the world.
 pub struct Vehicle {
+    transmission: Transmission,
+    flood_ticks: u16,
     pub spec: VehicleSpec,
     pub body: RigidBodyHandle,
     pub collider: ColliderHandle,
@@ -286,25 +286,30 @@ impl Vehicle {
     /// Spawn with the road datum (bottom of the wheels) at `datum`, nose along `yaw`
     /// (forward = (sin yaw, 0, cos yaw)).
     pub fn spawn(world: &mut CollisionWorld, spec: VehicleSpec, datum: DVec3, yaw: f64) -> Self {
-        let rot = DQuat::from_rotation_y(yaw);
-        let center = datum + rot * DVec3::new(0.0, spec.height / 2.0, 0.0);
-        let clearance = spec.sill_y;
+        let pose = spec.ground_pose(world, datum, yaw);
+        let offset = DVec3::Y * (spec.sill_y / 2.0);
+        let half = DVec3::new(spec.width, spec.height - spec.sill_y, spec.length) / 2.0;
+        Self::spawn_chassis(world, spec, pose, offset, half)
+    }
+
+    pub(crate) fn spawn_chassis(world: &mut CollisionWorld, spec: VehicleSpec, pose: (DVec3, DQuat), offset: DVec3, half: DVec3) -> Self {
+        let (center, rot) = pose;
         let body = RigidBodyBuilder::dynamic()
-            .pose(Pose::from_parts(Vector::new(center.x as f32, center.y as f32, center.z as f32), Rotation::from_rotation_y(yaw as f32)))
+            .pose(Pose::from_parts(Vector::new(center.x as f32, center.y as f32, center.z as f32), Rotation::from_array(rot.as_quat().to_array())))
             .ccd_enabled(true)
             .additional_mass_properties(MassProperties::new(
-                Vector::new(0.0, spec.com_offset_y as f32, 0.0),
+                Vector::new(0.0, spec.com_offset_y as f32, spec.com_offset_z as f32),
                 spec.mass_kg as f32,
                 Vector::new(spec.pitch_inertia as f32, spec.yaw_inertia as f32, spec.roll_inertia as f32),
             ))
             .build();
         let body = world.physics.insert_body(body);
-        let collider = ColliderBuilder::cuboid((spec.width / 2.0) as f32, ((spec.height - clearance) / 2.0) as f32, (spec.length / 2.0) as f32)
-            .translation(Vector::new(0.0, (clearance / 2.0) as f32, 0.0))
+        let collider = ColliderBuilder::cuboid(half.x as f32, half.y as f32, half.z as f32)
+            .translation(Vector::from_array(offset.as_vec3().to_array()))
             .density(0.0)
             .friction(0.4)
             .restitution(0.05)
-            .collision_groups(InteractionGroups::new(layer::VEHICLE, layer::WORLD | layer::STREET | layer::VEHICLE | layer::CHARACTER, InteractionTestMode::And))
+            .collision_groups(InteractionGroups::new(layer::VEHICLE, layer::WORLD | layer::STREET | layer::VEHICLE | layer::CHARACTER | layer::BOAT | layer::PEDESTRIAN, InteractionTestMode::And))
             .build();
         let collider = world.physics.insert_collider(collider, Some(body));
         // Mass properties are otherwise only computed on the next world step,
@@ -330,9 +335,23 @@ impl Vehicle {
             (spec.track_rear / 2.0, spec.rear_axle_z),
             (-spec.track_rear / 2.0, spec.rear_axle_z),
         ] {
-            controller.add_wheel(Vector::new(x as f32, y, z as f32), Vector::new(0.0, -1.0, 0.0), Vector::new(-1.0, 0.0, 0.0), spec.suspension_free_length() as f32, spec.wheel_radius as f32, &tuning);
+            // Rapier expresses stiffness relative to chassis mass. A payload
+            // must compress the same spring, not make it stiffer.
+            let mut axle_tuning = tuning;
+            let mut rest = spec.suspension_free_length();
+            if spec.powertrain.is_some() {
+                let curb_fraction = spec.curb_mass_kg / spec.mass_kg;
+                let share = if z == spec.front_axle_z { spec.curb_front_share } else { 1.0 - spec.curb_front_share };
+                let per_wheel = 0.5 * share;
+                let stiffness = spec.suspension_stiffness * per_wheel * 4.0;
+                axle_tuning.suspension_stiffness = (stiffness * curb_fraction) as f32;
+                axle_tuning.suspension_compression *= (curb_fraction * per_wheel * 4.0) as f32;
+                axle_tuning.suspension_damping *= (curb_fraction * per_wheel * 4.0) as f32;
+                rest = spec.design_gap() + tuning::GRAVITY_MPS2 * per_wheel / stiffness;
+            }
+            controller.add_wheel(Vector::new(x as f32, y, z as f32), Vector::new(0.0, -1.0, 0.0), Vector::new(-1.0, 0.0, 0.0), rest as f32, spec.wheel_radius as f32, &axle_tuning);
         }
-        Self { spec, body, collider, controller, shaper: DriveShaper::new(spec.wheelbase), controls: Controls::default() }
+        Self { transmission: Transmission::default(), flood_ticks: 0, spec, body, collider, controller, shaper: DriveShaper::new(spec.wheelbase), controls: Controls::default() }
     }
 
     pub fn pose(&self, world: &CollisionWorld) -> (DVec3, DQuat) {
@@ -366,6 +385,22 @@ impl Vehicle {
         self.controller.wheels().iter().filter(|w| w.raycast_info().is_in_contact).count()
     }
 
+    /// Range changes are a driver action. A request made in motion is discarded.
+    pub fn toggle_drive_direction(&mut self, world: &CollisionWorld) {
+        let velocity = world.physics.bodies[self.body].linvel();
+        if velocity.length() <= feel::MAX_RANGE_SHIFT_SPEED_MPS as f32 {
+            self.transmission.reverse_selected = !self.transmission.reverse_selected;
+            self.transmission.gear = 0;
+            if let Some(drive) = self.spec.powertrain {
+                self.transmission.shift_left = drive.shift_duration_ticks;
+            }
+        }
+    }
+
+    pub fn reverse_selected(&self) -> bool {
+        self.transmission.reverse_selected
+    }
+
     /// Submit this step's controls and run the wheel solve (before the world step),
     /// using dry calm road conditions.
     pub fn pre_step(&mut self, world: &mut CollisionWorld, steer_in: f64, throttle_in: f64, brake_in: f64, handbrake: bool, analog: bool) {
@@ -386,10 +421,25 @@ impl Vehicle {
         analog: bool,
         weather: &crate::weather::WeatherPhysics,
     ) {
+        if !world.physics.bodies[self.body].is_enabled() { world.physics.bodies[self.body].set_enabled(true); }
         let speed = self.forward_speed(world);
         let dt = tuning::FIXED_STEP_S;
-        let c = self.shaper.update(steer_in, throttle_in, brake_in, handbrake, analog, speed, dt);
+        let mut c = self.shaper.update(steer_in, throttle_in, brake_in, handbrake, analog, speed, dt);
+        if self.transmission.reverse_selected {
+            c.throttle = -c.throttle;
+        }
+        if analog && self.spec.powertrain.is_some() {
+            // A steering-axis command requests an actual rack angle. Keyboard
+            // steering retains the ramp and high-speed assistance.
+            c.steer = self.shaper.steer_normalized;
+        }
         self.controls = c;
+        if self.spec.powertrain.is_some() {
+            let mut road = c;
+            if self.displace_water(world) { road.throttle = 0.0; }
+            self.road_step(world, road, weather, speed);
+            return;
+        }
         let s = &self.spec;
         let demand = if c.handbrake { 0.0 } else { c.throttle };
         let reverse = demand < 0.0;
@@ -402,19 +452,16 @@ impl Vehicle {
         // Per driven wheel: half the tractive force, netted against that wheel's brake.
         let engine_per_wheel = (if reverse { -tractive } else { tractive }) / 2.0;
         let drive_impulse = engine_per_wheel * dt;
-        let driven_engine = drive_impulse.signum() * (drive_impulse.abs() - rear).max(0.0) / dt;
-        let driven_brake = (rear - drive_impulse.abs()).max(0.0);
         let steer = (c.steer * s.max_steer_rad) as f32;
         // A SLEEPING CHASSIS MUST NOT BE DRIVEN (catalogue-vehicle-controller.js
         // `preStep`): the wheel solve would bank velocity on a body the solver
         // no longer integrates. An undemanded sleeping car is left alone; the
         // first frame of demand wakes it.
         let demanded = c.throttle.abs() > 0.0 || c.brake > 0.0 || steer != 0.0;
-        if world.physics.bodies[self.body].is_sleeping() {
-            if !demanded {
-                return;
-            }
+        if demanded {
             world.physics.bodies[self.body].wake_up(true);
+        } else if world.physics.bodies[self.body].is_sleeping() {
+            return;
         }
         let dry_calm = weather.is_dry_calm();
         let (pos, rot) = self.pose(world);
@@ -441,11 +488,14 @@ impl Vehicle {
                 }
             }
             if DRIVEN[i] {
+                let brake = if i < 2 { front } else { rear };
+                let driven_engine = drive_impulse.signum() * (drive_impulse.abs() - brake).max(0.0) / dt;
+                let driven_brake = (brake - drive_impulse.abs()).max(0.0);
                 w.engine_force = driven_engine as f32;
                 w.brake = (driven_brake + extra_drag_imp) as f32;
             } else {
                 w.engine_force = 0.0;
-                w.brake = (front + extra_drag_imp) as f32;
+                w.brake = (if i < 2 { front } else { rear } + extra_drag_imp) as f32;
             }
         }
         if !dry_calm {
@@ -458,15 +508,33 @@ impl Vehicle {
         }
         let filter = QueryFilter::default()
             .groups(InteractionGroups::new(layer::VEHICLE, layer::WORLD | layer::STREET, InteractionTestMode::And))
+            .predicate(&crate::world::wheel_supports_contact)
             .exclude_rigid_body(self.body);
         let p = &mut world.physics;
         let queries = p.broad_phase.as_query_pipeline_mut(p.narrow_phase.query_dispatcher(), &mut p.bodies, &mut p.colliders, filter);
         self.controller.update_vehicle(dt as f32, queries);
+        self.hold_brakes(world, c, weather, speed);
     }
 
     /// No driver: brakes on, no drive (a parked car).
     pub fn park(&mut self, world: &mut CollisionWorld) {
-        self.pre_step(world, 0.0, 0.0, 0.0, true, false);
+        self.park_with_weather(world, &Default::default());
+    }
+
+    /// An unoccupied car receives the road grip and wind of its current world.
+    pub fn park_with_weather(&mut self, world: &mut CollisionWorld, weather: &crate::weather::WeatherPhysics) {
+        let at = self.datum(world);
+        let margin = 0.5 * self.spec.length.hypot(self.spec.width);
+        let resident = [-margin, margin].into_iter().all(|dx| {
+            [-margin, margin].into_iter().all(|dz| world.is_resident(at.x + dx, at.z + dz))
+        });
+        if !resident {
+            // Freeze outside the simulated area. The body's pose and velocity
+            // survive while the collision stream has no supporting road.
+            world.physics.bodies[self.body].set_enabled(false);
+            return;
+        }
+        self.pre_step_with_weather(world, 0.0, 0.0, 0.0, true, false, weather);
     }
 
     /// the car between steps: the chassis body (pose, velocities, sleep)
@@ -475,6 +543,9 @@ impl Vehicle {
         let b = &world.physics.bodies[self.body];
         let (p, r, v, w) = (b.translation(), b.rotation(), b.linvel(), b.angvel());
         VehicleState {
+            config: self.spec.config,
+            flood_ticks: self.flood_ticks,
+            transmission: self.transmission,
             translation: [p.x, p.y, p.z],
             rotation: [r.x, r.y, r.z, r.w],
             linvel: [v.x, v.y, v.z],
@@ -489,6 +560,8 @@ impl Vehicle {
 
     /// put the car back in a state `state` returned.
     pub fn set_state(&mut self, world: &mut CollisionWorld, s: &VehicleState) {
+        self.transmission = s.transmission;
+        self.flood_ticks = s.flood_ticks.min(water::FLOOD_TICKS);
         let b = &mut world.physics.bodies[self.body];
         let t = s.translation;
         let r = s.rotation;
@@ -509,6 +582,9 @@ impl Vehicle {
 /// `Vehicle::state` (plain data).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct VehicleState {
+    pub transmission: Transmission,
+    pub flood_ticks: u16,
+    pub config: VehicleConfig,
     pub translation: [f32; 3],
     pub rotation: [f32; 4],
     pub linvel: [f32; 3],

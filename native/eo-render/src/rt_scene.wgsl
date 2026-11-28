@@ -98,10 +98,13 @@ fn rt_sh(n: vec3<f32>) -> vec3<f32> {
 }
 
 // The rig's open-sky irradiance at a normal (hemisphere light, ambient,
-// environment at the painted-facade class), as `look_light` builds `irr`.
+// environment at the painted-facade class — honoring physical daylight `look.hemi_sky.w`),
+// as `look_light` builds `irr`.
 fn rt_rig_irradiance(n: vec3<f32>) -> vec3<f32> {
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
-    return hemi + look.ambient.xyz + rt_sh(n) * (look.ambient.w * look.env_class.x);
+    let phys = clamp(look.hemi_sky.w, 0.0, 1.0);
+    let env_i = mix(look.ambient.w * look.env_class.x, 1.0, phys);
+    return hemi + look.ambient.xyz + rt_sh(n) * env_i;
 }
 
 // The hemisphere light's radiance along d (sky above the horizon, the ground lobe below).
@@ -215,17 +218,50 @@ fn rt_hit(o: vec3<f32>, d: vec3<f32>, tmin: f32, tmax: f32) -> RtHit {
     return r;
 }
 
-// The Lambert radiance a hit sends back along the ray: albedo / pi x (the key
-// through a shadow ray within `reach`, the rim, `sky` x the rig's open-sky
-// irradiance at its normal).
+// The radiance a hit sends back along the ray: Lambert multi-bounce (albedo / pi x
+// (the key through a shadow ray within `reach`, the rim, `sky` x the rig's open-sky
+// irradiance at its normal) with geometric multi-bounce energy preservation on sunlit
+// walls), plus a Fresnel sky reflection bounce when hitting architectural glass so
+// reflected towers read as gleaming glass rather than pitch-black blocks.
 fn rt_hit_light(h: RtHit, o: vec3<f32>, d: vec3<f32>, sky: f32, reach: f32) -> vec3<f32> {
     let p = o + d * h.t + h.n * 0.03;
     var e = rt_rig_irradiance(h.n) * sky;
     let l = look.key_dir.xyz;
     let nl = dot(h.n, l);
+    var sun_vis = 0.0;
     if (nl > 0.0 && look.key_dir.w > 0.0) {
-        e = e + look.key.xyz * (nl * look.key_dir.w * rt_sun_visible(p, l, reach));
+        sun_vis = rt_sun_visible(p, l, reach);
+        e = e + look.key.xyz * (nl * look.key_dir.w * sun_vis);
     }
     e = e + look.rim.xyz * max(dot(h.n, look.rim_dir.xyz), 0.0);
-    return h.albedo / LK_PI * e;
+    // Approximate 2nd+ order urban canyon multi-bounce energy: 1 / (1 - 0.38 * albedo)
+    // and warm sunlit-facade carry (strictly daytime via `look.sun.y`, never moonlit night).
+    let day_sun = smoothstep(-0.02, 0.08, look.sun.y);
+    let night_w = 1.0 - day_sun;
+    let mb = vec3<f32>(1.0) / max(vec3<f32>(1.0) - min(h.albedo * 0.42, vec3<f32>(0.36)), vec3<f32>(0.64));
+    let sun_warm = mix(vec3<f32>(1.0), vec3<f32>(1.14, 1.07, 0.96), sun_vis * max(nl, 0.0) * day_sun);
+    var out = (h.albedo / LK_PI) * e * mb * sun_warm;
+    if ((h.flags & RT_F_GLASS) != 0u) {
+        let nv = max(dot(h.n, -d), 0.0);
+        let fv = 0.08 + 0.82 * pow(1.0 - nv, 4.0);
+        let gr = reflect(d, h.n);
+        let phys = clamp(look.hemi_sky.w, 0.0, 1.0);
+        let env_i = mix(look.ambient.w * look.env_class.y, 1.0, phys);
+        let sky_tint = mix(vec3<f32>(0.76, 0.90, 1.06), vec3<f32>(0.42, 0.62, 1.14), night_w);
+        let g_sky = (rt_sh(gr) / LK_PI) * env_i * sky_tint;
+        out = out + g_sky * (fv * 0.55);
+        if (night_w > 0.02) {
+            // Subtle multi-temperature glowing interior windows on reflected night glass facades
+            // (alternating 2600K warm amber, 3600K soft white, and 5200K cool office blue-white).
+            let cell = floor(vec3<f32>(p.x / 3.4, p.y / 3.2, p.z / 3.4));
+            let wh = fract(sin(dot(cell, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
+            if (wh < 0.28) {
+                let wt = fract(wh * 17.37);
+                let win_c = mix(vec3<f32>(1.18, 0.72, 0.30), vec3<f32>(0.72, 0.92, 1.24), smoothstep(0.45, 0.80, wt));
+                let inv_ex = 1.0 / max(look.key.w, 0.22);
+                out = out + win_c * (0.28 * night_w * inv_ex * (1.0 - 0.5 * fv));
+            }
+        }
+    }
+    return out;
 }

@@ -90,13 +90,20 @@
 //! table's values, unscaled.
 
 mod bents;
+mod east_span;
+pub use east_span::{pavement_enabled as east_span_pavement, pavement_joints as east_span_paving_joints};
+/// Deck colour alpha reserved for the registered eastern carriageways.
+pub const EAST_SPAN_PAVING_ALPHA: u8 = 254;
+pub mod skyway_lights;
 mod census;
+pub mod cut_ground;
 mod chains;
 mod clear;
 mod index;
 mod joins;
 mod landmark;
 mod mesh;
+mod merge_surface;
 mod profile;
 mod route;
 mod section;
@@ -104,6 +111,9 @@ mod solve;
 mod sweep;
 mod tiles;
 mod tunnel;
+mod tunnel_clearance;
+mod island_section;
+pub use island_section::IslandTunnelSection;
 mod walls;
 #[cfg(test)]
 mod joins_tests;
@@ -409,23 +419,7 @@ pub enum ChainKind {
     Landmark,
 }
 
-/// The landmark deck a landmark chain lies on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum LandmarkDeck {
-    GoldenGate,
-    BayBridgeUpper,
-    BayBridgeLower,
-}
-
-impl LandmarkDeck {
-    pub fn name(self) -> &'static str {
-        match self {
-            LandmarkDeck::GoldenGate => "Golden Gate Bridge deck",
-            LandmarkDeck::BayBridgeUpper => "Bay Bridge upper deck",
-            LandmarkDeck::BayBridgeLower => "Bay Bridge lower deck",
-        }
-    }
-}
+pub use eo_landmarks::bridge_roads::LandmarkDeck;
 
 /// What a chain's end meets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -620,8 +614,8 @@ pub struct Chain {
     /// by side. Where their roadways overlap the two profiles are one
     /// surface, and the meshes draw it once.
     pub merged_with: Vec<u32>,
-    /// A chain held as end too low (`Hold::EndTooLow`): the least height
-    /// each fixed end would need for the deck to clear what it crosses within
+    /// A deck held by clearance or grade: the least height
+    /// each fixed end would need to meet the crossing, terrain and opposite end within
     /// its grade (the binding bound's reach back to the end); stage A6 asks a
     /// paved stub to climb to it (an approach embankment,
     /// `StructureWorld::street_joins`). None elsewhere.
@@ -629,6 +623,10 @@ pub struct Chain {
 }
 
 impl Chain {
+    pub(crate) fn shares_end(&self, other: &Chain) -> bool {
+        self.ends.iter().any(|end| other.ends.iter().any(|n| n.node == end.node))
+    }
+
     pub fn length(&self) -> f64 {
         self.cum.last().copied().unwrap_or(0.0)
     }
@@ -768,6 +766,7 @@ pub struct StructureWorld {
     deck_levels: Vec<i8>,
     /// OSM way id -> level, for the ways a built chain carries.
     levels: HashMap<String, i8>,
+    landmark_lanes: HashMap<String, Vec<eo_data::sim_source::TrafficDeckLane>>,
     census: Census,
     /// The meshes by tile (filled by `attach_meshes`).
     tiles: tiles::Tiles,
@@ -793,6 +792,8 @@ pub struct StructureWorld {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bore {
     pub chain: u32,
+    /// Measured inner section of the stacked Yerba Buena traffic decks, when enabled.
+    pub island_section: Option<IslandTunnelSection>,
     /// The stations of its first and last covered station.
     pub s0: f64,
     pub s1: f64,
@@ -872,7 +873,10 @@ impl Bore {
                 continue;
             }
             let above = y - (a.y + (b.y - a.y) * t);
-            if !(-BORE_BELOW_M..=BORE_ABOVE_M).contains(&above) {
+            let ceiling = self.island_section.map_or(BORE_ABOVE_M, |section| {
+                section.height(u / reach) + (BORE_ABOVE_M - BORE_CLEAR_M)
+            });
+            if !(-BORE_BELOW_M..=ceiling).contains(&above) {
                 continue;
             }
             let d = (x - qx).hypot(z - qz);
@@ -923,6 +927,8 @@ pub struct TunnelLight {
     /// roadway's height under it.
     pub half_width: f64,
     pub floor: f64,
+    /// Fraction of the longitudinal station's light emitted by this aperture.
+    pub flux_share: f32,
 }
 
 /// The ground one open stretch of a tunnel cuts through (stage A7): the
@@ -1031,7 +1037,7 @@ pub const PAINT_LIFT_M: f64 = mesh::PAINT_LIFT_M;
 /// The vertex encoding (tint and wear in `colors`, formwork coordinates in
 /// `uv`) is documented on the mesh module and in `StructureClass`; in short:
 /// alpha = wear (0 clean .. 255 stained) on `Concrete`, `Joint`, `Metal`,
-/// 255 elsewhere; `uv` = (along the boards, across them) in metres.
+/// 255 elsewhere except for `EAST_SPAN_PAVING_ALPHA` on a registered deck; `uv` = (along the boards, across them) in metres.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StructureMesh {
     pub positions: Vec<[f32; 3]>,
@@ -1116,7 +1122,7 @@ pub const WEST_APPROACH_M: f64 = 1609.344;
 /// ramps), else old. `chains`: every chain (the landmark decks' ends).
 pub fn era_of(c: &Chain, chains: &[Chain], scale: f64) -> Era {
     let name = c.name();
-    if name.contains("Presidio Parkway") {
+    if name.contains("Presidio Parkway") || east_span::readings(c).is_some() {
         return Era::New;
     }
     if name.contains("Central Freeway") {
@@ -1182,6 +1188,11 @@ fn way_key(way_id: &str) -> &str {
 }
 
 impl StructureWorld {
+    /// The city's landmark bridge geometry is already installed in its collision tiles.
+    pub fn has_landmark_roads(&self) -> bool {
+        self.tiles.has_landmark_roads()
+    }
+
     /// A world with nothing in it.
     pub fn empty() -> Self {
         Self::default()
@@ -1198,7 +1209,7 @@ impl StructureWorld {
     /// (a missing clearance holds the chains that need it instead).
     pub fn build(streets: &StreetWorld, city: &City, standards: &CaStandards, landmarks: &LandmarksJs, options: StructureOptions) -> anyhow::Result<Self> {
         let mut w = Self::solve_only(streets, city, standards, landmarks, options)?;
-        w.attach(streets, city, standards)?;
+        w.attach(streets, city, standards, landmarks)?;
         Ok(w)
     }
 
@@ -1211,19 +1222,30 @@ impl StructureWorld {
     }
 
     /// The meshes of a solved world (`build`'s second half).
-    pub(crate) fn attach(&mut self, streets: &StreetWorld, city: &City, standards: &CaStandards) -> anyhow::Result<()> {
+    pub(crate) fn attach(&mut self, streets: &StreetWorld, city: &City, standards: &CaStandards, landmarks: &LandmarksJs) -> anyhow::Result<()> {
         // the class-model lane width of each way a fallback section needs.
         let by_id: HashMap<&str, &eo_data::Road> = city.roads.iter().map(|r| (r.id.as_str(), r)).collect();
         let state = standards.metric("travel-lane-width-state-highway-min").ok();
         let lane = |way: &str| -> f64 { by_id.get(way).and_then(|r| standards.class_lane_width(r).ok()).or(state).unwrap_or(0.0) };
-        self.attach_meshes(streets, standards, &lane)
+        let apron = landmark::marin_apron_chains(landmarks, &self.chains);
+        self.attach_meshes_with_apron(streets, standards, &lane, &apron)?;
+        let section = eo_landmarks::suspension::DeckStandards::load(standards)?;
+        let roads = eo_landmarks::bridge_roads::surfaces(landmarks, &|x, z| streets.terrain.grid.sample(x, z), &section);
+        self.tiles.install_landmark_roads(&self.chains, roads, &mut self.clear);
+        self.landmark_lanes = landmark::golden_gate_traffic_lanes(landmarks, streets, &section, &by_id, self);
+        Ok(())
     }
 
     /// Sweeps every built chain into its tiles (the meshes themselves are
     /// built when a tile is first asked for) and indexes the columns.
+    #[cfg(test)]
     pub(crate) fn attach_meshes(&mut self, streets: &StreetWorld, standards: &CaStandards, class_lane: &dyn Fn(&str) -> f64) -> anyhow::Result<()> {
+        self.attach_meshes_with_apron(streets, standards, class_lane, &[])
+    }
+
+    fn attach_meshes_with_apron(&mut self, streets: &StreetWorld, standards: &CaStandards, class_lane: &dyn Fn(&str) -> f64, apron: &[u32]) -> anyhow::Result<()> {
         let dims = section::Dims::read(standards)?;
-        self.tiles = tiles::Tiles::build(streets, &self.chains, dims, class_lane);
+        self.tiles = tiles::Tiles::build(streets, &self.chains, dims, class_lane, apron);
         self.census.section_fallbacks = self.tiles.fallback_chains;
         self.columns.clear();
         for c in self.chains.iter().filter(|c| c.is_built() && c.kind == ChainKind::Deck) {
@@ -1328,6 +1350,11 @@ impl StructureWorld {
         self.lights.values().flatten().cloned().collect()
     }
 
+    /// The same swept traffic space used to clip the tunnel linings and street surfaces.
+    pub fn road_openings(&self) -> &eo_street::road_openings::RoadOpenings {
+        &self.tiles.openings
+    }
+
     /// Every terrain cut (stage A7; none without `--tunnels`), by chain then station.
     pub fn terrain_cuts(&self) -> &[TerrainCut] {
         &self.cuts
@@ -1338,7 +1365,7 @@ impl StructureWorld {
     /// portal's canopy (`terrain_cuts`): a building drawn there stands in the
     /// cut or over the bore's mouth (the Broadway portals, A8), so the host
     /// leaves it out. None without tunnels.
-    pub fn buildings_over_cuts(&self, rings: &[Vec<[f64; 2]>]) -> Vec<usize> {
+    pub fn buildings_over_cuts(&self, rings: &[impl AsRef<[[f64; 2]]>]) -> Vec<usize> {
         if self.cuts.is_empty() {
             return vec![];
         }
@@ -1348,7 +1375,8 @@ impl StructureWorld {
             (d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0)
         };
         let mut out = vec![];
-        for (i, ring) in rings.iter().enumerate() {
+        for (i, footprint) in rings.iter().enumerate() {
+            let ring = footprint.as_ref();
             if ring.len() < 3 {
                 continue;
             }
@@ -1399,6 +1427,25 @@ impl StructureWorld {
     /// True when nothing was built: no deck (landmark decks included), no level.
     pub fn is_empty(&self) -> bool {
         !self.chains.iter().any(|c| c.is_built())
+    }
+
+    /// The vertical extent of the skyway lights and the roadway they illuminate.
+    /// The prop streamer cannot infer these tiles from the at-grade street index.
+    pub fn skyway_light_tiles(&self) -> impl Iterator<Item = ((i32, i32), [f32; 2])> + '_ {
+        self.tiles.tiles.iter().filter_map(|(&key, tile)| {
+            let first = tile.skyway.first()?;
+            let mut bounds = [first.road_y as f32, first.top as f32];
+            for p in &tile.skyway[1..] {
+                bounds[0] = bounds[0].min(p.road_y as f32);
+                bounds[1] = bounds[1].max(p.top as f32);
+            }
+            Some((key, bounds))
+        })
+    }
+
+    /// Skyway roadway lights owned by the tile containing each shaft.
+    pub fn skyway_standards(&self, key: (i32, i32)) -> &[skyway_lights::Standard] {
+        self.tiles.tiles.get(&key).map_or(&[], |tile| tile.skyway.as_slice())
     }
 
     /// Every chain, built or not, by id.
@@ -1469,10 +1516,34 @@ impl StructureWorld {
     /// its deck (half width plus `DECK_QUERY_MARGIN_M`, past its ends).
     pub fn deck_top(&self, chain: u32, x: f64, z: f64) -> Option<f64> {
         let c = self.chains.get(chain as usize)?;
+        // The full-width landmark panels include skewed approach ends past one
+        // carriageway's final map node. Traffic and tyres share those faces.
+        if let Some(y) = c.landmark.and_then(|deck| self.tiles.landmark_road_height(deck, x, z)) {
+            return Some(y);
+        }
         let sw = self.tiles.sweeps.get(chain as usize)?.as_ref()?;
         let (s, dist) = c.project(x, z);
         if dist > c.half_at(s) + DECK_QUERY_MARGIN_M || s <= 0.0 || s >= c.length() {
             return None;
+        }
+        if let Some(y) = mesh::near_deck_height(sw, s, x, z) {
+            return Some(y);
+        }
+        if let Some(y) = self.tiles.join_deck_height(chain, x, z) {
+            return Some(y);
+        }
+        // Where a major deck clips a minor, the major's triangles cover
+        // the clipped part. Follow that explicit merge, not a deck nearby.
+        for &major in &c.merged_with {
+            let other = &self.chains[major as usize];
+            if !solve::is_major(other, c) {
+                continue;
+            }
+            let Some(sweep) = self.tiles.sweeps[major as usize].as_ref() else { continue };
+            let (s, _) = other.project(x, z);
+            if let Some(y) = mesh::near_deck_height(sweep, s, x, z) {
+                return Some(y);
+            }
         }
         let st = sw.lerp(s);
         let u = (x - st.x) * st.nx + (z - st.z) * st.nz;
@@ -1500,6 +1571,42 @@ impl StructureWorld {
     /// Empty for an empty world.
     pub fn way_levels(&self) -> &HashMap<String, i8> {
         &self.levels
+    }
+
+    /// The built chain's own height profile, split by source way like the
+    /// street plan. These are routing heights and are independent of tile LOD.
+    pub fn traffic_surfaces(&self) -> Vec<eo_data::sim_source::TrafficDeckSurface> {
+        let mut surfaces = Vec::new();
+        let mut lanes = self.landmark_lanes.clone();
+        for chain in &self.chains {
+            if !chain.is_built() || chain.level == 0 {
+                continue;
+            }
+            for piece in &chain.pieces {
+                if piece.s1 <= piece.s0 || self.way_level(&piece.way) != chain.level {
+                    continue;
+                }
+                let start = chain.stations.partition_point(|&s| s <= piece.s0);
+                let end = chain.stations.partition_point(|&s| s < piece.s1);
+                let sweep = self.tiles.sweeps.get(chain.id as usize).and_then(Option::as_ref);
+                let points = std::iter::once(piece.s0)
+                    .chain(chain.stations[start..end].iter().copied())
+                    .chain(std::iter::once(piece.s1))
+                    .map(|s| {
+                        let f = chain.frame(s);
+                        let y = sweep.filter(|sw| sw.draw != sweep::Draw::Tunnel)
+                            .map_or_else(|| chain.deck_point(s).y, |sw| sw.top(&sw.lerp(s), 0.0));
+                        [f.x, y, f.z]
+                    })
+                    .collect();
+                surfaces.push(eo_data::sim_source::TrafficDeckSurface {
+                    way: piece.way.clone(),
+                    points,
+                    lanes: lanes.remove(&piece.way).unwrap_or_default(),
+                });
+            }
+        }
+        surfaces
     }
 
     /// Render meshes for one tile at a level of detail (0 near, 1 far, 2

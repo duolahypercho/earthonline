@@ -37,8 +37,9 @@
 //! falloff keep what leaks through a building small (a wall behind one faces
 //! P across a block at least).
 //!
-//! The gather takes `SAMPLES` texels on a disc of `RADIUS_M` round P's own
-//! texel in light space, sample i at radius `RADIUS_M u^2` (u its stratum,
+//! The gather takes `SAMPLES` texels on a disc of `REACH_M` (`RADIUS_M`
+//! without eo-render's `--sun-bounce-reach`) round P's own texel in light
+//! space, sample i at radius `R u^2` (u its stratum,
 //! jittered), on a golden-angle spiral turned per pixel: dense near P where
 //! the falloff is steep. Each stands for `area` (the inverse of the sample
 //! density: 4 pi r^1.5 R^0.5 / N), so the sum is an unbiased estimate of the
@@ -63,6 +64,18 @@ pub const SAMPLES_WITH_HISTORY: u32 = 12;
 /// canyon's lower floors (the falloff leaves a surface at 32 m about a
 /// tenth of one at 10 m).
 pub const RADIUS_M: f64 = 32.0;
+/// The gather's radius with eo-render's `--sun-bounce-reach` (on by default;
+/// `--no-sun-bounce-reach` keeps `RADIUS_M`), metres in light space. A wall
+/// across the street from P lies `D sin(alt) + h cos(alt)` from P's texel in
+/// light space (D the street's width between the fronts, h the height up the
+/// wall, alt the sun's altitude): at a noon sun of 65 degrees over a 25 m
+/// street (Mission, Market, Van Ness and the South of Market's arterials
+/// have 25 to 38 m between their fronts) the wall starts 23 m out, so a
+/// 32 m disc reached its lowest 22 m only, with a few of its samples. At
+/// 64 m the disc reaches such a wall 90 m up, and the falloff leaves what
+/// lies past it a few per cent (measured at Mission and 3rd at noon: the
+/// shaded street's light rose 23% at 64 m, 4% more at 128 m).
+pub const REACH_M: f64 = 64.0;
 /// The screen-space bounce's radius (surfaces_ao.wgsl `AO_RADIUS_M`): the
 /// near field it leaves to this gather by `d^2 / R^2`.
 pub const SCREEN_SPACE_RADIUS_M: f64 = 4.0;
@@ -88,14 +101,15 @@ pub const MAX_SLOPE: f64 = 24.0;
 /// The golden angle (radians), the spiral's step.
 pub const GOLDEN_ANGLE: f64 = 2.399_963_229_728_653;
 
-/// Sample `i` of `n` (jitter `j` in 0..1, the spiral turned by `rot`
-/// radians): its offset in light space (metres, along the map's x and y) and
-/// the area it stands for (m^2).
-pub fn sample(i: u32, n: u32, j: f64, rot: f64) -> ([f64; 2], f64) {
+/// Sample `i` of `n` on a disc of `radius` metres (`REACH_M` or `RADIUS_M`;
+/// jitter `j` in 0..1, the spiral turned by `rot` radians): its offset in
+/// light space (metres, along the map's x and y) and the area it stands for
+/// (m^2).
+pub fn sample(i: u32, n: u32, j: f64, rot: f64, radius: f64) -> ([f64; 2], f64) {
     let u = (i as f64 + j) / n as f64;
-    let r = RADIUS_M * u * u;
+    let r = radius * u * u;
     let a = i as f64 * GOLDEN_ANGLE + rot;
-    let area = 4.0 * std::f64::consts::PI * r.powf(1.5) * RADIUS_M.sqrt() / n as f64;
+    let area = 4.0 * std::f64::consts::PI * r.powf(1.5) * radius.sqrt() / n as f64;
     ([r * a.cos(), r * a.sin()], area)
 }
 
@@ -124,16 +138,17 @@ pub fn contribution(p: [f64; 3], n: [f64; 3], x: [f64; 3], nx: [f64; 3], to_sun:
     [0, 1, 2].map(|c| (WALL_ALBEDO[c] * key[c] - stand_in[c] / cs).max(0.0) * k)
 }
 
-/// The CPU reference of the shader's gather at `p` (normal `n`), its
-/// irradiance under the key `key` with the stand-in `stand_in`: `surface(q)`
+/// The CPU reference of the shader's gather at `p` (normal `n`) over a disc
+/// of `radius` metres, its irradiance under the key `key` with the stand-in
+/// `stand_in`: `surface(q)`
 /// is the first surface the sun meets through the light-space point `q`
 /// (metres along `basis[0]` and `basis[1]` from P's own), its position and
 /// normal, or None.
 #[allow(clippy::too_many_arguments)]
-pub fn gather(p: [f64; 3], n: [f64; 3], to_sun: [f64; 3], basis: [[f64; 3]; 2], key: Rgb, stand_in: Rgb, j: f64, rot: f64, surface: impl Fn([f64; 3]) -> Option<([f64; 3], [f64; 3])>) -> Rgb {
+pub fn gather(p: [f64; 3], n: [f64; 3], to_sun: [f64; 3], basis: [[f64; 3]; 2], key: Rgb, stand_in: Rgb, j: f64, rot: f64, radius: f64, surface: impl Fn([f64; 3]) -> Option<([f64; 3], [f64; 3])>) -> Rgb {
     let mut e = [0.0; 3];
     for i in 0..SAMPLES {
-        let (o, area) = sample(i, SAMPLES, j, rot);
+        let (o, area) = sample(i, SAMPLES, j, rot, radius);
         let q = [0, 1, 2].map(|c| p[c] + basis[0][c] * o[0] + basis[1][c] * o[1]);
         if let Some((x, nx)) = surface(q) {
             let c = contribution(p, n, x, nx, to_sun, area, key, stand_in);
@@ -181,6 +196,10 @@ mod tests {
 
     /// The mean of the gather over many jitters and turns (the frame's temporal resolve).
     fn converged(p: [f64; 3], n: [f64; 3], s: [f64; 3], key: Rgb, stand_in: Rgb, surface: Surface) -> Rgb {
+        converged_at(p, n, s, key, stand_in, surface, RADIUS_M)
+    }
+
+    fn converged_at(p: [f64; 3], n: [f64; 3], s: [f64; 3], key: Rgb, stand_in: Rgb, surface: Surface, radius: f64) -> Rgb {
         let b = light_basis(s);
         let basis = [b[0], b[1]];
         let k = 4096;
@@ -188,7 +207,7 @@ mod tests {
         for t in 0..k {
             let j = ((t as f64 + 0.5) * 0.754_877_666).fract();
             let rot = ((t as f64 + 0.5) * 0.569_840_29).fract() * TAU;
-            let g = gather(p, n, s, basis, key, stand_in, j, rot, &surface);
+            let g = gather(p, n, s, basis, key, stand_in, j, rot, radius, &surface);
             for c in 0..3 {
                 e[c] += g[c] / k as f64;
             }
@@ -198,21 +217,56 @@ mod tests {
 
     #[test]
     fn samples_cover_the_disc_once() {
-        // the areas sum to the disc's on average over the jitter.
-        let k = 2000;
-        let mut sum = 0.0;
-        for t in 0..k {
-            let j = (t as f64 + 0.5) / k as f64;
+        // the areas sum to the disc's on average over the jitter, at either radius.
+        for radius in [RADIUS_M, REACH_M] {
+            let k = 2000;
+            let mut sum = 0.0;
+            for t in 0..k {
+                let j = (t as f64 + 0.5) / k as f64;
+                for i in 0..SAMPLES {
+                    sum += sample(i, SAMPLES, j, 0.0, radius).1;
+                }
+            }
+            let disc = std::f64::consts::PI * radius * radius;
+            assert!((sum / k as f64 / disc - 1.0).abs() < 0.01, "{} of the disc", sum / k as f64 / disc);
             for i in 0..SAMPLES {
-                sum += sample(i, SAMPLES, j, 0.0).1;
+                let (o, _) = sample(i, SAMPLES, 0.999, 1.0, radius);
+                assert!((o[0] * o[0] + o[1] * o[1]).sqrt() <= radius + 1e-9);
             }
         }
-        let disc = std::f64::consts::PI * RADIUS_M * RADIUS_M;
-        assert!((sum / k as f64 / disc - 1.0).abs() < 0.01, "{} of the disc", sum / k as f64 / disc);
-        for i in 0..SAMPLES {
-            let (o, _) = sample(i, SAMPLES, 0.999, 1.0);
-            assert!((o[0] * o[0] + o[1] * o[1]).sqrt() <= RADIUS_M + 1e-9);
+    }
+
+    /// The street under a sunlit front across it (`REACH_M`): Mission at 3rd
+    /// at noon in late July, a 65 degree sun over a 25 m street whose far
+    /// front, 40 m tall, faces it. Its view of that front, by a fine
+    /// quadrature, is the target: the 32 m disc took about a quarter of it,
+    /// the 64 m one nearly all.
+    #[test]
+    fn the_reach_takes_a_wide_streets_far_front() {
+        let s = to_sun(65.0, std::f64::consts::PI); // from -x: the front at x = 25 faces it
+        let key = [1.0; 3];
+        let p = [0.0, 0.0, 0.0];
+        let up = [0.0, 1.0, 0.0];
+        // the front's irradiance x its form factor from a horizontal point: the
+        // quadrature over the wall (y 0..40, z far either way).
+        let (d, h) = (25.0, 40.0);
+        let mut ff = 0.0;
+        let (ny, nz) = (400, 1600);
+        let (dy, dz) = (h / ny as f64, 400.0 / nz as f64);
+        for a in 0..ny {
+            for b in 0..nz {
+                let (y, z) = ((a as f64 + 0.5) * dy, (b as f64 + 0.5) * dz - 200.0);
+                let r2 = d * d + y * y + z * z;
+                ff += (y / r2.sqrt()) * (d / r2.sqrt()) * dy * dz / (std::f64::consts::PI * r2);
+            }
         }
+        let m = WALL_ALBEDO[1] * -s[0];
+        let full = m * ff;
+        let near = converged_at(p, up, s, key, [0.0; 3], facade(s, d, h), RADIUS_M)[1] / full;
+        let far = converged_at(p, up, s, key, [0.0; 3], facade(s, d, h), REACH_M)[1] / full;
+        println!("a 25 m street's far front (form factor {ff:.3}): {near:.2} of it at {RADIUS_M} m, {far:.2} at {REACH_M} m");
+        assert!(near < 0.6, "the 32 m disc took {near:.2}");
+        assert!(far > 0.9 && far < 1.03, "the 64 m disc took {far:.2}");
     }
 
     #[test]

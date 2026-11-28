@@ -10,14 +10,26 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+mod bridge_readings;
+pub mod bridge_survey;
+pub mod skyway_readings;
+pub mod parking_junctions;
+pub mod movable_spans;
 pub mod shelf;
+pub mod decks; // roof decks the bare-earth survey keeps as ground, brought down to the streets' grade (--no-deck-ground)
 pub mod detail_ground; // a finer drawn ground than the 8 m grid, when a provider is set (none yet)
 pub mod external; // where the optional open assets are read from (<repo>/external/<set>, or the set's variable)
 pub mod geo; // latitude, longitude and height above mean sea level to game coordinates
 pub mod groundscale; // the street size (the approved ground-plan deviation, 1.25)
+pub mod lidar_buildings; // per-building 3D roof, setback and penthouse massing from external/lidar
+pub mod bikeways; // each street segment's bike facility: class, two-way, barrier, green paint (DataSF / SFMTA)
+pub mod lithology; // the city's bedrock map (USGS geologic map units as rock classes)
+pub mod pavement; // each street segment's pavement condition and last resurfacing (DataSF PCI)
+pub mod street_survey; // kerbside parking (regulations, meters) and mid-block signalised crossings (DataSF / SFMTA)
 pub mod roof_colours; // measured roof colours (aerial imagery)
 pub mod sim_source;
 pub mod standards;
+pub mod tree_sizes; // the street trees' trunk sizes (DataSF) and the Urban Tree Database allometry
 pub use standards::CaStandards;
 
 /// Where the repository's data lives.
@@ -180,6 +192,8 @@ pub struct RawRoad {
     pub lanes: Option<f64>,
     #[serde(default)]
     pub maxspeed: String,
+    #[serde(default)]
+    pub sidewalk: String,
     #[serde(default)]
     pub layer: serde_json::Value,
     #[serde(default)]
@@ -453,7 +467,7 @@ impl City {
     /// the city on the ground plan of scale `s` (1.0: as surveyed),
     /// whatever this process's own scale is (the ground-plan test compares both).
     pub fn load_at(paths: &DataPaths, s: f64) -> Result<City> {
-        let raw: RawCity = parse_json(&paths.sf("sf-city.json.gz"))?;
+        let mut raw: RawCity = parse_json(&paths.sf("sf-city.json.gz"))?;
         if raw.meta.projection.axes != "x east, z south, metres" {
             bail!("sf-city.json: unexpected frame '{}'", raw.meta.projection.axes);
         }
@@ -574,6 +588,7 @@ impl City {
         };
 
         let gs = s;
+        movable_spans::add_to(&mut raw.roads);
         let roads = raw
             .roads
             .into_iter()
@@ -637,6 +652,12 @@ pub struct ElevationGrid {
 impl ElevationGrid {
     pub fn load(paths: &DataPaths) -> Result<Self> {
         let mut g = Self::decode(&read_maybe_gzip(&paths.sf("sf-elevation.bin.gz"))?)?;
+        // (`--no-deck-ground`) the roof decks the survey keeps as ground, down to the streets' grade
+        if let Some(t) = decks::table() {
+            if let Err(e) = decks::apply(t, &mut g) {
+                eprintln!("deck ground: {e:#}; the ground as surveyed");
+            }
+        }
         // the grid's horizontal frame scaled (origin and cell), its heights not:
         // the ground under a scaled street is the ground that was under the real one.
         let gs = groundscale::scale();

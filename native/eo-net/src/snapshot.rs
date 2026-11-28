@@ -6,9 +6,9 @@
 //! top two bits are its class (simulated car, walker, player, player's car)
 //! and a quantised state (`QState`): position in 1/128 m (absolute, in the
 //! zone's frame), yaw in 2 pi / 65536, speed in 1/64 m/s, a one-byte
-//! animation phase, kind and flags as the simulation writes them, and for
-//! player cars pitch/roll and wheel steer. Agents carry y = 0: the client
-//! grounds them on its own street surface, as the single-player feed does.
+//! animation phase, kind and flags as the simulation writes them. Physical
+//! cars carry pitch and roll, and player cars also carry wheel steer. Cars
+//! without a surface height and walkers are grounded by the client.
 //!
 //! DELTA. The server keeps, per client, what the client holds after each of
 //! its last `HISTORY` snapshots. A snapshot names its baseline (the newest
@@ -33,6 +33,9 @@ pub const CLASS_WALKER: u32 = 1;
 pub const CLASS_PLAYER: u32 = 2;
 pub const CLASS_PLAYER_CAR: u32 = 3;
 
+/// A fleet car's pose and tilt come from server physics, including its datum y.
+pub const TRAFFIC_PHYSICAL: u16 = 0x2000;
+
 #[inline]
 pub fn net_id(class: u32, local: u32) -> u32 {
     (class << 30) | (local & 0x3FFF_FFFF)
@@ -56,7 +59,7 @@ pub struct QState {
     pub y: i32,
     pub z: i32,
     pub yaw: u16,
-    /// Player cars: pitch (low 16 bits) and roll (high 16), 2 pi / 65536 each.
+    /// Physical cars: pitch (low 16 bits) and roll (high 16), 2 pi / 65536 each.
     pub tilt: u32,
     pub speed: i16,
     pub anim: u8,
@@ -304,6 +307,7 @@ pub struct Own {
 /// A correction: the server's whole player state after input `seq`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Correction {
+    pub weather: crate::weather::WeatherEpoch,
     pub id: u16,
     pub seq: u32,
     pub state: Vec<u8>,
@@ -347,6 +351,7 @@ impl SnapHeader {
                 w.bit(true);
                 w.write(c.id as u32, 16);
                 w.write(c.seq, 32);
+                w.bytes(&c.weather.bytes());
                 w.write(c.state.len() as u32, 16);
                 w.bytes(&c.state);
             }
@@ -369,8 +374,9 @@ impl SnapHeader {
         let correction = if r.bit()? {
             let id = r.read(16)? as u16;
             let seq = r.read(32)?;
+            let weather = crate::weather::WeatherEpoch::read(&r.bytes(crate::weather::WeatherEpoch::BYTES)?)?;
             let n = r.read(16)? as usize;
-            Some(Correction { id, seq, state: r.bytes(n)? })
+            Some(Correction { id, seq, weather, state: r.bytes(n)? })
         } else {
             None
         };
@@ -496,7 +502,7 @@ impl Replicator {
                 j += 1;
             }
         }
-        let budget_bits = (budget_bytes as u32).saturating_mul(8).saturating_sub(HEADER_BITS + header.sky.bits() + header.correction.as_ref().map_or(0, |c| c.state.len() as u32 * 8));
+        let budget_bits = (budget_bytes as u32).saturating_mul(8).saturating_sub(HEADER_BITS + header.sky.bits() + header.correction.as_ref().map_or(0, |c| 64 + (crate::weather::WeatherEpoch::BYTES + c.state.len()) as u32 * 8));
         let mut order: Vec<usize> = (0..cands.len()).collect();
         order.sort_by(|&a, &b| (cands[b].must as u8).cmp(&(cands[a].must as u8)).then(cands[b].prio.total_cmp(&cands[a].prio)));
         let mut take = vec![false; cands.len()];
@@ -745,10 +751,19 @@ pub fn interpolate_smooth(pa: Option<&Decoded>, a: &Decoded, b: &Decoded, pb: Op
         let mut s = show(*id, sb);
         if ai < ae.len() && ae[ai].0 == *id && ahead == 0.0 {
             let sa = show(*id, &ae[ai].1);
-            let jump = (0..3).map(|k| (s.pos[k] - sa.pos[k]).powi(2)).sum::<f64>().sqrt();
+            // The y of a vehicle without a surface reference is a placeholder.
+            use eo_data::sim_source::TRAFFIC_SURFACE_Y;
+            let surface_changed = class_of(*id) == CLASS_CAR
+                && (sa.flags ^ sb.flags) & TRAFFIC_SURFACE_Y != 0;
+            let surface_height = if sb.flags & TRAFFIC_SURFACE_Y != 0 { s.pos[1] } else { sa.pos[1] };
+            let jump = (0..3).filter(|&k| k != 1 || !surface_changed)
+                .map(|k| (s.pos[k] - sa.pos[k]).powi(2)).sum::<f64>().sqrt();
             if jump < 40.0 {
                 for k in 0..3 {
                     s.pos[k] = sa.pos[k] + (s.pos[k] - sa.pos[k]) * u;
+                }
+                if surface_changed {
+                    s.pos[1] = surface_height;
                 }
                 s.yaw = lerp_angle(sa.yaw, s.yaw, u);
                 s.pitch = lerp_angle(sa.pitch, s.pitch, u);
@@ -810,6 +825,26 @@ mod tests {
 
     fn car(x: i32, z: i32, yaw: u16, speed: i16) -> QState {
         QState { x, z, yaw, speed, anim: (x & 255) as u8, ..Default::default() }
+    }
+
+    #[test]
+    fn traffic_surface_height_interpolates_only_between_valid_references() {
+        use eo_data::sim_source::TRAFFIC_SURFACE_Y;
+        let snap = |tick, x, y, flags| Decoded {
+            header: SnapHeader { tick, ..Default::default() },
+            entities: vec![(net_id(CLASS_CAR, 1), QState {
+                x: q_pos(x), y: q_pos(y), flags, ..Default::default()
+            })].into(),
+        };
+        let a = snap(0, 0.0, 0.0, 0);
+        let b = snap(2, 2.0, 60.0, TRAFFIC_SURFACE_Y);
+        let c = snap(4, 4.0, 62.0, TRAFFIC_SURFACE_Y);
+        let mut out = Vec::new();
+        interpolate(&a, &b, 1.5, 0.0, &mut out);
+        assert_eq!(out[0].pos, [1.5, 60.0, 0.0]);
+        assert_eq!(out[0].flags & TRAFFIC_SURFACE_Y, TRAFFIC_SURFACE_Y);
+        interpolate(&b, &c, 3.0, 0.0, &mut out);
+        assert_eq!(out[0].pos, [3.0, 61.0, 0.0]);
     }
 
     #[test]

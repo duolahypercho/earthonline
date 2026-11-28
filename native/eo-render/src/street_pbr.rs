@@ -48,6 +48,14 @@ pub const GUTTER_ALBEDO: f64 = 0.21;
 /// toward a low sun).
 pub const ASPHALT_ROUGH: f64 = 0.82;
 pub const ASPHALT_ROUGH_POLISHED: f64 = 0.52;
+/// (`--matte-wheel-paths`, look::MATTE_WHEEL_PATHS) the wheel paths' polish
+/// as drawn with it (a shading choice, matched to a photograph): at 0.52
+/// the paths in a building's shade reflected the bright sky down the street
+/// as sky-blue bands from the eye's feet to the far end (Mission at 3rd,
+/// noon); a photograph of that street from the same corner (Wikimedia
+/// Commons, CC0, 2011) shows the near carriageway matte and the polish only
+/// as a faint sheen far down the road toward grazing, which 0.68 keeps.
+pub const ASPHALT_ROUGH_POLISHED_MATTE: f64 = 0.68;
 /// The share of the design vehicle's width between its wheel paths' centres
 /// (a shading choice: a car's or bus's tyres run inside its body).
 pub const TRACK_SHARE: f64 = 0.7;
@@ -74,6 +82,82 @@ pub const SLAB_TONE: f64 = 0.07;
 pub const SLAB_NEW_SHARE: f64 = 0.06;
 pub const SLAB_NEW_TONE: f64 = 1.2;
 pub const SLAB_STAINED_SHARE: f64 = 0.05;
+
+// ---- `--road-wear`, `--pavement-age` (look::ROAD_WEAR, look::PAVEMENT_AGE; street_pbr.wgsl `rw_*`) ----
+//
+// Each travel lane's traffic wear as the traffic lays it, and each street's
+// pavement by its age and condition (the city's survey, eo-data `pavement`,
+// cc0_decals.rs `DK_LANE`, `DK_SURFACE`). A wheel path is not one stripe:
+// the tyres of cars, vans and buses run at their own tracks, each wandering
+// about its lane (a bell, no edges), so a path is a few overlapping tracks
+// with thin lines of rubber and polish along the travel; between them the
+// drips gather, most where the traffic waits at a stop. Real wheel paths are
+// only a little lighter than the lane round them (cores trafficked two years
+// and more: 10-20 % higher lightness, UK Energy Research Centre report "The
+// effect of pavement material on road lighting performance"), and the polish
+// is fine-scale under a coarse texture that stays rough: a glint toward a low
+// sun, not a mirror of the sky.
+
+/// Fresh asphalt's albedo over the weathered calibration: new binder ~0.05
+/// against aged 0.10-0.15 (the reference sheet 2.1, LBNL / EPA, as
+/// weathering.rs `PATCH_NEW`), 0.05 / 0.11.
+pub const RW_FRESH_TONE: f64 = 0.45;
+/// The binder's oxidation and wear toward the weathered grey (years, the
+/// e-folding time): most of the change in the first few years. INFERRED.
+pub const RW_OXIDATION_YEARS: f64 = 2.5;
+/// The fresh binder film over the stones' tops, worn off by the traffic
+/// (years): a new road shows no polished aggregate. INFERRED.
+pub const RW_FILM_YEARS: f64 = 1.5;
+/// The lanes' wear growing with the pavement's age (years, e-folding). INFERRED.
+pub const RW_WEAR_YEARS: f64 = 4.0;
+/// The tracks: half a vehicle's track (tyre centre from the lane's line of
+/// travel, m), the spread of its wander (m: lateral wander's standard
+/// deviation 0.2-0.6 m, Timm & Priest, "Wheel wander at the NCAT test track";
+/// a tyre's width folded in) and its share. Vehicle dimensions, not street
+/// ones: a passenger car's track 1.5-1.65 m; vans and SUVs ~1.7 m; a transit
+/// bus's rear duals ~1.8 m centre to centre (bus axle listings 1756-1840 mm)
+/// and its front ~2.1 m. INFERRED shares.
+pub const RW_CAR_HALF_M: f64 = 0.78;
+pub const RW_CAR_SIGMA_M: f64 = 0.20;
+pub const RW_CAR_W: f64 = 1.0;
+pub const RW_VAN_HALF_M: f64 = 0.86;
+pub const RW_VAN_SIGMA_M: f64 = 0.22;
+pub const RW_VAN_W: f64 = 0.55;
+pub const RW_BUS_HALF_M: f64 = 0.95;
+pub const RW_BUS_SIGMA_M: f64 = 0.17;
+pub const RW_BUS_W: f64 = 0.3;
+/// A bus's share in a kerb lane beside a transit stop (it pulls in and stands).
+pub const RW_BUS_W_STOP: f64 = 0.8;
+/// The tracks' sum at its fullest (it saturates there: 1).
+pub const RW_TRACK_NORM: f64 = 1.35;
+/// The wheel path's lift in albedo at its fullest (10-20 % lightness, UKERC).
+pub const RW_LIGHT: f64 = 0.14;
+/// The tyres' lines inside it: darker rubber and polish streaks, their
+/// spacing across (m: a tread rib's) and their darkening. INFERRED.
+pub const RW_LINE_M: f64 = 0.045;
+pub const RW_RUBBER: f64 = 0.18;
+/// The polish: the lanes' roughness eased this share in the tracks (the coarse
+/// texture stays rough). INFERRED.
+pub const RW_POLISH: f64 = 0.12;
+/// With `--street-pbr`: the polished roughness's share in the tracks (0.85 before).
+pub const RW_PBR_POLISH: f64 = 0.3;
+/// With `--street-glare`, `--street-aggregate`: the wheel paths' extra polish
+/// and exposed tops taken at this share (1 before).
+pub const RW_GLARE_SHARE: f64 = 0.35;
+/// The tracks spread into the junction's turns over this much before a stop end (m),
+/// and the drips gather over a queue of this length behind it (m: four cars). INFERRED.
+pub const RW_STOP_FADE_M: f64 = 6.0;
+pub const RW_QUEUE_M: f64 = 28.0;
+/// The drips' band about the lane's line of travel (half-width, m: under the
+/// engine and gearbox, between the tracks). INFERRED.
+pub const RW_DRIP_HALF_M: f64 = 0.45;
+/// The weathering's and street pass's patches: their tone's departure from
+/// the road's kept at this share (old patches 16-38 % lighter before). INFERRED.
+pub const RW_PATCH_CONTRAST: f64 = 0.35;
+/// The road's cracks by its age: none on a new surface, all of them by the
+/// second figure (years). INFERRED.
+pub const RW_CRACK_START_YEARS: f64 = 1.5;
+pub const RW_CRACK_FULL_YEARS: f64 = 6.0;
 
 // ---- `--street-wear` (look::STREET_WEAR; street_pbr.wgsl `sw_*`) ----------------------
 //
@@ -247,6 +331,23 @@ pub const AGG_MASTIC_AO: f64 = 0.85;
 /// (their blotchy 5-10 cm normal field: what the scans are at the road's
 /// scale is the mean of the aggregate, which this layer now draws).
 pub const AGG_SCAN_RELIEF_OUT: f64 = 0.65;
+/// (`--aged-aggregate`, look::AGED_AGGREGATE) An old street's grime film (tyre
+/// rubber, brake dust, soil) over stones and mastic alike: each stone's tone
+/// keeps this share of its departure from the layout's mean, the rest the
+/// mean's own. A shading choice matched to a photograph: Mission at 3rd (the
+/// same corner, CC0, 2011) shows the shaded carriageway 2-4 m from the eye a
+/// near-even grey, its fine contrast (linear luminance less a 6 px blur, its
+/// spread over its mean) 0.13, where the stones' full tones drew 0.76.
+pub const AGG_AGED_TONE: f64 = 0.3;
+/// (`--aged-aggregate`) The stones' tones resolved only while a stone spans a
+/// few pixels or more across the view: whole up to a footprint of this share
+/// of the pitch (a stone over ten pixels), gone at the second (four pixels),
+/// as a camera's lens and sensor take a three-pixel grain's contrast down (the
+/// relief and finish keep their own fade). Without it the tones held to a
+/// stone of a pixel, the tops widened by the footprint brighter than the
+/// layout's mean (the street 16% lighter than its calibrated tone at 3 m).
+pub const AGG_AGED_NEAR: f64 = 0.1;
+pub const AGG_AGED_FAR: f64 = 0.25;
 
 // ---- `--plaza-setts` (look::PLAZA_SETTS; street_pbr.wgsl `ss_*`) ------------------------
 //
@@ -622,6 +723,7 @@ pub fn wgsl() -> String {
         ("SP_GUTTER_ALBEDO", GUTTER_ALBEDO),
         ("SP_ASPHALT_ROUGH", ASPHALT_ROUGH),
         ("SP_ASPHALT_ROUGH_POLISHED", ASPHALT_ROUGH_POLISHED),
+        ("SP_ASPHALT_ROUGH_POLISHED_MATTE", ASPHALT_ROUGH_POLISHED_MATTE),
         ("SP_LANE_M", d.lane_m),
         ("SP_PARKING_M", d.parking_m),
         ("SP_TRACK_M", d.vehicle_m * TRACK_SHARE),
@@ -691,6 +793,33 @@ pub fn wgsl() -> String {
         ("SW_SEAL_ROUGH_AGED", WEAR_SEAL_ROUGH_AGED),
         ("SW_DRIP_CELL_M", WEAR_DRIP_CELL_M),
         ("SW_DRIP_DARK", WEAR_DRIP_DARK),
+        ("RW_FRESH_TONE", RW_FRESH_TONE),
+        ("RW_OXIDATION_YEARS", RW_OXIDATION_YEARS),
+        ("RW_FILM_YEARS", RW_FILM_YEARS),
+        ("RW_WEAR_YEARS", RW_WEAR_YEARS),
+        ("RW_CAR_HALF_M", RW_CAR_HALF_M),
+        ("RW_CAR_SIGMA_M", RW_CAR_SIGMA_M),
+        ("RW_CAR_W", RW_CAR_W),
+        ("RW_VAN_HALF_M", RW_VAN_HALF_M),
+        ("RW_VAN_SIGMA_M", RW_VAN_SIGMA_M),
+        ("RW_VAN_W", RW_VAN_W),
+        ("RW_BUS_HALF_M", RW_BUS_HALF_M),
+        ("RW_BUS_SIGMA_M", RW_BUS_SIGMA_M),
+        ("RW_BUS_W", RW_BUS_W),
+        ("RW_BUS_W_STOP", RW_BUS_W_STOP),
+        ("RW_TRACK_NORM", RW_TRACK_NORM),
+        ("RW_LIGHT", RW_LIGHT),
+        ("RW_LINE_M", RW_LINE_M),
+        ("RW_RUBBER", RW_RUBBER),
+        ("RW_POLISH", RW_POLISH),
+        ("RW_PBR_POLISH", RW_PBR_POLISH),
+        ("RW_GLARE_SHARE", RW_GLARE_SHARE),
+        ("RW_STOP_FADE_M", RW_STOP_FADE_M),
+        ("RW_QUEUE_M", RW_QUEUE_M),
+        ("RW_DRIP_HALF_M", RW_DRIP_HALF_M),
+        ("RW_PATCH_CONTRAST", RW_PATCH_CONTRAST),
+        ("RW_CRACK_START_YEARS", RW_CRACK_START_YEARS),
+        ("RW_CRACK_FULL_YEARS", RW_CRACK_FULL_YEARS),
         ("SG_MACRO_SLOPE", GLARE_MACRO_SLOPE),
         ("SG_TOPS", GLARE_TOPS),
         ("SG_TOPS_WHEEL", GLARE_TOPS_WHEEL),
@@ -705,6 +834,9 @@ pub fn wgsl() -> String {
         ("SG_WIDE_MATTE", GLARE_WIDE_MATTE),
         ("SG_SETT_ROUGH", GLARE_SETT_ROUGH),
         ("SA_STONE_M", AGG_STONE_M),
+        ("SA_AGED_TONE", AGG_AGED_TONE),
+        ("SA_AGED_NEAR", AGG_AGED_NEAR),
+        ("SA_AGED_FAR", AGG_AGED_FAR),
         ("SA_STONE_SHARE", AGG_STONE_SHARE),
         ("SA_GAP_MIN", AGG_GAP_MIN),
         ("SA_GAP_MAX", AGG_GAP_MAX),
@@ -830,6 +962,8 @@ mod tests {
         assert!(SEAL_PROUD_M > 0.0015 && SEAL_PROUD_M < 0.0032, "1/16-1/8 in");
         assert!(PAINT_WORN < PAINT_WORN_OLD && PAINT_WORN_OLD < 0.5);
         assert!(PAINT_ROUGH < PAINT_ROUGH_AGED && PAINT_ROUGH_AGED <= ASPHALT_ROUGH_POLISHED);
+        // (`--matte-wheel-paths`) still polished, short of the open binder
+        assert!(ASPHALT_ROUGH_POLISHED < ASPHALT_ROUGH_POLISHED_MATTE && ASPHALT_ROUGH_POLISHED_MATTE < ASPHALT_ROUGH);
         for a in [SETT_ALBEDO, BRICK_PAVER_ALBEDO, CONCRETE_PAVER_ALBEDO] {
             assert!((0.2..=0.4).contains(&a), "{a}");
         }
@@ -896,8 +1030,12 @@ mod tests {
         let cover = (ao0 - AGG_MASTIC_AO) / (1.0 - AGG_MASTIC_AO);
         assert!((0.4..=0.8).contains(&cover), "{cover}");
         assert!(AGG_TOP_ROUGH_WHEEL < AGG_TOP_ROUGH && AGG_TOP_ROUGH < AGG_FILM_ROUGH && AGG_FILM_ROUGH < AGG_MASTIC_ROUGH);
+        // (`--aged-aggregate`) the grime keeps a share of each tone, and the tones fade out
+        // over footprints of a tenth to a quarter of the pitch: before the layer's own fade begins
+        assert!(AGG_AGED_TONE > 0.0 && AGG_AGED_TONE < 1.0);
+        assert!(AGG_AGED_NEAR < AGG_AGED_FAR && AGG_AGED_FAR <= 0.3);
         let w = wgsl();
-        for k in ["SA_STONE_M", "SA_MEAN_ALB0", "SA_MEAN_ROUGH1", "SA_MEAN_TOPS0", "SA_GREY_TINT"] {
+        for k in ["SA_STONE_M", "SA_MEAN_ALB0", "SA_MEAN_ROUGH1", "SA_MEAN_TOPS0", "SA_GREY_TINT", "SA_AGED_TONE", "SA_AGED_NEAR", "SA_AGED_FAR"] {
             assert!(w.contains(&format!("const {k}: ")), "{k}");
         }
     }

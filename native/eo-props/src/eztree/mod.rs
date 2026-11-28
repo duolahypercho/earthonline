@@ -6,7 +6,8 @@
 //! street pass's tree table and its near / window / far forms
 //! (`street-furniture.js`; `street.rs`), and a cooker that bakes every form
 //! the street pass and the streamed tiles draw once, in parallel, into one
-//! cached file (`cook.rs`).
+//! cached file (`cook.rs`). Not from the JS: the crown core the window and
+//! far forms take under `--tree-crowns` (`crown.rs`).
 //!
 //! Provenance and licence: the generator is ez-tree by Daniel Greenheck,
 //! https://github.com/dgreenheck/ez-tree `src/lib` at commit
@@ -26,18 +27,23 @@
 
 mod coastal;
 mod cook;
+mod garden;
+pub mod crown;
 mod generator;
 mod geometry;
 mod street;
 
 pub use coastal::{COASTAL_SHRUBS, COASTAL_TREES};
+pub use garden::{GARDEN_SHRUBS, GARDEN_TREES};
 pub use cook::{EzLibrary, StreetForm, cook_all, cook_all_with};
+pub use crown::{PART_CORE, crown_core, tree_crowns_enabled};
 pub use geometry::build_ez_tree;
 pub use street::{
     StreetTreeMesh, StreetTreeMode, build_street_tree_geometry, street_tree_silhouette_for, street_tree_species,
     street_tree_species_id, street_tree_trunk_radius, street_tree_variant_count, street_tree_variant_for,
     surveyed_form_variant, surveyed_tree_variant,
 };
+pub use street::{GENUS_MODELS, SPECIES_MODELS, species_model, species_tree_variant, street_crown_widths}; // (`--tree-species`, `--tree-sizes`)
 
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
@@ -58,7 +64,7 @@ pub struct EzMesh {
     pub uvs: Vec<[f32; 2]>,
     /// The JS `color` attribute: linear tint x baked tone.
     pub colors: Vec<[f32; 3]>,
-    /// 0 wood, 1 leaf (the JS `plantPart`).
+    /// 0 wood, 1 leaf (the JS `plantPart`); 2 a crown core (`crown_core`, not JS).
     pub part: Vec<u8>,
     pub indices: Vec<u32>,
     pub user: EzUserData,
@@ -281,6 +287,10 @@ impl EzData {
         }
         // the Golden Gate's coastal trees and scrub (coastal.rs), beside the export's own.
         for sp in coastal::species_list() {
+            species.insert(sp.id.clone(), sp);
+        }
+        // the rear yards' garden shrubs (garden.rs).
+        for sp in garden::species_list() {
             species.insert(sp.id.clone(), sp);
         }
         let strings = |v: &Value| -> Vec<String> { v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default() };

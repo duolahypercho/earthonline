@@ -263,6 +263,29 @@ fn offsets(line: &[[f64; 2]], half: f64) -> Vec<[f64; 2]> {
         .collect()
 }
 
+fn deck_y(d: &Dock, sea: f64) -> f64 {
+    sea + FREEBOARD_M - if d.main { 0.0 } else { FINGER_DROP_M }
+}
+
+fn deck_quad(d: &Dock, off: &[[f64;2]], top: f64, i: usize) -> [[f64;3];4] {
+    let at = |j: usize, side: f64| [d.line[j][0]+off[j][0]*side, top, d.line[j][1]+off[j][1]*side];
+    let [a,b,c,e] = [at(i,1.0),at(i+1,1.0),at(i+1,-1.0),at(i,-1.0)];
+    if (b[2]-a[2])*(e[0]-a[0]) >= (b[0]-a[0])*(e[2]-a[2]) { [a,b,c,e] } else { [e,c,b,a] }
+}
+
+pub fn walkable(docks: &[Dock], sea: f64) -> Vec<[[f32;3];3]> {
+    let mut out = Vec::new();
+    for d in docks {
+        let off = offsets(&d.line, d.width / 2.0);
+        for i in 0..d.line.len().saturating_sub(1) {
+            if (d.line[i][0]-d.line[i+1][0]).hypot(d.line[i][1]-d.line[i+1][1]) < 1e-6 { continue; }
+            let [a,b,c,e] = deck_quad(d, &off, deck_y(d,sea), i).map(|v| v.map(|f| f as f32));
+            out.extend([[a,b,c],[a,c,e]]);
+        }
+    }
+    out
+}
+
 /// The floats' meshes: deck, walers and float body per run, the guide piles.
 pub fn build_meshes(docks: &[Dock], sea: f64) -> DockMeshes {
     let mut m = MeshArrays::new("waterfront:floating-docks");
@@ -270,7 +293,7 @@ pub fn build_meshes(docks: &[Dock], sea: f64) -> DockMeshes {
     let mut piles = 0usize;
     let mut total = 0.0;
     for d in docks {
-        let top = sea + FREEBOARD_M - if d.main { 0.0 } else { FINGER_DROP_M };
+        let top = deck_y(d, sea);
         let (waler_y, foot) = (top - WALER_M, sea - FLOAT_DRAFT_M);
         let off = offsets(&d.line, d.width / 2.0);
         let at = |i: usize, side: f64, y: f64| [d.line[i][0] + off[i][0] * side, y, d.line[i][1] + off[i][1] * side];
@@ -282,12 +305,23 @@ pub fn build_meshes(docks: &[Dock], sea: f64) -> DockMeshes {
             }
             total += l;
             // The deck, facing up.
-            face(&mut m, at(i, 1.0, top), at(i + 1, 1.0, top), at(i + 1, -1.0, top), at(i, -1.0, top), deck_c, [0.0, 1.0, 0.0]);
-            // Each side: the waler, then the float body down past the waterline, facing out.
+            let [a_top, b_top, c_top, d_top] = deck_quad(d, &off, top, i);
+            m.quad(a_top,b_top,c_top,d_top,deck_c);
+            // Each side: the waler, then the float body down past the waterline, facing out, plus mooring cleats on main walks.
+            let cleats = if d.main && l >= 8.0 { (l / 9.0).floor() as usize } else { 0 };
+            let cleat_c = srgb_hex(0x2a2e33);
+            let dir = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+            let yaw = dir[1].atan2(dir[0]);
             for side in [1.0, -1.0] {
                 let n = [-(b[1] - a[1]) / l * side, 0.0, (b[0] - a[0]) / l * side];
                 face(&mut m, at(i, side, top), at(i + 1, side, top), at(i + 1, side, waler_y), at(i, side, waler_y), waler_c, n);
                 face(&mut m, at(i, side, waler_y), at(i + 1, side, waler_y), at(i + 1, side, foot), at(i, side, foot), float_c, n);
+                for k in 0..cleats {
+                    let t = (k as f64 + 0.5) / cleats as f64;
+                    let cx = a[0] + (b[0] - a[0]) * t + (off[i][0] + (off[i + 1][0] - off[i][0]) * t) * side * 0.86;
+                    let cz = a[1] + (b[1] - a[1]) * t + (off[i][1] + (off[i + 1][1] - off[i][1]) * t) * side * 0.86;
+                    m.box_(cx, cz, top, top + 0.09, 0.16, 0.045, yaw, cleat_c, crate::geometry::NO_BOTTOM);
+                }
             }
         }
         // The two ends, facing out along the line.

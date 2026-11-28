@@ -37,10 +37,16 @@ struct Harness {
 }
 
 impl Harness {
-    fn start() -> Self {
+    fn start() -> Self { Self::with_config(ServerConfig::default()) }
+
+    fn with_config(config: ServerConfig) -> Self {
         let (g, s) = world();
+        Self::with_world(config, g.clone(), s.clone())
+    }
+
+    fn with_world(config: ServerConfig, game: Arc<GameWorld>, source: Arc<eo_sim::native::NativeSource>) -> Self {
         let ctl = Arc::new(Mutex::new(Ctl::default()));
-        let th = spawn_server(ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 2, sim_threads: 2, ..Default::default() }, g.clone(), s.clone(), ctl.clone());
+        let th = spawn_server(ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 2, sim_threads: 2, ..config }, game, source, ctl.clone());
         let addr = loop {
             if let Some(a) = ctl.lock().unwrap().addr {
                 break a;
@@ -68,9 +74,14 @@ struct Player {
 
 impl Player {
     fn connect(addr: std::net::SocketAddr, name: &str, cond: Conditions, spawn: [f64; 3]) -> Self {
+        Self::join(addr, name, cond, spawn, None)
+    }
+
+    fn join(addr: std::net::SocketAddr, name: &str, cond: Conditions, spawn: [f64; 3], vehicle: Option<eo_player::vehicle::VehicleConfig>) -> Self {
         let mut c = ClientConfig::new(addr, &format!("dev:{name}"));
+        c.vehicle = vehicle.unwrap_or_default();
         c.conditions = cond;
-        c.spawn = Some(SpawnHint { x: spawn[0] as f32, z: spawn[1] as f32, yaw: spawn[2] as f32, driving: false });
+        c.spawn = Some(SpawnHint { x: spawn[0] as f32, z: spawn[1] as f32, yaw: spawn[2] as f32, driving: vehicle.is_some() });
         c.timeout_s = 2.0;
         Self { net: NetClient::connect(c).unwrap(), pred: None, last_ack: 0, accepts: vec![], out: vec![], reliable: vec![] }
     }
@@ -83,8 +94,8 @@ impl Player {
                     let mut cw = world().0.collision_world(2);
                     let p = rebuild_player(&mut cw, &s, &a.car_spawns);
                     match self.pred.as_mut() {
-                        Some(pr) => pr.reset(p, cw, a.input_seq),
-                        None => self.pred = Some(Predictor::new(p, cw, a.input_seq)),
+                        Some(pr) => pr.reset_with_weather(p, cw, a.input_seq, a.weather),
+                        None => self.pred = Some(Predictor::with_weather(p, cw, a.input_seq, a.weather)),
                     }
                     self.accepts.push((a.player_id, a.resumed));
                 }
@@ -205,6 +216,7 @@ fn a_client_that_loses_its_link_reconnects_as_the_same_player() {
     let id = p.net.player_id();
     let before = p.pred.as_ref().unwrap().player.character.feet();
     p.net.set_blackout(true);
+    h.ctl.lock().unwrap().sky = Some((8.0, 1.0, eo_net::presence::weather_code("rain").unwrap(), 19));
     run_frames(&mut [&mut p], 3.5, |_, _| (StepInput::default(), 0.5));
     assert_eq!(p.net.status().phase, Phase::Reconnecting, "the client noticed the dead link");
     p.net.set_blackout(false);
@@ -215,6 +227,7 @@ fn a_client_that_loses_its_link_reconnects_as_the_same_player() {
         std::thread::sleep(Duration::from_millis(5));
     }
     run_frames(&mut [&mut p], 1.0, |_, _| (StepInput { move_y: 1.0, ..Default::default() }, 0.5));
+    assert_eq!(p.pred.as_ref().unwrap().player.weather.rain_mm_h, 6.0);
     let after = p.pred.as_ref().unwrap().player.character.feet();
     let st = p.net.status();
     let server = h.stop();
@@ -226,7 +239,17 @@ fn a_client_that_loses_its_link_reconnects_as_the_same_player() {
 
 #[test]
 fn two_clients_see_each_other_and_the_same_traffic() {
-    let h = Harness::start();
+    verify_shared_traffic(Harness::start());
+}
+
+#[test]
+fn two_clients_replicate_traffic_from_the_drawn_street_plan() {
+    let (game, source) = eo_server::load_with_traffic_plan(true, None, true, true).unwrap();
+    let config = ServerConfig { traffic_contact: true, ..Default::default() };
+    verify_shared_traffic(Harness::with_world(config, game, source));
+}
+
+fn verify_shared_traffic(h: Harness) {
     let a_spawn = *SPAWN;
     let b_spawn = [SPAWN[0] + 6.0, SPAWN[1] + 2.0, -1.5708];
     let mut a = Player::connect(h.addr, "ada", Conditions::profile_80ms(), a_spawn);
@@ -411,4 +434,228 @@ fn friends_share_names_emotes_the_sky_and_a_fast_trip() {
     assert_eq!(unpack_anim(e.1.anim).0, Emote::None);
     let st = h.stop();
     println!("presence: names, a wave, one sky, a trip of {:.0} m; server {st}", (feet.x - b_spawn[0]).hypot(feet.z - b_spawn[1]));
+}
+
+#[test]
+fn a_vehicle_impact_moves_both_authoritative_clients() {
+    run_vehicle_impact("clear", Conditions::NONE, 0);
+}
+
+#[test]
+fn a_loaded_van_and_a_hatchback_reconcile_their_contact_on_a_storm_wet_road() {
+    run_vehicle_impact("storm", Conditions::parse("90,8,0").unwrap(), 600);
+}
+
+fn run_vehicle_impact(weather: &str, link: Conditions, van_cargo: u16) {
+    use eo_player::vehicle::{VehicleConfig, VehicleModel};
+    let mode = eo_net::presence::weather_code(weather).unwrap();
+    let h = Harness::with_config(ServerConfig { weather: mode, ..Default::default() });
+    let game = &world().0;
+    let route = eo_player::routes::drive_route(&game.city, &game.elevation);
+    let [x, z] = route.path[0];
+    let yaw = (route.path[1][0] - x).atan2(route.path[1][1] - z);
+    let vehicle = |model, cargo_kg| Some(VehicleConfig { model, occupants_kg: 75, cargo_kg });
+    let mut a = Player::join(h.addr, "driver", link, [x,z,yaw], vehicle(VehicleModel::DeliveryVan, van_cargo));
+    let mut b = Player::join(h.addr, "waiting", link, [x+9.0*yaw.sin(), z+9.0*yaw.cos(), yaw], vehicle(VehicleModel::Hatchback, 0));
+    wait_connected(&mut [&mut a,&mut b]);
+    let position = |p: &Player| {
+        let state = p.pred.as_ref().unwrap();
+        state.player.vehicles[0].datum(&state.cw)
+    };
+    let initial = position(&b);
+    run_frames(&mut [&mut a,&mut b], 5.5, |which,t| {
+        (StepInput { throttle: if which==0 && t < 3.0 { 0.8 } else { 0.0 }, ..Default::default() }, yaw)
+    });
+    let moved = position(&b) - initial;
+    let corrections = [a.pred.as_ref().unwrap().stats.corrections,b.pred.as_ref().unwrap().stats.corrections];
+    let expected = eo_net::weather::RoadWeather::new(eo_net::weather::WeatherEpoch::new(mode, 0, 0, 0)).at(0);
+    for (driver, cargo) in [(&a, van_cargo), (&b, 0)] {
+        let peer = driver.pred.as_ref().unwrap();
+        assert_eq!(peer.player.weather, expected);
+        assert_eq!(peer.player.vehicles[0].spec.config.cargo_kg, cargo);
+        assert!(peer.stats.error_mm.len() > 30, "expected acknowledgements during and after contact");
+        if van_cargo > 0 {
+            assert!(peer.stats.replayed_steps > 0, "a delayed contact snapshot must replay pending inputs");
+        }
+    }
+    let stats = h.stop();
+    let contacts = stats["vehicle_contact_ticks"].as_array().unwrap();
+    eprintln!("{weather}, van cargo {van_cargo} kg, contacts {contacts:?}, applied {corrections:?}, hatchback displacement {moved:?}");
+    assert_eq!(contacts.len(), 2);
+    assert!(contacts.iter().all(|x| x.as_u64().unwrap() > 0) && corrections.iter().all(|n| *n > 0));
+    assert!(moved.x*yaw.sin() + moved.z*yaw.cos() > 0.4);
+}
+
+#[test]
+fn driving_uses_the_servers_rain_at_join_and_its_storm_during_replay() {
+    let rain = eo_net::presence::weather_code("rain").unwrap();
+    let storm = eo_net::presence::weather_code("storm").unwrap();
+    let h = Harness::with_config(ServerConfig { weather: rain, ..Default::default() });
+    let game = &world().0;
+    let route = eo_player::routes::drive_route(&game.city, &game.elevation);
+    let [x, z] = route.path[0];
+    let yaw = (route.path[1][0] - x).atan2(route.path[1][1] - z);
+    let link = Conditions::parse("90,8,0").unwrap();
+    let mut p = Player::join(h.addr, "rain-driver", link, [x, z, yaw], Some(eo_player::vehicle::VehicleConfig { model: eo_player::vehicle::VehicleModel::Sedan, ..Default::default() }));
+    wait_connected(&mut [&mut p]);
+    let rain_state = p.pred.as_ref().unwrap().player.weather;
+    assert_eq!((rain_state.rain_mm_h, rain_state.wind), (6.0, [4.4, 1.1]));
+    let drive = |_: usize, _: f64| (StepInput { throttle: 0.7, ..Default::default() }, yaw);
+    run_frames(&mut [&mut p], 2.5, drive);
+    let before = p.pred.as_ref().unwrap();
+    assert!(before.player.vehicles[0].forward_speed(&before.cw) > 2.0, "car speed {}, mode {:?}", before.player.vehicles[0].forward_speed(&before.cw), before.player.mode);
+    assert!(before.stats.error_mm.len() > 12 && before.stats.error_mm.iter().all(|v| *v == 0.0));
+    h.ctl.lock().unwrap().sky = Some((18.0, 0.0, storm, 27));
+    run_frames(&mut [&mut p], 1.0, drive);
+    let brake = |_: usize, _: f64| (StepInput { brake: 1.0, ..Default::default() }, yaw);
+    run_frames(&mut [&mut p], 2.0, brake);
+    let end = p.pred.as_ref().unwrap();
+    let wet = end.player.weather;
+    assert_eq!((wet.rain_mm_h, wet.wind), (22.0, [11.5, 4.2]));
+    assert!(wet.wetness > rain_state.wetness && wet.puddle_fill > rain_state.puddle_fill);
+    assert!(end.stats.replayed_steps > 0 && end.stats.corrections >= 1);
+    assert!(end.stats.error_mm.iter().rev().take(15).all(|v| *v == 0.0));
+    println!("UDP rain to storm: {} acknowledgements, {} replayed inputs, {} corrections", end.stats.error_mm.len(), end.stats.replayed_steps, end.stats.corrections);
+    let stats = h.stop();
+    assert_eq!(stats["mismatches"], 0, "server disagreed after the authoritative weather change");
+}
+
+#[test]
+fn drive_range_and_hill_hold_on_filbert_street_agree_over_udp() {
+    use eo_player::vehicle::{VehicleConfig, VehicleModel};
+    let game = &world().0;
+    // Choose the middle of an actual graded block, clear of the junction.
+    let (grade, x, z, yaw) = game
+        .city
+        .roads
+        .iter()
+        .filter(|r| r.name == "Filbert Street" && !r.bridge && !r.tunnel)
+        .flat_map(|r| r.points64.windows(2))
+        .filter_map(|w| {
+            let (dx, dz) = (w[1][0] - w[0][0], w[1][1] - w[0][1]);
+            let len = dx.hypot(dz);
+            if len < 32.0 {
+                return None;
+            }
+            let (x, z) = ((w[1][0] + w[0][0]) * 0.5, (w[1][1] + w[0][1]) * 0.5);
+            let (ux, uz) = (dx / len, dz / len);
+            let grade = (game.ground.ground_y(x + 5.0 * ux, z + 5.0 * uz)
+                - game.ground.ground_y(x - 5.0 * ux, z - 5.0 * uz))
+                / 10.0;
+            (0.08..0.20).contains(&grade.abs()).then_some((
+                grade.abs(),
+                x,
+                z,
+                (ux * grade.signum()).atan2(uz * grade.signum()),
+            ))
+        })
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .expect("graded Filbert Street block");
+    let h = Harness::start();
+    let mut p = Player::join(
+        h.addr,
+        "hill-driver",
+        Conditions::NONE,
+        [x, z, yaw],
+        Some(VehicleConfig {
+            model: VehicleModel::Sedan,
+            ..Default::default()
+        }),
+    );
+    wait_connected(&mut [&mut p]);
+    let brake = |_: usize, _: f64| {
+        (
+            StepInput {
+                brake: 1.0,
+                ..Default::default()
+            },
+            yaw,
+        )
+    };
+    run_frames(&mut [&mut p], 1.2, brake);
+    let position = |p: &Player| {
+        let s = p.pred.as_ref().unwrap();
+        s.player.position(&s.cw)
+    };
+    let start = position(&p);
+    let s = p.pred.as_ref().unwrap();
+    let wheels = s.player.vehicles[0].controller.wheels();
+    assert!(wheels.iter().all(|w| w.raycast_info().is_in_contact));
+    let contact_grade = wheels
+        .iter()
+        .map(|w| {
+            let n = w.raycast_info().contact_normal_ws;
+            -(f64::from(n.x) * yaw.sin() + f64::from(n.z) * yaw.cos()) / f64::from(n.y)
+        })
+        .sum::<f64>()
+        / wheels.len() as f64;
+    assert!(
+        contact_grade > 0.07,
+        "wheel contacts on grade {contact_grade}"
+    );
+    p.frame(
+        &StepInput {
+            shift_direction: true,
+            brake: 1.0,
+            ..Default::default()
+        },
+        yaw,
+        0.001,
+    );
+    run_frames(&mut [&mut p], 1.7, |_, _| {
+        (
+            StepInput {
+                throttle: 0.6,
+                ..Default::default()
+            },
+            yaw,
+        )
+    });
+    let s = p.pred.as_ref().unwrap();
+    assert!(
+        s.player.vehicles[0].reverse_selected() && s.player.vehicles[0].forward_speed(&s.cw) < -2.0
+    );
+    let moved = position(&p) - start;
+    assert!(moved.x * yaw.sin() + moved.z * yaw.cos() < -1.0);
+    run_frames(&mut [&mut p], 2.0, brake);
+    let stopped = position(&p);
+    run_frames(&mut [&mut p], 2.0, brake);
+    let drift = stopped.distance(position(&p));
+    let s = p.pred.as_ref().unwrap();
+    let samples = s.stats.error_mm.len();
+    let peak_error = s.stats.error_mm.iter().copied().fold(0.0_f64, f64::max);
+    let stats = h.stop();
+    println!(
+        "Filbert Street ({x:.2}, {z:.2}): terrain {grade:.3}, wheel grade {contact_grade:.3}, brake drift {drift:.4} m, {samples} acknowledgements, max error {peak_error} mm"
+    );
+    assert!(drift < 0.03 && samples > 30 && peak_error == 0.0);
+    assert_eq!(stats["mismatches"], 0);
+}
+
+#[test]
+fn ocean_beach_promenade_spawn_and_walk_agree_over_udp() {
+    // Survey-plan coordinates at the sixth mapped stair opening.
+    let [x, z] = eo_data::groundscale::plan([-8061.9855, 1143.8]);
+    let yaw = 0.09829;
+    let h = Harness::start();
+    let mut p = Player::connect(h.addr, "beach-walker", Conditions::NONE, [x, z, yaw]);
+    wait_connected(&mut [&mut p]);
+    run_frames(&mut [&mut p], 0.75, |_, _| (StepInput::default(), yaw));
+    let pred = p.pred.as_ref().unwrap();
+    let start = pred.player.character.feet();
+    assert!(pred.player.character.grounded);
+    assert!(start.y - pred.cw.floor_y(start.x, start.z) > 0.25);
+    run_frames(&mut [&mut p], 3.0, |_, _| {
+        (StepInput { move_y: 1.0, ..Default::default() }, yaw)
+    });
+    let pred = p.pred.as_ref().unwrap();
+    let end = pred.player.character.feet();
+    let travel = (end.x - start.x) * yaw.sin() + (end.z - start.z) * yaw.cos();
+    let height_error = (end.y - pred.cw.surface_y(end.x, end.z)).abs();
+    let samples = pred.stats.error_mm.len();
+    let max_error = pred.stats.error_mm.iter().copied().fold(0.0_f64, f64::max);
+    let stats = h.stop();
+    println!("Ocean Beach UDP: walked {travel:.2} m, floor gap {height_error:.4} m, {samples} acknowledgements, maximum prediction error {max_error:.3} mm");
+    assert!(travel > 3.0 && height_error < 0.04 && samples > 20 && max_error == 0.0);
+    assert_eq!(stats["mismatches"], 0);
 }

@@ -46,7 +46,8 @@ pub fn spawn_server(cfg: ServerConfig, game: Arc<GameWorld>, source: Arc<eo_sim:
                         let corr: u64 = server.sessions.iter().map(|s| s.stats.corrections_sent).sum();
                         let mism: u64 = server.sessions.iter().map(|s| s.stats.mismatches).sum();
                         let run: u64 = server.sessions.iter().map(|s| s.stats.inputs_run).sum();
-                        c.stats = Some(json!({ "inputs_run": run, "inputs_stood_in": stood, "mismatches": mism, "corrections_sent": corr }));
+                        let contacts: Vec<_> = server.sessions.iter().map(|s| s.stats.vehicle_contact_ticks).collect();
+                        c.stats = Some(json!({ "vehicle_contact_ticks": contacts, "inputs_run": run, "inputs_stood_in": stood, "mismatches": mism, "corrections_sent": corr }));
                         return;
                     }
                     if let Some((h, r, w, seed)) = c.sky.take() {
@@ -152,8 +153,12 @@ pub fn script_route(game: &GameWorld) -> (Vec<[f64; 2]>, [f64; 3]) {
 
 /// One run: returns the measurements.
 pub fn run(game: &Arc<GameWorld>, source: &Arc<eo_sim::native::NativeSource>, cond: Conditions, seconds: f64, shove: bool) -> anyhow::Result<serde_json::Value> {
+    run_with_config(game, source, cond, seconds, shove, ServerConfig::default())
+}
+
+pub fn run_with_config(game: &Arc<GameWorld>, source: &Arc<eo_sim::native::NativeSource>, cond: Conditions, seconds: f64, shove: bool, config: ServerConfig) -> anyhow::Result<serde_json::Value> {
     let ctl = Arc::new(Mutex::new(Ctl::default()));
-    let cfg = ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 2, sim_threads: 2, structures: game.structures, ..Default::default() };
+    let cfg = ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 2, sim_threads: 2, structures: game.structures, ..config };
     let th = spawn_server(cfg.clone(), game.clone(), source.clone(), ctl.clone());
     let addr = loop {
         if let Some(a) = ctl.lock().unwrap().addr {
@@ -197,7 +202,7 @@ pub fn run(game: &Arc<GameWorld>, source: &Arc<eo_sim::native::NativeSource>, co
                     let mut cw = game.collision_world(2);
                     let player = rebuild_player(&mut cw, &state, &a.car_spawns);
                     script = Some(Script::new(route.clone(), [a.car_spawns[0][0] as f64, a.car_spawns[0][1] as f64]));
-                    pred = Some(Predictor::new(player, cw, a.input_seq));
+                    pred = Some(Predictor::with_weather(player, cw, a.input_seq, a.weather));
                     connect_ms = t_connect.elapsed().as_secs_f64() * 1e3;
                     joined_this_frame = true;
                 }

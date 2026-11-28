@@ -52,7 +52,12 @@ fn pr_sphere(i: PrInstance, m: PrModel) -> PrSphere {
     var s: PrSphere;
     let v = pr_veg_scale(i);
     s.c = i.pos + pr_rot(i.yaw, m.center * i.scale * v);
-    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z) * v * (1.0 + length(pr_veg_grad(i)));
+    // a tree's lean (`pr_tree_lean`) shears its points by their height: the centre with
+    // them, and the radius by the shear's length (zero for everything else)
+    let lean = pr_tree_lean(i);
+    let cy = (m.center * i.scale * v).y;
+    s.c = s.c + vec3<f32>(lean.x * cy, 0.0, lean.y * cy);
+    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z) * v * (1.0 + length(pr_veg_grad(i)) + length(lean));
     if (pr_afloat_on(i)) {
         s.r = s.r * 1.12; // a boat's roll and pitch turn it about its waterline (`pr_afloat`)
     }
@@ -163,7 +168,7 @@ fn classify(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let s = pr_sphere(inst, m);
     let d = max(distance(s.c, pr.cam.xyz) - s.r, 0.0);
-    if (d >= m.lod.w) {
+    if (d * pr_reach(inst) >= m.lod.w) {
         return;
     }
     let dl = pr_lod_dist(inst, d);
@@ -187,11 +192,14 @@ fn classify(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     // Sun casters: the model's cascades, a coarser level further out (the
     // role of the JS caster policy: small kit casts into the near cascade only).
+    // A yard plant (pr_reach under 1) casts into the near cascade only, at its
+    // coarsest level: a garden holds thousands, and a shrub's shadow is a soft mass.
+    let yard = pr_reach(inst) < 1.0;
     for (var c = 0u; c < 3u; c = c + 1u) {
-        if ((pr.mode.x & (2u << c)) == 0u || c >= m.casts.x || !pr_in_cascade(c, s)) {
+        if ((pr.mode.x & (2u << c)) == 0u || c >= m.casts.x || !pr_in_cascade(c, s) || (yard && c > 0u)) {
             continue;
         }
-        let mesh = pr_mesh_at(m, max(lod, min(c + 1u, 2u)));
+        let mesh = pr_mesh_at(m, select(max(lod, min(c + 1u, 2u)), 2u, yard));
         if (mesh != PR_NONE) {
             pr_records[i * PR_VIEWS + 1u + c] = pr_take(1u + c, mesh);
         }
@@ -207,62 +215,88 @@ fn pr_write_cmd(slot: u32, count: u32, instances: u32, first: u32, base_vertex: 
     pr_cmds[b + 4u] = first_instance;
 }
 
-var<workgroup> pr_wg_n: array<u32, 1536>;
-var<workgroup> pr_wg_off: array<u32, 1536>;
+// Up to PR_MESH_MAX meshes (eo-render props.rs `PROP_MESH_MAX`): each view's per-mesh counts,
+// then (in place) their exclusive prefix sum; a mesh's count is the gap to the next offset
+// (the view's total past the last). One array, so 1024 meshes need ~24 KB of workgroup memory (props.rs checks the device gives it).
+const PR_MESH_MAX: u32 = 1024u;
+var<workgroup> pr_wg: array<u32, 6144>; // PR_VIEWS * PR_MESH_MAX
+var<workgroup> pr_wg_total: array<u32, 6>; // PR_VIEWS
+var<workgroup> pr_wg_tail: array<u32, 12>; // PR_VIEWS * 2
+
+fn pr_wg_count(v: u32, j: u32, meshes: u32) -> u32 {
+    let next = select(pr_wg_total[v], pr_wg[v * PR_MESH_MAX + j + 1u], j + 1u < meshes);
+    return next - pr_wg[v * PR_MESH_MAX + j];
+}
 
 @compute @workgroup_size(256)
-fn offsets(@builtin(local_invocation_index) k: u32) {
+fn offsets(@builtin(local_invocation_index) t: u32) {
     let meshes = pr.counts.y;
     let cap = pr.counts.z;
-    if (k < meshes) {
+    let mode_y = pr.mode.y;
+    for (var k = t; k < meshes; k = k + 256u) {
         for (var v = 0u; v < PR_VIEWS; v = v + 1u) {
-            pr_wg_n[v * 256u + k] = atomicLoad(&pr_counts[v * meshes + k]);
+            if ((mode_y & (1u << v)) != 0u) {
+                pr_wg[v * PR_MESH_MAX + k] = atomicLoad(&pr_counts[v * meshes + k]);
+            }
         }
     }
     workgroupBarrier();
-    if (k < PR_VIEWS && (pr.mode.y & (1u << k)) != 0u) {
-        let v = k;
+    if (t < PR_VIEWS && (mode_y & (1u << t)) != 0u) {
+        let v = t;
         var run = 0u;
         var tris = 0u;
         for (var j = 0u; j < meshes; j = j + 1u) {
-            let n = pr_wg_n[v * 256u + j];
-            pr_wg_off[v * 256u + j] = run;
-            let mesh = pr_meshes[j];
-            tris = tris + n * (mesh.count + mesh.cut_count) / 3u;
-            run = run + n;
+            let n = pr_wg[v * PR_MESH_MAX + j];
+            pr_wg[v * PR_MESH_MAX + j] = run;
+            if (n > 0u) {
+                let mesh = pr_meshes[j];
+                tris = tris + n * (mesh.count + mesh.cut_count) / 3u;
+                run = run + n;
+            }
         }
+        pr_wg_total[v] = run;
         atomicStore(&pr_stats[v * 2u], run);
         atomicStore(&pr_stats[v * 2u + 1u], tris);
     }
     workgroupBarrier();
-    if (k < meshes) {
+    for (var k = t; k < meshes; k = k + 256u) {
         for (var v = 0u; v < PR_VIEWS; v = v + 1u) {
-            if ((pr.mode.y & (1u << v)) == 0u) {
-                continue;
+            if ((mode_y & (1u << v)) != 0u) {
+                atomicStore(&pr_counts[(PR_VIEWS + v) * meshes + k], pr_wg[v * PR_MESH_MAX + k]);
             }
-            atomicStore(&pr_counts[(PR_VIEWS + v) * meshes + k], pr_wg_off[v * 256u + k]);
         }
     }
     // one compacted list per (view, part): only meshes with instances,
     // the rest of the list zero-instance (for a renderer without the count draw).
-    if (k < PR_VIEWS * 2u && (pr.mode.y & (1u << (k / 2u))) != 0u) {
+    if (t < PR_VIEWS * 2u && (mode_y & (1u << (t / 2u))) != 0u) {
+        let k = t;
         let v = k / 2u;
         let cut = (k & 1u) == 1u;
         var cursor = 0u;
         for (var j = 0u; j < meshes; j = j + 1u) {
-            let n = pr_wg_n[v * 256u + j];
-            let mesh = pr_meshes[j];
-            let count = select(mesh.count, mesh.cut_count, cut);
-            if (n > 0u && count > 0u) {
-                let first = select(mesh.first, mesh.cut_first, cut);
-                pr_write_cmd(k * meshes + cursor, count, n, first, mesh.base_vertex, v * cap + pr_wg_off[v * 256u + j]);
-                cursor = cursor + 1u;
+            let n = pr_wg_count(v, j, meshes);
+            if (n > 0u) {
+                let mesh = pr_meshes[j];
+                let count = select(mesh.count, mesh.cut_count, cut);
+                if (count > 0u) {
+                    let first = select(mesh.first, mesh.cut_first, cut);
+                    pr_write_cmd(k * meshes + cursor, count, n, first, mesh.base_vertex, v * cap + pr_wg[v * PR_MESH_MAX + j]);
+                    cursor = cursor + 1u;
+                }
             }
         }
-        for (var j = cursor; j < meshes; j = j + 1u) {
-            pr_write_cmd(k * meshes + j, 0u, 0u, 0u, 0, 0u);
-        }
+        pr_wg_tail[k] = cursor;
         pr_list_counts[k] = cursor;
+    }
+    workgroupBarrier();
+    for (var list = 0u; list < PR_VIEWS * 2u; list = list + 1u) {
+        if ((mode_y & (1u << (list / 2u))) == 0u) {
+            continue;
+        }
+        let start = pr_wg_tail[list];
+        for (var j = start + t; j < meshes; j = j + 256u) {
+            pr_write_cmd(list * meshes + j, 0u, 0u, 0u, 0, 0u);
+        }
     }
 }
 

@@ -37,6 +37,7 @@ pub mod rng;
 pub mod signals;
 pub mod standards;
 pub mod stats;
+pub mod vehicle_catalogue;
 pub mod vehicles;
 pub mod world;
 

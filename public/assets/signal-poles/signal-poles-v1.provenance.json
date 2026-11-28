@@ -1,0 +1,5933 @@
+{
+  "version": "signal-poles-v1",
+  "note": "San Francisco traffic-signal poles, mast arms and head mounts, modelled in code from the dimensions of Caltrans RSP ES-7C (sources) and the game's signal-hardware constants (props-js.json.gz), with modelling values where no sheet was read (modellingValues). No third-party geometry or image is used: the maps are baked and weathered by the script. Frames: glTF Y up; a pole's origin at its foot on its axis, its arm side +X (the handhole at -X); an arm part's origin on the arm axis, +X along the arm (armTube unit length, scaled to the arm); a mount's origin on the pole (or arm) axis at the head's centre (the arm), +X toward the head. Every part in two finishes (finishes): painted and galvanised; their level 0 files differ (the maps), the far levels are shared.",
+  "script": "scripts/assets/build-signal-poles-v1.py",
+  "scriptSha256": "2d137754ee242a0a55adc7dbaf5866374dedeb7f399af4a6a3cd83de7bf8ea03",
+  "blender": "4.5.3 LTS",
+  "sources": {
+    "caltransEs7e": {
+      "title": "Caltrans Revised Standard Plan RSP ES-7E, Electrical Systems (Signal and Lighting Standard, Case 3 Arm Loading, Wind Velocity = 100 mph, Arm Lengths 15 ft to 45 ft)",
+      "edition": "2006 Revised Standard Plans, RSP ES-7E dated June 30, 2006 (page 441 of the May 2006 Standard Plans book)",
+      "publisher": "State of California, Department of Transportation",
+      "url": "https://www.oaklandca.gov/files/assets/city/v/1/public-works/documents/standard-details-for-public-works-construction/es-7e.pdf",
+      "urlNote": "a copy of the Caltrans sheet in the City of Oakland's standard details",
+      "used": "the signal arm data (projected length, mounting height G, connection height H, angle at the pole, minimum OD at the pole), through the standards table entry signal-mast-arm-caltrans; the drawing is not reproduced"
+    },
+    "caMutcd2026": {
+      "title": "California Manual on Uniform Traffic Control Devices, 2026 Edition (FHWA MUTCD 2023 as amended for use in California)",
+      "publisher": "State of California, Department of Transportation",
+      "url": "https://dot.ca.gov/programs/safety-programs/camutcd",
+      "used": "push button height and facing (Section 4I.05, ped-push-button-location), the R10-3e(CA) sign's size (Table 2B-1, ped-push-button-sign) and layout (Figure 2B-27(CA), redrawn), the overhead Street Name sign's letter height (Section 2D.45, street-name-sign-overhead-letter-height)"
+    },
+    "overpass": {
+      "title": "Overpass 3.0.5 (Bold)",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org",
+      "url": "https://github.com/RedHatOfficial/Overpass",
+      "file": "external/sign-art/overpass (the sign art manifest's verified copy)",
+      "used": "the push button sign's legends, rasterised into the hardware atlas (the font file is not shipped)",
+      "sha256": "e6f3ec3d7a14a9819e9b2726cfa8d86ae8b6594990247a26cf0adafa3e03fb84"
+    },
+    "caltransEs7c": {
+      "title": "Caltrans Revised Standard Plan RSP ES-7C, Electrical Systems (Signal and Lighting Standard, Case 1 Arm Loading, Wind Velocity = 100 mph, Arm Lengths 15 ft to 30 ft)",
+      "edition": "2006 Revised Standard Plans, RSP ES-7C dated June 15, 2007 (page 439 of the May 2006 Standard Plans book)",
+      "publisher": "State of California, Department of Transportation",
+      "url": "https://www.oaklandca.gov/files/assets/city/v/1/public-works/documents/standard-details-for-public-works-construction/es-7c.pdf",
+      "urlNote": "a copy of the Caltrans sheet in the City of Oakland's standard details",
+      "used": "dimensions only (Type 16-1-100 / 18-1-100 base plate data, signal arm connection details, CIDH pile diameter); the drawing is not reproduced",
+      "read": {
+        "basePlateIn": 18.0,
+        "basePlateThicknessIn": 1.25,
+        "anchorBoltDiameterIn": 1.5,
+        "anchorBoltCircleIn": 17.5,
+        "armPlateIn": 12.0,
+        "armPlateThicknessIn": 1.25,
+        "polePlateThicknessIn": 1.5,
+        "capScrewDiameterIn": 1.25,
+        "capScrews": 4,
+        "capScrewCircleIn": 12.0,
+        "pileDiameterIn": 30.0,
+        "armOdAtPoleIn": [
+          7.0,
+          8.0
+        ],
+        "handhole": "far side (opposite the arm)"
+      }
+    },
+    "mccainMsf60": {
+      "title": "SWARCO McCain MSF60 NEMA Cabinet (product page)",
+      "publisher": "SWARCO McCain, Inc.",
+      "url": "https://www.mccain-inc.com/products/cabinets/nema-cabinets/msf60-nema-cabinet",
+      "used": "the controller cabinet's overall size, its two side-by-side front doors and its aluminium shell (`cabinet`); the product's drawings are not reproduced (none read): doors, handles, hinges, louvres and hood are modelling values",
+      "read": {
+        "heightIn": 61.0,
+        "widthIn": 36.0,
+        "depthIn": 18.5,
+        "doors": "front (2), side by side, reduced door swing",
+        "material": "5052-H32 aluminium, 0.125 in"
+      }
+    },
+    "mccainSanFrancisco2014": {
+      "title": "McCain Secures Contract for 180 Traffic Controller Cabinets With the City of San Francisco (press release, May 13, 2014)",
+      "publisher": "McCain, Inc. (Business Wire)",
+      "url": "https://finance.yahoo.com/news/mccain-secures-contract-180-traffic-153000493.html",
+      "used": "that the city buys the MSF60 (its first purchase of 180 of them), chosen for narrow, busy sidewalks"
+    },
+    "datasfTrafficSignals": {
+      "title": "Traffic Signals (DataSF dataset ybh5-27n2, from the SFMTA signal shop's Signals Access database)",
+      "publisher": "City and County of San Francisco, SFMTA",
+      "license": "PDDL-1.0",
+      "url": "https://data.sfgov.org/d/ybh5-27n2",
+      "used": "one controller cabinet per signal, and the cabinet sizes the city runs (field CABINET_SI: MSF 596, 2070-MSF-TS2-TYPE-1 207, MSF65-ATC 78, MSF TALL 15, MSF72 10 of 1507 rows, read 2026-11-27): the MSF family is the common one"
+    },
+    "christyN30": {
+      "title": "Oldcastle Infrastructure Christy N30 enclosure (product page and the Christy concrete products catalogue)",
+      "publisher": "Oldcastle Infrastructure",
+      "url": "https://oldcastleinfrastructure.com/product/christy-n30/",
+      "urlNote": "the N30 as the No. 5 pull box: City of Lake Elsinore Traffic Signal Specifications (2024), \"Christy #5 Box | N30 Box\", https://www.lake-elsinore.org/DocumentCenter/View/4215",
+      "used": "the No. 5 traffic pull box beside a signal pole (`pullBox`): its opening and its lid; the outside of its top wall from a distributor's overall size (27 1/2 x 18 in)",
+      "read": {
+        "openingLengthIn": 24.25,
+        "openingWidthIn": 13.25,
+        "lidLengthIn": 24.25,
+        "lidWidthIn": 13.75,
+        "lidThicknessIn": 2.0,
+        "outsideLengthIn": 27.5,
+        "outsideWidthIn": 18.0
+      }
+    }
+  },
+  "modellingValues": {
+    "heavyHexNut": "ASME B18.2.2 heavy hex nut proportions: across flats 1.5 x the bolt + 1/8 in, height ~ the bolt",
+    "washer": "ASTM F436 washer proportions: outside diameter 2 x the bolt, 5/32 in thick",
+    "levellingGap": "the base plate on levelling nuts, the gap left open (no grout), as the reference photographs show",
+    "handhole": "4 x 7 in opening in a raised 3/4 in frame, centre 19 in over the plate (mast); 2 1/2 x 5 in on the posts",
+    "poleCap": "cast cap 3/8 in over the shaft, domed",
+    "pedestalPipe": "4 in nominal steel pipe (4.5 in outside diameter) on a cast flared base, as San Francisco pedestal posts",
+    "armRadii": "the arm tube as the game built it in code (eo-render props_lib: radius 0.09 m at the pole to 0.06 m at the end; ES-7C gives 7 to 8 in at the pole)",
+    "mountPipe": "1 1/2 in nominal pipe (1.9 in outside diameter) bracket arms, as Caltrans side-mount signal brackets; a pedestrian head standing off its pole on two such arms (pedReach) from its clamshell",
+    "weathering": "paint fade, dust, chips, rust and grime amounts are artistic, matched by eye to the reference photographs",
+    "armTaper": "the rising arms lose 0.14 in of outside diameter per foot of length from ES-7E's diameter at the pole (a common tapered steel arm taper; no sheet read gives it)",
+    "armLevelDiameter": "a level arm takes ES-7E's minimum outside diameter at the pole for its length class and the rising arms' taper: the sheet's diameter is the arm's strength for its length and loads, rise or none (no SFMTA arm drawing was read)",
+    "armRiseShape": "the arm's axis at rise * (1 - (1 - t)^p) over its root, p = tan(angle at the pole) * E / rise (at least 1): it leaves the pole at ES-7E's angle and ends level, as the sheet draws the arm curving",
+    "nameSignHang": "a Street Name sign hangs level 6 cm under the arm's lower end over its width, in the longest stretch of the arm free of the heads, on two flat bars 15 cm in from its ends (no SF mounting detail read)",
+    "pushButton": "an accessible push button unit after the San Francisco installations' look: a housing 12 x 16 x 6.6 cm, a 5 cm button with a raised arrow, on a channel clamped to the pole by two bands, the sign over it (sizes are modelling values)",
+    "mastCut": "the mast pole split at 2.0 m and 4.45 m over its foot (its shaft's uv column edges): the foot holds the base plate, bolts, weld and handhole, the top the upper shaft and the cap; a pole of another height draws the shaft between at its own length",
+    "pushButtonSign": "the R10-3e(CA) face drawn here after CA MUTCD 2026 Figure 2B-27(CA) (p. 273) in Overpass: panel layout, legends and the arrow as the figure has them, the symbols simple shapes; not the official artwork",
+    "cabinetPad": "the cabinet stands on a cast concrete pad 3 in over the sidewalk, 6 cm wider than the cabinet all round, its top edge eased (no SFMTA or Caltrans foundation sheet was read)",
+    "cabinetDetail": "the MSF60's two doors raised 4 mm on its front with a 14 mm seam, a latch handle and lock each by the seam, three hinges on each outer edge, a louvred intake at each door's foot, a police panel door on the right door, a hood overhanging 25 to 35 mm with a drip lip, a base flange; the shell mill-finish aluminium gone dull, rain-streaked under the hood, splashed at the foot, with graffiti painted out in mismatched grey patches and sticker residue as the city's cabinets carry (artistic amounts)",
+    "pullBoxLegend": "the No. 5 lid of precast concrete, flush with the sidewalk, cast with TRAFFIC SIGNAL along its length (1 1/4 in letters) and two 1/2 x 2 in lifting slots; the box's top wall round it",
+    "signChannel": "two aluminium channels (1 1/2 in web, 3/4 in flanges, 0.09 in thick) across the back of an arm's Street Name sign at a quarter of its height from top and bottom, as the reference photographs show on San Francisco sign backs (Lombard and Hyde); no SFMTA sign detail was read"
+  },
+  "dims": {
+    "mastPoleHeightM": 6.9,
+    "pedestalHeightM": 3.95,
+    "postHeightM": 3.2,
+    "armRootRadiusM": 0.09,
+    "armTipRadiusM": 0.06,
+    "mountArmRadiiM": [
+      0.0875,
+      0.0775,
+      0.0675
+    ],
+    "sideReachM": 0.34,
+    "frontReachM": 0.2,
+    "pipeRadiusM": 0.05715,
+    "headHalfM": 0.6172,
+    "pedHalfM": 0.261,
+    "pedBackM": 0.209,
+    "armClasses": [
+      {
+        "lengthM": 4.572,
+        "riseM": 1.27,
+        "angleDeg": 23,
+        "odAtPoleM": 0.1683,
+        "rootRadiusM": 0.0842,
+        "tipRadiusM": 0.0575,
+        "exponent": 1.5281
+      },
+      {
+        "lengthM": 6.096,
+        "riseM": 1.27,
+        "angleDeg": 23,
+        "odAtPoleM": 0.1778,
+        "rootRadiusM": 0.0889,
+        "tipRadiusM": 0.0533,
+        "exponent": 2.0375
+      },
+      {
+        "lengthM": 7.62,
+        "riseM": 2.032,
+        "angleDeg": 23,
+        "odAtPoleM": 0.2,
+        "rootRadiusM": 0.1,
+        "tipRadiusM": 0.0556,
+        "exponent": 1.5918
+      },
+      {
+        "lengthM": 9.144,
+        "riseM": 2.133,
+        "angleDeg": 23,
+        "odAtPoleM": 0.2032,
+        "rootRadiusM": 0.1016,
+        "tipRadiusM": 0.0483,
+        "exponent": 1.8197
+      },
+      {
+        "lengthM": 10.668,
+        "riseM": 2.133,
+        "angleDeg": 21,
+        "odAtPoleM": 0.2223,
+        "rootRadiusM": 0.1111,
+        "tipRadiusM": 0.0489,
+        "exponent": 1.9199
+      },
+      {
+        "lengthM": 12.192,
+        "riseM": 2.133,
+        "angleDeg": 15,
+        "odAtPoleM": 0.2381,
+        "rootRadiusM": 0.1191,
+        "tipRadiusM": 0.0479,
+        "exponent": 1.5316
+      },
+      {
+        "lengthM": 13.716,
+        "riseM": 2.337,
+        "angleDeg": 15,
+        "odAtPoleM": 0.2572,
+        "rootRadiusM": 0.1286,
+        "tipRadiusM": 0.0486,
+        "exponent": 1.5726
+      }
+    ],
+    "armFlangeXM": 0.2075,
+    "pushButtonSignM": [
+      0.2286,
+      0.381
+    ],
+    "pushButtonHeightM": 1.067,
+    "pushButtonMastOffsetM": 0.0767,
+    "mastCutM": [
+      2.0,
+      4.45
+    ],
+    "cabinetM": [
+      0.9144,
+      0.4699,
+      1.5494
+    ],
+    "cabinetPadM": [
+      0.076,
+      0.06
+    ],
+    "pullBoxM": [
+      0.6985,
+      0.4572
+    ],
+    "signChannelM": [
+      0.0381,
+      0.019
+    ]
+  },
+  "finishes": {
+    "painted": {
+      "mastPole": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastPole-v1.glb",
+            "sha256": "12bf124069892155ca975eced998876ac7b801f5a7efd1dd502653973910c3da",
+            "bytes": 190736,
+            "triangles": 1480,
+            "boundsM": {
+              "min": [
+                -0.381,
+                -0.06,
+                -0.381
+              ],
+              "max": [
+                0.381,
+                6.93,
+                0.381
+              ]
+            },
+            "dimensionsM": [
+              0.762,
+              6.99,
+              0.762
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastPole-v1-lod1.glb",
+            "sha256": "0b70e7a998a2969d4c2540797838647c3b28ad92d451bcf625a04cdb1cd29a42",
+            "bytes": 16420,
+            "triangles": 356,
+            "boundsM": {
+              "min": [
+                -0.3811,
+                -0.06,
+                -0.3811
+              ],
+              "max": [
+                0.3811,
+                6.93,
+                0.3811
+              ]
+            },
+            "dimensionsM": [
+              0.7623,
+              6.99,
+              0.7623
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastPole-v1-lod2.glb",
+            "sha256": "b2b84a26873e46c51e7179dbe6e58b666937ae7a0d205ce68efb35dfcc6e7c21",
+            "bytes": 6276,
+            "triangles": 72,
+            "boundsM": {
+              "min": [
+                -0.14,
+                0.0,
+                -0.1212
+              ],
+              "max": [
+                0.14,
+                6.87,
+                0.1212
+              ]
+            },
+            "dimensionsM": [
+              0.28,
+              6.87,
+              0.2425
+            ]
+          }
+        ]
+      },
+      "mastFoot": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastFoot-v1.glb",
+            "sha256": "b7037caba2d3f29138aa4208a35fc5251e377fc62240b0ce6df3766c7ebd80ce",
+            "bytes": 176940,
+            "triangles": 1098,
+            "boundsM": {
+              "min": [
+                -0.381,
+                -0.06,
+                -0.381
+              ],
+              "max": [
+                0.381,
+                2.0,
+                0.381
+              ]
+            },
+            "dimensionsM": [
+              0.762,
+              2.06,
+              0.762
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastFoot-v1-lod1.glb",
+            "sha256": "a618e6d984b9dacc4dc6d971d7f06ae4c21f5b2612dc57b666586307deac355c",
+            "bytes": 10284,
+            "triangles": 206,
+            "boundsM": {
+              "min": [
+                -0.3811,
+                -0.06,
+                -0.3811
+              ],
+              "max": [
+                0.3811,
+                2.0,
+                0.3811
+              ]
+            },
+            "dimensionsM": [
+              0.7623,
+              2.06,
+              0.7623
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastFoot-v1-lod2.glb",
+            "sha256": "d13647bc249efb21c1eb02207c85058256156e41c6845160ab98a1729b878122",
+            "bytes": 4576,
+            "triangles": 48,
+            "boundsM": {
+              "min": [
+                -0.14,
+                0.0,
+                -0.1212
+              ],
+              "max": [
+                0.14,
+                2.0,
+                0.1212
+              ]
+            },
+            "dimensionsM": [
+              0.28,
+              2.0,
+              0.2425
+            ]
+          }
+        ]
+      },
+      "mastMid": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMid-v1.glb",
+            "sha256": "5668fa6dd438eec39e35495d4f24e26898eb89401e0634c4e7009fb91c06fda8",
+            "bytes": 121880,
+            "triangles": 64,
+            "boundsM": {
+              "min": [
+                -0.1284,
+                2.0,
+                -0.1284
+              ],
+              "max": [
+                0.1284,
+                4.45,
+                0.1284
+              ]
+            },
+            "dimensionsM": [
+              0.2568,
+              2.45,
+              0.2568
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMid-v1-lod1.glb",
+            "sha256": "805ad067e79e5bcfb6f281e916da309b9f454be79897b87a5b0e0d234f53800f",
+            "bytes": 2200,
+            "triangles": 24,
+            "boundsM": {
+              "min": [
+                -0.1284,
+                2.0,
+                -0.1284
+              ],
+              "max": [
+                0.1284,
+                4.45,
+                0.1284
+              ]
+            },
+            "dimensionsM": [
+              0.2568,
+              2.45,
+              0.2568
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMid-v1-lod2.glb",
+            "sha256": "abec4caf1770656862ef305ef4d1263689dd562c204dedb1afb4002d02fa9fd1",
+            "bytes": 2060,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.1284,
+                2.0,
+                -0.1112
+              ],
+              "max": [
+                0.1284,
+                4.45,
+                0.1112
+              ]
+            },
+            "dimensionsM": [
+              0.2568,
+              2.45,
+              0.2224
+            ]
+          }
+        ]
+      },
+      "mastTop": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastTop-v1.glb",
+            "sha256": "d52dc5fa3568750bb7d5269583c6ab5040c54e2b1307ffb56a39fbc4d89bc568",
+            "bytes": 130692,
+            "triangles": 318,
+            "boundsM": {
+              "min": [
+                -0.1142,
+                4.45,
+                -0.1142
+              ],
+              "max": [
+                0.1142,
+                6.93,
+                0.1142
+              ]
+            },
+            "dimensionsM": [
+              0.2284,
+              2.48,
+              0.2284
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastTop-v1-lod1.glb",
+            "sha256": "55d1cae81c29cf7a005a695d9d84ba3654136f8a87ae8a113abb3663b28ad44f",
+            "bytes": 6392,
+            "triangles": 126,
+            "boundsM": {
+              "min": [
+                -0.1142,
+                4.45,
+                -0.1142
+              ],
+              "max": [
+                0.1142,
+                6.93,
+                0.1142
+              ]
+            },
+            "dimensionsM": [
+              0.2284,
+              2.48,
+              0.2284
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastTop-v1-lod2.glb",
+            "sha256": "e2fdde59635ade233678366bc4606208dd4e00b003364175fe7d2e5fc7986dd6",
+            "bytes": 2076,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.1142,
+                4.45,
+                -0.0989
+              ],
+              "max": [
+                0.1142,
+                6.87,
+                0.0989
+              ]
+            },
+            "dimensionsM": [
+              0.2284,
+              2.42,
+              0.1978
+            ]
+          }
+        ]
+      },
+      "pedestalPole": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedestalPole-v1.glb",
+            "sha256": "c1071130ce567dc77148baf487e27c305a7b8a4b8acd2ea38bf5ca71eaaef9a6",
+            "bytes": 178348,
+            "triangles": 1358,
+            "boundsM": {
+              "min": [
+                -0.24,
+                -0.06,
+                -0.24
+              ],
+              "max": [
+                0.24,
+                4.009,
+                0.24
+              ]
+            },
+            "dimensionsM": [
+              0.48,
+              4.069,
+              0.48
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedestalPole-v1-lod1.glb",
+            "sha256": "2609a9cb2d661b0d154391d3edd7d1445bed3681b813ee99f6b3437a25c48fb5",
+            "bytes": 19240,
+            "triangles": 323,
+            "boundsM": {
+              "min": [
+                -0.2402,
+                -0.0601,
+                -0.2402
+              ],
+              "max": [
+                0.2402,
+                4.009,
+                0.2402
+              ]
+            },
+            "dimensionsM": [
+              0.4805,
+              4.069,
+              0.4805
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedestalPole-v1-lod2.glb",
+            "sha256": "e5a4126313d640c67195c9f62534981e316ae889278e0ea28b087530145c211c",
+            "bytes": 4604,
+            "triangles": 48,
+            "boundsM": {
+              "min": [
+                -0.0571,
+                0.0,
+                -0.0495
+              ],
+              "max": [
+                0.0571,
+                3.91,
+                0.0495
+              ]
+            },
+            "dimensionsM": [
+              0.1143,
+              3.91,
+              0.099
+            ]
+          }
+        ]
+      },
+      "pedPost": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedPost-v1.glb",
+            "sha256": "1dbfaa8514f5deb8cd930673bbcc3c1a5fa8a399c43e0407837707c2966be56b",
+            "bytes": 178344,
+            "triangles": 1358,
+            "boundsM": {
+              "min": [
+                -0.24,
+                -0.06,
+                -0.24
+              ],
+              "max": [
+                0.24,
+                3.259,
+                0.24
+              ]
+            },
+            "dimensionsM": [
+              0.48,
+              3.319,
+              0.48
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedPost-v1-lod1.glb",
+            "sha256": "f0d5e65f3f077aed744bd97c4c5c4284edfe749eb0c317f70ece32c99749b50d",
+            "bytes": 19236,
+            "triangles": 323,
+            "boundsM": {
+              "min": [
+                -0.2402,
+                -0.0601,
+                -0.2402
+              ],
+              "max": [
+                0.2402,
+                3.259,
+                0.2402
+              ]
+            },
+            "dimensionsM": [
+              0.4805,
+              3.319,
+              0.4805
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedPost-v1-lod2.glb",
+            "sha256": "fe12cf366ce63536dfcab07663563eea9c424d801229d0e3a5f7c60791840318",
+            "bytes": 4600,
+            "triangles": 48,
+            "boundsM": {
+              "min": [
+                -0.0571,
+                0.0,
+                -0.0495
+              ],
+              "max": [
+                0.0571,
+                3.16,
+                0.0495
+              ]
+            },
+            "dimensionsM": [
+              0.1143,
+              3.16,
+              0.099
+            ]
+          }
+        ]
+      },
+      "armTube": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armTube-v1.glb",
+            "sha256": "e7a854aaec2b4296ecd9c26fa1e8c9d18bd5249eb520217d292b63dff2e40af2",
+            "bytes": 152724,
+            "triangles": 240,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.09,
+                -0.09
+              ],
+              "max": [
+                1.0,
+                0.09,
+                0.09
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.18,
+              0.18
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTube-v1-lod1.glb",
+            "sha256": "737fd11d7d60f3c78666c4f7417f13ea327f276c9f70a4da568683cc1db95ae6",
+            "bytes": 3372,
+            "triangles": 40,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.09,
+                -0.0856
+              ],
+              "max": [
+                1.0,
+                0.09,
+                0.0856
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.18,
+              0.1712
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTube-v1-lod2.glb",
+            "sha256": "0b3e183bc6f6f0bcb23820590d13ade45e23a7651191a2770eaff9f3ebfaefaf",
+            "bytes": 1908,
+            "triangles": 10,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0728,
+                -0.0856
+              ],
+              "max": [
+                1.0,
+                0.09,
+                0.0856
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.1628,
+              0.1712
+            ]
+          }
+        ]
+      },
+      "armRoot": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRoot-v1.glb",
+            "sha256": "5d9e539b08867a26dc7c90aabf9ccbfd39b177c2eea0a5b47984e75232b16481",
+            "bytes": 166892,
+            "triangles": 392,
+            "boundsM": {
+              "min": [
+                0.0513,
+                -0.1524,
+                -0.1524
+              ],
+              "max": [
+                0.2313,
+                0.1524,
+                0.1524
+              ]
+            },
+            "dimensionsM": [
+              0.18,
+              0.3048,
+              0.3048
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRoot-v1-lod1.glb",
+            "sha256": "66335979c121964425d2e4713a98be4def50e2bdca9c583722f3f7f7a7486341",
+            "bytes": 3948,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                0.0513,
+                -0.1524,
+                -0.1589
+              ],
+              "max": [
+                0.2075,
+                0.1524,
+                0.1589
+              ]
+            },
+            "dimensionsM": [
+              0.1562,
+              0.3048,
+              0.3179
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRoot-v1-lod1.glb",
+            "sha256": "66335979c121964425d2e4713a98be4def50e2bdca9c583722f3f7f7a7486341",
+            "bytes": 3948,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                0.0513,
+                -0.1524,
+                -0.1589
+              ],
+              "max": [
+                0.2075,
+                0.1524,
+                0.1589
+              ]
+            },
+            "dimensionsM": [
+              0.1562,
+              0.3048,
+              0.3179
+            ]
+          }
+        ]
+      },
+      "armTip": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armTip-v1.glb",
+            "sha256": "afe4761a54b35e22abe758fbc0898be64018d16a4b9ac82637386f2ecf488436",
+            "bytes": 154236,
+            "triangles": 198,
+            "boundsM": {
+              "min": [
+                -0.075,
+                -0.066,
+                -0.066
+              ],
+              "max": [
+                0.025,
+                0.066,
+                0.066
+              ]
+            },
+            "dimensionsM": [
+              0.1,
+              0.132,
+              0.132
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTip-v1-lod1.glb",
+            "sha256": "bda289e961d72773edaec953f9939d6d7be518190521041e7cf47905a599aa95",
+            "bytes": 5280,
+            "triangles": 79,
+            "boundsM": {
+              "min": [
+                -0.075,
+                -0.0693,
+                -0.0693
+              ],
+              "max": [
+                0.0249,
+                0.066,
+                0.0693
+              ]
+            },
+            "dimensionsM": [
+              0.0999,
+              0.1353,
+              0.1387
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTip-v1-lod1.glb",
+            "sha256": "bda289e961d72773edaec953f9939d6d7be518190521041e7cf47905a599aa95",
+            "bytes": 5280,
+            "triangles": 79,
+            "boundsM": {
+              "min": [
+                -0.075,
+                -0.0693,
+                -0.0693
+              ],
+              "max": [
+                0.0249,
+                0.066,
+                0.0693
+              ]
+            },
+            "dimensionsM": [
+              0.0999,
+              0.1353,
+              0.1387
+            ]
+          }
+        ]
+      },
+      "mastMount0": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMount0-v1.glb",
+            "sha256": "b8337f19117c8f082a9e134befac432b88f5bfe6aab35fffc5389b4e2bcab57b",
+            "bytes": 160924,
+            "triangles": 314,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.212,
+                -0.0935
+              ],
+              "max": [
+                0.085,
+                0.0935,
+                0.0935
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.3055,
+              0.187
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount0-v1-lod1.glb",
+            "sha256": "d9182cd1c5344fdcdc9a6e7d68e865be26cc772c35144880c1e458b9dfd7430e",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0982
+              ],
+              "max": [
+                0.085,
+                0.0982,
+                0.0982
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.3082,
+              0.1965
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount0-v1-lod1.glb",
+            "sha256": "d9182cd1c5344fdcdc9a6e7d68e865be26cc772c35144880c1e458b9dfd7430e",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0982
+              ],
+              "max": [
+                0.085,
+                0.0982,
+                0.0982
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.3082,
+              0.1965
+            ]
+          }
+        ]
+      },
+      "mastMount1": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMount1-v1.glb",
+            "sha256": "bff965d601d5d3daa3b345cf649db2bf845aebab104d4411f5e60f12a2e9de19",
+            "bytes": 160924,
+            "triangles": 314,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.212,
+                -0.0835
+              ],
+              "max": [
+                0.085,
+                0.0835,
+                0.0835
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2955,
+              0.167
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount1-v1-lod1.glb",
+            "sha256": "dea572b353c686b4830949b0df0cdeff0392d019620571583c14747b4e0e26ee",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0808
+              ],
+              "max": [
+                0.085,
+                0.0838,
+                0.0823
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2938,
+              0.163
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount1-v1-lod1.glb",
+            "sha256": "dea572b353c686b4830949b0df0cdeff0392d019620571583c14747b4e0e26ee",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0808
+              ],
+              "max": [
+                0.085,
+                0.0838,
+                0.0823
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2938,
+              0.163
+            ]
+          }
+        ]
+      },
+      "mastMount2": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMount2-v1.glb",
+            "sha256": "e704f877f03c6920053b6ae6fc06ac89e4266a778fd6384ca08310d83ff0c325",
+            "bytes": 160924,
+            "triangles": 314,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.212,
+                -0.0735
+              ],
+              "max": [
+                0.085,
+                0.0735,
+                0.0735
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2855,
+              0.147
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount2-v1-lod1.glb",
+            "sha256": "36c8e6d9c1e31f4e48763d271eecc94c0fce569f014a76932760c85806e118ba",
+            "bytes": 6520,
+            "triangles": 93,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.079
+              ],
+              "max": [
+                0.085,
+                0.079,
+                0.0768
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.289,
+              0.1558
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount2-v1-lod1.glb",
+            "sha256": "36c8e6d9c1e31f4e48763d271eecc94c0fce569f014a76932760c85806e118ba",
+            "bytes": 6520,
+            "triangles": 93,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.079
+              ],
+              "max": [
+                0.085,
+                0.079,
+                0.0768
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.289,
+              0.1558
+            ]
+          }
+        ]
+      },
+      "sideMountPipe": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/sideMountPipe-v1.glb",
+            "sha256": "7bbae482ed04aa3ffa664efb490b3d590bb04e86c4168072b3f8901f8c80dbdd",
+            "bytes": 177848,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6953,
+                -0.0641
+              ],
+              "max": [
+                0.376,
+                0.6953,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.4401,
+              1.3907,
+              0.1283
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountPipe-v1-lod1.glb",
+            "sha256": "896132c373cee349f98cc3196bcd8dcc725450efc761f0e6db210c35dc5fac6e",
+            "bytes": 15668,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0666
+              ],
+              "max": [
+                0.3636,
+                0.6914,
+                0.0655
+              ]
+            },
+            "dimensionsM": [
+              0.4278,
+              1.3828,
+              0.1321
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountPipe-v1-lod1.glb",
+            "sha256": "896132c373cee349f98cc3196bcd8dcc725450efc761f0e6db210c35dc5fac6e",
+            "bytes": 15668,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0666
+              ],
+              "max": [
+                0.3636,
+                0.6914,
+                0.0655
+              ]
+            },
+            "dimensionsM": [
+              0.4278,
+              1.3828,
+              0.1321
+            ]
+          }
+        ]
+      },
+      "sideMountMast": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/sideMountMast-v1.glb",
+            "sha256": "7339f36469132578c52c90381ae2892337d251b7bd305bc8c4186f059904148b",
+            "bytes": 177844,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.1282,
+                -0.6953,
+                -0.1282
+              ],
+              "max": [
+                0.376,
+                0.6953,
+                0.1282
+              ]
+            },
+            "dimensionsM": [
+              0.5042,
+              1.3907,
+              0.2563
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountMast-v1-lod1.glb",
+            "sha256": "c52d7fb4576d7893a7869e7ae188bb6b3afec3ff5f75f67d9982881c3cf901e4",
+            "bytes": 15828,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1282,
+                -0.6913,
+                -0.1328
+              ],
+              "max": [
+                0.3656,
+                0.6914,
+                0.1328
+              ]
+            },
+            "dimensionsM": [
+              0.4937,
+              1.3828,
+              0.2655
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountMast-v1-lod1.glb",
+            "sha256": "c52d7fb4576d7893a7869e7ae188bb6b3afec3ff5f75f67d9982881c3cf901e4",
+            "bytes": 15828,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1282,
+                -0.6913,
+                -0.1328
+              ],
+              "max": [
+                0.3656,
+                0.6914,
+                0.1328
+              ]
+            },
+            "dimensionsM": [
+              0.4937,
+              1.3828,
+              0.2655
+            ]
+          }
+        ]
+      },
+      "frontMountPipe": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/frontMountPipe-v1.glb",
+            "sha256": "2223fe29b76a207e924fbae98474b29901ddc721e9a59da41862764548e2e3d6",
+            "bytes": 177848,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6953,
+                -0.0641
+              ],
+              "max": [
+                0.236,
+                0.6953,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.3001,
+              1.3907,
+              0.1283
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountPipe-v1-lod1.glb",
+            "sha256": "61f6099a33c710b58638286bb57192d94f19ee6d4e240192e3bd188118bdd012",
+            "bytes": 14868,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0683
+              ],
+              "max": [
+                0.2253,
+                0.6914,
+                0.0665
+              ]
+            },
+            "dimensionsM": [
+              0.2895,
+              1.3828,
+              0.1347
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountPipe-v1-lod1.glb",
+            "sha256": "61f6099a33c710b58638286bb57192d94f19ee6d4e240192e3bd188118bdd012",
+            "bytes": 14868,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0683
+              ],
+              "max": [
+                0.2253,
+                0.6914,
+                0.0665
+              ]
+            },
+            "dimensionsM": [
+              0.2895,
+              1.3828,
+              0.1347
+            ]
+          }
+        ]
+      },
+      "frontMountMast": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/frontMountMast-v1.glb",
+            "sha256": "8440f08d51ca1817b935bdb778091789c022de6665405e6b6d0c3a58f6d80f2c",
+            "bytes": 177840,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.129,
+                -0.6953,
+                -0.129
+              ],
+              "max": [
+                0.263,
+                0.6953,
+                0.129
+              ]
+            },
+            "dimensionsM": [
+              0.3921,
+              1.3907,
+              0.2581
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountMast-v1-lod1.glb",
+            "sha256": "75cce11677a39e3ea072484a1e55cebcf888b536b230a65ab79b9ffcaa1c8ae8",
+            "bytes": 14772,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1312,
+                -0.6913,
+                -0.1337
+              ],
+              "max": [
+                0.2524,
+                0.6914,
+                0.1337
+              ]
+            },
+            "dimensionsM": [
+              0.3836,
+              1.3828,
+              0.2673
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountMast-v1-lod1.glb",
+            "sha256": "75cce11677a39e3ea072484a1e55cebcf888b536b230a65ab79b9ffcaa1c8ae8",
+            "bytes": 14772,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1312,
+                -0.6913,
+                -0.1337
+              ],
+              "max": [
+                0.2524,
+                0.6914,
+                0.1337
+              ]
+            },
+            "dimensionsM": [
+              0.3836,
+              1.3828,
+              0.2673
+            ]
+          }
+        ]
+      },
+      "pedMountPipe": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedMountPipe-v1.glb",
+            "sha256": "fe355cccc6d948f03cbcd6af16c0449e7024e3b2d30524abda49bf8e02e6f315",
+            "bytes": 158920,
+            "triangles": 300,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.236,
+                -0.0641
+              ],
+              "max": [
+                0.0872,
+                0.2361,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.1513,
+              0.4721,
+              0.1283
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountPipe-v1-lod1.glb",
+            "sha256": "745733f87e51961e88a2509773bf36684f98bf86bccb666b6cab911ab1d4e014",
+            "bytes": 6972,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.236,
+                -0.0683
+              ],
+              "max": [
+                0.0872,
+                0.2361,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.1513,
+              0.4721,
+              0.1324
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountPipe-v1-lod1.glb",
+            "sha256": "745733f87e51961e88a2509773bf36684f98bf86bccb666b6cab911ab1d4e014",
+            "bytes": 6972,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.236,
+                -0.0683
+              ],
+              "max": [
+                0.0872,
+                0.2361,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.1513,
+              0.4721,
+              0.1324
+            ]
+          }
+        ]
+      },
+      "pedMountMast": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedMountMast-v1.glb",
+            "sha256": "acfff3283c3a3615ca1354a7b41f63c06e11104584bf783932c262645fb5fb9a",
+            "bytes": 158916,
+            "triangles": 300,
+            "boundsM": {
+              "min": [
+                -0.1308,
+                -0.236,
+                -0.1308
+              ],
+              "max": [
+                0.1538,
+                0.2361,
+                0.1308
+              ]
+            },
+            "dimensionsM": [
+              0.2845,
+              0.4721,
+              0.2615
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountMast-v1-lod1.glb",
+            "sha256": "cb246d6b7e1436da5bb4c8b6167221fa90463f546774dc73179a4bccafbf1612",
+            "bytes": 7544,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.1355,
+                -0.236,
+                -0.1355
+              ],
+              "max": [
+                0.1538,
+                0.2362,
+                0.1358
+              ]
+            },
+            "dimensionsM": [
+              0.2892,
+              0.4722,
+              0.2713
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountMast-v1-lod1.glb",
+            "sha256": "cb246d6b7e1436da5bb4c8b6167221fa90463f546774dc73179a4bccafbf1612",
+            "bytes": 7544,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.1355,
+                -0.236,
+                -0.1355
+              ],
+              "max": [
+                0.1538,
+                0.2362,
+                0.1358
+              ]
+            },
+            "dimensionsM": [
+              0.2892,
+              0.4722,
+              0.2713
+            ]
+          }
+        ]
+      },
+      "pedReach": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedReach-v1.glb",
+            "sha256": "d3e418ffe8a989f4630a3cd1f642ddcd5fc5b824d82485fe17020f1c017903f4",
+            "bytes": 149800,
+            "triangles": 68,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.2351,
+                -0.0241
+              ],
+              "max": [
+                1.0,
+                0.2351,
+                0.0241
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.4703,
+              0.0483
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedReach-v1-lod1.glb",
+            "sha256": "d2ae2038f82866dd1fdd592981fbfb911c88c38cceffaf558cb2d5d5a00d2a99",
+            "bytes": 4440,
+            "triangles": 68,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.2351,
+                -0.0241
+              ],
+              "max": [
+                1.0,
+                0.2351,
+                0.0241
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.4703,
+              0.0483
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedReach-v1-lod1.glb",
+            "sha256": "d2ae2038f82866dd1fdd592981fbfb911c88c38cceffaf558cb2d5d5a00d2a99",
+            "bytes": 4440,
+            "triangles": 68,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.2351,
+                -0.0241
+              ],
+              "max": [
+                1.0,
+                0.2351,
+                0.0241
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.4703,
+              0.0483
+            ]
+          }
+        ]
+      },
+      "armRise0": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise0-v1.glb",
+            "sha256": "58b5084adc8fe47f88c28af9e85df21d3c1f6c96a1af701ffde95bbac8634304",
+            "bytes": 129132,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0329,
+                -0.0775,
+                -0.0842
+              ],
+              "max": [
+                4.572,
+                1.3275,
+                0.0842
+              ]
+            },
+            "dimensionsM": [
+              4.6049,
+              1.4049,
+              0.1683
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise0-v1-lod1.glb",
+            "sha256": "08baf4f8eb5e0e750e2eca066346f458f3f71d61aa0c73cd4b21326c81382463",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0329,
+                -0.0775,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                1.3275,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.6049,
+              1.4049,
+              0.1601
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise0-v1-lod1.glb",
+            "sha256": "08baf4f8eb5e0e750e2eca066346f458f3f71d61aa0c73cd4b21326c81382463",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0329,
+                -0.0775,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                1.3275,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.6049,
+              1.4049,
+              0.1601
+            ]
+          }
+        ]
+      },
+      "armRise1": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise1-v1.glb",
+            "sha256": "6f1c8b4689e6ce3cfcedd6b2ee98a0f1abbd9d25cf1b11968c390f44487849e4",
+            "bytes": 129132,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0347,
+                -0.0818,
+                -0.0889
+              ],
+              "max": [
+                6.096,
+                1.3233,
+                0.0889
+              ]
+            },
+            "dimensionsM": [
+              6.1307,
+              1.4052,
+              0.1778
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise1-v1-lod1.glb",
+            "sha256": "009ed26b34001fef2212ae1797753f4769c023447fa87af25d1ad27410764771",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0347,
+                -0.0818,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                1.3233,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.1307,
+              1.4052,
+              0.1691
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise1-v1-lod1.glb",
+            "sha256": "009ed26b34001fef2212ae1797753f4769c023447fa87af25d1ad27410764771",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0347,
+                -0.0818,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                1.3233,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.1307,
+              1.4052,
+              0.1691
+            ]
+          }
+        ]
+      },
+      "armRise2": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise2-v1.glb",
+            "sha256": "bc13419e681848cf82644a9fa88c3cd5ab3b4721f976c068ed52ff80bbcf55d9",
+            "bytes": 129132,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0391,
+                -0.0921,
+                -0.1
+              ],
+              "max": [
+                7.62,
+                2.0876,
+                0.1
+              ]
+            },
+            "dimensionsM": [
+              7.6591,
+              2.1796,
+              0.2
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise2-v1-lod1.glb",
+            "sha256": "df210f76ff867e6c37eafcdea3b917ebcbd26e1469237ad95ef481619c678b50",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0391,
+                -0.0921,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                2.0876,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.6591,
+              2.1796,
+              0.1902
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise2-v1-lod1.glb",
+            "sha256": "df210f76ff867e6c37eafcdea3b917ebcbd26e1469237ad95ef481619c678b50",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0391,
+                -0.0921,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                2.0876,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.6591,
+              2.1796,
+              0.1902
+            ]
+          }
+        ]
+      },
+      "armRise3": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise3-v1.glb",
+            "sha256": "bb369e482619c33378e72b2d02bbe3d175be37c132d5c9afaa9bec8f9ac0b464",
+            "bytes": 129128,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0397,
+                -0.0935,
+                -0.1016
+              ],
+              "max": [
+                9.144,
+                2.1813,
+                0.1016
+              ]
+            },
+            "dimensionsM": [
+              9.1837,
+              2.2748,
+              0.2032
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise3-v1-lod1.glb",
+            "sha256": "b4feeed27dd1a8661b7fe92edd0a66ac39a4c2694bf6a893c3297a8b70271a2e",
+            "bytes": 7972,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0397,
+                -0.0935,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                2.1813,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.1837,
+              2.2748,
+              0.1933
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise3-v1-lod1.glb",
+            "sha256": "b4feeed27dd1a8661b7fe92edd0a66ac39a4c2694bf6a893c3297a8b70271a2e",
+            "bytes": 7972,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0397,
+                -0.0935,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                2.1813,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.1837,
+              2.2748,
+              0.1933
+            ]
+          }
+        ]
+      },
+      "armRise4": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise4-v1.glb",
+            "sha256": "a4e84517ef0ca11c17d1c9a9019c2c14d88c61e421d47609e6001b703a7b8070",
+            "bytes": 129132,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0398,
+                -0.1038,
+                -0.1111
+              ],
+              "max": [
+                10.668,
+                2.1819,
+                0.1111
+              ]
+            },
+            "dimensionsM": [
+              10.7078,
+              2.2857,
+              0.2223
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise4-v1-lod1.glb",
+            "sha256": "e98adb942cf25b167ae197f9f710bfd59ec0963111b2a45b491df743c6199f43",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0398,
+                -0.1038,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                2.1819,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.7078,
+              2.2857,
+              0.2114
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise4-v1-lod1.glb",
+            "sha256": "e98adb942cf25b167ae197f9f710bfd59ec0963111b2a45b491df743c6199f43",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0398,
+                -0.1038,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                2.1819,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.7078,
+              2.2857,
+              0.2114
+            ]
+          }
+        ]
+      },
+      "armRise5": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise5-v1.glb",
+            "sha256": "2b74018ed53192c757b16d86e6eb576f8c205cf0e6adf79228a9a162057b36d5",
+            "bytes": 129132,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0308,
+                -0.115,
+                -0.1191
+              ],
+              "max": [
+                12.192,
+                2.1809,
+                0.1191
+              ]
+            },
+            "dimensionsM": [
+              12.2228,
+              2.2959,
+              0.2381
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise5-v1-lod1.glb",
+            "sha256": "8cac519183c4c69b04c15c63271e7f774739618d9a50d96f3cfcde4a94c01f07",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0308,
+                -0.115,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                2.1809,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.2228,
+              2.2959,
+              0.2264
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise5-v1-lod1.glb",
+            "sha256": "8cac519183c4c69b04c15c63271e7f774739618d9a50d96f3cfcde4a94c01f07",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0308,
+                -0.115,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                2.1809,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.2228,
+              2.2959,
+              0.2264
+            ]
+          }
+        ]
+      },
+      "armRise6": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise6-v1.glb",
+            "sha256": "d5e9da163fa72a2d94a1c5149e7baad2708b84f35d6b1399fb57718c34736626",
+            "bytes": 129132,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0333,
+                -0.1242,
+                -0.1286
+              ],
+              "max": [
+                13.716,
+                2.3856,
+                0.1286
+              ]
+            },
+            "dimensionsM": [
+              13.7493,
+              2.5098,
+              0.2572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise6-v1-lod1.glb",
+            "sha256": "2ea8117f449aeed0f151246fb7975b257f4a18f27aea827a94c4647926a95fa4",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0333,
+                -0.1242,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                2.3856,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.7493,
+              2.5098,
+              0.2446
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise6-v1-lod1.glb",
+            "sha256": "2ea8117f449aeed0f151246fb7975b257f4a18f27aea827a94c4647926a95fa4",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0333,
+                -0.1242,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                2.3856,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.7493,
+              2.5098,
+              0.2446
+            ]
+          }
+        ]
+      },
+      "signBracket": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/signBracket-v1.glb",
+            "sha256": "c2ff3c73e6afe825b27b10f6f8b87d94b2cf5056c328c9ec0165a6cbb59ea524",
+            "bytes": 107364,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.025,
+                -1.0,
+                -0.004
+              ],
+              "max": [
+                0.025,
+                0.0,
+                0.004
+              ]
+            },
+            "dimensionsM": [
+              0.05,
+              1.0,
+              0.008
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signBracket-v1.glb",
+            "sha256": "c2ff3c73e6afe825b27b10f6f8b87d94b2cf5056c328c9ec0165a6cbb59ea524",
+            "bytes": 107364,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.025,
+                -1.0,
+                -0.004
+              ],
+              "max": [
+                0.025,
+                0.0,
+                0.004
+              ]
+            },
+            "dimensionsM": [
+              0.05,
+              1.0,
+              0.008
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signBracket-v1.glb",
+            "sha256": "c2ff3c73e6afe825b27b10f6f8b87d94b2cf5056c328c9ec0165a6cbb59ea524",
+            "bytes": 107364,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.025,
+                -1.0,
+                -0.004
+              ],
+              "max": [
+                0.025,
+                0.0,
+                0.004
+              ]
+            },
+            "dimensionsM": [
+              0.05,
+              1.0,
+              0.008
+            ]
+          }
+        ]
+      },
+      "pushButtonPipeP": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeP-v1.glb",
+            "sha256": "2db0c9fc06b37b0636dc0790558db896e113b2c08aad06ac8bf0c16359e530f1",
+            "bytes": 119412,
+            "triangles": 245,
+            "boundsM": {
+              "min": [
+                -0.0622,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1537,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2158,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeP-v1-lod1.glb",
+            "sha256": "7767e32a873394df4aacfa8f1bc5eb949ff6b1689f6d2d93a2881c66beccef95",
+            "bytes": 5232,
+            "triangles": 59,
+            "boundsM": {
+              "min": [
+                -0.0644,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2047,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeP-v1-lod1.glb",
+            "sha256": "7767e32a873394df4aacfa8f1bc5eb949ff6b1689f6d2d93a2881c66beccef95",
+            "bytes": 5232,
+            "triangles": 59,
+            "boundsM": {
+              "min": [
+                -0.0644,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2047,
+              0.566,
+              0.2286
+            ]
+          }
+        ]
+      },
+      "pushButtonPipeN": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeN-v1.glb",
+            "sha256": "de7d576be9e6a9c4810a3307fb2352593e8f559fbfcc6aa7e12f79bf4fc42156",
+            "bytes": 119412,
+            "triangles": 245,
+            "boundsM": {
+              "min": [
+                -0.0622,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1537,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2158,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeN-v1-lod1.glb",
+            "sha256": "ea7d48f90bca03a8c445d047f4f87a548dd7d4b5ce5bf85cdbaef8590fdf6a8f",
+            "bytes": 5260,
+            "triangles": 58,
+            "boundsM": {
+              "min": [
+                -0.0618,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2021,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeN-v1-lod1.glb",
+            "sha256": "ea7d48f90bca03a8c445d047f4f87a548dd7d4b5ce5bf85cdbaef8590fdf6a8f",
+            "bytes": 5260,
+            "triangles": 58,
+            "boundsM": {
+              "min": [
+                -0.0618,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2021,
+              0.566,
+              0.2286
+            ]
+          }
+        ]
+      },
+      "armLevel0": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel0-v1.glb",
+            "sha256": "f60e08150fc20017cd875b57e1999e39fdc3743dff883610f0e074c7ea4347b3",
+            "bytes": 129116,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0842,
+                -0.0842
+              ],
+              "max": [
+                4.572,
+                0.0842,
+                0.0842
+              ]
+            },
+            "dimensionsM": [
+              4.572,
+              0.1683,
+              0.1683
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel0-v1-lod1.glb",
+            "sha256": "c338e961f554cd444a77a87abdbc8ad54a35675286355ff18a141f1f3aa1439c",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0842,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                0.0842,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.572,
+              0.1683,
+              0.1601
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel0-v1-lod1.glb",
+            "sha256": "c338e961f554cd444a77a87abdbc8ad54a35675286355ff18a141f1f3aa1439c",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0842,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                0.0842,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.572,
+              0.1683,
+              0.1601
+            ]
+          }
+        ]
+      },
+      "armLevel1": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel1-v1.glb",
+            "sha256": "3ae0c4551421b616397f3cf2ef45f7c444ad5d566d127e5f297c8292ba553efd",
+            "bytes": 129116,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0889,
+                -0.0889
+              ],
+              "max": [
+                6.096,
+                0.0889,
+                0.0889
+              ]
+            },
+            "dimensionsM": [
+              6.096,
+              0.1778,
+              0.1778
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel1-v1-lod1.glb",
+            "sha256": "36e94f0b89bb84644b8b8eab9ba3a56a9bef93d241c0c98cbc8c94c7f3d63823",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0889,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                0.0889,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.096,
+              0.1778,
+              0.1691
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel1-v1-lod1.glb",
+            "sha256": "36e94f0b89bb84644b8b8eab9ba3a56a9bef93d241c0c98cbc8c94c7f3d63823",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0889,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                0.0889,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.096,
+              0.1778,
+              0.1691
+            ]
+          }
+        ]
+      },
+      "armLevel2": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel2-v1.glb",
+            "sha256": "d541b0e25fae39d6632de47ce8033f8fe34445d93099958b90f6a2368b3ff302",
+            "bytes": 129116,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1,
+                -0.1
+              ],
+              "max": [
+                7.62,
+                0.1,
+                0.1
+              ]
+            },
+            "dimensionsM": [
+              7.62,
+              0.2,
+              0.2
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel2-v1-lod1.glb",
+            "sha256": "faec1b1aa66055c48d3e537542ea6c53dbf2f65eb85e1cfd7c24eb462715516e",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                0.1,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.62,
+              0.2,
+              0.1902
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel2-v1-lod1.glb",
+            "sha256": "faec1b1aa66055c48d3e537542ea6c53dbf2f65eb85e1cfd7c24eb462715516e",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                0.1,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.62,
+              0.2,
+              0.1902
+            ]
+          }
+        ]
+      },
+      "armLevel3": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel3-v1.glb",
+            "sha256": "606cc3fe88eaa1a76ff6d2996ea72f690e0cc66a0f106c43e87fd353eda1b850",
+            "bytes": 129116,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1016,
+                -0.1016
+              ],
+              "max": [
+                9.144,
+                0.1016,
+                0.1016
+              ]
+            },
+            "dimensionsM": [
+              9.144,
+              0.2032,
+              0.2032
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel3-v1-lod1.glb",
+            "sha256": "610ca3d9d28c07a2e2ea28b80898024f92597455af7d8a50b2aab0b881c5be6b",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1016,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                0.1016,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.144,
+              0.2032,
+              0.1933
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel3-v1-lod1.glb",
+            "sha256": "610ca3d9d28c07a2e2ea28b80898024f92597455af7d8a50b2aab0b881c5be6b",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1016,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                0.1016,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.144,
+              0.2032,
+              0.1933
+            ]
+          }
+        ]
+      },
+      "armLevel4": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel4-v1.glb",
+            "sha256": "7a4758b70234287e61f45eb606870396c4e90ae3d3269ef747a6e68726b6ae95",
+            "bytes": 129116,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1111,
+                -0.1111
+              ],
+              "max": [
+                10.668,
+                0.1111,
+                0.1111
+              ]
+            },
+            "dimensionsM": [
+              10.668,
+              0.2223,
+              0.2223
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel4-v1-lod1.glb",
+            "sha256": "af80fbb4a8b49c36aa268c5a24cc265e042ded7e70a1d01aa596ac180ba20112",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1111,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                0.1111,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.668,
+              0.2223,
+              0.2114
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel4-v1-lod1.glb",
+            "sha256": "af80fbb4a8b49c36aa268c5a24cc265e042ded7e70a1d01aa596ac180ba20112",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1111,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                0.1111,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.668,
+              0.2223,
+              0.2114
+            ]
+          }
+        ]
+      },
+      "armLevel5": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel5-v1.glb",
+            "sha256": "7ff8832c1d7db2d57ac10f933eaace57983f81360e13d815f85156b793a04708",
+            "bytes": 129116,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1191,
+                -0.1191
+              ],
+              "max": [
+                12.192,
+                0.1191,
+                0.1191
+              ]
+            },
+            "dimensionsM": [
+              12.192,
+              0.2381,
+              0.2381
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel5-v1-lod1.glb",
+            "sha256": "ff0c3d81f6113604b2b7e408ccad84d102617a8fe3654b08bf6ef53c271c04b8",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1191,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                0.1191,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.192,
+              0.2381,
+              0.2264
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel5-v1-lod1.glb",
+            "sha256": "ff0c3d81f6113604b2b7e408ccad84d102617a8fe3654b08bf6ef53c271c04b8",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1191,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                0.1191,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.192,
+              0.2381,
+              0.2264
+            ]
+          }
+        ]
+      },
+      "armLevel6": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel6-v1.glb",
+            "sha256": "d8e315292aea523822c60c267491ce4892498fddb733e70c1eb2754a7c0c4df2",
+            "bytes": 129116,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1286,
+                -0.1286
+              ],
+              "max": [
+                13.716,
+                0.1286,
+                0.1286
+              ]
+            },
+            "dimensionsM": [
+              13.716,
+              0.2572,
+              0.2572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel6-v1-lod1.glb",
+            "sha256": "bfa67b4f24f074ef3b13a75533fb868c0d09fec6d61819e65f2c2ce77d86aae4",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1286,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                0.1286,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.716,
+              0.2572,
+              0.2446
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel6-v1-lod1.glb",
+            "sha256": "bfa67b4f24f074ef3b13a75533fb868c0d09fec6d61819e65f2c2ce77d86aae4",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1286,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                0.1286,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.716,
+              0.2572,
+              0.2446
+            ]
+          }
+        ]
+      },
+      "cabinet": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/cabinet-v1.glb",
+            "sha256": "8bff42af424b3c52cff088b6dbe2af7f9746ae833e3002f0f5ae002e2aaf565b",
+            "bytes": 161588,
+            "triangles": 580,
+            "boundsM": {
+              "min": [
+                -0.5172,
+                -0.05,
+                -0.295
+              ],
+              "max": [
+                0.5172,
+                1.6254,
+                0.295
+              ]
+            },
+            "dimensionsM": [
+              1.0344,
+              1.6754,
+              0.5899
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/cabinet-v1-lod1.glb",
+            "sha256": "d5a381145be0fc623eb9e75d262b25fa39a08e770b99339670c96eb504ab5464",
+            "bytes": 9544,
+            "triangles": 124,
+            "boundsM": {
+              "min": [
+                -0.5172,
+                -0.05,
+                -0.295
+              ],
+              "max": [
+                0.5172,
+                1.6254,
+                0.295
+              ]
+            },
+            "dimensionsM": [
+              1.0344,
+              1.6754,
+              0.5899
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/cabinet-v1-lod2.glb",
+            "sha256": "ced4b691e65d7ccedd73d4815273c505f20df1b0659d5072750e0e73c678bfc7",
+            "bytes": 7024,
+            "triangles": 88,
+            "boundsM": {
+              "min": [
+                -0.5172,
+                -0.05,
+                -0.295
+              ],
+              "max": [
+                0.5172,
+                1.6254,
+                0.295
+              ]
+            },
+            "dimensionsM": [
+              1.0344,
+              1.6754,
+              0.5899
+            ]
+          }
+        ]
+      },
+      "pullBox": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pullBox-v1.glb",
+            "sha256": "e133acc94ad29708a07ecc54df11863326311d4432294557ef37312c6eec4f2b",
+            "bytes": 92956,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                -0.3492,
+                -0.03,
+                -0.2286
+              ],
+              "max": [
+                0.3492,
+                0.006,
+                0.2286
+              ]
+            },
+            "dimensionsM": [
+              0.6985,
+              0.036,
+              0.4572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pullBox-v1.glb",
+            "sha256": "e133acc94ad29708a07ecc54df11863326311d4432294557ef37312c6eec4f2b",
+            "bytes": 92956,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                -0.3492,
+                -0.03,
+                -0.2286
+              ],
+              "max": [
+                0.3492,
+                0.006,
+                0.2286
+              ]
+            },
+            "dimensionsM": [
+              0.6985,
+              0.036,
+              0.4572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pullBox-v1.glb",
+            "sha256": "e133acc94ad29708a07ecc54df11863326311d4432294557ef37312c6eec4f2b",
+            "bytes": 92956,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                -0.3492,
+                -0.03,
+                -0.2286
+              ],
+              "max": [
+                0.3492,
+                0.006,
+                0.2286
+              ]
+            },
+            "dimensionsM": [
+              0.6985,
+              0.036,
+              0.4572
+            ]
+          }
+        ]
+      },
+      "signChannel": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/signChannel-v1.glb",
+            "sha256": "e01fce94918f507c3c83d71c368b447e85fad15abcf9558351e729ce73e02eff",
+            "bytes": 93308,
+            "triangles": 36,
+            "boundsM": {
+              "min": [
+                -0.5,
+                -0.0191,
+                -0.019
+              ],
+              "max": [
+                0.5,
+                0.0191,
+                -0.0
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.0381,
+              0.019
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signChannel-v1.glb",
+            "sha256": "e01fce94918f507c3c83d71c368b447e85fad15abcf9558351e729ce73e02eff",
+            "bytes": 93308,
+            "triangles": 36,
+            "boundsM": {
+              "min": [
+                -0.5,
+                -0.0191,
+                -0.019
+              ],
+              "max": [
+                0.5,
+                0.0191,
+                -0.0
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.0381,
+              0.019
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signChannel-v1.glb",
+            "sha256": "e01fce94918f507c3c83d71c368b447e85fad15abcf9558351e729ce73e02eff",
+            "bytes": 93308,
+            "triangles": 36,
+            "boundsM": {
+              "min": [
+                -0.5,
+                -0.0191,
+                -0.019
+              ],
+              "max": [
+                0.5,
+                0.0191,
+                -0.0
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.0381,
+              0.019
+            ]
+          }
+        ]
+      }
+    },
+    "galvanised": {
+      "mastPole": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastPole-v1-galvanised.glb",
+            "sha256": "28319fce4d5978eb343fcc87e163b3fdcaea166cc4d845c0451e79c897c64dc2",
+            "bytes": 239580,
+            "triangles": 1480,
+            "boundsM": {
+              "min": [
+                -0.381,
+                -0.06,
+                -0.381
+              ],
+              "max": [
+                0.381,
+                6.93,
+                0.381
+              ]
+            },
+            "dimensionsM": [
+              0.762,
+              6.99,
+              0.762
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastPole-v1-lod1.glb",
+            "sha256": "0b70e7a998a2969d4c2540797838647c3b28ad92d451bcf625a04cdb1cd29a42",
+            "bytes": 16420,
+            "triangles": 356,
+            "boundsM": {
+              "min": [
+                -0.3811,
+                -0.06,
+                -0.3811
+              ],
+              "max": [
+                0.3811,
+                6.93,
+                0.3811
+              ]
+            },
+            "dimensionsM": [
+              0.7623,
+              6.99,
+              0.7623
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastPole-v1-lod2.glb",
+            "sha256": "b2b84a26873e46c51e7179dbe6e58b666937ae7a0d205ce68efb35dfcc6e7c21",
+            "bytes": 6276,
+            "triangles": 72,
+            "boundsM": {
+              "min": [
+                -0.14,
+                0.0,
+                -0.1212
+              ],
+              "max": [
+                0.14,
+                6.87,
+                0.1212
+              ]
+            },
+            "dimensionsM": [
+              0.28,
+              6.87,
+              0.2425
+            ]
+          }
+        ]
+      },
+      "mastFoot": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastFoot-v1-galvanised.glb",
+            "sha256": "a2ce4a0b979478365be1d96e78296349b26e64750c8683994d5418911177a7dc",
+            "bytes": 225784,
+            "triangles": 1098,
+            "boundsM": {
+              "min": [
+                -0.381,
+                -0.06,
+                -0.381
+              ],
+              "max": [
+                0.381,
+                2.0,
+                0.381
+              ]
+            },
+            "dimensionsM": [
+              0.762,
+              2.06,
+              0.762
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastFoot-v1-lod1.glb",
+            "sha256": "a618e6d984b9dacc4dc6d971d7f06ae4c21f5b2612dc57b666586307deac355c",
+            "bytes": 10284,
+            "triangles": 206,
+            "boundsM": {
+              "min": [
+                -0.3811,
+                -0.06,
+                -0.3811
+              ],
+              "max": [
+                0.3811,
+                2.0,
+                0.3811
+              ]
+            },
+            "dimensionsM": [
+              0.7623,
+              2.06,
+              0.7623
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastFoot-v1-lod2.glb",
+            "sha256": "d13647bc249efb21c1eb02207c85058256156e41c6845160ab98a1729b878122",
+            "bytes": 4576,
+            "triangles": 48,
+            "boundsM": {
+              "min": [
+                -0.14,
+                0.0,
+                -0.1212
+              ],
+              "max": [
+                0.14,
+                2.0,
+                0.1212
+              ]
+            },
+            "dimensionsM": [
+              0.28,
+              2.0,
+              0.2425
+            ]
+          }
+        ]
+      },
+      "mastMid": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMid-v1-galvanised.glb",
+            "sha256": "8745cae784dad81fb127870071571ccaf614e82206bab30e1eb8bcbc3505a654",
+            "bytes": 170724,
+            "triangles": 64,
+            "boundsM": {
+              "min": [
+                -0.1284,
+                2.0,
+                -0.1284
+              ],
+              "max": [
+                0.1284,
+                4.45,
+                0.1284
+              ]
+            },
+            "dimensionsM": [
+              0.2568,
+              2.45,
+              0.2568
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMid-v1-lod1.glb",
+            "sha256": "805ad067e79e5bcfb6f281e916da309b9f454be79897b87a5b0e0d234f53800f",
+            "bytes": 2200,
+            "triangles": 24,
+            "boundsM": {
+              "min": [
+                -0.1284,
+                2.0,
+                -0.1284
+              ],
+              "max": [
+                0.1284,
+                4.45,
+                0.1284
+              ]
+            },
+            "dimensionsM": [
+              0.2568,
+              2.45,
+              0.2568
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMid-v1-lod2.glb",
+            "sha256": "abec4caf1770656862ef305ef4d1263689dd562c204dedb1afb4002d02fa9fd1",
+            "bytes": 2060,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.1284,
+                2.0,
+                -0.1112
+              ],
+              "max": [
+                0.1284,
+                4.45,
+                0.1112
+              ]
+            },
+            "dimensionsM": [
+              0.2568,
+              2.45,
+              0.2224
+            ]
+          }
+        ]
+      },
+      "mastTop": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastTop-v1-galvanised.glb",
+            "sha256": "fdab7661d1668c08e9d9ee1470ef4e860490f58b1c9861b27847c4946432c034",
+            "bytes": 179536,
+            "triangles": 318,
+            "boundsM": {
+              "min": [
+                -0.1142,
+                4.45,
+                -0.1142
+              ],
+              "max": [
+                0.1142,
+                6.93,
+                0.1142
+              ]
+            },
+            "dimensionsM": [
+              0.2284,
+              2.48,
+              0.2284
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastTop-v1-lod1.glb",
+            "sha256": "55d1cae81c29cf7a005a695d9d84ba3654136f8a87ae8a113abb3663b28ad44f",
+            "bytes": 6392,
+            "triangles": 126,
+            "boundsM": {
+              "min": [
+                -0.1142,
+                4.45,
+                -0.1142
+              ],
+              "max": [
+                0.1142,
+                6.93,
+                0.1142
+              ]
+            },
+            "dimensionsM": [
+              0.2284,
+              2.48,
+              0.2284
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastTop-v1-lod2.glb",
+            "sha256": "e2fdde59635ade233678366bc4606208dd4e00b003364175fe7d2e5fc7986dd6",
+            "bytes": 2076,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.1142,
+                4.45,
+                -0.0989
+              ],
+              "max": [
+                0.1142,
+                6.87,
+                0.0989
+              ]
+            },
+            "dimensionsM": [
+              0.2284,
+              2.42,
+              0.1978
+            ]
+          }
+        ]
+      },
+      "pedestalPole": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedestalPole-v1-galvanised.glb",
+            "sha256": "5bc18621e8ddfee8a5aaf3b7fbc36a0287f57d4fb9c8d923fdaf20f23b00ccd8",
+            "bytes": 212864,
+            "triangles": 1358,
+            "boundsM": {
+              "min": [
+                -0.24,
+                -0.06,
+                -0.24
+              ],
+              "max": [
+                0.24,
+                4.009,
+                0.24
+              ]
+            },
+            "dimensionsM": [
+              0.48,
+              4.069,
+              0.48
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedestalPole-v1-lod1.glb",
+            "sha256": "2609a9cb2d661b0d154391d3edd7d1445bed3681b813ee99f6b3437a25c48fb5",
+            "bytes": 19240,
+            "triangles": 323,
+            "boundsM": {
+              "min": [
+                -0.2402,
+                -0.0601,
+                -0.2402
+              ],
+              "max": [
+                0.2402,
+                4.009,
+                0.2402
+              ]
+            },
+            "dimensionsM": [
+              0.4805,
+              4.069,
+              0.4805
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedestalPole-v1-lod2.glb",
+            "sha256": "e5a4126313d640c67195c9f62534981e316ae889278e0ea28b087530145c211c",
+            "bytes": 4604,
+            "triangles": 48,
+            "boundsM": {
+              "min": [
+                -0.0571,
+                0.0,
+                -0.0495
+              ],
+              "max": [
+                0.0571,
+                3.91,
+                0.0495
+              ]
+            },
+            "dimensionsM": [
+              0.1143,
+              3.91,
+              0.099
+            ]
+          }
+        ]
+      },
+      "pedPost": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedPost-v1-galvanised.glb",
+            "sha256": "6049205cba1e90d50650afaa384d839d24b2d88efbea5f0685437967f090f104",
+            "bytes": 212860,
+            "triangles": 1358,
+            "boundsM": {
+              "min": [
+                -0.24,
+                -0.06,
+                -0.24
+              ],
+              "max": [
+                0.24,
+                3.259,
+                0.24
+              ]
+            },
+            "dimensionsM": [
+              0.48,
+              3.319,
+              0.48
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedPost-v1-lod1.glb",
+            "sha256": "f0d5e65f3f077aed744bd97c4c5c4284edfe749eb0c317f70ece32c99749b50d",
+            "bytes": 19236,
+            "triangles": 323,
+            "boundsM": {
+              "min": [
+                -0.2402,
+                -0.0601,
+                -0.2402
+              ],
+              "max": [
+                0.2402,
+                3.259,
+                0.2402
+              ]
+            },
+            "dimensionsM": [
+              0.4805,
+              3.319,
+              0.4805
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedPost-v1-lod2.glb",
+            "sha256": "fe12cf366ce63536dfcab07663563eea9c424d801229d0e3a5f7c60791840318",
+            "bytes": 4600,
+            "triangles": 48,
+            "boundsM": {
+              "min": [
+                -0.0571,
+                0.0,
+                -0.0495
+              ],
+              "max": [
+                0.0571,
+                3.16,
+                0.0495
+              ]
+            },
+            "dimensionsM": [
+              0.1143,
+              3.16,
+              0.099
+            ]
+          }
+        ]
+      },
+      "armTube": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armTube-v1-galvanised.glb",
+            "sha256": "52faae901b8307df88b15470c982d8106b859adf165ba55ee184162d8f4520b8",
+            "bytes": 182200,
+            "triangles": 240,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.09,
+                -0.09
+              ],
+              "max": [
+                1.0,
+                0.09,
+                0.09
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.18,
+              0.18
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTube-v1-lod1.glb",
+            "sha256": "737fd11d7d60f3c78666c4f7417f13ea327f276c9f70a4da568683cc1db95ae6",
+            "bytes": 3372,
+            "triangles": 40,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.09,
+                -0.0856
+              ],
+              "max": [
+                1.0,
+                0.09,
+                0.0856
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.18,
+              0.1712
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTube-v1-lod2.glb",
+            "sha256": "0b3e183bc6f6f0bcb23820590d13ade45e23a7651191a2770eaff9f3ebfaefaf",
+            "bytes": 1908,
+            "triangles": 10,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0728,
+                -0.0856
+              ],
+              "max": [
+                1.0,
+                0.09,
+                0.0856
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.1628,
+              0.1712
+            ]
+          }
+        ]
+      },
+      "armRoot": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRoot-v1-galvanised.glb",
+            "sha256": "459b6bc38fcc6971c111f7f2e00acf65018395fe57d837898214d119ea6dc5df",
+            "bytes": 196364,
+            "triangles": 392,
+            "boundsM": {
+              "min": [
+                0.0513,
+                -0.1524,
+                -0.1524
+              ],
+              "max": [
+                0.2313,
+                0.1524,
+                0.1524
+              ]
+            },
+            "dimensionsM": [
+              0.18,
+              0.3048,
+              0.3048
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRoot-v1-lod1.glb",
+            "sha256": "66335979c121964425d2e4713a98be4def50e2bdca9c583722f3f7f7a7486341",
+            "bytes": 3948,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                0.0513,
+                -0.1524,
+                -0.1589
+              ],
+              "max": [
+                0.2075,
+                0.1524,
+                0.1589
+              ]
+            },
+            "dimensionsM": [
+              0.1562,
+              0.3048,
+              0.3179
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRoot-v1-lod1.glb",
+            "sha256": "66335979c121964425d2e4713a98be4def50e2bdca9c583722f3f7f7a7486341",
+            "bytes": 3948,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                0.0513,
+                -0.1524,
+                -0.1589
+              ],
+              "max": [
+                0.2075,
+                0.1524,
+                0.1589
+              ]
+            },
+            "dimensionsM": [
+              0.1562,
+              0.3048,
+              0.3179
+            ]
+          }
+        ]
+      },
+      "armTip": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armTip-v1-galvanised.glb",
+            "sha256": "ab5992ac974f4a63fcc54056e65d3907eab56bcc332ebcd039e1b808f8af8389",
+            "bytes": 183708,
+            "triangles": 198,
+            "boundsM": {
+              "min": [
+                -0.075,
+                -0.066,
+                -0.066
+              ],
+              "max": [
+                0.025,
+                0.066,
+                0.066
+              ]
+            },
+            "dimensionsM": [
+              0.1,
+              0.132,
+              0.132
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTip-v1-lod1.glb",
+            "sha256": "bda289e961d72773edaec953f9939d6d7be518190521041e7cf47905a599aa95",
+            "bytes": 5280,
+            "triangles": 79,
+            "boundsM": {
+              "min": [
+                -0.075,
+                -0.0693,
+                -0.0693
+              ],
+              "max": [
+                0.0249,
+                0.066,
+                0.0693
+              ]
+            },
+            "dimensionsM": [
+              0.0999,
+              0.1353,
+              0.1387
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armTip-v1-lod1.glb",
+            "sha256": "bda289e961d72773edaec953f9939d6d7be518190521041e7cf47905a599aa95",
+            "bytes": 5280,
+            "triangles": 79,
+            "boundsM": {
+              "min": [
+                -0.075,
+                -0.0693,
+                -0.0693
+              ],
+              "max": [
+                0.0249,
+                0.066,
+                0.0693
+              ]
+            },
+            "dimensionsM": [
+              0.0999,
+              0.1353,
+              0.1387
+            ]
+          }
+        ]
+      },
+      "mastMount0": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMount0-v1-galvanised.glb",
+            "sha256": "277941277cbd88a8b333ebac3c1b0b6c68fc3e5faa8fcc3ad4a58a0b7a8113c2",
+            "bytes": 190396,
+            "triangles": 314,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.212,
+                -0.0935
+              ],
+              "max": [
+                0.085,
+                0.0935,
+                0.0935
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.3055,
+              0.187
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount0-v1-lod1.glb",
+            "sha256": "d9182cd1c5344fdcdc9a6e7d68e865be26cc772c35144880c1e458b9dfd7430e",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0982
+              ],
+              "max": [
+                0.085,
+                0.0982,
+                0.0982
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.3082,
+              0.1965
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount0-v1-lod1.glb",
+            "sha256": "d9182cd1c5344fdcdc9a6e7d68e865be26cc772c35144880c1e458b9dfd7430e",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0982
+              ],
+              "max": [
+                0.085,
+                0.0982,
+                0.0982
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.3082,
+              0.1965
+            ]
+          }
+        ]
+      },
+      "mastMount1": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMount1-v1-galvanised.glb",
+            "sha256": "f9e022082550d5f5e11b6f953231c3c3ec78f607f2c432fb6df5894818c1c53d",
+            "bytes": 190396,
+            "triangles": 314,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.212,
+                -0.0835
+              ],
+              "max": [
+                0.085,
+                0.0835,
+                0.0835
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2955,
+              0.167
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount1-v1-lod1.glb",
+            "sha256": "dea572b353c686b4830949b0df0cdeff0392d019620571583c14747b4e0e26ee",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0808
+              ],
+              "max": [
+                0.085,
+                0.0838,
+                0.0823
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2938,
+              0.163
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount1-v1-lod1.glb",
+            "sha256": "dea572b353c686b4830949b0df0cdeff0392d019620571583c14747b4e0e26ee",
+            "bytes": 7004,
+            "triangles": 94,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.0808
+              ],
+              "max": [
+                0.085,
+                0.0838,
+                0.0823
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2938,
+              0.163
+            ]
+          }
+        ]
+      },
+      "mastMount2": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/mastMount2-v1-galvanised.glb",
+            "sha256": "eec14ee0c979fb125a1f58d0467edf0d28dd85a6da46a69e2d02881c65c083bc",
+            "bytes": 190396,
+            "triangles": 314,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.212,
+                -0.0735
+              ],
+              "max": [
+                0.085,
+                0.0735,
+                0.0735
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.2855,
+              0.147
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount2-v1-lod1.glb",
+            "sha256": "36c8e6d9c1e31f4e48763d271eecc94c0fce569f014a76932760c85806e118ba",
+            "bytes": 6520,
+            "triangles": 93,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.079
+              ],
+              "max": [
+                0.085,
+                0.079,
+                0.0768
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.289,
+              0.1558
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/mastMount2-v1-lod1.glb",
+            "sha256": "36c8e6d9c1e31f4e48763d271eecc94c0fce569f014a76932760c85806e118ba",
+            "bytes": 6520,
+            "triangles": 93,
+            "boundsM": {
+              "min": [
+                -0.085,
+                -0.21,
+                -0.079
+              ],
+              "max": [
+                0.085,
+                0.079,
+                0.0768
+              ]
+            },
+            "dimensionsM": [
+              0.17,
+              0.289,
+              0.1558
+            ]
+          }
+        ]
+      },
+      "sideMountPipe": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/sideMountPipe-v1-galvanised.glb",
+            "sha256": "c424281f3f3d4ce4128d8caf022e2dc4082067d82b714e668aeddfd838afcee7",
+            "bytes": 207320,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6953,
+                -0.0641
+              ],
+              "max": [
+                0.376,
+                0.6953,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.4401,
+              1.3907,
+              0.1283
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountPipe-v1-lod1.glb",
+            "sha256": "896132c373cee349f98cc3196bcd8dcc725450efc761f0e6db210c35dc5fac6e",
+            "bytes": 15668,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0666
+              ],
+              "max": [
+                0.3636,
+                0.6914,
+                0.0655
+              ]
+            },
+            "dimensionsM": [
+              0.4278,
+              1.3828,
+              0.1321
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountPipe-v1-lod1.glb",
+            "sha256": "896132c373cee349f98cc3196bcd8dcc725450efc761f0e6db210c35dc5fac6e",
+            "bytes": 15668,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0666
+              ],
+              "max": [
+                0.3636,
+                0.6914,
+                0.0655
+              ]
+            },
+            "dimensionsM": [
+              0.4278,
+              1.3828,
+              0.1321
+            ]
+          }
+        ]
+      },
+      "sideMountMast": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/sideMountMast-v1-galvanised.glb",
+            "sha256": "b19806965c72f60e8fb22fd1dc74a4b41b4475b75d88971a1ff14be7d903879f",
+            "bytes": 207316,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.1282,
+                -0.6953,
+                -0.1282
+              ],
+              "max": [
+                0.376,
+                0.6953,
+                0.1282
+              ]
+            },
+            "dimensionsM": [
+              0.5042,
+              1.3907,
+              0.2563
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountMast-v1-lod1.glb",
+            "sha256": "c52d7fb4576d7893a7869e7ae188bb6b3afec3ff5f75f67d9982881c3cf901e4",
+            "bytes": 15828,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1282,
+                -0.6913,
+                -0.1328
+              ],
+              "max": [
+                0.3656,
+                0.6914,
+                0.1328
+              ]
+            },
+            "dimensionsM": [
+              0.4937,
+              1.3828,
+              0.2655
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/sideMountMast-v1-lod1.glb",
+            "sha256": "c52d7fb4576d7893a7869e7ae188bb6b3afec3ff5f75f67d9982881c3cf901e4",
+            "bytes": 15828,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1282,
+                -0.6913,
+                -0.1328
+              ],
+              "max": [
+                0.3656,
+                0.6914,
+                0.1328
+              ]
+            },
+            "dimensionsM": [
+              0.4937,
+              1.3828,
+              0.2655
+            ]
+          }
+        ]
+      },
+      "frontMountPipe": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/frontMountPipe-v1-galvanised.glb",
+            "sha256": "2e9d954c17e8d0106d6a28437c419727c015ef16bb337f57c32df0538c89cd5b",
+            "bytes": 207320,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6953,
+                -0.0641
+              ],
+              "max": [
+                0.236,
+                0.6953,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.3001,
+              1.3907,
+              0.1283
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountPipe-v1-lod1.glb",
+            "sha256": "61f6099a33c710b58638286bb57192d94f19ee6d4e240192e3bd188118bdd012",
+            "bytes": 14868,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0683
+              ],
+              "max": [
+                0.2253,
+                0.6914,
+                0.0665
+              ]
+            },
+            "dimensionsM": [
+              0.2895,
+              1.3828,
+              0.1347
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountPipe-v1-lod1.glb",
+            "sha256": "61f6099a33c710b58638286bb57192d94f19ee6d4e240192e3bd188118bdd012",
+            "bytes": 14868,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.6913,
+                -0.0683
+              ],
+              "max": [
+                0.2253,
+                0.6914,
+                0.0665
+              ]
+            },
+            "dimensionsM": [
+              0.2895,
+              1.3828,
+              0.1347
+            ]
+          }
+        ]
+      },
+      "frontMountMast": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/frontMountMast-v1-galvanised.glb",
+            "sha256": "d7d0bef0a5ed7e266dae150dc05701c230d985b833363b26024f47334101b7c2",
+            "bytes": 207312,
+            "triangles": 788,
+            "boundsM": {
+              "min": [
+                -0.129,
+                -0.6953,
+                -0.129
+              ],
+              "max": [
+                0.263,
+                0.6953,
+                0.129
+              ]
+            },
+            "dimensionsM": [
+              0.3921,
+              1.3907,
+              0.2581
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountMast-v1-lod1.glb",
+            "sha256": "75cce11677a39e3ea072484a1e55cebcf888b536b230a65ab79b9ffcaa1c8ae8",
+            "bytes": 14772,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1312,
+                -0.6913,
+                -0.1337
+              ],
+              "max": [
+                0.2524,
+                0.6914,
+                0.1337
+              ]
+            },
+            "dimensionsM": [
+              0.3836,
+              1.3828,
+              0.2673
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/frontMountMast-v1-lod1.glb",
+            "sha256": "75cce11677a39e3ea072484a1e55cebcf888b536b230a65ab79b9ffcaa1c8ae8",
+            "bytes": 14772,
+            "triangles": 268,
+            "boundsM": {
+              "min": [
+                -0.1312,
+                -0.6913,
+                -0.1337
+              ],
+              "max": [
+                0.2524,
+                0.6914,
+                0.1337
+              ]
+            },
+            "dimensionsM": [
+              0.3836,
+              1.3828,
+              0.2673
+            ]
+          }
+        ]
+      },
+      "pedMountPipe": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedMountPipe-v1-galvanised.glb",
+            "sha256": "c408716a335939d638664be3195a574e1181188f2c10b128622ccc9470eb5cf5",
+            "bytes": 188392,
+            "triangles": 300,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.236,
+                -0.0641
+              ],
+              "max": [
+                0.0872,
+                0.2361,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.1513,
+              0.4721,
+              0.1283
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountPipe-v1-lod1.glb",
+            "sha256": "745733f87e51961e88a2509773bf36684f98bf86bccb666b6cab911ab1d4e014",
+            "bytes": 6972,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.236,
+                -0.0683
+              ],
+              "max": [
+                0.0872,
+                0.2361,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.1513,
+              0.4721,
+              0.1324
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountPipe-v1-lod1.glb",
+            "sha256": "745733f87e51961e88a2509773bf36684f98bf86bccb666b6cab911ab1d4e014",
+            "bytes": 6972,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.0641,
+                -0.236,
+                -0.0683
+              ],
+              "max": [
+                0.0872,
+                0.2361,
+                0.0641
+              ]
+            },
+            "dimensionsM": [
+              0.1513,
+              0.4721,
+              0.1324
+            ]
+          }
+        ]
+      },
+      "pedMountMast": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedMountMast-v1-galvanised.glb",
+            "sha256": "f22bf34973045a011907edb266eb82ede40c56f7a1d2326ce8079be46c03fe34",
+            "bytes": 188388,
+            "triangles": 300,
+            "boundsM": {
+              "min": [
+                -0.1308,
+                -0.236,
+                -0.1308
+              ],
+              "max": [
+                0.1538,
+                0.2361,
+                0.1308
+              ]
+            },
+            "dimensionsM": [
+              0.2845,
+              0.4721,
+              0.2615
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountMast-v1-lod1.glb",
+            "sha256": "cb246d6b7e1436da5bb4c8b6167221fa90463f546774dc73179a4bccafbf1612",
+            "bytes": 7544,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.1355,
+                -0.236,
+                -0.1355
+              ],
+              "max": [
+                0.1538,
+                0.2362,
+                0.1358
+              ]
+            },
+            "dimensionsM": [
+              0.2892,
+              0.4722,
+              0.2713
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedMountMast-v1-lod1.glb",
+            "sha256": "cb246d6b7e1436da5bb4c8b6167221fa90463f546774dc73179a4bccafbf1612",
+            "bytes": 7544,
+            "triangles": 120,
+            "boundsM": {
+              "min": [
+                -0.1355,
+                -0.236,
+                -0.1355
+              ],
+              "max": [
+                0.1538,
+                0.2362,
+                0.1358
+              ]
+            },
+            "dimensionsM": [
+              0.2892,
+              0.4722,
+              0.2713
+            ]
+          }
+        ]
+      },
+      "pedReach": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pedReach-v1-galvanised.glb",
+            "sha256": "664aafea86272121b76a2c393ff4d62a08e1f64495e8041d642e82ecbc7bfa5c",
+            "bytes": 179272,
+            "triangles": 68,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.2351,
+                -0.0241
+              ],
+              "max": [
+                1.0,
+                0.2351,
+                0.0241
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.4703,
+              0.0483
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedReach-v1-lod1.glb",
+            "sha256": "d2ae2038f82866dd1fdd592981fbfb911c88c38cceffaf558cb2d5d5a00d2a99",
+            "bytes": 4440,
+            "triangles": 68,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.2351,
+                -0.0241
+              ],
+              "max": [
+                1.0,
+                0.2351,
+                0.0241
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.4703,
+              0.0483
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pedReach-v1-lod1.glb",
+            "sha256": "d2ae2038f82866dd1fdd592981fbfb911c88c38cceffaf558cb2d5d5a00d2a99",
+            "bytes": 4440,
+            "triangles": 68,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.2351,
+                -0.0241
+              ],
+              "max": [
+                1.0,
+                0.2351,
+                0.0241
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.4703,
+              0.0483
+            ]
+          }
+        ]
+      },
+      "armRise0": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise0-v1-galvanised.glb",
+            "sha256": "007e8ca5b1d710cd7f6d78e7775d577d5f8e56ac8080c7ccb51c038de901fbee",
+            "bytes": 141732,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0329,
+                -0.0775,
+                -0.0842
+              ],
+              "max": [
+                4.572,
+                1.3275,
+                0.0842
+              ]
+            },
+            "dimensionsM": [
+              4.6049,
+              1.4049,
+              0.1683
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise0-v1-lod1.glb",
+            "sha256": "08baf4f8eb5e0e750e2eca066346f458f3f71d61aa0c73cd4b21326c81382463",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0329,
+                -0.0775,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                1.3275,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.6049,
+              1.4049,
+              0.1601
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise0-v1-lod1.glb",
+            "sha256": "08baf4f8eb5e0e750e2eca066346f458f3f71d61aa0c73cd4b21326c81382463",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0329,
+                -0.0775,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                1.3275,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.6049,
+              1.4049,
+              0.1601
+            ]
+          }
+        ]
+      },
+      "armRise1": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise1-v1-galvanised.glb",
+            "sha256": "6826324157a07bf7b536f4d4e007e25d08bd6c2fe897fb63028b845c68591c76",
+            "bytes": 141732,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0347,
+                -0.0818,
+                -0.0889
+              ],
+              "max": [
+                6.096,
+                1.3233,
+                0.0889
+              ]
+            },
+            "dimensionsM": [
+              6.1307,
+              1.4052,
+              0.1778
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise1-v1-lod1.glb",
+            "sha256": "009ed26b34001fef2212ae1797753f4769c023447fa87af25d1ad27410764771",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0347,
+                -0.0818,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                1.3233,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.1307,
+              1.4052,
+              0.1691
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise1-v1-lod1.glb",
+            "sha256": "009ed26b34001fef2212ae1797753f4769c023447fa87af25d1ad27410764771",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0347,
+                -0.0818,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                1.3233,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.1307,
+              1.4052,
+              0.1691
+            ]
+          }
+        ]
+      },
+      "armRise2": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise2-v1-galvanised.glb",
+            "sha256": "d9aa06e969237cd124a45a27d1112a531487b4038b97a9df58fe4597a3e5b28b",
+            "bytes": 141732,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0391,
+                -0.0921,
+                -0.1
+              ],
+              "max": [
+                7.62,
+                2.0876,
+                0.1
+              ]
+            },
+            "dimensionsM": [
+              7.6591,
+              2.1796,
+              0.2
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise2-v1-lod1.glb",
+            "sha256": "df210f76ff867e6c37eafcdea3b917ebcbd26e1469237ad95ef481619c678b50",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0391,
+                -0.0921,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                2.0876,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.6591,
+              2.1796,
+              0.1902
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise2-v1-lod1.glb",
+            "sha256": "df210f76ff867e6c37eafcdea3b917ebcbd26e1469237ad95ef481619c678b50",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0391,
+                -0.0921,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                2.0876,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.6591,
+              2.1796,
+              0.1902
+            ]
+          }
+        ]
+      },
+      "armRise3": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise3-v1-galvanised.glb",
+            "sha256": "2206a5078e439f3df34040dc1d2f9c9608733b3a1c4409dbab838c682504bf50",
+            "bytes": 141728,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0397,
+                -0.0935,
+                -0.1016
+              ],
+              "max": [
+                9.144,
+                2.1813,
+                0.1016
+              ]
+            },
+            "dimensionsM": [
+              9.1837,
+              2.2748,
+              0.2032
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise3-v1-lod1.glb",
+            "sha256": "b4feeed27dd1a8661b7fe92edd0a66ac39a4c2694bf6a893c3297a8b70271a2e",
+            "bytes": 7972,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0397,
+                -0.0935,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                2.1813,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.1837,
+              2.2748,
+              0.1933
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise3-v1-lod1.glb",
+            "sha256": "b4feeed27dd1a8661b7fe92edd0a66ac39a4c2694bf6a893c3297a8b70271a2e",
+            "bytes": 7972,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0397,
+                -0.0935,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                2.1813,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.1837,
+              2.2748,
+              0.1933
+            ]
+          }
+        ]
+      },
+      "armRise4": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise4-v1-galvanised.glb",
+            "sha256": "33030de2f131a52de32126b6a21b3fc6c63c427e1ded135844e8bafe8e5202f0",
+            "bytes": 141732,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0398,
+                -0.1038,
+                -0.1111
+              ],
+              "max": [
+                10.668,
+                2.1819,
+                0.1111
+              ]
+            },
+            "dimensionsM": [
+              10.7078,
+              2.2857,
+              0.2223
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise4-v1-lod1.glb",
+            "sha256": "e98adb942cf25b167ae197f9f710bfd59ec0963111b2a45b491df743c6199f43",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0398,
+                -0.1038,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                2.1819,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.7078,
+              2.2857,
+              0.2114
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise4-v1-lod1.glb",
+            "sha256": "e98adb942cf25b167ae197f9f710bfd59ec0963111b2a45b491df743c6199f43",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0398,
+                -0.1038,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                2.1819,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.7078,
+              2.2857,
+              0.2114
+            ]
+          }
+        ]
+      },
+      "armRise5": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise5-v1-galvanised.glb",
+            "sha256": "bfd20983d7b2e0461cd0a4c87b54f122222107b4ea437d00c91390dd239e7cee",
+            "bytes": 141732,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0308,
+                -0.115,
+                -0.1191
+              ],
+              "max": [
+                12.192,
+                2.1809,
+                0.1191
+              ]
+            },
+            "dimensionsM": [
+              12.2228,
+              2.2959,
+              0.2381
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise5-v1-lod1.glb",
+            "sha256": "8cac519183c4c69b04c15c63271e7f774739618d9a50d96f3cfcde4a94c01f07",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0308,
+                -0.115,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                2.1809,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.2228,
+              2.2959,
+              0.2264
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise5-v1-lod1.glb",
+            "sha256": "8cac519183c4c69b04c15c63271e7f774739618d9a50d96f3cfcde4a94c01f07",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0308,
+                -0.115,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                2.1809,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.2228,
+              2.2959,
+              0.2264
+            ]
+          }
+        ]
+      },
+      "armRise6": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armRise6-v1-galvanised.glb",
+            "sha256": "b05171b12115abd01a094bb4c1aaab25e9d798a599c40fde5592e3fcc97146f3",
+            "bytes": 141732,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                -0.0333,
+                -0.1242,
+                -0.1286
+              ],
+              "max": [
+                13.716,
+                2.3856,
+                0.1286
+              ]
+            },
+            "dimensionsM": [
+              13.7493,
+              2.5098,
+              0.2572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise6-v1-lod1.glb",
+            "sha256": "2ea8117f449aeed0f151246fb7975b257f4a18f27aea827a94c4647926a95fa4",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0333,
+                -0.1242,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                2.3856,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.7493,
+              2.5098,
+              0.2446
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armRise6-v1-lod1.glb",
+            "sha256": "2ea8117f449aeed0f151246fb7975b257f4a18f27aea827a94c4647926a95fa4",
+            "bytes": 7976,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                -0.0333,
+                -0.1242,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                2.3856,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.7493,
+              2.5098,
+              0.2446
+            ]
+          }
+        ]
+      },
+      "signBracket": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/signBracket-v1.glb",
+            "sha256": "c2ff3c73e6afe825b27b10f6f8b87d94b2cf5056c328c9ec0165a6cbb59ea524",
+            "bytes": 107364,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.025,
+                -1.0,
+                -0.004
+              ],
+              "max": [
+                0.025,
+                0.0,
+                0.004
+              ]
+            },
+            "dimensionsM": [
+              0.05,
+              1.0,
+              0.008
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signBracket-v1.glb",
+            "sha256": "c2ff3c73e6afe825b27b10f6f8b87d94b2cf5056c328c9ec0165a6cbb59ea524",
+            "bytes": 107364,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.025,
+                -1.0,
+                -0.004
+              ],
+              "max": [
+                0.025,
+                0.0,
+                0.004
+              ]
+            },
+            "dimensionsM": [
+              0.05,
+              1.0,
+              0.008
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signBracket-v1.glb",
+            "sha256": "c2ff3c73e6afe825b27b10f6f8b87d94b2cf5056c328c9ec0165a6cbb59ea524",
+            "bytes": 107364,
+            "triangles": 12,
+            "boundsM": {
+              "min": [
+                -0.025,
+                -1.0,
+                -0.004
+              ],
+              "max": [
+                0.025,
+                0.0,
+                0.004
+              ]
+            },
+            "dimensionsM": [
+              0.05,
+              1.0,
+              0.008
+            ]
+          }
+        ]
+      },
+      "pushButtonPipeP": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeP-v1.glb",
+            "sha256": "2db0c9fc06b37b0636dc0790558db896e113b2c08aad06ac8bf0c16359e530f1",
+            "bytes": 119412,
+            "triangles": 245,
+            "boundsM": {
+              "min": [
+                -0.0622,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1537,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2158,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeP-v1-lod1.glb",
+            "sha256": "7767e32a873394df4aacfa8f1bc5eb949ff6b1689f6d2d93a2881c66beccef95",
+            "bytes": 5232,
+            "triangles": 59,
+            "boundsM": {
+              "min": [
+                -0.0644,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2047,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeP-v1-lod1.glb",
+            "sha256": "7767e32a873394df4aacfa8f1bc5eb949ff6b1689f6d2d93a2881c66beccef95",
+            "bytes": 5232,
+            "triangles": 59,
+            "boundsM": {
+              "min": [
+                -0.0644,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2047,
+              0.566,
+              0.2286
+            ]
+          }
+        ]
+      },
+      "pushButtonPipeN": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeN-v1.glb",
+            "sha256": "de7d576be9e6a9c4810a3307fb2352593e8f559fbfcc6aa7e12f79bf4fc42156",
+            "bytes": 119412,
+            "triangles": 245,
+            "boundsM": {
+              "min": [
+                -0.0622,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1537,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2158,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeN-v1-lod1.glb",
+            "sha256": "ea7d48f90bca03a8c445d047f4f87a548dd7d4b5ce5bf85cdbaef8590fdf6a8f",
+            "bytes": 5260,
+            "triangles": 58,
+            "boundsM": {
+              "min": [
+                -0.0618,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2021,
+              0.566,
+              0.2286
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pushButtonPipeN-v1-lod1.glb",
+            "sha256": "ea7d48f90bca03a8c445d047f4f87a548dd7d4b5ce5bf85cdbaef8590fdf6a8f",
+            "bytes": 5260,
+            "triangles": 58,
+            "boundsM": {
+              "min": [
+                -0.0618,
+                -0.11,
+                -0.1143
+              ],
+              "max": [
+                0.1403,
+                0.456,
+                0.1143
+              ]
+            },
+            "dimensionsM": [
+              0.2021,
+              0.566,
+              0.2286
+            ]
+          }
+        ]
+      },
+      "armLevel0": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel0-v1-galvanised.glb",
+            "sha256": "46e98b7ca985ff31274ab6208758ebdd4c08aa14f5f731fbaf9b3ce2f50917f1",
+            "bytes": 141716,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0842,
+                -0.0842
+              ],
+              "max": [
+                4.572,
+                0.0842,
+                0.0842
+              ]
+            },
+            "dimensionsM": [
+              4.572,
+              0.1683,
+              0.1683
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel0-v1-lod1.glb",
+            "sha256": "c338e961f554cd444a77a87abdbc8ad54a35675286355ff18a141f1f3aa1439c",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0842,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                0.0842,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.572,
+              0.1683,
+              0.1601
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel0-v1-lod1.glb",
+            "sha256": "c338e961f554cd444a77a87abdbc8ad54a35675286355ff18a141f1f3aa1439c",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0842,
+                -0.08
+              ],
+              "max": [
+                4.572,
+                0.0842,
+                0.08
+              ]
+            },
+            "dimensionsM": [
+              4.572,
+              0.1683,
+              0.1601
+            ]
+          }
+        ]
+      },
+      "armLevel1": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel1-v1-galvanised.glb",
+            "sha256": "f4b368ab28471dfdca4650265f286ccf1b69eaeb23edfb26ee815538ba670dcc",
+            "bytes": 141716,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0889,
+                -0.0889
+              ],
+              "max": [
+                6.096,
+                0.0889,
+                0.0889
+              ]
+            },
+            "dimensionsM": [
+              6.096,
+              0.1778,
+              0.1778
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel1-v1-lod1.glb",
+            "sha256": "36e94f0b89bb84644b8b8eab9ba3a56a9bef93d241c0c98cbc8c94c7f3d63823",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0889,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                0.0889,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.096,
+              0.1778,
+              0.1691
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel1-v1-lod1.glb",
+            "sha256": "36e94f0b89bb84644b8b8eab9ba3a56a9bef93d241c0c98cbc8c94c7f3d63823",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.0889,
+                -0.0845
+              ],
+              "max": [
+                6.096,
+                0.0889,
+                0.0845
+              ]
+            },
+            "dimensionsM": [
+              6.096,
+              0.1778,
+              0.1691
+            ]
+          }
+        ]
+      },
+      "armLevel2": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel2-v1-galvanised.glb",
+            "sha256": "27eb4c76261da3ac7027ce5e8f5f59f4e3180e6c83a193266f127fff53e94670",
+            "bytes": 141716,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1,
+                -0.1
+              ],
+              "max": [
+                7.62,
+                0.1,
+                0.1
+              ]
+            },
+            "dimensionsM": [
+              7.62,
+              0.2,
+              0.2
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel2-v1-lod1.glb",
+            "sha256": "faec1b1aa66055c48d3e537542ea6c53dbf2f65eb85e1cfd7c24eb462715516e",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                0.1,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.62,
+              0.2,
+              0.1902
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel2-v1-lod1.glb",
+            "sha256": "faec1b1aa66055c48d3e537542ea6c53dbf2f65eb85e1cfd7c24eb462715516e",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1,
+                -0.0951
+              ],
+              "max": [
+                7.62,
+                0.1,
+                0.0951
+              ]
+            },
+            "dimensionsM": [
+              7.62,
+              0.2,
+              0.1902
+            ]
+          }
+        ]
+      },
+      "armLevel3": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel3-v1-galvanised.glb",
+            "sha256": "0deb677ac0a59c56f5b4932814834339ae45948ca17839a50f824cf3c57147a6",
+            "bytes": 141716,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1016,
+                -0.1016
+              ],
+              "max": [
+                9.144,
+                0.1016,
+                0.1016
+              ]
+            },
+            "dimensionsM": [
+              9.144,
+              0.2032,
+              0.2032
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel3-v1-lod1.glb",
+            "sha256": "610ca3d9d28c07a2e2ea28b80898024f92597455af7d8a50b2aab0b881c5be6b",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1016,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                0.1016,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.144,
+              0.2032,
+              0.1933
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel3-v1-lod1.glb",
+            "sha256": "610ca3d9d28c07a2e2ea28b80898024f92597455af7d8a50b2aab0b881c5be6b",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1016,
+                -0.0966
+              ],
+              "max": [
+                9.144,
+                0.1016,
+                0.0966
+              ]
+            },
+            "dimensionsM": [
+              9.144,
+              0.2032,
+              0.1933
+            ]
+          }
+        ]
+      },
+      "armLevel4": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel4-v1-galvanised.glb",
+            "sha256": "04f18c107e0be96b76f2008268fcba42cc77be9c20b813202a6d2946bd169206",
+            "bytes": 141716,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1111,
+                -0.1111
+              ],
+              "max": [
+                10.668,
+                0.1111,
+                0.1111
+              ]
+            },
+            "dimensionsM": [
+              10.668,
+              0.2223,
+              0.2223
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel4-v1-lod1.glb",
+            "sha256": "af80fbb4a8b49c36aa268c5a24cc265e042ded7e70a1d01aa596ac180ba20112",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1111,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                0.1111,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.668,
+              0.2223,
+              0.2114
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel4-v1-lod1.glb",
+            "sha256": "af80fbb4a8b49c36aa268c5a24cc265e042ded7e70a1d01aa596ac180ba20112",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1111,
+                -0.1057
+              ],
+              "max": [
+                10.668,
+                0.1111,
+                0.1057
+              ]
+            },
+            "dimensionsM": [
+              10.668,
+              0.2223,
+              0.2114
+            ]
+          }
+        ]
+      },
+      "armLevel5": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel5-v1-galvanised.glb",
+            "sha256": "2a0b561dbc482a16f6038076d60609a4f2cbe9e4103ab59e29e01845de8f3f69",
+            "bytes": 141716,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1191,
+                -0.1191
+              ],
+              "max": [
+                12.192,
+                0.1191,
+                0.1191
+              ]
+            },
+            "dimensionsM": [
+              12.192,
+              0.2381,
+              0.2381
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel5-v1-lod1.glb",
+            "sha256": "ff0c3d81f6113604b2b7e408ccad84d102617a8fe3654b08bf6ef53c271c04b8",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1191,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                0.1191,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.192,
+              0.2381,
+              0.2264
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel5-v1-lod1.glb",
+            "sha256": "ff0c3d81f6113604b2b7e408ccad84d102617a8fe3654b08bf6ef53c271c04b8",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1191,
+                -0.1132
+              ],
+              "max": [
+                12.192,
+                0.1191,
+                0.1132
+              ]
+            },
+            "dimensionsM": [
+              12.192,
+              0.2381,
+              0.2264
+            ]
+          }
+        ]
+      },
+      "armLevel6": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/armLevel6-v1-galvanised.glb",
+            "sha256": "0b5a193d4d0bb76b2f2bf018ce3eb19314973fc6ca026b027071c99d75bbb3e0",
+            "bytes": 141716,
+            "triangles": 960,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1286,
+                -0.1286
+              ],
+              "max": [
+                13.716,
+                0.1286,
+                0.1286
+              ]
+            },
+            "dimensionsM": [
+              13.716,
+              0.2572,
+              0.2572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel6-v1-lod1.glb",
+            "sha256": "bfa67b4f24f074ef3b13a75533fb868c0d09fec6d61819e65f2c2ce77d86aae4",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1286,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                0.1286,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.716,
+              0.2572,
+              0.2446
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/armLevel6-v1-lod1.glb",
+            "sha256": "bfa67b4f24f074ef3b13a75533fb868c0d09fec6d61819e65f2c2ce77d86aae4",
+            "bytes": 7960,
+            "triangles": 160,
+            "boundsM": {
+              "min": [
+                0.0,
+                -0.1286,
+                -0.1223
+              ],
+              "max": [
+                13.716,
+                0.1286,
+                0.1223
+              ]
+            },
+            "dimensionsM": [
+              13.716,
+              0.2572,
+              0.2446
+            ]
+          }
+        ]
+      },
+      "cabinet": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/cabinet-v1.glb",
+            "sha256": "8bff42af424b3c52cff088b6dbe2af7f9746ae833e3002f0f5ae002e2aaf565b",
+            "bytes": 161588,
+            "triangles": 580,
+            "boundsM": {
+              "min": [
+                -0.5172,
+                -0.05,
+                -0.295
+              ],
+              "max": [
+                0.5172,
+                1.6254,
+                0.295
+              ]
+            },
+            "dimensionsM": [
+              1.0344,
+              1.6754,
+              0.5899
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/cabinet-v1-lod1.glb",
+            "sha256": "d5a381145be0fc623eb9e75d262b25fa39a08e770b99339670c96eb504ab5464",
+            "bytes": 9544,
+            "triangles": 124,
+            "boundsM": {
+              "min": [
+                -0.5172,
+                -0.05,
+                -0.295
+              ],
+              "max": [
+                0.5172,
+                1.6254,
+                0.295
+              ]
+            },
+            "dimensionsM": [
+              1.0344,
+              1.6754,
+              0.5899
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/cabinet-v1-lod2.glb",
+            "sha256": "ced4b691e65d7ccedd73d4815273c505f20df1b0659d5072750e0e73c678bfc7",
+            "bytes": 7024,
+            "triangles": 88,
+            "boundsM": {
+              "min": [
+                -0.5172,
+                -0.05,
+                -0.295
+              ],
+              "max": [
+                0.5172,
+                1.6254,
+                0.295
+              ]
+            },
+            "dimensionsM": [
+              1.0344,
+              1.6754,
+              0.5899
+            ]
+          }
+        ]
+      },
+      "pullBox": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/pullBox-v1.glb",
+            "sha256": "e133acc94ad29708a07ecc54df11863326311d4432294557ef37312c6eec4f2b",
+            "bytes": 92956,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                -0.3492,
+                -0.03,
+                -0.2286
+              ],
+              "max": [
+                0.3492,
+                0.006,
+                0.2286
+              ]
+            },
+            "dimensionsM": [
+              0.6985,
+              0.036,
+              0.4572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pullBox-v1.glb",
+            "sha256": "e133acc94ad29708a07ecc54df11863326311d4432294557ef37312c6eec4f2b",
+            "bytes": 92956,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                -0.3492,
+                -0.03,
+                -0.2286
+              ],
+              "max": [
+                0.3492,
+                0.006,
+                0.2286
+              ]
+            },
+            "dimensionsM": [
+              0.6985,
+              0.036,
+              0.4572
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/pullBox-v1.glb",
+            "sha256": "e133acc94ad29708a07ecc54df11863326311d4432294557ef37312c6eec4f2b",
+            "bytes": 92956,
+            "triangles": 34,
+            "boundsM": {
+              "min": [
+                -0.3492,
+                -0.03,
+                -0.2286
+              ],
+              "max": [
+                0.3492,
+                0.006,
+                0.2286
+              ]
+            },
+            "dimensionsM": [
+              0.6985,
+              0.036,
+              0.4572
+            ]
+          }
+        ]
+      },
+      "signChannel": {
+        "lods": [
+          {
+            "path": "public/assets/signal-poles/signChannel-v1.glb",
+            "sha256": "e01fce94918f507c3c83d71c368b447e85fad15abcf9558351e729ce73e02eff",
+            "bytes": 93308,
+            "triangles": 36,
+            "boundsM": {
+              "min": [
+                -0.5,
+                -0.0191,
+                -0.019
+              ],
+              "max": [
+                0.5,
+                0.0191,
+                -0.0
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.0381,
+              0.019
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signChannel-v1.glb",
+            "sha256": "e01fce94918f507c3c83d71c368b447e85fad15abcf9558351e729ce73e02eff",
+            "bytes": 93308,
+            "triangles": 36,
+            "boundsM": {
+              "min": [
+                -0.5,
+                -0.0191,
+                -0.019
+              ],
+              "max": [
+                0.5,
+                0.0191,
+                -0.0
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.0381,
+              0.019
+            ]
+          },
+          {
+            "path": "public/assets/signal-poles/signChannel-v1.glb",
+            "sha256": "e01fce94918f507c3c83d71c368b447e85fad15abcf9558351e729ce73e02eff",
+            "bytes": 93308,
+            "triangles": 36,
+            "boundsM": {
+              "min": [
+                -0.5,
+                -0.0191,
+                -0.019
+              ],
+              "max": [
+                0.5,
+                0.0191,
+                -0.0
+              ]
+            },
+            "dimensionsM": [
+              1.0,
+              0.0381,
+              0.019
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

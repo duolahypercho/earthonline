@@ -57,6 +57,8 @@ pub mod cine_post; // the cinematic look's post pass (`--look cinematic`, stage 
 pub mod props; // props
 pub mod props_lib; // props
 pub mod props_lib2;
+pub mod props_yards; // the rear-yard fence's model (`--yard-detail`)
+pub mod yards; // the rear yards' ground classes in the terrain's shader (`--yard-detail`)
 pub mod probe; // facade
 pub mod probe_grid; // the reflection probes on the streets round the camera (lighting)
 pub mod front_daylight; // the playable house's measured garden daylight (`--house-front-daylight`)
@@ -68,7 +70,9 @@ pub mod rt_reflect; // ray-traced reflections (`--rt-reflect`)
 pub mod rt_scene; // the traced scene every ray-traced pass shares (`--rt-gi`, `--rt-reflect`)
 pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
 pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
+pub mod aerial_ground; // the open ground's colour from the aerial survey (`--no-aerial-ground`, Docs/HILLS-PLAN.md H2)
 pub mod sky; // sky
+pub mod skyline_field; // citywide 2.5D skyline heightfield + horizon sky-vis / bent normal / distant sun shadows
 mod sky_reflect; // (`--screen-reflect`) the histories' mip chain (the reflect track)
 pub mod smooth_time; // the drawn hour following the clock (`--smooth-time`)
 pub mod street;
@@ -632,13 +636,17 @@ pub struct Renderer {
     pub counts: Option<std::sync::Arc<counted::Counts>>,
     /// The opaque, transparent and late opaque lists in the emulation.
     main_lists: Option<counted::CountedLists>,
-    /// The last update's camera, and the writes counted then (`vis_writes`):
-    /// a jump is a cut for the emulation; the step, the motion-aware bounds'
-    /// (counted.rs `ViewStep`).
-    last_view: std::sync::Mutex<Option<(Camera, u64)>>,
-    /// Writes that can change what the cull selects (objects, their groups,
-    /// the far layer's residency, any streamed bytes; counted.rs `ViewStep::quiet`).
+    /// The last update's camera, and the writes counted then (`vis_writes`,
+    /// `vis_added`): a jump is a cut for the emulation; the step, the
+    /// motion-aware bounds' (counted.rs `ViewStep`).
+    last_view: std::sync::Mutex<Option<(Camera, u64, u64)>>,
+    /// Structural writes that invalidate steady bounds (scene resets, multiplier,
+    /// far-tree block count changes; counted.rs `ViewStep::quiet`).
     vis_writes: std::sync::atomic::AtomicU64,
+    /// Incremental object/group streaming delta (upper bound on newly added
+    /// objects in `Target::Object` / `Target::Group` writes) so steady late lists
+    /// can add exact headroom instead of falling back to the full early floor.
+    vis_added: std::sync::atomic::AtomicU64,
     /// The far layer draws without the compacted lists (an adapter without
     /// multi-draw-indirect-count, unless `--no-far-fallback`): fixed-size
     /// lists, see `hlod::HlodGpu::draw` and `hlod_trees::FarTrees::draw`.
@@ -696,6 +704,12 @@ pub struct Renderer {
     pub facade: facade::FacadeGpu,
     /// the shop signs' lettering (group 0 binding 28, stage S1).
     pub signs: sign_letters::SignLettersGpu,
+    /// the open ground's colour from the aerial survey (`--no-aerial-ground`; a 1 x 1 stand-in without it).
+    pub aerial: aerial_ground::AerialGround,
+    /// the 24-room interior parallax texture array (group 0 binding 30, rooms.rs).
+    pub rooms: rooms::RoomsGpu,
+    /// The rear yards' ground classes (`--yard-detail`), group 0 binding 31.
+    pub yards: yards::YardGroundGpu,
     /// runtime switches (facade::RUN_*), read by draw.wgsl from the frame uniform.
     pub facade_flags: std::sync::atomic::AtomicU32,
     pub bytes: GpuBytes,
@@ -750,6 +764,8 @@ pub struct Renderer {
     /// on) and their own timestamp set (`set_lighting_timestamps`).
     pub far_shadow: far_shadow::FarShadowGpu,
     pub ambient: ambient::AmbientGpu,
+    /// citywide 2.5D skyline heightfield + horizon sky-vis / bent normal (group 1 binding 24).
+    pub skyline_field: std::sync::OnceLock<skyline_field::SkylineFieldGpu>,
     /// the probe grid (`--probe-grid`), attached once (`attach_probe_grid`).
     pub probe_grid: probe_grid::ProbeGridGpu,
     pub light_shadow: light_shadow::LightShadowGpu,
@@ -839,6 +855,9 @@ fn make_draw_bg(
     probe_sh: &wgpu::Buffer,
     cc0: &cc0::Cc0Gpu, // cc0
     signs: &wgpu::TextureView, // the shop signs' lettering (stage S1)
+    aerial: &wgpu::TextureView, // the open ground's colour from the aerial survey (`--no-aerial-ground`)
+    rooms: &wgpu::TextureView, // 24-room interior parallax texture array (rooms.rs)
+    yards: &wgpu::Buffer, // the rear yards' ground classes (`--yard-detail`)
 ) -> wgpu::BindGroup {
     let (av, nv, mv) = (array_view(kit[0]), array_view(kit[1]), array_view(kit[2]));
     let cb = cc0.bind(); // cc0
@@ -880,6 +899,12 @@ fn make_draw_bg(
             wgpu::BindGroupEntry { binding: 27, resource: cb.decals.as_entire_binding() },
             // the shop signs' lettering (stage S1; a stand-in without the facade clutter).
             wgpu::BindGroupEntry { binding: 28, resource: wgpu::BindingResource::TextureView(signs) },
+            // the open ground's colour from the aerial survey (`--no-aerial-ground`; aerial_ground.rs).
+            wgpu::BindGroupEntry { binding: 29, resource: wgpu::BindingResource::TextureView(aerial) },
+            // 24-room interior parallax texture array (rooms.rs; stand-in with `--no-room-atlas`).
+            wgpu::BindGroupEntry { binding: 30, resource: wgpu::BindingResource::TextureView(rooms) },
+            // the rear yards' ground classes (`--yard-detail`, yards.rs; the header alone without it).
+            wgpu::BindGroupEntry { binding: 31, resource: yards.as_entire_binding() },
         ],
     })
 }
@@ -1221,6 +1246,17 @@ impl Renderer {
                 buf_entry(27, fs, storage(true)),
                 // the shop signs' lettering (stage S1, sign_letters.rs; draw.wgsl `sgn_atlas`).
                 tex_entry(28),
+                // the open ground's colour from the aerial survey (aerial_ground.rs; draw.wgsl `hm_tex`).
+                wgpu::BindGroupLayoutEntry {
+                    binding: 29,
+                    visibility: fs,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                // 24-room interior parallax texture array (rooms.rs; rooms.wgsl `rm_atlas`).
+                tex_entry(30),
+                // the rear yards' ground classes (`--yard-detail`, yards.rs; yards.wgsl `yd_map`).
+                buf_entry(31, fs, storage(true)),
             ],
         });
         // the JS street scans' sampler (`configureSurfaceTexture`: repeat, trilinear, anisotropy 8).
@@ -1323,7 +1359,11 @@ impl Renderer {
         };
         let make = |label: &str, blend: bool, rt: bool| make_with(&draw_module, label, blend, rt);
         let opaque_pipeline = make("draw-opaque", false, false);
-        let blend_pipeline = make("draw-blend", true, false);
+        let blend_module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("draw-blend"),
+            source: wgpu::ShaderSource::Wgsl(look::city_shader_source_blend().into()),
+        });
+        let blend_pipeline = make_with(&blend_module, "draw-blend", true, false);
         // (`CityClasses`) one opaque pipeline a class, each with the others' surfaces compiled out.
         let class_pipelines = classes.then(|| {
             [(look::CITY_GENERAL, "draw-opaque-general"), (look::CITY_STREET, "draw-opaque-street"), (look::CITY_LANDMARK, "draw-opaque-landmark")].map(|(class, label)| {
@@ -1360,8 +1400,12 @@ impl Renderer {
         let cc0_gpu = cc0::Cc0Gpu::new(d); // placeholders until attached
         // the shop signs' words (stage S1): drawn with `--facade-clutter` (waits for the worker), else a stand-in.
         let sign_gpu = sign_letters::SignLettersGpu::new(d, &ctx.queue);
-        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view));
-        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view));
+        let aerial_gpu = aerial_ground::AerialGround::new(d, &ctx.queue); // (`--no-aerial-ground`)
+        // 24-room interior parallax texture array (rooms.rs; stand-in when `--no-room-atlas`).
+        let rooms_gpu = rooms::RoomsGpu::new(d, &ctx.queue);
+        let yard_gpu = yards::YardGroundGpu::new(d); // the rear yards' ground (`--yard-detail`)
+        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view, &yard_gpu.buf));
+        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view, &yard_gpu.buf));
 
         let bytes = GpuBytes {
             vertex: vb_bytes,
@@ -1370,7 +1414,7 @@ impl Renderer {
             draws: draw_bytes + (COUNTER_WORDS * 4) as u64 + occlusion_gpu.vis_buf.size(), // + per-object flags
             materials: std::mem::size_of_val(init.materials) as u64,
             groups: std::mem::size_of_val(groups.as_slice()) as u64 + hlod_map_buf.size() + hlod_state_buf.size() + hlod_flags_buf.size(), // + the far layer's per-group words
-            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; the signs' words (0 without them)
+            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes + aerial_gpu.bytes + rooms_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; signs, aerial ground & room atlas
         };
         // (`--rt-gi`) the traced scene with its static cells, and the pass.
         let rt_scene = rt_live.then(|| {
@@ -1402,6 +1446,7 @@ impl Renderer {
             main_lists,
             last_view: std::sync::Mutex::new(None),
             vis_writes: std::sync::atomic::AtomicU64::new(0),
+            vis_added: std::sync::atomic::AtomicU64::new(0),
             far_fallback: !ctx.compaction() && far_city::FarCity::from_env().fallback,
             color_format: init.color_format,
             sample_count: init.sample_count,
@@ -1453,6 +1498,9 @@ impl Renderer {
             look: look_gpu,
             facade: facade_gpu,
             signs: sign_gpu,
+            aerial: aerial_gpu,
+            rooms: rooms_gpu,
+            yards: yard_gpu,
             facade_flags: std::sync::atomic::AtomicU32::new(facade::RUN_AGE | facade::RUN_DETAIL | facade::RUN_ATLAS2 | facade::RUN_PROBE | facade::RUN_ROOMS | facade::RUN_AGENT_HZB | facade::RUN_PROBE_DEFER), // + rooms, agent pyramid test, probe deferral
             bytes,
             multiplier: n,
@@ -1484,6 +1532,7 @@ impl Renderer {
             hlod_trees: std::sync::OnceLock::new(),  // hlod
             far_shadow: far_shadow::FarShadowGpu::new(d, far_shadow::scene_heights(&objects)), // lighting
             ambient: ambient::AmbientGpu::new(d),
+            skyline_field: std::sync::OnceLock::new(),
             probe_grid: probe_grid::ProbeGridGpu::new(d), // lighting
             light_shadow: light_shadow::LightShadowGpu::new(d),
             lit_fog: lit_fog::LitFogGpu::new(d),
@@ -1605,7 +1654,8 @@ impl Renderer {
 
     /// the CPU copy of the object table follows a write of the GPU table (bytes at `offset`).
     pub fn note_object_write(&self, offset: u64, data: &[u8]) {
-        self.note_vis_write();
+        let objs = (data.len() / std::mem::size_of::<scene::GpuObject>()).max(1) as u64;
+        self.note_vis_added(objs);
         if let Some(r) = &self.ranges {
             r.lock().unwrap().write(offset, data);
         }
@@ -1663,6 +1713,7 @@ impl Renderer {
         if self.hlod_trees.get().is_some() || !(self.compact || self.far_fallback || self.look.options.cove_detail) || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
             return 0;
         }
+        let use_list = !ctx.indirect_count && !self.bounded && (self.compact || self.far_fallback);
         let t = hlod_trees::FarTrees::new(&hlod_trees::FarTreesInit {
             // without the compacted lists: every far tree from the fixed-size lists (`far_fallback`),
             // else the Black Point grove alone (`--cove-detail`)
@@ -1674,9 +1725,10 @@ impl Renderer {
             late_bgl: &self.occlusion.late_bgl,
             sample_count: self.sample_count,
             debug_ids: self.debug_ids,
-            fallback: !self.compact && self.far_fallback,
+            fallback: use_list,
+            late_discard: !self.compact,
         });
-        if let Some(c) = self.counts.as_ref().filter(|_| !self.bounded) {
+        if let Some(c) = self.counts.as_ref().filter(|_| !self.bounded && !t.uses_list()) {
             t.register_counts(c); // (the bounded draws: its guards instead)
         }
         let b = t.bytes;
@@ -1684,7 +1736,7 @@ impl Renderer {
         b
     }
 
-    /// build the far layer's GPU side (once; later calls are ignored).
+    /// the far layer's GPU side (once; later calls are ignored).
     /// Draws from the compacted lists (multi-draw-indirect-count, or its
     /// emulation), else from fixed-size lists (`far_fallback`); with neither the
     /// far layer stays off and the boxes draw as before. Returns the bytes allocated.
@@ -1710,6 +1762,23 @@ impl Renderer {
         let b = h.total_bytes();
         let _ = self.hlod.set(h);
         b
+    }
+
+    /// Upload and bind the citywide 2.5D skyline heightfield + horizon sky-visibility /
+    /// bent-normal map (group 1 binding 24, `look.lx[15]`). Returns GPU bytes allocated.
+    pub fn attach_skyline_field(&self, ctx: &GpuContext, baked: &skyline_field::BakedSkylineField) -> u64 {
+        if self.skyline_field.get().is_some() {
+            return 0;
+        }
+        let gpu = skyline_field::SkylineFieldGpu::upload(&ctx.device, &ctx.queue, baked);
+        let bytes = gpu.bytes;
+        let params = gpu.params;
+        if self.skyline_field.set(gpu).is_ok() {
+            if let Some(g) = self.skyline_field.get() {
+                self.look.set_skyline_field(Some(&g.view), params);
+            }
+        }
+        bytes
     }
 
     /// each LOD group's far cell (`hlod_bake::NO_CELL`: none), written once.
@@ -1747,9 +1816,28 @@ impl Renderer {
     }
 
     /// One budgeted write (see `upload::UploadQueue`). Object writes are
-    /// repeated for every stress copy.
+    /// repeated for every stress copy. Only object and LOD-group table writes
+    /// can change what the city/shadow/probe culls select (`note_vis_added`).
     pub fn write(&self, queue: &wgpu::Queue, target: upload::Target, offset: u64, data: &[u8]) {
-        self.note_vis_write();
+        match target {
+            upload::Target::Object if self.multiplier > 1 => {
+                let objs = (data.len() / std::mem::size_of::<scene::GpuObject>()).max(1) as u64;
+                self.note_vis_added(objs.saturating_mul(self.multiplier as u64));
+            }
+            upload::Target::Group => {
+                // Full GpuLodGroup slices (kit) or single 4-byte ready words (street/models):
+                // conservative upper bound of 2 newly visible objects per flipped group.
+                let groups = (data.len() / std::mem::size_of::<GpuLodGroup>()).max(1) as u64;
+                self.note_vis_added(groups.saturating_mul(2));
+            }
+            upload::Target::PropInstances => {
+                // Direct writes (tile eviction, tests) count as visibility writes; per-frame
+                // boat pose updates use `write_prop_poses` (`write_quiet`) and staged tile
+                // uploads go through `UploadQueue` (`note_streamed_bytes`).
+                self.note_vis_write();
+            }
+            _ => {}
+        }
         self.write_quiet(queue, target, offset, data);
     }
 
@@ -1807,20 +1895,38 @@ impl Renderer {
     /// streamed bytes copied to the GPU this frame outside `write` (the
     /// upload stager's copies), counted like a write for the probe deferral.
     pub fn note_streamed(&self, bytes: u64) {
-        self.frame_upload_bytes.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+        self.note_streamed_bytes(bytes);
         if bytes > 0 {
             self.note_vis_write();
         }
     }
 
-    /// A write that can change what the cull selects (counted.rs `ViewStep::quiet`).
+    /// Streamed bytes accounted for probe deferral without marking cull tables dirty
+    /// (for bulk vertex, index, texture, or prop uploads that do not change cull selection).
+    pub fn note_streamed_bytes(&self, bytes: u64) {
+        self.frame_upload_bytes.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// A structural write that can change what the cull selects (counted.rs `ViewStep::quiet`).
     pub fn note_vis_write(&self) {
         self.vis_writes.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Such writes so far.
+    /// An incremental object/group streaming delta (upper bound on newly visible objects).
+    pub fn note_vis_added(&self, objs: u64) {
+        if objs > 0 {
+            self.vis_added.fetch_add(objs, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// Such structural writes so far.
     pub fn vis_writes(&self) -> u64 {
         self.vis_writes.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Incremental streamed objects/group-equivalents written so far.
+    pub fn vis_added(&self) -> u64 {
+        self.vis_added.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// the device (the upload stager makes its chunks with it).
@@ -1991,6 +2097,9 @@ impl Renderer {
     pub fn attach_props(&self, ctx: &GpuContext, lib: &props_lib::PropLibrary) -> Result<()> {
         if self.props.get().is_none() {
             let p = props::PropsGpu::new(&self.props_init(ctx), lib)?;
+            if let Some(c) = &self.counts {
+                p.register_counts(c);
+            }
             let _ = self.props.set(p);
             self.bind_props_cc0();
         }
@@ -2012,7 +2121,12 @@ impl Renderer {
 
     /// attach a props renderer built elsewhere (once; later calls are ignored).
     pub fn attach_props_gpu(&self, p: props::PropsGpu) {
-        let _ = self.props.set(p);
+        if self.props.get().is_none() {
+            if let Some(c) = &self.counts {
+                p.register_counts(c);
+            }
+            let _ = self.props.set(p);
+        }
         self.bind_props_cc0();
     }
 
@@ -2071,11 +2185,16 @@ impl Renderer {
     /// both sets (every mip) and rebind group 0. Returns the bytes allocated.
     pub fn upload_street_maps(&self, ctx: &GpuContext, maps: &eo_assets::street_maps::StreetMaps) -> u64 {
         let layers = maps.albedo.len() as u32;
-        let (a, ab) = texture_array(ctx, "street-albedo", wgpu::TextureFormat::Rgba8UnormSrgb, maps.res, layers);
+        let terrain = (layers == 2).then(|| scene::terrain_detail::marin_ground::atlas_mips(maps.res)).flatten();
+        let colour_layers = layers + u32::from(terrain.is_some());
+        let (a, ab) = texture_array(ctx, "street-albedo", wgpu::TextureFormat::Rgba8UnormSrgb, maps.res, colour_layers);
         let (n, nb) = texture_array(ctx, "street-nra", wgpu::TextureFormat::Rgba8Unorm, maps.res, layers);
         for l in 0..layers as usize {
             write_array_layer(&ctx.queue, &a, l as u32, &maps.albedo[l]);
             write_array_layer(&ctx.queue, &n, l as u32, &maps.nra[l]);
+        }
+        if let Some(mips) = terrain {
+            write_array_layer(&ctx.queue, &a, layers, mips);
         }
         *self.street_textures.lock().unwrap() = [a, n];
         self.rebuild_draw_bgs(&ctx.device);
@@ -2099,8 +2218,8 @@ impl Renderer {
         hitch::mark(hitch::Mark::BindGroupCreated, 4);
         let st = self.street_textures.lock().unwrap();
         let kit = [&self.kit_textures[0], &self.kit_textures[1], &self.kit_textures[2]];
-        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view));
-        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view));
+        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view, &self.yards.buf));
+        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view, &self.yards.buf));
         *self.draw_bg.lock().unwrap() = bg;
         *self.probe_draw_bg.lock().unwrap() = pbg;
     }
@@ -2171,18 +2290,29 @@ impl Renderer {
             // update): recover bounds for the new view while read-backs catch up.
             let fwd = cam.forward();
             let writes = self.vis_writes() + self.occlusion.resets();
+            let added = self.vis_added();
             let mut last = self.last_view.lock().unwrap();
-            if last.is_some_and(|(p, _)| p.eye.distance(cam.eye) > COUNT_CUT_M || p.forward().dot(fwd) < COUNT_CUT_COS) {
+            if last.is_some_and(|(p, _, _)| p.eye.distance(cam.eye) > COUNT_CUT_M || p.forward().dot(fwd) < COUNT_CUT_COS) {
                 c.force_full();
             }
             // what changed since the last update (the motion-aware bounds).
-            let step = last.map(|(p, seen)| counted::ViewStep {
-                turn: view_turn(&p, cam),
-                step: p.eye.distance(cam.eye),
-                quiet: seen == writes && same_lens(&p, cam),
-                occlusion: occlusion && self.compact,
+            let step = last.map(|(p, seen_w, seen_a)| {
+                let lens_ok = same_lens(&p, cam);
+                let quiet = seen_w == writes && seen_a == added && lens_ok;
+                let stream_added = if !quiet && seen_w == writes && lens_ok {
+                    Some(added.saturating_sub(seen_a).min(u32::MAX as u64) as u32)
+                } else {
+                    None
+                };
+                counted::ViewStep {
+                    turn: view_turn(&p, cam),
+                    step: p.eye.distance(cam.eye),
+                    quiet,
+                    stream_added,
+                    occlusion: occlusion && self.compact,
+                }
             });
-            *last = Some((*cam, writes));
+            *last = Some((*cam, writes, added));
             drop(last);
             c.begin_frame(step); // the emulated lists' bounds for this frame, from the counts read back
             if self.probe_grid.active(&self.look) {
@@ -2355,7 +2485,7 @@ impl Renderer {
             p.set_cc0_run(self.cc0.run_bits()); // the tree basins' soil scan
             p.update(queue, cam, &self.look, occlusion && self.compact); // props
         }
-        self.groundcover.update(queue, cam, &self.look, occlusion && self.compact);
+        self.groundcover.update(queue, cam, &self.look, occlusion && self.compact, self.structures.get().map(|s| s.world()));
         if let Some(w) = self.water.get() {
             // the grid, the clock, the gate, the uniforms (the probe as the mirror's fallback).
             let probe = (frame.probe_info[3] > 0.5).then(|| glam::Vec3::new(frame.probe_info[0], frame.probe_info[1], frame.probe_info[2]));
@@ -2600,7 +2730,7 @@ impl Renderer {
         ts: Option<(&wgpu::QuerySet, u32)>,
     ) {
         if let Some(c) = &self.counts {
-            if self.last_view.lock().unwrap().is_some_and(|(_, seen)| seen != self.vis_writes() + self.occlusion.resets()) {
+            if self.last_view.lock().unwrap().is_some_and(|(_, seen_w, seen_a)| seen_w != self.vis_writes() + self.occlusion.resets() || seen_a != self.vis_added()) {
                 c.relax(); // written since the update: no motion-aware bound this frame
             }
             c.encode_zero(enc);
@@ -2681,6 +2811,10 @@ impl Renderer {
         // with the water pass on, the glass is drawn after the water (its own pass below).
         let water = self.water.get().filter(|_| self.water_active());
         let water_on = water.is_some();
+        // When single-sample with no debug_ids / RT / visible surf strip, fold the overhead
+        // wires into the water pass (or late city pass when water is off) to avoid a separate
+        // full-screen HDR + depth TBDR render pass.
+        let fold_wires = !self.debug_ids && resolve.is_none() && rt.is_none() && (!water_on || !self.surf.get().is_some_and(|s| s.has_visible()));
         // What a city pass draws: everything (without the traced light), the
         // opaque city alone (with its G-buffer), or the rest after the composite.
         #[derive(Clone, Copy, PartialEq)]
@@ -2864,6 +2998,11 @@ impl Renderer {
                     self.look.bind_main(&mut pass);
                     l.draw_wires(&mut pass);
                 }
+                if fold_wires {
+                    if let Some(p) = self.props.get() {
+                        p.draw_wires_in_pass(&mut pass, &self.look);
+                    }
+                }
             }
         };
         let first = if rt.is_some() { CityPart::Opaque } else { CityPart::All };
@@ -2983,6 +3122,11 @@ impl Renderer {
                     self.look.bind_main(pass);
                     l.draw(pass);
                 }
+                if fold_wires {
+                    if let Some(p) = self.props.get() {
+                        p.draw_wires_in_pass(pass, &self.look);
+                    }
+                }
             });
             if let Some(s) = self.surf.get() {
                 s.encode(enc, w, &self.look, &hdr, front); // the surf strip over the sea, its own depth
@@ -2997,7 +3141,11 @@ impl Renderer {
             }
         }
         if let Some(p) = self.props.get() {
-            p.draw_wires(enc, color, resolve, depth, &self.look); // the overhead wires, a timed pass of their own
+            if fold_wires {
+                p.empty_wires_ts(enc);
+            } else {
+                p.draw_wires(enc, color, resolve, depth, &self.look); // the overhead wires, a timed pass of their own
+            }
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
         // rain, luminaires, velocity, volume, (lighting) the lit fog, resolve, bloom
@@ -3163,6 +3311,18 @@ impl Renderer {
     /// set the per-cell residency words directly (tests; the far layer's streamer writes them otherwise).
     pub fn write_hlod_flags(&self, queue: &wgpu::Queue, flags: &[u32]) {
         self.note_vis_write();
+        self.write_hlod_flags_inner(queue, flags);
+    }
+
+    /// Update per-cell residency words from `HlodRuntime`, accounting only for buildings
+    /// whose cell transitioned from covered (`!= 0`) to uncovered (`0`) and therefore
+    /// return to the city cull lists (`restored_buildings`).
+    pub fn write_hlod_flags_delta(&self, queue: &wgpu::Queue, flags: &[u32], restored_buildings: u64) {
+        self.note_vis_added(restored_buildings);
+        self.write_hlod_flags_inner(queue, flags);
+    }
+
+    fn write_hlod_flags_inner(&self, queue: &wgpu::Queue, flags: &[u32]) {
         queue.write_buffer(&self.hlod_flags_buf, 0, bytemuck::cast_slice(flags));
         if let Some(r) = &self.ranges {
             r.lock().unwrap().set_hlod_flags(flags); // the kit boxes' rule (draw_ranges)

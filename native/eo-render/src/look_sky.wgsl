@@ -169,7 +169,28 @@ fn sky_color(ndc: vec2<f32>) -> vec4<f32> {
     var rgb = lk_sky_dome(d);
     // A clear night sky away from the city glow is a deep blue-black, not a neutral grey: the dark
     // dome takes a blue cast with the night (the glow added over it keeps its warm colour).
-    rgb = rgb * mix(vec3<f32>(1.0), vec3<f32>(0.78, 0.9, 1.35), smoothstep(0.85, 1.0, skyu.night.z) * clamp(1.0 - skyu.cloud0.z, 0.0, 1.0));
+    let night_dome_w = smoothstep(0.85, 1.0, skyu.night.z) * clamp(1.0 - skyu.cloud0.z, 0.0, 1.0);
+    rgb = rgb * mix(vec3<f32>(1.0), vec3<f32>(0.78, 0.9, 1.35), night_dome_w);
+    if (SF_AAA_AERIAL) {
+        // Photographic deep midnight indigo-navy SF night sky (`06a`, `06b`) with smooth blue-hour
+        // transition (`10_neighborhood_dusk_houses`) so twilight clouds stay cohesive and night reads
+        // authentic deep navy `#06112d` instead of muddy brown-grey or neon royal blue.
+        let deep_n = smoothstep(0.84, 1.0, skyu.night.z) * (1.0 - smoothstep(-0.15, -0.07, look.sun.y));
+        let dusk_n = smoothstep(0.45, 0.88, skyu.night.z) * (1.0 - smoothstep(-0.08, 0.01, look.sun.y)) * (1.0 - deep_n);
+        let clear_w = 1.0 - clamp(look.wx.x, 0.0, 1.0) * 0.75;
+        if (deep_n > 0.001) {
+            let nl_d = max(lk_luma(rgb), 0.0010);
+            let ind_d = mix(vec3<f32>(0.38, 0.52, 1.18), vec3<f32>(0.22, 0.42, 1.38), smoothstep(0.02, 0.48, max(d.y, 0.0)));
+            let ind_n = ind_d / max(lk_luma(ind_d), 1e-4);
+            rgb = mix(rgb, ind_n * (nl_d * 0.86), deep_n * clear_w * 0.86);
+        } else if (dusk_n > 0.001) {
+            // Subtle blue-hour twilight slate-indigo cleanup without over-brightening the sky dome behind clouds.
+            let nl_tw = lk_luma(rgb);
+            let tw_t = mix(vec3<f32>(0.72, 0.78, 1.08), vec3<f32>(0.42, 0.56, 1.24), smoothstep(0.08, 0.55, max(d.y, 0.0)));
+            let tw_n = tw_t / max(lk_luma(tw_t), 1e-4);
+            rgb = mix(rgb, tw_n * (nl_tw * 0.84), dusk_n * clear_w * 0.34 * smoothstep(0.06, 0.35, max(d.y, 0.0)));
+        }
+    }
     if (dot(d, look.sun.xyz) > look.disc.w) {
         rgb = rgb + look.disc.xyz * smoothstep(0.15, 0.6, skyu.cloud1.w); // not through a rain deck
     }

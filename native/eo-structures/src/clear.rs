@@ -128,6 +128,9 @@ pub(crate) struct ClearIndex {
     /// 32 m cell of a column's centre -> index into `columns`.
     col_cells: HashMap<(i32, i32), Vec<u32>>,
     columns: Vec<Col>,
+    /// Drawn approach triangles outside the landmark deck, by centroid cell.
+    abutments: HashMap<(i32, i32), Vec<(u32, [[f64; 3]; 3])>>,
+    abutment_reach: f64,
     /// Per chain: how far across (section metres) its solids reach.
     reach: Vec<f64>,
     barrier_h: f64,
@@ -247,6 +250,15 @@ fn locate(sw: &Sweep, k0: usize, k1: usize, p: [f64; 2], reach: f64, past: f64, 
 }
 
 impl ClearIndex {
+    pub(crate) fn add_abutment(&mut self, chain: u32, tri: [[f64; 3]; 3]) {
+        let x = tri.iter().map(|p| p[0]).sum::<f64>() / 3.0;
+        let z = tri.iter().map(|p| p[2]).sum::<f64>() / 3.0;
+        for p in tri {
+            self.abutment_reach = self.abutment_reach.max((p[0] - x).hypot(p[2] - z));
+        }
+        self.abutments.entry((cell_of(x), cell_of(z))).or_default().push((chain, tri));
+    }
+
     pub fn build(chains: &[Chain], sweeps: &[Option<Sweep>], barrier_h: f64, barrier_base: f64) -> Self {
         let mut ix = ClearIndex { barrier_h, barrier_base, reach: vec![0.0; chains.len()], ..Default::default() };
         for (ci, c) in chains.iter().enumerate() {
@@ -304,6 +316,27 @@ impl StructureWorld {
         let r = radius.max(0.0);
         let pad = ENVELOPE_PAD_M;
         let pad_y = ENVELOPE_PAD_Y_M;
+        let search = r + pad + ix.abutment_reach;
+        for gz in cell_of(z - search)..=cell_of(z + search) {
+            for gx in cell_of(x - search)..=cell_of(x + search) {
+                let Some(faces) = ix.abutments.get(&(gx, gz)) else { continue };
+                for &(chain, tri) in faces {
+                    let sides = [0, 1, 2].map(|i| {
+                        let (a, b) = (tri[i], tri[(i + 1) % 3]);
+                        cross([b[0] - a[0], b[2] - a[2]], [x - a[0], z - a[2]])
+                    });
+                    let inside = sides.iter().all(|&v| v >= 0.) || sides.iter().all(|&v| v <= 0.);
+                    if !inside && !(0..3).any(|i| {
+                        let (a, b) = (tri[i], tri[(i + 1) % 3]);
+                        crate::index::project([x, z], [a[0], a[2]], [b[0], b[2]]).1 <= r + pad
+                    }) { continue; }
+                    let ys = tri.map(|p| p[1]);
+                    let lo = ys.into_iter().fold(f64::INFINITY, f64::min) - pad_y;
+                    let hi = ys.into_iter().fold(f64::NEG_INFINITY, f64::max) + pad_y;
+                    if !f(Obstruction { chain, part: Part::Deck, lo, hi }) { return; }
+                }
+            }
+        }
         // columns: each filed once, under its centre's cell.
         let cr = r + COLUMN_R_MAX_M + pad;
         for gz in cell_of(z - cr)..=cell_of(z + cr) {

@@ -333,6 +333,10 @@ pub const SERP_KNOBS: u32 = 3;
 /// (40-70, 45-70, 40-60) (estimate; [P:baker-sunset] (35,24,15) in the surf
 /// and (61,39,15) in the foreground under the sunset): its middle.
 pub const SERPENTINITE_BOULDER_SRGB: [u8; 3] = [55, 60, 52];
+/// The serpentine bluff's band (`Flora::bluff`): serpentinite within this of the shore
+/// (drawn m) carries the coast bluff scrub (the bluff band from Fort Point to Baker
+/// Beach, INFERRED; eo-app props/vegetation.rs `SERPENTINE_SHORE_M` is this band).
+pub const BLUFF_SHORE_M: f64 = 200.0;
 /// The tip word that asks the props shader for serpentinite's scaly fabric.
 pub const TIP_SCALY: u8 = 253;
 /// The bluff knobs' and the beach boulders' size range (real m): rounded to

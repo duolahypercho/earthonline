@@ -342,7 +342,8 @@ impl Oracle {
                     road_side: f.road_side,
                     node_keys: f.node_keys.clone(),
                     normal: f.normal.unwrap_or([0.0, 0.0]),
-                    cross_index: f.cross_index,
+                    cross_index: [f.cross_index; 2],
+                    original_arc_start: None,
                     ends: [end(f.ends.first()), end(f.ends.get(1))],
                     tile: None,
                 }
@@ -358,7 +359,7 @@ impl Oracle {
         let mut tiles: Vec<TileKey> = n.lanes.iter().map(|l| TileKey::of(l.points[0], l.points[1])).collect();
         tiles.sort();
         tiles.dedup();
-        NetworkBuild { tiles, lanes, footways, foot_nodes, junctions, segments, merge_max_lateral_m, footway_activity: vec![] }
+        NetworkBuild { tiles, lanes, footways, foot_nodes, junctions, segments, merge_max_lateral_m, ..Default::default() }
     }
 }
 

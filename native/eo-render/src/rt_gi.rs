@@ -73,7 +73,7 @@ pub struct RtGiConfig {
 
 impl Default for RtGiConfig {
     fn default() -> Self {
-        Self { reach_m: 200.0, origin_m: 0.05, origin_per_m: 0.002, hit_sky: 0.6, max_frames: 24.0, fade_start_m: 260.0, fade_end_m: 340.0, normal_power: 32.0, plane_m: 0.25, atrous: 3, ssao_keep: 0.5, weight: 1.0, debug: 0 }
+        Self { reach_m: 220.0, origin_m: 0.05, origin_per_m: 0.002, hit_sky: 0.74, max_frames: 24.0, fade_start_m: 280.0, fade_end_m: 380.0, normal_power: 32.0, plane_m: 0.25, atrous: 3, ssao_keep: 0.15, weight: 1.0, debug: 0 }
     }
 }
 

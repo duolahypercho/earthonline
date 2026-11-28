@@ -39,8 +39,10 @@ pub const BLUE_RES: usize = 64;
 /// sky_common.wgsl `SKY_CSHADOW_RES`.
 pub const SHADOW_RES: u32 = 384;
 /// Hemispherical off-screen cloud reflection dome resolution (`--volumetric-clouds`, hemi-octahedral,
-/// updated 1/4 per frame via 2x2 staggered dispatch for ~0.02 ms steady-state cost).
-pub const REFL_RES: u32 = 64;
+/// 128x128 with 5 mip levels for glossy-to-rough building & water reflections; updated 1/16 per frame
+/// via 4x4 Bayer staggered dispatch = 1,024 threads for ~0.03 ms steady-state cost incl. mip chain).
+pub const REFL_RES: u32 = 128;
+pub const REFL_MIPS: u32 = 5;
 
 /// The baked noise volumes and their one-time bake (GPU).
 pub struct CloudNoise {
@@ -71,7 +73,7 @@ pub struct CloudGpu {
     pub(crate) blue_view: wgpu::TextureView,
     /// The cloud-shadow map (the look's group-1 binding 7, the volume's 18).
     pub(crate) shadow_view: wgpu::TextureView,
-    /// Hemispherical cloud reflection dome (water pass group-0 binding 13, `--volumetric-clouds`).
+    /// Hemispherical cloud reflection dome (water pass group-0 binding 21, look group-1 binding 23; 128^2, 5 mips).
     pub(crate) refl_view: wgpu::TextureView,
     blue: wgpu::Texture,
     blue_ready: AtomicBool,
@@ -81,6 +83,8 @@ pub struct CloudGpu {
     shadow_bg: wgpu::BindGroup,
     refl_pipe: wgpu::ComputePipeline,
     refl_bg: wgpu::BindGroup,
+    refl_down_pipe: wgpu::ComputePipeline,
+    refl_down_bgs: Vec<(wgpu::BindGroup, u32)>,
     pub bytes: u64,
 }
 
@@ -248,7 +252,8 @@ impl CloudGpu {
         let su = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING;
         let blue = tex2(d, "clouds-blue-noise", BLUE_RES as u32, wgpu::TextureFormat::Rgba8Unorm, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
         let shadow = tex2(d, "clouds-shadow-map", SHADOW_RES, wgpu::TextureFormat::Rgba16Float, su);
-        let refl = tex2(d, "clouds-refl-dome", REFL_RES, wgpu::TextureFormat::Rgba16Float, su);
+        let refl = tex2_mips(d, "clouds-refl-dome", REFL_RES, REFL_MIPS, wgpu::TextureFormat::Rgba16Float, su);
+        let refl_mip = |m: u32| refl.create_view(&wgpu::TextureViewDescriptor { base_mip_level: m, mip_level_count: Some(1), ..Default::default() });
         let cs = wgpu::ShaderStages::COMPUTE;
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: cs, ty, count: None };
         let st2 = |format| wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format, view_dimension: wgpu::TextureViewDimension::D2 };
@@ -308,6 +313,7 @@ impl CloudGpu {
             ],
         });
         let refl_pipe = compute("clouds-refl", &layout("clouds-refl-layout", &refl_bgl), inp.module, "cl_refl_main");
+        let refl_mip0 = refl_mip(0);
         let refl_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("clouds-refl-bg"),
             layout: &refl_bgl,
@@ -323,9 +329,30 @@ impl CloudGpu {
                 wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&shadow_view) },
                 wgpu::BindGroupEntry { binding: 23, resource: wgpu::BindingResource::TextureView(&vol_detail_view) },
                 wgpu::BindGroupEntry { binding: 24, resource: wgpu::BindingResource::TextureView(&vol_weather_view) },
-                wgpu::BindGroupEntry { binding: 25, resource: wgpu::BindingResource::TextureView(&refl_view) },
+                wgpu::BindGroupEntry { binding: 25, resource: wgpu::BindingResource::TextureView(&refl_mip0) },
             ],
         });
+        let t2_unfilt = wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false };
+        let refl_down_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("clouds-refl-down-bgl"),
+            entries: &[entry(25, st2(wgpu::TextureFormat::Rgba16Float)), entry(26, t2_unfilt)],
+        });
+        let refl_down_pipe = compute("clouds-refl-down", &layout("clouds-refl-down-layout", &refl_down_bgl), inp.module, "cl_refl_down_main");
+        let refl_down_bgs = (1..REFL_MIPS)
+            .map(|m| {
+                let dst = refl_mip(m);
+                let src = refl_mip(m - 1);
+                let bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("clouds-refl-down-bg"),
+                    layout: &refl_down_bgl,
+                    entries: &[
+                        wgpu::BindGroupEntry { binding: 25, resource: wgpu::BindingResource::TextureView(&dst) },
+                        wgpu::BindGroupEntry { binding: 26, resource: wgpu::BindingResource::TextureView(&src) },
+                    ],
+                });
+                (bg, (REFL_RES >> m).max(1))
+            })
+            .collect();
         let bytes = (BASE_RES as u64).pow(3) * 4 * 8 / 7
             + (DETAIL_RES as u64).pow(3) * 4 * 8 / 7
             + (CURL_RES as u64).pow(2) * 4
@@ -333,7 +360,7 @@ impl CloudGpu {
             + (VOL_WEATHER_RES as u64).pow(2) * 4 * 4 / 3
             + (BLUE_RES as u64).pow(2) * 4
             + (SHADOW_RES as u64).pow(2) * 8
-            + (REFL_RES as u64).pow(2) * 8;
+            + (REFL_RES as u64).pow(2) * 8 * 4 / 3;
         Self {
             detail_view: noise.detail.create_view(&Default::default()),
             noise,
@@ -353,6 +380,8 @@ impl CloudGpu {
             shadow_bg,
             refl_pipe,
             refl_bg,
+            refl_down_pipe,
+            refl_down_bgs,
             bytes,
         }
     }
@@ -395,20 +424,30 @@ impl CloudGpu {
         if vol_clouds && !self.vol_baked.swap(true, Ordering::Relaxed) {
             self.vol_noise.encode(&mut pass);
         }
+        // Dispatches at half-res (SHADOW_RES / 2): fills all 2x2 texels on cuts, wrap-seam
+        // bands, and the ClSky LUT row, and refreshes 1/4 texels per steady frame (full 32 km
+        // world-anchored shadow map refresh every 4 frames).
+        let half = SHADOW_RES / 2;
         pass.set_pipeline(&self.shadow_pipe);
         pass.set_bind_group(0, &self.shadow_bg, &[]);
-        pass.dispatch_workgroups(SHADOW_RES.div_ceil(8), SHADOW_RES.div_ceil(8), 1);
+        pass.dispatch_workgroups(half.div_ceil(8), half.div_ceil(8), 1);
     }
 
-    /// Hemispherical off-screen cloud reflection dome (`--volumetric-clouds` only, run inside
+    /// Hemispherical off-screen cloud reflection dome (`--volumetric-clouds`, run inside
     /// the volume compute pass after `sky-atmosphere` has updated the atmosphere LUTs).
-    /// Dispatches half-res `REFL_RES / 2` (1024 threads): fills all 2x2 texels on cut frames
-    /// and refines 1/4 texels per steady frame (full 64x64 refresh every 4 frames).
+    /// Dispatches quarter-res `REFL_RES / 4` (32x32 = 1,024 threads): fills 4x4 blocks on cut frames,
+    /// refines in 4x4 Bayer order (effective 64^2 in 4 frames, full 128^2 in 16 frames), then builds
+    /// its 4 box-filtered mip levels (64 -> 32 -> 16 -> 8) for glossy-to-rough building reflections.
     pub(crate) fn encode_refl(&self, pass: &mut wgpu::ComputePass) {
-        let half = REFL_RES / 2;
+        let q = REFL_RES / 4;
         pass.set_pipeline(&self.refl_pipe);
         pass.set_bind_group(0, &self.refl_bg, &[]);
-        pass.dispatch_workgroups(half.div_ceil(8), half.div_ceil(8), 1);
+        pass.dispatch_workgroups(q.div_ceil(8), q.div_ceil(8), 1);
+        pass.set_pipeline(&self.refl_down_pipe);
+        for (bg, res) in &self.refl_down_bgs {
+            pass.set_bind_group(0, bg, &[]);
+            pass.dispatch_workgroups(res.div_ceil(8), res.div_ceil(8), 1);
+        }
     }
 }
 

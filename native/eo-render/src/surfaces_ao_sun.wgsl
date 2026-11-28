@@ -92,10 +92,13 @@ fn ao_sun_bounce(world: vec3<f32>, n: vec3<f32>, rot: f32, jit: f32, near: bool)
         stand_in = vec3<f32>(0.0);
     }
     let n_s = f32(sb_samples);
-    let sq_r = sqrt(SB_RADIUS_M);
+    // (`--sun-bounce-reach`, look.ao_params.w bit 4) the disc out to SB_REACH_M: a
+    // wide street's sunlit far front (eo-look `sun_bounce::REACH_M`).
+    let radius = select(SB_RADIUS_M, SB_REACH_M, (u32(look.ao_params.w + 0.5) & 16u) != 0u);
+    let sq_r = sqrt(radius);
     for (var i = 0; i < sb_samples; i = i + 1) {
         let u = (f32(i) + jit) / n_s;
-        let r = SB_RADIUS_M * u * u;
+        let r = radius * u * u;
         let a = f32(i) * SB_GOLDEN_ANGLE + rot;
         let off = r * vec2<f32>(cos(a), sin(a));
         let suv = uv + vec2<f32>(off.x, -off.y) / m_uv;

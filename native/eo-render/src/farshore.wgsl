@@ -50,6 +50,7 @@ struct FarU {
 @group(0) @binding(2) var fs_class: texture_2d<f32>;
 @group(0) @binding(3) var fs_samp: sampler;
 @group(0) @binding(4) var fs_shape: texture_2d<f32>; // sky visibility, valley
+@group(0) @binding(6) var fs_marin: texture_2d<f32>;
 @group(0) @binding(5) var fs_outer: texture_2d<f32>; // the outer ring's heights (stage L5, the cinematic look)
 
 @group(1) @binding(0) var<uniform> look: Look;
@@ -553,6 +554,13 @@ fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
         let cv = fs_cover(p, n, v, l, fp, wood_in, slope, valley, north, dry, urban, marsh, shore);
         lit = (cv.sun * key + cv.sky * (rim + irr * ao)) / FS_PI;
 // sf:end
+        if (FS_MARIN) {
+            let uv = (p - FS_MARIN_IMAGE.xy) / FS_MARIN_IMAGE.zw;
+            if (all(uv >= vec2<f32>(0.0)) && all(uv < vec2<f32>(1.0))) {
+                let aerial = textureSampleLevel(fs_marin, fs_samp, uv, 0.0);
+                lit = mix(lit, aerial.rgb * (key + rim + irr * ao) / FS_PI, aerial.a);
+            }
+        }
         // The built-up flats by night: an even warm glow standing in for their lights (no lighting data).
         let lamps = skyu.night.x;
         if (lamps > 0.0) {

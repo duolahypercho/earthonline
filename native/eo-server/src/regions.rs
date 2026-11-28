@@ -24,7 +24,7 @@
 
 use eo_sim::network::TileKey as SimTile;
 use eo_sim::region::{Claim, Focus, People, Region, RegionConfig};
-use eo_sim::{Network, World};
+use eo_sim::World;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -135,7 +135,7 @@ fn cell_seed(k: RegionKey) -> u32 {
 
 impl Regions {
     pub fn new(source: Arc<eo_sim::native::NativeSource>, seed: u32, threads: usize) -> Self {
-        let mut world = World::new(Network::new(source.timing.clone()));
+        let mut world = World::new(source.new_network());
         world.set_threads(threads);
         let (req_tx, req_rx) = channel::<Vec<SimTile>>();
         let (build_tx, build_rx) = channel();
@@ -226,7 +226,7 @@ impl Regions {
     fn stream(&mut self, viewers: &[Viewer]) {
         let mut want: Vec<(f64, SimTile)> = vec![];
         for v in viewers {
-            for k in eo_sim::native::tiles_around(v.x, v.z, NET_RADIUS_M) {
+            for k in self.source.resident_tiles(v.x, v.z, NET_RADIUS_M) {
                 if !self.world.net.tiles.contains_key(&k) && !self.requested.contains(&k) {
                     let o = k.origin();
                     let tm = eo_sim::network::TILE_M;
@@ -237,32 +237,25 @@ impl Regions {
         if !want.is_empty() {
             // Nearest a player first, in pairs, so the tile under a player arrives soon.
             want.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            let mut list: Vec<SimTile> = vec![];
             for (_, k) in want {
-                if self.requested.insert(k) {
-                    list.push(k);
+                let mut delivery = self.source.delivery_tiles(k);
+                delivery.retain(|tile| !self.world.net.tiles.contains_key(tile) && self.requested.insert(*tile));
+                if !delivery.is_empty() {
+                    let _ = self.req_tx.send(delivery);
                 }
-            }
-            for k in list {
-                let _ = self.req_tx.send(vec![k]);
             }
         }
         // Drop far tiles, batched, at most every 2 s.
         if self.last_drop.elapsed().as_secs_f64() > 2.0 {
             self.last_drop = Instant::now();
-            let tm = eo_sim::network::TILE_M;
-            let keep = NET_RADIUS_M + tm;
+            let keep: HashSet<_> = viewers.iter().flat_map(|v| self.source.resident_tiles(v.x, v.z, NET_RADIUS_M + eo_sim::network::TILE_M)).collect();
             let far: Vec<SimTile> = self
                 .world
                 .net
                 .tiles
                 .keys()
                 .copied()
-                .filter(|t| {
-                    let o = t.origin();
-                    let c = [o[0] + tm / 2.0, o[1] + tm / 2.0];
-                    !viewers.iter().any(|v| (v.x - c[0]).abs() <= keep + tm / 2.0 && (v.z - c[1]).abs() <= keep + tm / 2.0)
-                })
+                .filter(|t| !keep.contains(t))
                 .collect();
             if !far.is_empty() {
                 let t = Instant::now();

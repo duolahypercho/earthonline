@@ -1881,6 +1881,19 @@ fn spec_of<'a>(table: &str, face: &str) -> Result<&'a serde_json::Value> {
     art::Manifest::get().spec(table, face).ok_or_else(|| anyhow!("sign art manifest: {table}.{face} has no entry (map it to art or mark it drawn)"))
 }
 
+/// One face of the `DRAW` table (a face with no published art: tow-away, the regulatory
+/// and guide catch-alls, angle parking) alone on a `w` x `h` px canvas, the face filling it as
+/// it fills its plate in the game (the cell's face rectangle is mapped onto the whole plate),
+/// with `fonts` (the official art's Overpass, as `official_face_atlas` draws it). For the Blender
+/// sign build (eo-props example `sign_faces_export`). None when the table does not draw the face.
+pub fn drawn_face(face: &str, w: u32, h: u32, fonts: &Fonts) -> Result<Option<Atlas>> {
+    let mut c = Canvas::new(w, h, fonts)?;
+    c.save();
+    let drawn = draw_face(&mut c, face, 0.0, 0.0, w as f64, h as f64);
+    c.restore();
+    Ok(drawn.then(|| c.finish(vec![])))
+}
+
 /// the face atlas from the official art (the JS cell layout, tiles unchanged).
 fn official_face_atlas(js: &JsProps, art: &art::SignArt, provenance: &mut Vec<(String, String)>) -> Result<Atlas> {
     let size = SIGN_FACE_SIZE;
@@ -2142,4 +2155,111 @@ pub fn load_or_cook_with(cache_dir: &Path, js: &JsProps, fonts: &Fonts, street_n
         eprintln!("eo-props: sign atlas cache not written: {e:#}");
     }
     Ok((a, CacheOutcome::Cooked))
+}
+
+// ---------------------------------------------------------------------------
+// the mast arms' Street Name signs (eo-props `signals::Fitting::NameSign`, eo-app `--no-arm-name-signs`)
+// ---------------------------------------------------------------------------
+
+/// Cell size (px) of a mast arm's Street Name sign in the sign face atlas, and the columns a row holds.
+pub const ARM_SIGN_CELL: [u32; 2] = [192, 32];
+pub const ARM_SIGN_COLUMNS: u32 = 10;
+
+/// The mast arms' Street Name signs drawn into the free rows of the sign face atlas (under its
+/// inventory faces): per accepted legend its real size, its cell's tile and its mean colour.
+pub struct ArmNameSigns {
+    /// The legends drawn, in face order (past the inventory's faces); the rest did not fit.
+    pub legends: Vec<String>,
+    /// Per legend, the sign's real size (width, height, m).
+    pub sizes: Vec<[f64; 2]>,
+    /// Per legend, its tile `[u0, v0 up, du, dv]` in the face atlas (`SIGN_FACE_SIZE` square).
+    pub tiles: Vec<[f32; 4]>,
+    /// Per legend, the sign's mean colour (sRGB, 0..1): the face colour where the atlas is not drawn.
+    pub colours: Vec<[f32; 4]>,
+    /// The cells' pixels: `SIGN_FACE_SIZE` wide, rows from `y0` (top first), sRGB, straight alpha.
+    pub rgba: Vec<u8>,
+    pub y0: u32,
+    pub height: u32,
+}
+
+/// Draw each legend as a CA MUTCD D3-1 Street Name sign (`art::SignArt::street_blade`: the FHWA
+/// D3-1a layout's green, border and corners, mixed case in Overpass Bold) at its real size for
+/// capitals `cap` m tall (`street-name-sign-overhead-letter-height`), into `ARM_SIGN_CELL` cells
+/// from the first free row under `face_count` inventory faces; then weathered (the sheeting
+/// faded and chalky, grime run down from the top edge, speckle): aged and matte. Legends past
+/// the free rows are left out (listed in neither `legends` nor `sizes`).
+pub fn arm_name_signs(legends: &[String], art: &art::SignArt, face_count: usize, cap: f64) -> Result<ArmNameSigns> {
+    let size = SIGN_FACE_SIZE;
+    let rows_used = (face_count as u32).div_ceil(SIGN_FACE_COLUMNS) * SIGN_FACE_CELL;
+    let y0 = rows_used + 8;
+    let [cw, ch] = ARM_SIGN_CELL;
+    let rows = (size.saturating_sub(y0)) / ch;
+    let capacity = (rows * ARM_SIGN_COLUMNS) as usize;
+    let height = rows * ch;
+    if height == 0 {
+        bail!("no free rows in the sign face atlas under {face_count} faces");
+    }
+    let mut pix = Pixmap::new(size, height).ok_or_else(|| anyhow!("pixmap {size} x {height}"))?;
+    let (mut out_l, mut sizes, mut tiles) = (vec![], vec![], vec![]);
+    for (i, legend) in legends.iter().take(capacity).enumerate() {
+        let (cx, cy) = ((i as u32 % ARM_SIGN_COLUMNS) * cw, (i as u32 / ARM_SIGN_COLUMNS) * ch);
+        let frame = art.blade_size(legend, cap)?;
+        // a pixel of gutter round each cell (the mips)
+        let dest = [cx as f64 + 1.0, cy as f64 + 1.0, cw as f64 - 2.0, ch as f64 - 2.0];
+        art.street_blade(&mut pix, legend, dest, frame)?;
+        out_l.push(legend.clone());
+        sizes.push(frame);
+        let inset = 1.5;
+        let (fx, fy) = (cx as f64 + inset, (y0 + cy) as f64 + inset);
+        let (fw, fh) = (cw as f64 - 2.0 * inset, ch as f64 - 2.0 * inset);
+        let s = size as f64;
+        tiles.push([(fx / s) as f32, (1.0 - (fy + fh) / s) as f32, (fw / s) as f32, (fh / s) as f32]);
+    }
+    let mut rgba = Vec::with_capacity((size * height * 4) as usize);
+    for p in pix.pixels() {
+        let c = p.demultiply();
+        rgba.extend_from_slice(&[c.red(), c.green(), c.blue(), c.alpha()]);
+    }
+    // weathering: per sign a fade, then grime run down from the top edge and speckle (hashes of the pixel)
+    let hash = |x: u32, y: u32, k: u32| -> f32 {
+        let mut h = x.wrapping_mul(0x8da6_b343) ^ y.wrapping_mul(0xd816_3841) ^ k.wrapping_mul(0xcb1a_b31f);
+        h ^= h >> 15;
+        h = h.wrapping_mul(0x2c1b_3c6d);
+        h ^= h >> 12;
+        (h & 0xffff) as f32 / 65535.0
+    };
+    let mut colours = vec![];
+    for i in 0..out_l.len() as u32 {
+        let (cx, cy) = ((i % ARM_SIGN_COLUMNS) * cw, (i / ARM_SIGN_COLUMNS) * ch);
+        let fade = 0.08 + 0.14 * hash(i, 7, 1);
+        let (mut sum, mut n) = ([0.0f32; 3], 0.0f32);
+        for y in cy..cy + ch {
+            let ty = (y - cy) as f32 / ch as f32;
+            for x in cx..cx + cw {
+                let o = ((y * size + x) * 4) as usize;
+                if rgba[o + 3] == 0 {
+                    continue;
+                }
+                // a run of grime down from the top at this column, broken
+                let col = hash(x / 3, 0, i + 11);
+                let run = if col > 0.72 { (1.0 - ty / (0.3 + 0.7 * col)).clamp(0.0, 1.0) * 0.22 } else { 0.0 };
+                let speck = if hash(x, y, i + 3) > 0.985 { 0.25 } else { 0.0 };
+                let grain = 0.94 + 0.08 * hash(x, y, i + 5);
+                for c in 0..3 {
+                    let v = rgba[o + c] as f32 / 255.0;
+                    // sun fade toward a chalky grey, grime and speckle darken
+                    let faded = v * (1.0 - fade) + 0.62 * fade;
+                    let d = faded * grain * (1.0 - run - speck).max(0.0);
+                    let warm = [1.0, 0.985, 0.95][c];
+                    let e = (d * warm).clamp(0.0, 1.0);
+                    rgba[o + c] = (e * 255.0).round() as u8;
+                    sum[c] += e;
+                }
+                n += 1.0;
+            }
+        }
+        let m = if n > 0.0 { [sum[0] / n, sum[1] / n, sum[2] / n] } else { [0.2, 0.35, 0.25] };
+        colours.push([m[0], m[1], m[2], 1.0]);
+    }
+    Ok(ArmNameSigns { legends: out_l, sizes, tiles, colours, rgba, y0, height })
 }

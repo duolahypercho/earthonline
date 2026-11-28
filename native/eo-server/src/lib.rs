@@ -28,6 +28,7 @@
 //! client does not have).
 
 pub mod bots;
+mod npc_contact;
 pub mod predict;
 pub mod regions;
 pub mod sys;
@@ -36,7 +37,7 @@ pub mod tiles;
 use eo_net::auth::{Account, Authenticator, DevTokens};
 use eo_net::bits::{ByteReader, PutLe};
 use eo_net::conn::Connection;
-use eo_net::game::{GameWorld, arrival_state, check_of, spawn_player, step_player};
+use eo_net::game::{GameWorld, arrival_state, check_of, spawn_configured_player, step_player_in_weather};
 use eo_net::presence::{Emote, SkyClock, Viewpoint, flag, pack_anim};
 use eo_net::interest::{Grid, Radii};
 use eo_net::link::{Conditions, Link};
@@ -68,6 +69,8 @@ pub struct ServerConfig {
     /// `--tunnels`; `load`). The handshake compares a client's against the
     /// loaded world's own (`GameWorld::structures`).
     pub structures: Option<eo_structures::StructureOptions>,
+    /// Preview of authoritative contact between a player's vehicle and the traffic fleet.
+    pub traffic_contact: bool,
     pub max_players: usize,
     pub seed: u32,
     /// A dropped player keeps its body this long for a reconnect.
@@ -87,8 +90,18 @@ pub struct ServerConfig {
     pub day_rate: f64,
     pub weather: u8,
     pub weather_seed: u32,
+    pub weather_physics: bool,
+    /// Weather simulation tick at server startup (independent of the sun clock).
+    pub weather_start_tick: u32,
     /// Seconds between two fast-travel trips of one player.
     pub travel_cooldown_s: f64,
+}
+
+impl ServerConfig {
+    fn weather_epoch(&self, sky: SkyClock, tick: u32, seq: u32) -> eo_net::weather::WeatherEpoch {
+        let mode = if self.weather_physics { sky.weather } else { 0 };
+        eo_net::weather::WeatherEpoch::new(mode, sky.seed, self.weather_start_tick.wrapping_add(tick), seq)
+    }
 }
 
 impl Default for ServerConfig {
@@ -102,6 +115,7 @@ impl Default for ServerConfig {
             conditions: Conditions::NONE,
             streets: true,
             structures: None,
+            traffic_contact: false,
             max_players: 512,
             seed: 1,
             resume_grace_s: 30.0,
@@ -119,7 +133,9 @@ impl Default for ServerConfig {
             hour: 12.0,
             day_rate: 1.0,
             weather: 0,
-            weather_seed: 1,
+            weather_seed: eo_net::weather::default_seed(),
+            weather_physics: true,
+            weather_start_tick: 0,
             travel_cooldown_s: 5.0,
         }
     }
@@ -131,6 +147,8 @@ pub struct SessionStats {
     pub inputs_stood_in: u64,
     pub inputs_late: u64,
     pub corrections_sent: u64,
+    pub vehicle_contact_ticks: u64,
+    pub traffic_contact_ticks: u64,
     pub mismatches: u64,
     pub snapshots: u64,
     pub deferred: u64,
@@ -168,6 +186,7 @@ pub struct Session {
     tokens: f64,
     pub rep: Replicator,
     accept: Accept,
+    weather: eo_net::weather::RoadWeather,
     pub stats: SessionStats,
     pub pos: DVec3,
     /// Debug/test: teleport the player by this much on the next step (a server-side event the client cannot predict).
@@ -195,7 +214,7 @@ impl Session {
     }
 
     /// Run the inputs that arrived, in sequence (tokens limit a client to real time plus a burst).
-    fn run(&mut self, now: Instant, gap_s: f64, tick: u32) {
+    fn run(&mut self, now: Instant, gap_s: f64, tick: u32, weather_tick: u32, sky: SkyClock) {
         let t0 = Instant::now();
         if let Some((_, at, due)) = self.travel {
             if tick.wrapping_sub(due) < 0x8000_0000 {
@@ -231,7 +250,11 @@ impl Session {
                 }
                 self.player.set_state(&mut self.cw, &s);
             }
-            step_player(&mut self.player, &mut self.cw, &input);
+            if self.weather.epoch.needs_reanchor(next, weather_tick) {
+                self.weather.epoch = eo_net::weather::WeatherEpoch::new(sky.weather, sky.seed, weather_tick, next);
+                self.queue_state_correction();
+            }
+            step_player_in_weather(&mut self.player, &mut self.cw, &input, next, &mut self.weather);
             self.last_seq = next;
             self.last_input = input;
             self.tokens -= 1.0;
@@ -247,11 +270,7 @@ impl Session {
                             eprintln!("server: player {} mismatch at seq {next}: server {:?} client {:?} (applied {} corr {})", self.player_id, mine.pos_mm, c.pos_mm, self.client_applied, self.corr_id);
                         }
                         self.stats.mismatches += 1;
-                        self.corr_id = self.corr_id.wrapping_add(1).max(1);
-                        let mut state = Vec::with_capacity(512);
-                        write_player_state(&self.player.state(&self.cw), &mut state);
-                        self.correction = Some(Correction { id: self.corr_id, seq: next, state });
-                        self.stats.corrections_sent += 1;
+                        self.queue_state_correction();
                     }
                 }
             }
@@ -281,12 +300,16 @@ impl Session {
         self.arrived_until = tick.wrapping_add(30);
         self.emote = Emote::None;
         self.pos = self.player.position(&self.cw);
+        self.queue_state_correction();
+        self.stats.arrivals += 1;
+    }
+
+    fn queue_state_correction(&mut self) {
         self.corr_id = self.corr_id.wrapping_add(1).max(1);
         let mut state = Vec::with_capacity(512);
         write_player_state(&self.player.state(&self.cw), &mut state);
-        self.correction = Some(Correction { id: self.corr_id, seq: self.last_seq, state });
+        self.correction = Some(Correction { weather: self.weather.epoch, id: self.corr_id, seq: self.last_seq, state });
         self.stats.corrections_sent += 1;
-        self.stats.arrivals += 1;
     }
 
     fn take_packet(&mut self, p: InputPacket, arrived: Instant) {
@@ -326,6 +349,7 @@ impl Session {
 }
 
 struct Joining {
+    vehicle: eo_player::vehicle::VehicleConfig,
     connection: u64,
     addr: SocketAddr,
     account: Account,
@@ -383,6 +407,8 @@ pub struct Server {
     by_conn: HashMap<u64, usize>,
     joining: Vec<Joining>,
     pub regions: Regions,
+    npc_contacts: Option<npc_contact::NpcContacts>,
+    traffic_weather: eo_net::weather::RoadWeather,
     pool: Pool,
     pub tick: u32,
     next_player: u32,
@@ -445,6 +471,7 @@ impl Server {
         };
         let tiles = tiles::SharedTiles::start(game.ground.clone(), game.buildings.clone(), cfg.tile_threads);
         let regions = Regions::new(source, cfg.seed, cfg.sim_threads.saturating_sub(1));
+        let npc_contacts = cfg.traffic_contact.then(|| npc_contact::NpcContacts::new(&game, tiles.clone()));
         let pool = Pool::new(cfg.player_threads.saturating_sub(1), "eo-server-work");
         let viewpoints = eo_net::presence::viewpoints()?;
         let gf = eo_data::geo::GeoFrame::of_city(&game.city.meta);
@@ -469,6 +496,8 @@ impl Server {
             by_conn: HashMap::new(),
             joining: vec![],
             regions,
+            npc_contacts,
+            traffic_weather: Default::default(),
             pool,
             tick: 0,
             next_player: 1,
@@ -507,9 +536,15 @@ impl Server {
 
     /// Set the sky clock (an admin or a capture): every client cuts to it.
     pub fn set_sky(&mut self, hour: f64, rate: f64, weather: u8, seed: u32) {
+        let weather_changed = weather != self.sky0.weather || (weather == eo_net::presence::WEATHER_SCHEDULE && seed != self.sky0.seed);
         let epoch = self.sky0.epoch.wrapping_add(1);
         self.sky0 = SkyClock { hour: hour.rem_euclid(24.0), rate: rate.max(0.0), weather, seed, epoch };
         self.sky_tick0 = self.tick;
+        if !weather_changed || !self.cfg.weather_physics { return; }
+        for s in &mut self.sessions {
+            s.weather.epoch = self.cfg.weather_epoch(self.sky0, self.tick, s.last_seq);
+            s.queue_state_correction();
+        }
     }
 
     /// The commands each client sent since the last tick: emotes, fast travel.
@@ -570,6 +605,64 @@ impl Server {
         }
     }
 
+    /// Broad phase on the server tick, after every session has consumed its inputs.
+    /// Clients receive the resulting velocities through the existing correction channel.
+    fn vehicle_contacts(&mut self) {
+        if self.sessions.len() < 2 {
+            return;
+        }
+        struct Chassis {
+            session: usize,
+            index: usize,
+            centre: DVec3,
+            radius: f64,
+            driven: bool,
+        }
+        let mut cars = Vec::new();
+        for (session, s) in self.sessions.iter().enumerate().filter(|(_, s)| s.online) {
+            for (index, car) in s.player.vehicles.iter().enumerate() {
+                let body = &s.cw.physics.bodies[car.body];
+                if !body.is_enabled() { continue; }
+                let size = car.spec.length.hypot(car.spec.width).hypot(car.spec.height);
+                let motion = f64::from(body.linvel().length()) * eo_player::tuning::FIXED_STEP_S;
+                cars.push(Chassis {
+                    session,
+                    index,
+                    centre: car.pose(&s.cw).0,
+                    radius: 0.5 * size + motion,
+                    driven: s.player.mode == Mode::Driving(index),
+                });
+            }
+        }
+        let left = |c: &Chassis| c.centre.x - c.radius;
+        cars.sort_by(|a, b| left(a).total_cmp(&left(b))
+            .then_with(|| (a.session, a.index).cmp(&(b.session, b.index))));
+        let mut changed = Vec::new();
+        for (n, car) in cars.iter().enumerate() {
+            for other in &cars[n + 1..] {
+                if left(other) > car.centre.x + car.radius { break; }
+                if car.session == other.session || !(car.driven || other.driven) { continue; }
+                if car.centre.distance_squared(other.centre) > (car.radius + other.radius).powi(2) { continue; }
+                let (a, b) = if car.session < other.session { (car, other) } else { (other, car) };
+                let (first, second) = self.sessions.split_at_mut(b.session);
+                let (sa, sb) = (&mut first[a.session], &mut second[0]);
+                if eo_player::vehicle::resolve_peer_contact(
+                    &sa.player.vehicles[a.index], &mut sa.cw,
+                    &sb.player.vehicles[b.index], &mut sb.cw,
+                ) {
+                    changed.extend([a.session, b.session]);
+                }
+            }
+        }
+        changed.sort_unstable();
+        changed.dedup();
+        for i in changed {
+            let s = &mut self.sessions[i];
+            s.stats.vehicle_contact_ticks += 1;
+            s.queue_state_correction();
+        }
+    }
+
     /// Run ticks at 60 Hz until `stop` (sleeping between them).
     pub fn run(&mut self, stop: &AtomicBool) {
         let dt = Duration::from_secs_f64(1.0 / proto::TICK_HZ as f64);
@@ -602,6 +695,8 @@ impl Server {
         self.commands();
         let t1 = Instant::now();
         let gap = self.cfg.input_gap_s;
+        let weather_tick = self.cfg.weather_start_tick.wrapping_add(self.tick);
+        let sky = self.sky0;
         let tick = self.tick;
         // Players step on the pool; a network tile waiting to be admitted is
         // admitted beside them on its own thread (they share nothing).
@@ -610,7 +705,7 @@ impl Server {
         let step_players = |sessions: &mut Vec<Session>| {
             pool.for_each_mut(sessions, |_, s| {
                 if s.online {
-                    s.run(t1, gap, tick);
+                    s.run(t1, gap, tick, weather_tick, sky);
                 }
             })
         };
@@ -621,10 +716,16 @@ impl Server {
             }),
             None => step_players(sessions),
         }
+        self.vehicle_contacts();
         let players_cpu: u64 = self.sessions.iter().map(|s| if s.online { s.stats.step_ns } else { 0 }).sum();
         let t2 = Instant::now();
         let viewers: Vec<Viewer> = self.sessions.iter().map(|s| Viewer { player: s.player_id, x: s.pos.x, z: s.pos.z, yaw: s.view_yaw() }).collect();
         self.regions.update(&viewers);
+        if let Some(contacts) = &mut self.npc_contacts {
+            self.traffic_weather.epoch = self.cfg.weather_epoch(sky, tick, tick);
+            let weather = self.traffic_weather.at(tick);
+            contacts.step(&self.game, &mut self.sessions, &mut self.regions, &weather);
+        }
         let t3 = Instant::now();
         self.regions.step();
         let t4 = Instant::now();
@@ -760,8 +861,8 @@ impl Server {
                     _ => (self.cfg.default_spawn, false),
                 };
                 let mut cw = CollisionWorld::fed(self.game.ground.clone(), self.game.buildings.clone(), self.tiles.clone());
-                cw.insert_per_pump = 4;
-                self.joining.push(Joining { connection, addr, account, spawn, driving, cw, since: Instant::now() });
+                cw.lockstep = true;
+                self.joining.push(Joining { vehicle: h.vehicle, connection, addr, account, spawn, driving, cw, since: Instant::now() });
             }
             Kind::Input | Kind::KeepAlive | Kind::Disconnect => {
                 let Ok(connection) = r.u64() else { return };
@@ -809,7 +910,8 @@ impl Server {
         s.gap_since = None;
         let mut state = Vec::with_capacity(512);
         write_player_state(&s.player.state(&s.cw), &mut state);
-        s.accept = Accept { connection, input_seq: s.last_seq, state, resumed: true, server_tick: self.tick, ..s.accept.clone() };
+        s.weather.epoch = self.cfg.weather_epoch(self.sky0, self.tick, s.last_seq);
+        s.accept = Accept { weather: s.weather.epoch, connection, input_seq: s.last_seq, state, resumed: true, server_tick: self.tick, ..s.accept.clone() };
         let mut out = vec![];
         s.accept.write(&mut out);
         self.link.send(&out, addr);
@@ -825,30 +927,21 @@ impl Server {
             let c = DVec3::new(j.spawn[0], 0.0, j.spawn[1]);
             j.cw.pump(c);
             // Every tile the spawn's blocking load wants (so spawning never waits on a cook).
-            let r = eo_player::world::TILE_SIZE_M;
-            let k0 = eo_player::world::TileKey::of(c.x, c.z);
-            let all = (-2..=2).all(|dx| {
-                (-2..=2).all(|dz| {
-                    let k = eo_player::world::TileKey { x: k0.x + dx, z: k0.z + dz };
-                    k.distance_to(c.x, c.z) > eo_player::world::LOAD_RADIUS_M || j.cw.is_resident(k.x as f64 * r + r / 2.0, k.z as f64 * r + r / 2.0)
-                })
-            });
+            let all = j.cw.tiles_ready(c, eo_player::world::LOAD_RADIUS_M);
             if (all || j.since.elapsed().as_secs_f64() > 10.0) && ready.len() < 2 {
                 ready.push(k); // at most two spawns a tick
             }
         }
         for k in ready.into_iter().rev() {
             let mut j = self.joining.swap_remove(k);
-            let (player, cars) = spawn_player(&mut j.cw, j.spawn[0], j.spawn[1], j.spawn[2], j.driving);
-            // From here the player's world streams in lockstep: what it holds at a step
-            // follows the body, not how fast the shared cookers ran (as the client's does).
-            j.cw.lockstep = true;
+            let (player, cars) = spawn_configured_player(&mut j.cw, j.spawn[0], j.spawn[1], j.spawn[2], j.driving, j.vehicle);
             let player_id = self.next_player;
             self.next_player += 1;
             let resume_key = keyed(self.secret, &[player_id as u64, j.connection, 3]);
             let mut state = Vec::with_capacity(512);
             write_player_state(&player.state(&j.cw), &mut state);
-            let accept = Accept { connection: j.connection, player_id, resume_key, tick_hz: proto::TICK_HZ as u8, snapshot_hz: self.cfg.snapshot_hz as u8, server_tick: self.tick, input_seq: 0, state, car_spawns: cars, resumed: false };
+            let weather = self.cfg.weather_epoch(self.sky0, self.tick, 0);
+            let accept = Accept { weather, connection: j.connection, player_id, resume_key, tick_hz: proto::TICK_HZ as u8, snapshot_hz: self.cfg.snapshot_hz as u8, server_tick: self.tick, input_seq: 0, state, car_spawns: cars, resumed: false };
             let mut out = vec![];
             accept.write(&mut out);
             self.link.send(&out, j.addr);
@@ -881,6 +974,7 @@ impl Server {
                 correction: None,
                 tokens: 10.0,
                 rep: Replicator::new(),
+                weather: eo_net::weather::RoadWeather::new(weather),
                 accept,
                 stats: SessionStats::default(),
                 pos,
@@ -905,20 +999,26 @@ impl Server {
         for r in &self.regions.world.regions {
             let [ox, oz] = r.out.origin;
             for a in &r.out.vehicles {
-                ents.push((
-                    net_id(CLASS_CAR, a.id),
-                    QState {
-                        x: q_pos(ox + a.pos[0] as f64),
-                        y: 0,
-                        z: q_pos(oz + a.pos[2] as f64),
-                        yaw: q_angle(a.heading as f64),
-                        speed: q_speed(a.speed as f64),
-                        anim: ((a.anim as f64).rem_euclid(16.0) * 16.0) as u8,
-                        kind: a.kind as u8,
-                        flags: a.flags,
-                        ..Default::default()
-                    },
-                ));
+                let mut state = QState {
+                    x: q_pos(ox + a.pos[0] as f64),
+                    y: q_pos(a.vehicle_surface_y().unwrap_or(0.0)),
+                    z: q_pos(oz + a.pos[2] as f64),
+                    yaw: q_angle(a.heading as f64),
+                    speed: q_speed(a.speed as f64),
+                    anim: ((a.anim as f64).rem_euclid(16.0) * 16.0) as u8,
+                    kind: a.kind as u8,
+                    flags: a.flags,
+                    ..Default::default()
+                };
+                if let Some((datum, rotation, speed)) = self.npc_contacts.as_ref().and_then(|contacts| contacts.pose(a.id)) {
+                    (state.x, state.y, state.z) = (q_pos(datum.x), q_pos(datum.y), q_pos(datum.z));
+                    let (yaw, pitch, roll) = ypr(rotation);
+                    state.yaw = q_angle(yaw);
+                    state.tilt = u32::from(q_angle(pitch)) | u32::from(q_angle(roll)) << 16;
+                    state.speed = q_speed(speed);
+                    state.flags |= snapshot::TRAFFIC_PHYSICAL | eo_sim::output::FLAG_SURFACE_Y;
+                }
+                ents.push((net_id(CLASS_CAR, a.id), state));
             }
             for a in &r.out.walkers {
                 ents.push((
@@ -1035,7 +1135,7 @@ fn player_entities(s: &Session, tick: u32, ents: &mut Vec<(u32, QState)>) {
                 tilt: q_angle(pitch) as u32 | (q_angle(roll) as u32) << 16,
                 speed: q_speed(v.forward_speed(&s.cw)),
                 kind: look_of(&s.account),
-                flags: braking as u16 | (driven as u16) << 1,
+                flags: braking as u16 | (driven as u16) << 1 | (v.spec.config.model as u16) << 2,
                 steer: (steer / 0.6 * 127.0).round().clamp(-127.0, 127.0) as i8,
                 ..Default::default()
             },
@@ -1089,6 +1189,16 @@ pub fn load(streets: bool) -> anyhow::Result<(Arc<GameWorld>, Arc<eo_sim::native
 /// server do), so the cars on a deck are on its level. Without them the
 /// table is empty and the source is as `load`'s.
 pub fn load_with(streets: bool, structures: Option<eo_structures::StructureOptions>) -> anyhow::Result<(Arc<GameWorld>, Arc<eo_sim::native::NativeSource>)> {
+    load_with_traffic_plan(streets, structures, false, false)
+}
+
+/// Load the server world with optional paved traffic geometry.
+pub fn load_with_traffic_plan(
+    streets: bool,
+    structures: Option<eo_structures::StructureOptions>,
+    traffic_street_plan: bool,
+    traffic_passing: bool,
+) -> anyhow::Result<(Arc<GameWorld>, Arc<eo_sim::native::NativeSource>)> {
     let paths = eo_data::DataPaths::discover()?;
     let (g, s) = std::thread::scope(|sc| {
         let p2 = paths.clone();
@@ -1097,8 +1207,35 @@ pub fn load_with(streets: bool, structures: Option<eo_structures::StructureOptio
         (g, src.join().expect("simulation source thread"))
     });
     let g = g?;
-    let s = s?.with_levels(g.way_levels());
-    Ok((Arc::new(g), Arc::new(s)))
+    let mut s = s?.with_levels(g.way_levels());
+    if traffic_street_plan {
+        s = s.with_traffic_plan(g.ground.traffic_plan()).with_passing(traffic_passing);
+        if let Some(decks) = &g.decks {
+            s = s.with_deck_surfaces(decks.traffic_surfaces());
+        }
+    }
+    Ok((Arc::new(g), Arc::new(configure_traffic_previews(s)?)))
+}
+
+/// Apply the same traffic preview switches to the standalone and embedded simulations.
+pub fn configure_traffic_previews(source: eo_sim::native::NativeSource) -> anyhow::Result<eo_sim::native::NativeSource> {
+    let bend_braking = std::env::args_os()
+        .filter(|arg| arg == "--traffic-bend-braking" || arg == "--no-traffic-bend-braking")
+        .last().is_some_and(|arg| arg == "--traffic-bend-braking");
+    configure_model_footprints(source.with_bend_braking(bend_braking))
+}
+
+/// Opt-in cooked chassis dimensions for the local and dedicated servers.
+pub fn configure_model_footprints(source: eo_sim::native::NativeSource) -> anyhow::Result<eo_sim::native::NativeSource> {
+    if std::env::args_os().any(|a| a == "--no-traffic-model-footprints") {
+        return Ok(source);
+    }
+    let Some(path) = std::env::var_os("EO_TRAFFIC_MODEL_FOOTPRINTS").filter(|p| !p.is_empty()) else {
+        return Ok(source);
+    };
+    let report = eo_sim::vehicle_catalogue::ScaleReport::load(std::path::Path::new(&path))?;
+    report.require_vehicle_scale(eo_data::groundscale::vehicles() as f32)?;
+    Ok(source.with_model_footprints(Arc::new(report)))
 }
 
 /// Make the reader for a packet (tests).

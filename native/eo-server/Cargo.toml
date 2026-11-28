@@ -13,5 +13,6 @@ eo-net = { path = "../eo-net" }
 eo-player = { path = "../eo-player" }
 eo-sim = { path = "../eo-sim" }
 eo-structures = { path = "../eo-structures" } # structures: `--structures`, `--tunnels`
+eo-street = { path = "../eo-street" } # `--street-tapers`: the street worlds this process builds
 glam = "0.34.3"
 serde_json = "1.0.154"

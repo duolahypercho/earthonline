@@ -91,7 +91,10 @@ file digests and the changes made are in
 - **Overpass 3.0.5** (read when present): SIL Open Font License 1.1,
   Copyright 2015 Red Hat, Inc. (the font is dual OFL-1.1 / LGPL-2.1; used
   under OFL-1.1). The sign atlases rasterise its glyphs when the sign art
-  folder is present; the font file is not copied into the repository.
+  folder is present, and `scripts/assets/build-signal-poles-v1.py` bakes them
+  into the push buttons' R10-3e(CA) sign in `public/assets/signal-poles/` (its
+  digest is in that set's provenance); the font file is not copied into the
+  repository.
   Source and digest are in `native/eo-props/data/sign-art-manifest.json`.
 
 ## City and map data (shipped)
@@ -102,22 +105,45 @@ carries its sources under `meta.sources`.
 
 - **OpenStreetMap**: © OpenStreetMap contributors, Open Database License
   (ODbL) 1.0, https://www.openstreetmap.org/copyright. Used in
-  `sf-city.json.gz`, `sf-lots-parks.json.gz`, `sf-map-citywide.json.gz` and
-  `building-metadata/`. These are Derivative Databases of OpenStreetMap and
+  `sf-city.json.gz`, `sf-lots-parks.json.gz`, `sf-map-citywide.json.gz`,
+  `building-metadata/` and the [traffic stop controls](native/eo-data/data/sf-traffic-stops.NOTICE.txt),
+  and through the street grades of `native/assets/sf-decks-v1.json`.
+  These are Derivative Databases of OpenStreetMap and
   are offered under the ODbL; publishing a modified version of them obliges
   you to publish it under the ODbL too. The ODbL does not apply to the code.
 - **DataSF**, City and County of San Francisco: Open Data Commons Public
   Domain Dedication and License (PDDL) 1.0. Building Footprints
   (`ynuv-fyni`), SF Shoreline and Islands, Stormwater inlets, drains and
   catch basins (`jtgq-b7c5`, maintained by the SFPUC), Registered Business
-  Locations (`g8m3-pdis`) and the Assessor Historical Secured Property Tax
-  Rolls (`wv5m-vpq2`).
+  Locations (`g8m3-pdis`), the Assessor Historical Secured Property Tax
+  Rolls (`wv5m-vpq2`), the Street Tree List (`tkzw-k3nq`, San Francisco
+  Public Works; `sf-tree-sizes.json.gz`), San Francisco Public Works' Streets
+  Data - Pavement Condition Index (PCI) Scores (`5aye-4rtt`) and Historical
+  PCI Scores (`78va-8dhi`) in `sf-pavement.json.gz`, and the SFMTA's MTA Bike
+  Network Linear Features (`ygmz-vaxd`) in `sf-bikeways.json.gz`, and its
+  Parking regulations (`hi6h-neyh`), Parking Meters (`8vzz-qzz9`) and Traffic
+  Signals (`ybh5-27n2`) in `sf-street-survey.json.gz`.
+- **USDA Forest Service, Urban Tree Database** (`sf-tree-allometry.json`):
+  McPherson, E. Gregory; van Doorn, Natalie S.; Peper, Paula J. 2016. Urban
+  tree database. Fort Collins, CO: Forest Service Research Data Archive.
+  Updated 21 January 2020. https://doi.org/10.2737/RDS-2016-0005 (report:
+  Gen. Tech. Rep. PSW-GTR-253, https://doi.org/10.2737/PSW-GTR-253). U.S.
+  Government work: "can be used without additional permissions or fees";
+  the citation is requested. [Build record](public/data/sf/sf-tree-allometry.NOTICE.txt).
 - **SF Planning, San Francisco Land Use** (`c5ge-t6pj`): CC0 1.0, as
   recorded in `public/data/sf/building-metadata/*/index.json`.
 - **U.S. Geological Survey, 3D Elevation Program** (1 m DEM in
-  `sf-elevation.bin.gz`; 1 arc-second DEM for the far shore, read when
+  `sf-elevation.bin.gz` and `native/assets/sf-decks-v1.json`; 1 arc-second DEM for the far shore, read when
   present): public domain (U.S. Government work). Credit: U.S. Geological
   Survey.
+- **OpenStreetMap contributors**. The closed movable road spans at Islais Creek use ODbL 1.0 way and node records. [Source versions and digests](native/eo-data/data/movable-road-spans.NOTICE.txt).
+- **OpenStreetMap contributors**. Connections between elevated parking aisles use shared
+  OSM nodes under ODbL 1.0. [Source versions and digests](native/eo-data/data/parking-junctions.NOTICE.txt).
+- **USGS 3DEP classified LiDAR**, CA_SanFrancisco_1_B23. Elevations for bridge roads, Saint Charles Avenue and its service drive
+  use classified bridge-deck and exposed ground returns. U.S. Geological Survey, public domain.
+  [Survey inputs and digests](native/eo-data/data/bridge-roads.NOTICE.txt).
+  The Golden Gate lamp stations and head heights use the same survey.
+  [Lamp survey and digests](native/eo-landmarks/data/golden-gate-lamps.NOTICE.txt). The concrete pylon crown measurements use the same public-domain survey. [Pylon survey and digests](native/eo-landmarks/data/golden-gate-pylons.NOTICE.txt).
 - **NOAA NCEI Continuously Updated Digital Elevation Model (CUDEM)**, 1/9
   arc-second topobathymetric tiles (seabed in `sf-elevation.bin.gz`): public
   domain (U.S. Government work). Cite as: Cooperative Institute for Research
@@ -128,6 +154,12 @@ carries its sources under `meta.sources`.
   Bay subset supplies offshore soundings beyond the detailed city grid. US
   Government public-domain data. [Dataset](https://doi.org/10.25921/fd45-gt74)
   and [build record](public/data/sf/sf-shelf.NOTICE.txt).
+- **U.S. Geological Survey geologic map databases** (`native/assets/sf-lithology-v1.json.gz`:
+  the map units read as rock classes): Blake, M.C., Jr., Graymer, R.W., and
+  Jones, D.L., 2000, MF-2337; Bonilla, M.G., 1998, Open-File Report 98-354;
+  Graymer, R.W., 2000, MF-2342. Public domain (U.S. Government work). Credit:
+  U.S. Geological Survey; no endorsement implied. Sources, digests and the
+  unit table are in the [build record](native/assets/sf-lithology-v1.NOTICE.txt).
 - **ESA WorldCover 10 m 2021 v200** (`sf-land-cover.bin.gz`): © ESA
   WorldCover project 2021 / Contains modified Copernicus Sentinel data
   (2021) processed by ESA WorldCover consortium. Zanaga, D. et al., 2022,
@@ -176,6 +208,27 @@ source, licence and SHA-256; the program refuses a file that does not match.
   James Ray Cock), `sandwichBoard` (Standing Chalkboard 01, ParzivalCG) and
   `utilityBox` (Utility Box 02, James Ray Cock). Source pages and digests are
   in `public/assets/street-props/street-props-v1.provenance.json`.
+- **Signal poles** (`public/assets/signal-poles/`): built in code by
+  `scripts/assets/build-signal-poles-v1.py` from the dimensions of Caltrans
+  Revised Standard Plans ES-7C and ES-7E and the CA MUTCD 2026 (push button
+  height, sign sizes; the R10-3e(CA) sign redrawn after Figure 2B-27(CA)); no
+  third-party geometry or image is used. The push button sign's legends are
+  Overpass glyphs (see [Fonts](#fonts)). Sources and digests:
+  `public/assets/signal-poles/signal-poles-v1.provenance.json`.
+- **Signal heads** (`public/assets/street-signals/`): built by
+  `scripts/assets/build-street-signals-v1.py` from two models by
+  Signalrenders, each licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
+  "[McCain Leotek 12 Inch Signal Set](https://sketchfab.com/3d-models/mccain-leotek-12-inch-signal-set-5d1544f61cc74047a2453d55791882ba)"
+  and "[McCain LED Pedestrian Signals Pack](https://sketchfab.com/3d-models/mccain-led-pedestrian-signals-pack-8c245f9477594831908c570c4f9a1385)".
+  Only their geometry is used. Modified: one head of each kept, rescaled to
+  the game's lens pitch and re-framed, a backplate with a yellow border added,
+  the housings rebaked and weathered. The photographs the models carry as lens
+  and face textures are not used: the lens and face images are drawn by the
+  script.
+  The sources' digests, what was changed and the built files' digests are in
+  `public/assets/street-signals/street-signals-v1.provenance.json`. The
+  licensor does not endorse this project.
 
 ### Not distributed
 
@@ -236,7 +289,19 @@ read from the folder `EO_SURVEY_ROOT` names.
 - **Overpass** font: see [Fonts](#fonts).
 - **USGS 3DEP 1 arc-second DEM** for the far shore: public domain.
   Manifest: `native/assets/dem-manifest.json`.
-- **USDA NAIP aerial imagery** for the roof survey tool: public domain.
+- **USDA NAIP aerial imagery** for the roof and yard survey tools: public domain.
+- **USGS 3DEP lidar point cloud** (project CA_SanFrancisco_B23, work unit
+  CA_SanFrancisco_1_B23, the Entwine copy on the AWS Open Data bucket
+  `usgs-lidar-public`) for the hill builder's tree cook (`external/lidar`,
+  fetched by `native/tools/fetch-lidar.py`; nothing of it is shipped) and
+  `--yard-lidar-trees`: public domain (U.S. Government work). Credit: U.S.
+  Geological Survey, 3D Elevation Program. Each area's files, URLs, retrieval
+  times and SHA-256 are listed in its `PROVENANCE.json`.
+- **DataSF "Parcels - Active and Retired"** (dataset acdm-wktn, City and
+  County of San Francisco): Open Data Commons Public Domain Dedication and
+  License (PDDL 1.0). The active parcels of one surveyed area, for the yard
+  survey tool and `--yard-detail`; the query, its URL, the date and the
+  sha-256 written beside them by `native/tools/fetch-parcels.py`.
 - **The Golden Gate survey set** (`EO_SURVEY_ROOT`; read by the
   `eo_farshore::survey` readers). Manifest, with path, bytes and SHA-256 per
   file and each group's attribution: `native/assets/survey-manifest.json`
@@ -254,6 +319,11 @@ read from the folder `EO_SURVEY_ROOT` names.
     image service: public domain (U.S. Government work,
     https://www.usa.gov/publicdomain/label/1.0/). Credit: Imagery: USDA NAIP,
     via the U.S. Geological Survey National Map.
+    The Marin landing terrain colours use these tiles. The source URLs and
+    file hashes are in [the Marin landing notice](native/assets/marin-landing.NOTICE.txt).
+    The headland and Vista Point surface atlas uses the same USDA NAIP survey.
+    Its [source tiles and attribution](native/assets/marin-headlands.NOTICE.txt) accompany the atlas.
+    The distant Marin hills use a wider National Map export. [Overview image provenance](native/assets/marin-overview.NOTICE.txt).
   - **Poly Haven** scanned rocks and plants (glTF models and their 2k
     texture maps): CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/);
     no attribution required, credited to Poly Haven (polyhaven.com).
@@ -352,3 +422,5 @@ references are listed in the provenance record. The shipped model includes
 [the original license](public/assets/ocean/reef-forms.LICENSE.txt) and a
 [provenance record](public/assets/ocean/reef-forms.provenance.json).
 [Upstream source at the pinned revision](https://github.com/Noniv/abyssal-garden/tree/a596354eff400d458bc2aeb9bdf5e0a9734b2bcf).
+
+The Bay Bridge Skyway light-standard measurements come from the USGS 3D Elevation Program, CA_SanFrancisco_1_B23, a United States Government work in the public domain. The register and generating inputs are identified in [the measurement notice](native/eo-data/data/skyway-lamps.NOTICE.txt).

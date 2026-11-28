@@ -286,6 +286,18 @@ pub fn built_ground_color() -> u32 {
     land_color(50, false)
 }
 
+/// A terrain vertex's colour at (wx, wz) where the ground tone has none
+/// (`colour_at` in the scene build: the land-cover class's tint, the cell's
+/// lidar flag), for the street ground drawn as terrain (street.rs).
+pub fn terrain_land_colour(land: Option<&LandCover>, g: &ElevationGrid, wx: f32, wz: f32) -> u32 {
+    let (ox, oz, cell) = (g.meta.origin_x as f32, g.meta.origin_z as f32, g.meta.cell_size as f32);
+    let cx = ((wx - ox) / cell).floor();
+    let cz = ((wz - oz) / cell).floor();
+    let lidar = cx >= 0.0 && cz >= 0.0 && (cx as usize) < g.meta.width && (cz as usize) < g.meta.height && g.is_lidar_ground_cell(cx as usize, cz as usize);
+    let class = land.map(|l| l.class_at(wx as f64, wz as f64)).unwrap_or(50);
+    land_color(class, !lidar)
+}
+
 /// Flat debug palette for terrain, keyed by WorldCover class. These are
 /// placeholder tones for a performance slice, not a look.
 fn land_color(class: u8, underwater: bool) -> u32 {
@@ -337,6 +349,28 @@ impl Builder {
         self.indices.extend_from_slice(local_indices);
         self.objects.push(GpuObject::new(kind, mn, mx, first_index, local_indices.len() as u32, base_vertex));
         Some(self.objects.len() - 1)
+    }
+
+    /// Emit the same excavated surface at driving and flight distances.
+    fn push_cut_ground(&mut self, mut verts: Vec<Vertex>, cuts: &[&eo_structures::TerrainCut], keep: &dyn Fn(usize, usize) -> bool, lod: bool, stats: &mut SceneStats) -> bool {
+        let sections: Vec<_> = cuts.iter().flat_map(|c| c.sections()).collect();
+        let side = TILE_CELLS + 1;
+        let fine = fit_tunnel_ground(&mut verts, side, 1, &sections, keep);
+        let coarse = fit_tunnel_ground(&mut verts, side, TERRAIN_COARSE_STRIDE, &sections, keep);
+        if let Some(o) = self.push(ObjectKind::Terrain, &verts, &fine) {
+            if lod {
+                let first = self.indices.len() as u32;
+                self.indices.extend_from_slice(&coarse);
+                self.objects[o].lod_role = LOD_TERRAIN;
+                self.objects[o].far_first_index = first;
+                self.objects[o].far_index_count = coarse.len() as u32;
+            }
+            stats.terrain_triangles += (fine.len() / 3) as u64;
+            stats.terrain_coarse_triangles += (coarse.len() / 3) as u64;
+            true
+        } else {
+            false
+        }
     }
 
     /// Append an object that reuses an index range already in the buffer
@@ -391,118 +425,16 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
     build_scene_with_cuts(inp, None)
 }
 
-/// An open cut (`canopy == false`) lowers the terrain vertices inside its
-/// ring and within this many terrain cells of it to its floor, so no
-/// terrain triangle reaching into the ring slopes across the cut's roadway
-/// (a grid vertex's triangles reach its neighbours one cell away). One cell
-/// is under the portal canopy's reach back over the bore
-/// (eo-structures `tunnel::PORTAL_OPEN_M`, 12 m), so no vertex over a
-/// covered bore past its canopy is lowered.
-pub const CUT_REACH_CELLS: f64 = 1.0;
+pub use eo_structures::cut_ground::{CUT_REACH_CELLS, terrain_cut_floor};
 
-fn seg_dist(a: [f64; 2], b: [f64; 2], x: f64, z: f64) -> f64 {
-    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
-    let l2 = dx * dx + dz * dz;
-    let t = if l2 > 1e-12 { (((x - a[0]) * dx + (z - a[1]) * dz) / l2).clamp(0.0, 1.0) } else { 0.0 };
-    (x - a[0] - t * dx).hypot(z - a[1] - t * dz)
+use eo_structures::cut_ground::GroundSection;
+
+/// Apply the excavation footprints to the high-resolution relief patches.
+fn tunnel_relief_cuts() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| !std::env::args().any(|a| a == "--no-tunnel-relief-cuts"))
 }
 
-/// (x, z) is inside `c`'s ring or within `reach` of it.
-fn near_cut(c: &eo_structures::TerrainCut, x: f64, z: f64, reach: f64) -> bool {
-    if x < c.min[0] - reach || x > c.max[0] + reach || z < c.min[1] - reach || z > c.max[1] + reach {
-        return false;
-    }
-    if c.contains(x, z) {
-        return true;
-    }
-    let n = c.ring.len();
-    (0..n).any(|i| seg_dist(c.ring[i], c.ring[(i + 1) % n], x, z) <= reach)
-}
-
-/// Whether (x, z) lies behind a portal's face (over or beside the bore,
-/// within `reach` of the face's ends): the face is a canopy ring's first and
-/// last points (eo-structures `tunnel::cuts`: the ring runs from the face back
-/// over the bore on one side and returns on the other).
-fn behind_portal(c: &eo_structures::TerrainCut, x: f64, z: f64, reach: f64) -> bool {
-    let n = c.ring.len();
-    if !c.canopy || n < 4 {
-        return false;
-    }
-    let (a, b) = (c.ring[0], c.ring[n - 1]);
-    let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
-    let (ax, az) = (b[0] - a[0], b[1] - a[1]);
-    let half = ax.hypot(az) / 2.0;
-    if half < 1e-6 {
-        return false;
-    }
-    let (ux, uz) = (ax / (2.0 * half), az / (2.0 * half));
-    // into the bore: the face's normal toward the ring's far end.
-    let far = c.ring[n / 2];
-    let (mut ix, mut iz) = (-uz, ux);
-    if (far[0] - mx) * ix + (far[1] - mz) * iz < 0.0 {
-        (ix, iz) = (-ix, -iz);
-    }
-    let (dx, dz) = (x - mx, z - mz);
-    dx * ix + dz * iz > 0.0 && (dx * ux + dz * uz).abs() <= half + reach
-}
-
-/// The floor a terrain vertex at (x, z) is lowered to: the lowest of the open
-/// cuts (`canopy == false`) holding it, or within `reach` of their ring and
-/// not behind a portal's face outside its canopy (a canopy in `cuts`: the
-/// hillside beside the bore keeps its height there; the headwall stands on
-/// the face).
-pub fn terrain_cut_floor(cuts: &[&eo_structures::TerrainCut], x: f64, z: f64, reach: f64) -> Option<f64> {
-    // (inside a canopy itself the ground is lowered: that part is left out, `minus_canopies`,
-    // and what stays round it slopes down to the headwall, never across the mouth.)
-    let behind = || cuts.iter().any(|c| behind_portal(c, x, z, reach)) && !cuts.iter().any(|c| c.canopy && c.contains(x, z));
-    cuts.iter().filter(|c| !c.canopy && (c.contains(x, z) || (near_cut(c, x, z, reach) && !behind()))).map(|c| c.floor).min_by(f64::total_cmp)
-}
-
-/// A convex polygon (x, y, z points; plan in x, z) cut by the line through
-/// `a`, `b`: the part on the side `sign` of it (+1 left of a to b, -1 right),
-/// heights interpolated along the cut edges (the pieces stay in the plane).
-fn clip_side(poly: &[[f64; 3]], a: [f64; 2], b: [f64; 2], sign: f64) -> Vec<[f64; 3]> {
-    let side = |p: &[f64; 3]| sign * ((b[0] - a[0]) * (p[2] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]));
-    let mut out = vec![];
-    for i in 0..poly.len() {
-        let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
-        let (sp, sq) = (side(&p), side(&q));
-        if sp >= 0.0 {
-            out.push(p);
-        }
-        if (sp >= 0.0) != (sq >= 0.0) {
-            let t = sp / (sp - sq);
-            out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t]);
-        }
-    }
-    out
-}
-
-/// A triangle less a convex polygon `ring` (plan): the convex pieces outside
-/// it (one per ring edge the triangle reaches past), heights in the
-/// triangle's plane. The triangle alone when it does not meet the ring.
-fn minus_convex(tri: [[f64; 3]; 3], ring: &[[f64; 2]]) -> Vec<Vec<[f64; 3]>> {
-    let n = ring.len();
-    let area: f64 = (0..n).map(|i| ring[i][0] * ring[(i + 1) % n][1] - ring[(i + 1) % n][0] * ring[i][1]).sum();
-    let inside = if area >= 0.0 { 1.0 } else { -1.0 }; // the ring's inside is left of its edges when it winds counter-clockwise
-    let mut rest: Vec<[f64; 3]> = tri.to_vec();
-    let mut pieces = vec![];
-    for i in 0..n {
-        let (a, b) = (ring[i], ring[(i + 1) % n]);
-        if (a[0] - b[0]).hypot(a[1] - b[1]) < 1e-9 {
-            continue;
-        }
-        let out = clip_side(&rest, a, b, -inside);
-        if out.len() >= 3 {
-            pieces.push(out);
-        }
-        rest = clip_side(&rest, a, b, inside);
-        if rest.len() < 3 {
-            return if pieces.len() == 1 && pieces[0].len() == 3 { vec![tri.to_vec()] } else { pieces };
-        }
-    }
-    pieces
-}
 
 /// One terrain tile's triangles (the shared topology at `stride` over
 /// `verts`) less the portals' canopies (`rings`, convex: eo-structures
@@ -514,7 +446,12 @@ fn minus_convex(tri: [[f64; 3]; 3], ring: &[[f64; 2]]) -> Vec<Vec<[f64; 3]>> {
 /// Only the cells `keep(x, z)` keeps are drawn (the cell's first vertex column
 /// and row; at `stride` a coarse cell goes with its first fine cell): the
 /// terrain detail's relief patches leave their cells out this way.
-fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[&[[f64; 2]]], keep: &dyn Fn(usize, usize) -> bool) -> Vec<u32> {
+fn fit_tunnel_ground(verts: &mut Vec<Vertex>, side: usize, stride: usize, sections: &[GroundSection], keep: &dyn Fn(usize, usize) -> bool) -> Vec<u32> {
+    const MIN_PIECE_AREA_M2: f64 = 1e-4;
+    // Adjacent sections share survey edges. Re-clipping a rounded GPU vertex
+    // against the next section can leave thin, disconnected pieces at a step.
+    let first_clipped = verts.len();
+    let mut clipped = Vec::<[f64; 3]>::new();
     let mut tris: Vec<[u32; 3]> = vec![];
     for z in (0..side - 1).step_by(stride) {
         for x in (0..side - 1).step_by(stride) {
@@ -529,30 +466,28 @@ fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[
             tris.push([i1, i2, i3]);
         }
     }
-    for ring in rings {
-        let (mut mn, mut mx) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
-        for q in ring.iter() {
-            mn = [mn[0].min(q[0]), mn[1].min(q[1])];
-            mx = [mx[0].max(q[0]), mx[1].max(q[1])];
-        }
+    for section in sections {
+        let (mn, mx) = (section.min, section.max);
         let mut next = Vec::with_capacity(tris.len());
         for t in tris {
-            let p = t.map(|i| verts[i as usize].pos.map(|v| v as f64));
+            let p = t.map(|i| {
+                let i = i as usize;
+                if i < first_clipped { verts[i].pos.map(f64::from) } else { clipped[i - first_clipped] }
+            });
             let (tx0, tx1) = (p[0][0].min(p[1][0]).min(p[2][0]), p[0][0].max(p[1][0]).max(p[2][0]));
             let (tz0, tz1) = (p[0][2].min(p[1][2]).min(p[2][2]), p[0][2].max(p[1][2]).max(p[2][2]));
             if tx1 < mn[0] || tx0 > mx[0] || tz1 < mn[1] || tz0 > mx[1] {
                 next.push(t);
                 continue;
             }
-            let pieces = minus_convex(p, ring);
-            if pieces.len() == 1 && pieces[0].len() == 3 && pieces[0].iter().zip(&p).all(|(a, b)| a == b) {
+            let Some(pieces) = section.shape(p) else {
                 next.push(t);
                 continue;
-            }
+            };
             for poly in pieces {
                 // (a sliver along an edge of no area is dropped.)
                 let area: f64 = (0..poly.len()).map(|i| poly[i][0] * poly[(i + 1) % poly.len()][2] - poly[(i + 1) % poly.len()][0] * poly[i][2]).sum::<f64>().abs() / 2.0;
-                if area < 1e-4 {
+                if area < MIN_PIECE_AREA_M2 {
                     continue;
                 }
                 let ids: Vec<u32> = poly
@@ -564,6 +499,7 @@ fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[
                         // the nearest corner's colour and normal.
                         let near = (0..3).min_by(|&a, &b| ((p[a][0] - q[0]).hypot(p[a][2] - q[2])).total_cmp(&(p[b][0] - q[0]).hypot(p[b][2] - q[2]))).unwrap();
                         let src = verts[t[near] as usize];
+                        clipped.push(*q);
                         verts.push(Vertex { pos: [q[0] as f32, q[1] as f32, q[2] as f32], ..src });
                         (verts.len() - 1) as u32
                     })
@@ -575,7 +511,18 @@ fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[
         }
         tris = next;
     }
-    tris.into_iter().flatten().collect()
+    if clipped.is_empty() {
+        return tris.into_iter().flatten().collect();
+    }
+    // A clipped fan can contain collinear points. Their packed coordinates
+    // can coincide or reverse the winding. Keep only top-facing terrain that
+    // survives at the same area precision as its clipped polygon.
+    tris.into_iter().filter(|t| {
+        if t.iter().all(|&i| (i as usize) < first_clipped) { return true; }
+        let [a, b, c] = t.map(|i| verts[i as usize].pos.map(f64::from));
+        let twice_area = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]);
+        twice_area >= 2.0 * MIN_PIECE_AREA_M2
+    }).flatten().collect()
 }
 
 /// The triangles of one terrain tile's grid (`side` x `side` vertices,
@@ -607,7 +554,7 @@ fn grid_without(side: usize, stride: usize, hole: &[bool]) -> Vec<u32> {
 /// `CUT_REACH_CELLS` of it (not behind a portal's face beside its canopy),
 /// is lowered to the cut's floor (its smooth normal from the lowered
 /// heights); the ground under a portal's canopy ring (`canopy == true`) is
-/// cut out exactly, at both levels (`minus_canopies`), so only the tiles with
+/// cut out exactly, at both levels (`fit_tunnel_ground`), so only the tiles with
 /// a canopy get their own vertices and index lists (the portal headwall's
 /// top and ends cover the hole from above). Tiles without a cut,
 /// and every tile with `cuts` None or a world without cuts (no `--tunnels`),
@@ -744,6 +691,8 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
         let class = inp.land.map(|l| l.class_at(wx as f64, wz as f64)).unwrap_or(50);
         inp.ground_tone.and_then(|f| f(wx, wz)).unwrap_or_else(|| land_color(class, !lidar))
     };
+    let landing = eo_landmarks::golden_gate::approach_finish().then(terrain_detail::marin_ground::Ground::load);
+    let lattice = terrain_detail::Lattice { ox: ox as f64, oz: oz as f64, cell: cell as f64, width: g.meta.width as i64, height: g.meta.height as i64 };
     let detail = if eo_landmarks::features::gg3_ground("terrain-detail") && inp.smooth_terrain {
         let street_tris: Vec<[[f32; 2]; 3]> = inp
             .street
@@ -764,7 +713,7 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
             .unwrap_or_default();
         let raw = |x: f64, z: f64| g.ground(x, z) as f32;
         let di = terrain_detail::Inputs {
-            lattice: terrain_detail::Lattice { ox: ox as f64, oz: oz as f64, cell: cell as f64, width: g.meta.width as i64, height: g.meta.height as i64 },
+            lattice,
             vertex_height: &vertex_height,
             raw_ground: &raw,
             colour: &colour_at,
@@ -777,6 +726,10 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
         terrain_detail::build(&di, materials.as_ref())
     } else {
         None
+    };
+    let detail = match &landing {
+        Some(ground) => Some(ground.patches(detail, lattice, &vertex_height, &colour_at)),
+        None => detail,
     };
     if let Some(d) = &detail {
         eprintln!(
@@ -817,7 +770,17 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
     // cell written last by the tile that holds it (the tiles keep all their vertices, the cells
     // under a patch included), not by a patch's 2 m vertices.
     if let Some(d) = &detail {
+        let cut_world = cuts.filter(|_| tunnel_relief_cuts());
         for p in &d.patches {
+            if let Some(world) = cut_world {
+                let lo = p.verts[0].pos;
+                let hi = p.verts[side * side - 1].pos;
+                let near = world.terrain_cuts_in([lo[0] as f64, lo[2] as f64], [hi[0] as f64, hi[2] as f64]);
+                if !near.is_empty() {
+                    b.push_cut_ground(p.verts.clone(), &near, &|_, _| true, inp.terrain_lod, &mut stats);
+                    continue;
+                }
+            }
             let o = b.push_shared(ObjectKind::Terrain, &p.verts, shared_first, shared_count);
             if inp.terrain_lod {
                 b.objects[o].lod_role = LOD_TERRAIN;
@@ -894,14 +857,15 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
                 if let Some(w) = terrain_detail::sand_slope_byte(wx as f64, wz as f64, vert.color) {
                     vert.normal |= (w as u8 as u32) << 24;
                 }
+                if let Some(ground) = &landing { ground.apply(&mut vert); }
                 verts.push(vert);
             }
         }
-        // the portals' canopies over the tile's grid (left out of it); empty: none.
+        // Fit the tile's terrain to each open approach and remove its covered portals.
         let (x0, x1) = (verts[0].pos[0] as f64, verts[side * side - 1].pos[0] as f64);
         let (z0, z1) = (verts[0].pos[2] as f64, verts[side * side - 1].pos[2] as f64);
-        let canopies: Vec<&eo_structures::TerrainCut> = near.iter().copied().filter(|c| c.canopy && c.max[0] >= x0 && c.min[0] <= x1 && c.max[1] >= z0 && c.min[1] <= z1).collect();
-        (verts, any_land, canopies)
+        let cuts: Vec<&eo_structures::TerrainCut> = near.iter().copied().filter(|c| c.max[0] >= x0 && c.min[0] <= x1 && c.max[1] >= z0 && c.min[1] <= z1).collect();
+        (verts, any_land, cuts)
     };
     let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
     let all: Vec<(usize, usize)> = (0..tiles_z).flat_map(|tz| (0..tiles_x).map(move |tx| (tx, tz))).collect();
@@ -910,30 +874,17 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
         let hs: Vec<_> = all.chunks(chunk).map(|c| s.spawn(move || c.iter().map(|&(tx, tz)| tile_verts(tx, tz)).collect::<Vec<_>>())).collect();
         hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
     });
-    for (&(tx, tz), (tv, any_land, canopies)) in all.iter().zip(built) {
-        let mut verts = tv;
+    for (&(tx, tz), (tv, any_land, cuts)) in all.iter().zip(built) {
+        let verts = tv;
         // (the terrain detail) the relief patches over this tile: their cells are left out of it at both levels.
         let holed = detail.as_ref().filter(|d| (0..TILE_CELLS as i64).any(|k| (0..TILE_CELLS as i64).step_by(terrain_detail::PATCH_CELLS as usize).any(|j| d.covers_quad((tx * TILE_CELLS) as i64 + j, (tz * TILE_CELLS) as i64 + k))));
-        if !canopies.is_empty() || holed.is_some() {
-            // a portal's canopy or relief patches over this tile: its own index lists (and, under a
-            // canopy, vertices), the ground under the canopy and the patches' cells left out at both levels.
+        if !cuts.is_empty() || holed.is_some() {
+            // Both detail levels follow the road cuts and leave out the portal canopies and relief patches.
             let (cx0, cz0) = ((tx * TILE_CELLS) as i64, (tz * TILE_CELLS) as i64);
             let keep = |x: usize, z: usize| holed.is_none_or(|d| !d.covers_quad(cx0 + x as i64, cz0 + z as i64));
-            let rings: Vec<&[[f64; 2]]> = canopies.iter().map(|c| c.ring.as_slice()).collect();
-            let fine = minus_canopies(&mut verts, side, 1, &rings, &keep);
-            let coarse = minus_canopies(&mut verts, side, TERRAIN_COARSE_STRIDE, &rings, &keep);
-            if let Some(o) = b.push(ObjectKind::Terrain, &verts, &fine) {
-                if inp.terrain_lod {
-                    let first = b.indices.len() as u32;
-                    b.indices.extend_from_slice(&coarse);
-                    b.objects[o].lod_role = LOD_TERRAIN;
-                    b.objects[o].far_first_index = first;
-                    b.objects[o].far_index_count = coarse.len() as u32;
-                }
+            if b.push_cut_ground(verts, &cuts, &keep, inp.terrain_lod, &mut stats) {
                 stats.terrain_tiles += 1;
-                stats.terrain_triangles += (fine.len() / 3) as u64;
-                stats.terrain_coarse_triangles += (coarse.len() / 3) as u64;
-                if !canopies.is_empty() {
+                if !cuts.is_empty() {
                     stats.terrain_cut_tiles += 1;
                 }
             }
@@ -1131,6 +1082,13 @@ mod tests {
     use super::*;
     use eo_structures::TerrainCut;
 
+    fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[&[[f64; 2]]], keep: &dyn Fn(usize, usize) -> bool) -> Vec<u32> {
+        let sections: Vec<_> = rings.iter().flat_map(|ring| {
+            cut(ring.to_vec(), 0.0, true).sections().collect::<Vec<_>>()
+        }).collect();
+        fit_tunnel_ground(verts, side, stride, &sections, keep)
+    }
+
     fn cut(ring: Vec<[f64; 2]>, floor: f64, canopy: bool) -> TerrainCut {
         let (mut mn, mut mx) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
         for q in &ring {
@@ -1211,7 +1169,7 @@ mod tests {
             // nothing left inside it (but slivers along its edges, of no area).
             for t in idx.chunks(3) {
                 let m = t.iter().fold([0.0f64; 2], |a, &i| [a[0] + verts[i as usize].pos[0] as f64 / 3.0, a[1] + verts[i as usize].pos[2] as f64 / 3.0]);
-                let edge = (0..ring.len()).map(|i| seg_dist(ring[i], ring[(i + 1) % ring.len()], m[0], m[1])).fold(f64::INFINITY, f64::min);
+                let edge = (0..ring.len()).map(|i| eo_structures::cut_ground::distance_to_segment(ring[i], ring[(i + 1) % ring.len()], m[0], m[1])).fold(f64::INFINITY, f64::min);
                 assert!(edge < 1e-3 || !eo_street::point_in_ring(m[0], m[1], &ring), "a piece left under the canopy at {m:?}");
             }
         }

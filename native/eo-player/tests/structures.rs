@@ -537,7 +537,11 @@ fn cars_on_the_bay_bridge_decks_and_the_golden_gate_stay_on_their_own_deck() {
     let landmark = |d: LandmarkDeck| sw.chains().iter().find(|ch| ch.landmark == Some(d) && ch.is_built()).unwrap_or_else(|| panic!("{d:?}"));
     let upper = landmark(LandmarkDeck::BayBridgeUpper);
     let lower = landmark(LandmarkDeck::BayBridgeLower);
-    for ch in [upper, lower, landmark(LandmarkDeck::GoldenGate)] {
+    let east = |way: &str| sw.chains().iter()
+        .filter(|ch| ch.is_built() && ch.ways().contains(&way))
+        .max_by(|a, b| a.length().total_cmp(&b.length()))
+        .expect("built east-span carriageway");
+    for ch in [upper, lower, landmark(LandmarkDeck::GoldenGate), east("236348361"), east("237731428")] {
         // over the water, 40 % along, driven 250 m along the centreline.
         let s0 = ch.length() * 0.4;
         let path: Vec<[f64; 2]> = (0..=60).map(|k| ch.frame(s0 + 5.0 * k as f64)).map(|f| [f.x, f.z]).collect();

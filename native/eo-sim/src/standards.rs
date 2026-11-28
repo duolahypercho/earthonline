@@ -207,6 +207,10 @@ pub struct StreetDims {
     pub crosswalk_m: f64,
     pub limit_line_setback_m: f64,
     pub limit_line_width_m: f64,
+    /// California Driver's Handbook guidance for a moving vehicle.
+    pub following_time_gap_s: f64,
+    /// Enough vertical clearance to keep two traffic streams independent.
+    pub surface_clearance_m: f64,
 }
 
 impl StreetDims {
@@ -224,6 +228,8 @@ impl StreetDims {
             crosswalk_m: s.metric_key("crosswalk-min-width", "general")?,
             limit_line_setback_m: s.metric_key("limit-line-setback-from-crosswalk", "minFromCrosswalk")?,
             limit_line_width_m: s.metric_key("limit-line-width", "max")?,
+            following_time_gap_s: s.metric("following-time-gap")?,
+            surface_clearance_m: s.metric("structure-vertical-clearance-local")?,
         })
     }
 

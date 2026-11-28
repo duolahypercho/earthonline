@@ -1,0 +1,8 @@
+© OpenStreetMap contributors, ODbL 1.0.
+https://www.openstreetmap.org/copyright
+Movable road leaves, with their original directions and tags. Coordinates use the shipped SF projection and 0.1 m precision.
+https://api.openstreetmap.org/api/0.6/ways.json?ways=667768321v4,667768323v4,675892536v7
+SHA-256 77cd2934b3ba8026b51ac16fdedf9f7b6bc4c50aa43fe3b6aedd17d807e0e80b
+https://api.openstreetmap.org/api/0.6/nodes.json?nodes=6252543988v1,6252543989v1,6252543990v1,6252543991v1,6252543992v2,11733512894v1
+SHA-256 d30f3fbffabcc46a7ca1086ee00e6dadcb25709a543cdb4a779be1370a4681df
+Output SHA-256 d5727160880dee5abbcf6e24475243f4d2771033a5aaec7ae72b0ae9e3277df3

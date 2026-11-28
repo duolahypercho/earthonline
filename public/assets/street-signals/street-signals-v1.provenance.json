@@ -1,0 +1,207 @@
+{
+  "version": "street-signals-v1",
+  "note": "San Francisco signal heads: the geometry of two published models (sources), licensed CC BY 4.0, modified as each row says (cut to one head, rescaled, re-framed, a backplate added, rebaked and weathered). The photographs the sources carry as lens and face textures are not used (the pedestrian ones are Flickr photographs under CC BY-NC 2.0, the others have no record of who took them): the lens and face images are drawn by the script. Built by the script below in Blender; frames: glTF Y up; signalHead origin at the middle lens centre, lenses toward +Z; pedHead origin at the face centre, face toward +Z.",
+  "script": "scripts/assets/build-street-signals-v1.py",
+  "scriptSha256": "fce5e88d0e95b5d54f4e9aa97db4144c9bc916eed92fe7268c534567bf916c59",
+  "blender": "4.5.3 LTS",
+  "sources": {
+    "mccainLeotek12": {
+      "uid": "5d1544f61cc74047a2453d55791882ba",
+      "title": "McCain Leotek 12 Inch Signal Set",
+      "author": "Signalrenders",
+      "authorUrl": "https://sketchfab.com/Signalrenders",
+      "url": "https://sketchfab.com/3d-models/mccain-leotek-12-inch-signal-set-5d1544f61cc74047a2453d55791882ba",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "file": "model.glb (Sketchfab download, glTF binary)",
+      "sha256": "0ad03a2247621b0b60759db9efe24a0c745a321744e411e1ac47c11e5075cea7",
+      "bytes": 2555948,
+      "used": "geometry only; its lens textures (photographs, no record of who took them) are not used"
+    },
+    "mccainPed16": {
+      "uid": "8c245f9477594831908c570c4f9a1385",
+      "title": "McCain LED Pedestrian Signals Pack",
+      "author": "Signalrenders",
+      "authorUrl": "https://sketchfab.com/Signalrenders",
+      "url": "https://sketchfab.com/3d-models/mccain-led-pedestrian-signals-pack-8c245f9477594831908c570c4f9a1385",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "file": "model.glb (Sketchfab download, glTF binary)",
+      "sha256": "5aad569ac424ba8881d19d28d23727e695bfdfce4745110b9a5b509629f7794c",
+      "bytes": 2267292,
+      "used": "geometry only; its face textures are not used (the lit ones are Flickr photographs by Citylight74 under CC BY-NC 2.0, e.g. https://www.flickr.com/photos/123654821@N05/35599766721/; the unlit one has no record of who took it)"
+    }
+  },
+  "attribution": [
+    "\"McCain Leotek 12 Inch Signal Set\" by Signalrenders (https://sketchfab.com/3d-models/mccain-leotek-12-inch-signal-set-5d1544f61cc74047a2453d55791882ba), licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); modified",
+    "\"McCain LED Pedestrian Signals Pack\" by Signalrenders (https://sketchfab.com/3d-models/mccain-led-pedestrian-signals-pack-8c245f9477594831908c570c4f9a1385), licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); modified"
+  ],
+  "assets": {
+    "signalHead": {
+      "path": "public/assets/street-signals/signalHead-v1.glb",
+      "sha256": "124f56c71d9732e9604ebffa77e455e285115186adaed40d9566aa95934b1675",
+      "bytes": 972676,
+      "triangles": 5712,
+      "boundsM": {
+        "min": [
+          -0.3011,
+          -0.6172,
+          -0.2335
+        ],
+        "max": [
+          0.3011,
+          0.6172,
+          0.2613
+        ]
+      },
+      "dimensionsM": [
+        0.6022,
+        1.2344,
+        0.4948
+      ],
+      "materials": [
+        "body",
+        "lens_red",
+        "lens_amber",
+        "lens_green"
+      ],
+      "lensPitchM": 0.35,
+      "lensRadiusM": 0.1455,
+      "lensFaceZ": 0.023,
+      "lensCentres": {
+        "lens_red": [
+          0.0,
+          0.35,
+          0.0
+        ],
+        "lens_amber": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "lens_green": [
+          0.0,
+          -0.35,
+          0.0
+        ]
+      },
+      "lensDomeSagM": 0.0272,
+      "visorInsideRadiusM": 0.147,
+      "visorDoorZM": -0.0338,
+      "visorMouthZM": 0.2613,
+      "visorCutMouthOfRadius": 0.5,
+      "ringSplit": 1,
+      "scaleFromSource": 0.95629,
+      "backplateBorderIn": 2.0,
+      "backplateBackZM": -0.066,
+      "backplateFrontZM": -0.06,
+      "source": "mccainLeotek12",
+      "sourceObjects": [
+        "Cylinder.857 / 12inch_Leotek_green_ON",
+        "Cylinder.857 / 12inchleotekredoff",
+        "Cylinder.857 / Aluminum.004",
+        "Cylinder.857 / Material.105",
+        "Cylinder.857 / inner_visor.008",
+        "Cylinder.857 / rubber_rim.005",
+        "Cylinder.857 / wingnut.006"
+      ],
+      "changes": "one head of the set kept (its housing, visors, gaskets and wing nuts), scaled to the game lens pitch and moved to the game frame; a louvred backplate with a 2 in yellow border added (closed behind the housing); the flat materials replaced by a baked, weathered albedo and metallic-roughness atlas; the lenses re-mapped 0..1 across each lens and their photographs dropped (the drawn lens image in their place); the lenses' domes deepened and their faces turned out of the head (the source's face into it); the visors' and the lenses' rings rounded (each segment split, the new points on the circle); the tunnel visors cut away underneath"
+    },
+    "pedHead": {
+      "path": "public/assets/street-signals/pedHead-v1.glb",
+      "sha256": "da107c6f498f1ddc16895c583a132ff3dbfac322faf77d6e46586bec35146d0a",
+      "bytes": 460080,
+      "triangles": 2420,
+      "boundsM": {
+        "min": [
+          -0.2635,
+          -0.2588,
+          -0.209
+        ],
+        "max": [
+          0.2635,
+          0.261,
+          0.2193
+        ]
+      },
+      "dimensionsM": [
+        0.5269,
+        0.5198,
+        0.4283
+      ],
+      "materials": [
+        "body",
+        "ped_face"
+      ],
+      "faceSizeM": [
+        0.4744,
+        0.4064
+      ],
+      "faceZ": -0.0,
+      "source": "mccainPed16",
+      "sourceObjects": [
+        "Circle.003 / MCCAIN_16_PED_SIGNAL",
+        "Circle.003 / Ped_OFF"
+      ],
+      "changes": "one hooded head of the pack kept (housing and face) and moved to the game frame; the flat housing material replaced by a baked, weathered albedo and metallic-roughness atlas; the face re-mapped 0..1 across it and its photographs dropped (the drawn face image, under an egg-crate lattice, in their place)"
+    }
+  },
+  "images": {
+    "signalLenses": {
+      "path": "public/assets/street-signals/signal-lenses-v1.png",
+      "sha256": "641b70e15bccfd37627ad8915bf00653cace1ad0c7d94239130eac112c86d375",
+      "bytes": 249844,
+      "px": 512,
+      "cellInset": 0.02,
+      "cells": {
+        "red_off": [
+          0,
+          0
+        ],
+        "amber_off": [
+          1,
+          0
+        ],
+        "green_off": [
+          0,
+          1
+        ],
+        "lit_pattern_rgb": [
+          1,
+          1
+        ]
+      },
+      "source": "drawn by this script (lens_images): no photograph",
+      "ledsAcross": 7.5,
+      "lensletsAcross": [
+        44,
+        46,
+        42
+      ]
+    },
+    "pedFaces": {
+      "path": "public/assets/street-signals/ped-faces-v1.png",
+      "sha256": "04c7dbfe32fd3c822354704fff021f185a84ff528c29a2185d5c02276322c5fb",
+      "bytes": 98358,
+      "px": 512,
+      "cellInset": 0.02,
+      "cells": {
+        "face_off": [
+          0,
+          0
+        ],
+        "lit_masks_rg": [
+          1,
+          0
+        ]
+      },
+      "masks": {
+        "R": "hand",
+        "G": "walking person"
+      },
+      "source": "drawn by this script (ped_images): no photograph",
+      "ledPitchM": 0.0075,
+      "maskCoverOfSymbol": 0.5716
+    }
+  }
+}

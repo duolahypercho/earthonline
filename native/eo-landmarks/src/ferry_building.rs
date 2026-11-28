@@ -662,9 +662,12 @@ impl B {
 
     /// The glazing of a window with the third pass: one pane per light (the
     /// mullions' quarter columns and their rails; the fanlight's three sectors
-    /// between its radial bars), each its own room tone or a drawn blind.
+    /// between its radial bars), each its own room tone or drawn linen blind,
+    /// plus subtle per-pane hand-set glass tilt so sky and cloud reflections break
+    /// up realistically across the arched lights instead of reading as a flat black sheet.
     fn glass_lights(&mut self, w: &Wall, o: &Op, d: f64, rl: &Relief) {
         let want = self.wn(w, 1.0);
+        let wt = self.wt(w, 1.0);
         let base = self.tone(F::Glass);
         let c = self.p(w, o.s, o.spring, 0.0);
         let pick = |i: i64| -> Rgb {
@@ -676,16 +679,25 @@ impl B {
                 mul(base, rl.light_tone_spread[0] + (rl.light_tone_spread[1] - rl.light_tone_spread[0]) * t)
             }
         };
+        let pane_nrm = |i: i64| -> V3 {
+            let tx = (h01(c[0], c[2], 521 + 7 * i) - 0.5) * 0.04;
+            let ty = (h01(c[0], c[2], 643 + 11 * i) - 0.5) * 0.04 + 0.015;
+            let nx = want[0] + wt[0] * tx;
+            let ny = want[1] + ty;
+            let nz = want[2] + wt[2] * tx;
+            let l = (nx * nx + ny * ny + nz * nz).sqrt().max(1e-9);
+            [nx / l, ny / l, nz / l]
+        };
         let cols = [o.l(), o.s - o.w / 4.0, o.s, o.s + o.w / 4.0, o.rt()];
         let n = ((o.spring - o.sill) / 0.95).round().max(1.0) as usize;
-        let mut quads: Vec<([V3; 4], Rgb)> = Vec::new();
-        let mut tris: Vec<([V3; 3], Rgb)> = Vec::new();
+        let mut quads: Vec<([V3; 4], Rgb, V3)> = Vec::new();
+        let mut tris: Vec<([V3; 3], Rgb, V3)> = Vec::new();
         let mut i = 0;
         for r in 0..n {
             let (y0, y1) = (o.sill + (o.spring - o.sill) * r as f64 / n as f64, o.sill + (o.spring - o.sill) * (r + 1) as f64 / n as f64);
             for cc in cols.windows(2) {
                 let q = [self.p(w, cc[0], y0, d), self.p(w, cc[1], y0, d), self.p(w, cc[1], y1, d), self.p(w, cc[0], y1, d)];
-                quads.push((q, pick(i)));
+                quads.push((q, pick(i), pane_nrm(i)));
                 i += 1;
             }
         }
@@ -695,19 +707,30 @@ impl B {
                 // the radial bars at 45 and 135 degrees split the fan in three.
                 let sector = if 4 * k < ARC { 0 } else if 4 * k < 3 * ARC { 1 } else { 2 };
                 let col = pick(100 + sector);
+                let nrm = pane_nrm(100 + sector);
                 let at = |b: &B, j: usize| {
                     let th = PI - PI * j as f64 / ARC as f64;
                     b.p(w, o.s + o.r() * th.cos(), o.spring + o.r() * th.sin(), d)
                 };
-                tris.push(([ctr, at(self, k), at(self, k + 1)], col));
+                tris.push(([ctr, at(self, k), at(self, k + 1)], col, nrm));
             }
         }
         let m = self.mesh(F::Glass);
-        for (q, col) in quads {
-            quad(m, q[0], q[1], q[2], q[3], col, want);
+        for (q, col, nrm) in quads {
+            let gn = cross(sub(q[1], q[0]), sub(q[3], q[0]));
+            let col = sky(col, want);
+            if dot(gn, want) >= 0.0 {
+                m.quad_n(q[0], q[1], q[2], q[3], col, nrm);
+            } else {
+                m.quad_n(q[3], q[2], q[1], q[0], col, nrm);
+            }
         }
-        for (t, col) in tris {
-            tri(m, t[0], t[1], t[2], col, want);
+        for (t, col, nrm) in tris {
+            let gn = cross(sub(t[1], t[0]), sub(t[2], t[0]));
+            let col = sky(col, want);
+            let (a, b, c) = if dot(gn, want) >= 0.0 { (t[0], t[1], t[2]) } else { (t[0], t[2], t[1]) };
+            let (ia, ib, ic) = (m.vertex(a, nrm, col), m.vertex(b, nrm, col), m.vertex(c, nrm, col));
+            m.tri_idx(ia, ib, ic);
         }
     }
 
@@ -1228,7 +1251,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             b.panel(F::Stone, &w, [g0, g1], [0.0, ceil], -wall_t, -1.0, &arcade, 0.6);
             // the ceiling
             {
-                let col = mul(b.tone(F::Stone), 0.75);
+                let col = mul(b.tone(F::Stone), 0.55);
                 let q = [b.p(&w, g0, ceil, -wall_t), b.p(&w, g1, ceil, -wall_t), b.p(&w, g1, ceil, back_d), b.p(&w, g0, ceil, back_d)];
                 quad(b.mesh(F::Stone), q[0], q[1], q[2], q[3], col, [0.0, -1.0, 0.0]);
             }
@@ -1513,7 +1536,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
                 let a = 2.0 * PI * k as f64 / 12.0;
                 let (sx, sy) = (a.sin(), a.cos());
                 let (r0, r1) = (dial_r - 0.75, dial_r - 0.2);
-                let (p0, p1) = (b.p(&w, cs + sx * r0, dial_y + sy * r0, 0.15), b.p(&w, cs + sx * r1, dial_y + sy * r1, 0.15));
+                let (p0, p1) = (b.p(&w, cs + sx * r0, dial_y + sy * r0, 0.175), b.p(&w, cs + sx * r1, dial_y + sy * r1, 0.175));
                 let up = b.wn(&w, 1.0);
                 let col = b.tone(F::Frame);
                 b.mesh(F::Frame).beam_up(p0, p1, if k % 3 == 0 { 0.32 } else { 0.18 }, 0.05, col, Some(up));
@@ -1521,7 +1544,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             let hour = inf.clock_hour.rem_euclid(12.0);
             for (len_m, wdt, ang) in [(t.clock.hour_hand_m, 0.3, hour / 12.0 * 2.0 * PI), (t.clock.minute_hand_m.min(dial_r - 0.15), 0.2, (inf.clock_hour.fract()) * 2.0 * PI)] {
                 let (sx, sy) = (ang.sin(), ang.cos());
-                let (p0, p1) = (b.p(&w, cs - sx * 0.35, dial_y - sy * 0.35, 0.2), b.p(&w, cs + sx * len_m, dial_y + sy * len_m, 0.2));
+                let (p0, p1) = (b.p(&w, cs - sx * 0.35, dial_y - sy * 0.35, 0.225), b.p(&w, cs + sx * len_m, dial_y + sy * len_m, 0.225));
                 let up = b.wn(&w, 1.0);
                 let col = b.tone(F::Frame);
                 b.mesh(F::Frame).beam_up(p0, p1, wdt, 0.06, col, Some(up));

@@ -21,6 +21,11 @@
 //! since decks, ramps and tunnels change the collision world and the
 //! traffic. The byte is the last field before the padding, so a hello
 //! written without it reads as 0, "none" (the setting every world had before).
+//! Its `STREET_TAPERS` bit carries `--street-tapers` the same way: the street's
+//! tapered kerbs are part of the collision world; `STREET_BIKEWAYS`
+//! `--bikeways` (a bike lane's raised island is), `STREET_SURVEY_PARKING`
+//! `--survey-parking` (the kerbs it moves) and `STREET_MIDBLOCK`
+//! `--midblock-crossings` (the kerb ramps it cuts).
 //!
 //! The request and response are padded so a spoofed source address cannot
 //! make the server send more bytes than it received (no amplification); the
@@ -43,7 +48,15 @@ pub const MAGIC: u32 = 0x454F_4E01;
 /// and more state flags; emote and fast-travel commands, the player roster.
 /// 4: inputs carry 16 button bits (the lift's interact tap) and the player
 /// state a landmark lift ride.
-pub const PROTOCOL_VERSION: u16 = 4;
+/// 5: predictions include the selected vehicle, its payload and moving support velocity.
+/// The reliable-count byte marks a valid ack, including the first packet (seq 0).
+/// 6: accept and correction carry the input sequence's driving weather timeline.
+/// 7: explicit Drive/Reverse range in inputs and vehicle checkpoints.
+/// 8: the coastal promenades and adjoining stairs are authoritative support.
+/// 9: tile loads preserve simulation time and unoccupied cars share the weather.
+/// 10: car interactions respect intervening floors and a jump resolves ceiling contacts.
+/// 11: a standing rider follows the vehicle roof and carries its velocity into a fall.
+pub const PROTOCOL_VERSION: u16 = 11;
 
 /// this process's ground-plan scale in parts per million (the
 /// handshake's ground plan; 1,250,000 by default). hills: when the ground
@@ -61,17 +74,31 @@ pub fn ground_scale_ppm() -> u32 {
 }
 
 /// A world's grade-separated roads as the handshake carries them: 0 none,
-/// `STRUCTURES_ON` with `--structures`, plus `STRUCTURES_TUNNELS` with `--tunnels`.
+/// `STRUCTURES_ON` with `--structures`, plus `STRUCTURES_TUNNELS` with `--tunnels`;
+/// plus `STREET_TAPERS` with `--street-tapers` (this process's street worlds,
+/// eo-street `options::tapers`: the tapered kerbs change the collision world).
 pub fn structures_code(s: Option<eo_structures::StructureOptions>) -> u8 {
-    match s {
-        None => 0,
-        Some(o) => STRUCTURES_ON | if o.tunnels { STRUCTURES_TUNNELS } else { 0 },
-    }
+    let tapers = if eo_street::options::tapers() { STREET_TAPERS } else { 0 };
+    let bikes = if eo_street::options::bikeways() { STREET_BIKEWAYS } else { 0 };
+    let parking = if eo_street::options::survey_parking() { STREET_SURVEY_PARKING } else { 0 };
+    let mid = if eo_street::options::midblock() { STREET_MIDBLOCK } else { 0 };
+    tapers
+        | bikes
+        | parking
+        | mid
+        | match s {
+            None => 0,
+            Some(o) => STRUCTURES_ON | if o.tunnels { STRUCTURES_TUNNELS } else { 0 },
+        }
 }
 
 /// `structures_code` bits.
 pub const STRUCTURES_ON: u8 = 1;
 pub const STRUCTURES_TUNNELS: u8 = 2;
+pub const STREET_TAPERS: u8 = 4;
+pub const STREET_BIKEWAYS: u8 = 8;
+pub const STREET_SURVEY_PARKING: u8 = 16;
+pub const STREET_MIDBLOCK: u8 = 32;
 
 /// A `structures_code` as the switches that give it, for messages.
 pub fn structures_switches(code: u8) -> &'static str {
@@ -79,6 +106,10 @@ pub fn structures_switches(code: u8) -> &'static str {
         0 => "no --structures",
         STRUCTURES_ON => "--structures",
         c if c == STRUCTURES_ON | STRUCTURES_TUNNELS => "--structures --tunnels",
+        STREET_TAPERS => "no --structures, --street-tapers",
+        c if c == STRUCTURES_ON | STREET_TAPERS => "--structures --street-tapers",
+        c if c == STRUCTURES_ON | STRUCTURES_TUNNELS | STREET_TAPERS => "--structures --tunnels --street-tapers",
+        c if c & (STREET_BIKEWAYS | STREET_SURVEY_PARKING | STREET_MIDBLOCK) != 0 => "a setting with --bikeways, --survey-parking or --midblock-crossings (compare --structures, --tunnels, --street-tapers, --bikeways, --survey-parking, --midblock-crossings)",
         _ => "an unknown structures setting",
     }
 }
@@ -155,6 +186,7 @@ pub struct Resume {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Hello {
+    pub vehicle: eo_player::vehicle::VehicleConfig,
     pub client_salt: u64,
     pub version: u16,
     /// the sender's ground-plan scale, parts per million (`ground_scale_ppm`).
@@ -200,6 +232,7 @@ impl Hello {
             None => out.put_u8(0),
         }
         out.put_u8(self.structures);
+        crate::wire::put_vehicle_config(out, self.vehicle);
         if out.len() < REQUEST_PAD {
             out.resize(REQUEST_PAD, 0);
         }
@@ -216,7 +249,8 @@ impl Hello {
         let spawn = if f & 1 != 0 { Some(SpawnHint { x: r.f32()?, z: r.f32()?, yaw: r.f32()?, driving: f & 2 != 0 }) } else { None };
         let resume = if r.u8()? != 0 { Some(Resume { player_id: r.u32()?, key: r.u64()? }) } else { None };
         let structures = r.u8()?;
-        Ok(Hello { client_salt, version, ground, structures, token, spawn, resume, server_salt, cookie })
+        let vehicle = if r.remaining() == 0 { Default::default() } else { crate::wire::get_vehicle_config(r)? };
+        Ok(Hello { vehicle, client_salt, version, ground, structures, token, spawn, resume, server_salt, cookie })
     }
 }
 
@@ -249,6 +283,7 @@ pub struct Accept {
     pub server_tick: u32,
     /// The input sequence the player's state was taken after (the next input is this + 1).
     pub input_seq: u32,
+    pub weather: crate::weather::WeatherEpoch,
     /// The player's whole state (`wire::write_player_state`) and where its cars were spawned.
     pub state: Vec<u8>,
     pub car_spawns: Vec<[f32; 3]>,
@@ -265,6 +300,7 @@ impl Accept {
         out.put_u8(self.snapshot_hz);
         out.put_u32(self.server_tick);
         out.put_u32(self.input_seq);
+        out.extend_from_slice(&self.weather.bytes());
         out.put_u8(self.resumed as u8);
         out.put_u8(self.car_spawns.len() as u8);
         for c in &self.car_spawns {
@@ -283,6 +319,7 @@ impl Accept {
         let snapshot_hz = r.u8()?;
         let server_tick = r.u32()?;
         let input_seq = r.u32()?;
+        let weather = crate::weather::WeatherEpoch::read(r.take(crate::weather::WeatherEpoch::BYTES)?)?;
         let resumed = r.u8()? != 0;
         let n = r.u8()? as usize;
         let mut car_spawns = vec![];
@@ -291,7 +328,7 @@ impl Accept {
         }
         let len = r.u16()? as usize;
         let state = r.take(len)?.to_vec();
-        Ok(Accept { connection, player_id, resume_key, tick_hz, snapshot_hz, server_tick, input_seq, state, car_spawns, resumed })
+        Ok(Accept { connection, player_id, resume_key, tick_hz, snapshot_hz, server_tick, input_seq, weather, state, car_spawns, resumed })
     }
 }
 
@@ -434,6 +471,7 @@ mod tests {
     fn hello(structures: u8) -> Hello {
         Hello {
             client_salt: 0x1234_5678_9abc_def0,
+            vehicle: Default::default(),
             version: PROTOCOL_VERSION,
             ground: 1_250_000,
             structures,
@@ -443,6 +481,13 @@ mod tests {
             server_salt: 11,
             cookie: 22,
         }
+    }
+
+    #[test]
+    fn street_tapers_bit_names_its_switch() {
+        assert_eq!(structures_switches(STRUCTURES_ON | STREET_TAPERS), "--structures --street-tapers");
+        assert_eq!(structures_switches(STREET_TAPERS), "no --structures, --street-tapers");
+        assert_eq!(structures_switches(STRUCTURES_ON | STRUCTURES_TUNNELS | STREET_TAPERS), "--structures --tunnels --street-tapers");
     }
 
     #[test]

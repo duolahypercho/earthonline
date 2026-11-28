@@ -4,7 +4,7 @@
 
 use crate::classify::Classified;
 use crate::elevation::{trim_profile_d, Plan, PartArgs};
-use crate::frame::{Edge, Frame};
+use crate::frame::{Basis, Edge, Frame, P2};
 use crate::js::*;
 use crate::rng::{hash_seed, js_num, Rng};
 
@@ -100,7 +100,41 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     } else {
         J::Null
     };
-    json!({
+    // On SF residential hillsides (Russian Hill, Nob Hill, North Beach), a realistic share of
+    // 2-4 storey apartment houses carry pitched gabled roofs (clay tile or composition shingle)
+    // and wider 2-5 storey residential blocks carry terracotta/shingle mansard roof skirts
+    // instead of 100% flat parapet boxes. Normalize footprint dimensions by groundscale so
+    // real SF lot sizes pass cleanly at 1.25x plan scale.
+    let gs = eo_data::groundscale::resolve().unwrap_or(1.0).max(0.5);
+    let real_front = front_length / gs;
+    let real_area = frame.area / (gs * gs);
+    let mut prng = Rng::new(&format!("{}|bwa-pitched", c.seed));
+    let p_roll = prng.next();
+    let p_mat_roll = prng.next();
+    let p_pitch = 0.34 + prng.next() * 0.24;
+    let pitched_gable = crate::typology::detail_enabled()
+        && !chinatown
+        && storeys.len() >= 2
+        && storeys.len() <= 4
+        && front.is_some()
+        && real_front >= 4.5
+        && real_front <= 16.0
+        && real_area <= 440.0
+        && frame.polygon.len() <= 10
+        && p_roll < 0.50;
+    let mansard_skirt = crate::typology::detail_enabled()
+        && !chinatown
+        && !pitched_gable
+        && storeys.len() >= 2
+        && storeys.len() <= 5
+        && front.is_some()
+        && real_front >= 6.0
+        && real_area <= 920.0
+        && p_roll >= 0.50
+        && p_roll < 0.78;
+    let gable_rise = if pitched_gable { (0.5 * real_front * p_pitch).clamp(1.2, 3.6) } else { 0.0 };
+    let pitched_mat = if p_mat_roll < 0.56 { "clay-barrel-tile" } else { "composition-shingle" };
+    let mut spec = json!({
         "id": format!("sf-archetype-{}", c.seed),
         "seed": c.seed,
         "height": c.height,
@@ -140,8 +174,17 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "garageRow": garage_row,
             "chinatown": chinatown_meta,
             "wall": wall,
+            "pitched": pitched_gable,
+            "mansard": mansard_skirt,
+            "gableRise": gable_rise,
         },
-    })
+    });
+    if pitched_gable || mansard_skirt {
+        set(obj_mut(&mut spec, "materials"), "pitchedRoof", json!(pitched_mat));
+        let min_allow = if crate::typology::detail_enabled() { 4.2 } else { 1.8 };
+        set(&mut spec, "roof", json!({ "slab": 0.3, "plantAllowance": (gable_rise.max(min_allow)) + 0.8 }));
+    }
+    spec
 }
 
 fn allowed_for(front: &Edge, frame: &Frame) -> f64 {
@@ -212,6 +255,31 @@ fn add_chinatown_front(plan: &mut Plan, frame: &Frame, front: &Edge, meta: &J, l
     plan.extra.insert("tints".into(), tints);
 }
 
+fn bay_face_basis(basis: &Basis, a: [f64; 2], b: [f64; 2]) -> (f64, Basis) {
+    let [ox, oz] = basis.origin;
+    let [ux, uz] = basis.u;
+    let [nx, nz] = basis.n;
+    let ds = b[0] - a[0];
+    let dw = b[1] - a[1];
+    let length = ds.hypot(dw).max(1e-6);
+    let ts = ds / length;
+    let tw = dw / length;
+    let os = -tw;
+    let ow = ts;
+    (
+        length,
+        Basis {
+            origin: [ox + ux * a[0] + nx * a[1], oz + uz * a[0] + nz * a[1]],
+            u: [ux * ts + nx * tw, uz * ts + nz * tw],
+            n: [ux * os + nx * ow, uz * os + nz * ow],
+        },
+    )
+}
+
+fn bay_world_pt(basis: &Basis, s: f64, w: f64) -> P2 {
+    P2 { x: basis.origin[0] + basis.u[0] * s + basis.n[0] * w, z: basis.origin[1] + basis.u[1] * s + basis.n[1] * w }
+}
+
 fn add_bay_projections(plan: &mut Plan, frame: &Frame, spec: &J) {
     let Some(meta) = spec.get_nn("archetype") else { return };
     let Some(front) = frame.edge_for_role("front") else { return };
@@ -234,6 +302,8 @@ fn add_bay_projections(plan: &mut Plan, frame: &Frame, spec: &J) {
     let outermost = 0.14f64.max(allowed - 0.02);
     let projection = meta.num("projection").min(outermost - BAY_TRIM_PROUD_M);
     let canted = meta.at("canted").cloned().unwrap_or(J::Null);
+    let is_canted = crate::typology::detail_enabled() && truthy(meta.at("canted")) && projection >= 0.28;
+    let detail_on = crate::typology::detail_enabled();
     let basis = front.basis;
     let e = front.index;
     for (bs0, bs1, bw) in bays {
@@ -241,6 +311,71 @@ fn add_bay_projections(plan: &mut Plan, frame: &Frame, spec: &J) {
         let centre = (bs0 + bs1) / 2.0;
         let s0 = centre - width / 2.0;
         let s1 = centre + width / 2.0;
+        if is_canted && width >= 1.6 {
+            // True 3-sided canted bay window prism with angled cheek sashes & molded cornice wrap
+            let cant = (width * 0.24).min(projection * 0.92).min(0.62);
+            let outline = [[s0, 0.0], [s0 + cant, projection], [s1 - cant, projection], [s1, 0.0]];
+            plan.add_prism(PartArgs {
+                kind: "bay".into(),
+                slot: "wall".into(),
+                points: outline.iter().map(|[s, w]| bay_world_pt(&basis, *s, *w)).collect(),
+                y0,
+                y1,
+                cast_shadow: Some(true),
+                receive_shadow: Some(true),
+                meta: Some(json!({ "archetype": kind, "canted": true, "edge": e })),
+                ..Default::default()
+            });
+            let faces: Vec<(f64, Basis)> = (0..3).map(|k| bay_face_basis(&basis, outline[k], outline[k + 1])).collect();
+            for &(flen, fbasis) in &faces {
+                plan.add_profile(&fbasis, PartArgs::profile("bay-cap", "trim", -0.04, flen + 0.04, trim_profile_d("ogee", 0.12, 0.24, y1)).edge(e));
+                plan.add_profile(&fbasis, PartArgs::profile("bay-sill", "trim", -0.04, flen + 0.04, trim_profile_d("stepped", 0.10, 0.20, y0 - 0.20)).edge(e));
+            }
+            let f = BAY_SASH_FRAME_M;
+            let m = json!({ "archetype": kind, "part": "bay-glazing" });
+            for i in 1..n {
+                let wy0 = lift + plan.storeys[i].y0 + 0.72;
+                let wy1 = lift + plan.storeys[i].y1 - 0.34;
+                if wy1 - wy0 < 0.9 {
+                    continue;
+                }
+                for (fi, &(flen, fbasis)) in faces.iter().enumerate() {
+                    let margin = (flen * 0.11).min(0.14);
+                    let a = margin;
+                    let b = flen - margin;
+                    if b - a < 0.36 {
+                        continue;
+                    }
+                    let fw0 = -0.02;
+                    let fw1 = BAY_SASH_PROUD_M;
+                    let sash = |x0: f64, x1: f64, yy0: f64, yy1: f64, w1: f64| {
+                        PartArgs::new("bay-sash", "frame", x0, x1, yy0, yy1, fw0, w1).edge(e).meta(m.clone())
+                    };
+                    plan.add_box(&fbasis, sash(a, a + f, wy0, wy1, fw1));
+                    plan.add_box(&fbasis, sash(b - f, b, wy0, wy1, fw1));
+                    plan.add_box(&fbasis, sash(a, b, wy1 - f, wy1, fw1));
+                    plan.add_box(&fbasis, sash(a, b, wy0, wy0 + f, fw1));
+                    // Double-hung meeting rail + front mullions on center face
+                    let rail = wy0 + (wy1 - wy0) * 0.54;
+                    plan.add_box(&fbasis, sash(a, b, rail - 0.025, rail + 0.025, fw1 - 0.01));
+                    if fi == 1 && b - a > 1.35 {
+                        let mm = (a + b) * 0.5;
+                        plan.add_box(&fbasis, PartArgs::new("bay-post", "frame", mm - 0.045, mm + 0.045, wy0, wy1, fw0, fw1 + 0.01).edge(e).meta(m.clone()));
+                    }
+                    // Projecting window sill & head trim on each canted bay face
+                    plan.add_box(&fbasis, PartArgs::new("sill", "trim", a - 0.05, b + 0.05, wy0 - 0.08, wy0 + 0.01, -0.01, fw1 + 0.055).edge(e).meta(m.clone()));
+                    plan.add_box(&fbasis, PartArgs::new("window-head", "trim", a - 0.06, b + 0.06, wy1 + 0.01, wy1 + 0.12, -0.01, fw1 + 0.055).edge(e).meta(m.clone()));
+                    plan.add_box(
+                        &fbasis,
+                        PartArgs::new("glass", "glass", a + f * 0.5, b - f * 0.5, wy0 + f * 0.5, wy1 - f * 0.5, 0.004, 0.014)
+                            .edge(e)
+                            .meta(m.clone())
+                            .shadow(false),
+                    );
+                }
+            }
+            continue;
+        }
         plan.add_box(
             &basis,
             PartArgs::new("bay", "wall", s0, s1, y0, y1, 0.0, projection)
@@ -281,6 +416,10 @@ fn add_bay_projections(plan: &mut Plan, frame: &Frame, spec: &J) {
                 let mm = gs0 + (gs1 - gs0) * t;
                 plan.add_box(&basis, sash(mm - 0.03, mm + 0.03, wy0, wy1, fw1 - 0.01));
             }
+            if detail_on {
+                plan.add_box(&basis, PartArgs::new("sill", "trim", gs0 - 0.06, gs1 + 0.06, wy0 - 0.08, wy0 + 0.01, face - 0.01, fw1 + 0.055).edge(e).meta(m.clone()));
+                plan.add_box(&basis, PartArgs::new("window-head", "trim", gs0 - 0.07, gs1 + 0.07, wy1 + 0.01, wy1 + 0.12, face - 0.01, fw1 + 0.055).edge(e).meta(m.clone()));
+            }
             plan.add_box(
                 &basis,
                 PartArgs::new("glass", "glass", gs0 + f * 0.5, gs1 - f * 0.5, wy0 + f * 0.5, wy1 - f * 0.5, face + 0.004, face + 0.014)
@@ -292,6 +431,40 @@ fn add_bay_projections(plan: &mut Plan, frame: &Frame, spec: &J) {
                 for (c0, c1) in [(s0 - 0.014, s0 - 0.004), (s1 + 0.004, s1 + 0.014)] {
                     plan.add_box(&basis, PartArgs::new("glass", "glass", c0, c1, wy0, wy1, 0.12, face - 0.12).edge(e).meta(m.clone()).shadow(false));
                 }
+            }
+        }
+    }
+    // Projecting stone water-table plinth belt along street edges so building walls meet sloped foundations crisply
+    if detail_on {
+        for edge in frame.edges.iter() {
+            if edge.party || !(edge.role == "front" || edge.role == "front-secondary") || edge.length < 2.0 {
+                continue;
+            }
+            let r_ops = plan.edges.iter().find(|er| er.index == edge.index);
+            let mut cuts: Vec<(f64, f64)> = r_ops
+                .map(|er| {
+                    er.openings
+                        .iter()
+                        .filter(|o| o.storey == 0 && matches!(o.type_.as_str(), "entrance" | "roller" | "storefront"))
+                        .map(|o| (o.s0 - 0.06, o.s1 + 0.06))
+                        .collect()
+                })
+                .unwrap_or_default();
+            cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            cuts.push((edge.length, edge.length));
+            let wp = 0.065f64.min(0.03f64.max(edge.allowance - 0.03));
+            let mut cur = 0.0;
+            for (a, b) in cuts {
+                let end = a.min(edge.length);
+                if end - cur > 0.25 {
+                    plan.add_profile(
+                        &edge.basis,
+                        PartArgs::profile("water-table", "trim", cur, end, trim_profile_d("stepped", wp, 0.26, lift - 0.02))
+                            .edge(edge.index)
+                            .meta(json!({ "archetype": kind, "part": "water-table" })),
+                    );
+                }
+                cur = cur.max(b);
             }
         }
     }
@@ -329,9 +502,10 @@ fn add_bay_window_cornice(plan: &mut Plan, frame: &Frame, spec: &J) {
         _ => "undefined".into(),
     };
     let mut random = Rng::from_num(hash_seed(&format!("{seed_text}|bay-window-cornice")) as f64);
+    let detail_on = crate::typology::detail_enabled();
     let profile = if random.next() < 0.62 { "ogee" } else { "stepped" };
-    let height = 0.46 + random.next() * 0.2;
-    let brackets = random.next() < 0.72;
+    let height = 0.46 + random.next() * 0.2 + if detail_on { 0.08 } else { 0.0 };
+    let brackets = random.next() < if detail_on { 0.90 } else { 0.72 };
     let lift = if plan.base_y.is_finite() { plan.base_y } else { 0.0 };
     let wall_top = plan.envelope.wall_top + lift;
     let parapet_top = wall_top + spec.at("parapet").get_nn("height").map(|v| to_number(Some(v))).unwrap_or(0.7);
@@ -355,7 +529,8 @@ fn add_bay_window_cornice(plan: &mut Plan, frame: &Frame, spec: &J) {
         let a = frame.to_plan(edge.start.x, edge.start.z);
         let b = frame.to_plan(edge.start.x + edge.u.x, edge.start.z + edge.u.z);
         let skew = if edge.convex_start || edge.convex_end { (b.x - a.x).abs() + (b.z - a.z).abs() } else { 1.0 };
-        let p = 0.12f64.max(0.62f64.min((allowed - 0.02) / 1f64.max(skew)));
+        let max_p: f64 = if detail_on { 0.72 } else { 0.62 };
+        let p = 0.12f64.max(max_p.min((allowed - 0.02) / 1f64.max(skew)));
         if !(p <= allowed - 0.02) {
             continue;
         }
@@ -365,7 +540,7 @@ fn add_bay_window_cornice(plan: &mut Plan, frame: &Frame, spec: &J) {
         set(&mut frieze, "part", json!("frieze"));
         plan.add_box(
             &edge.basis,
-            PartArgs::new("string-course", "trim", -(0.04f64.min(ext0)), edge.length + 0.04f64.min(ext1), wall_top - 0.34, y0, -0.01, 0.04f64.min(p))
+            PartArgs::new("string-course", "trim", -(0.04f64.min(ext0)), edge.length + 0.04f64.min(ext1), wall_top - 0.34, y0, -0.01, if detail_on { 0.07f64.min(p) } else { 0.04f64.min(p) })
                 .edge(edge.index)
                 .meta(frieze),
         );
@@ -391,9 +566,14 @@ fn add_bay_window_cornice(plan: &mut Plan, frame: &Frame, spec: &J) {
             }
             let mut mm = cmeta.clone();
             set(&mut mm, "part", json!("modillion"));
+            let mh = if detail_on { 0.34 } else { 0.26 };
+            let md = p * if detail_on { 0.80 } else { 0.72 };
             plan.add_box(
                 &edge.basis,
-                PartArgs::new("cornice-bracket", "trim", s - 0.06, s + 0.06, y0 - 0.26, y0, -0.01, p * 0.72).edge(edge.index).shadow(false).meta(mm),
+                PartArgs::new("cornice-bracket", "trim", s - 0.065, s + 0.065, y0 - mh, y0, -0.01, md)
+                    .edge(edge.index)
+                    .shadow(detail_on)
+                    .meta(mm),
             );
         }
     }
@@ -402,4 +582,140 @@ fn add_bay_window_cornice(plan: &mut Plan, frame: &Frame, spec: &J) {
 pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
     add_bay_projections(plan, frame, spec);
     add_bay_window_cornice(plan, frame, spec);
+    // Optional pitched tile/shingle gable roof (inscribed strictly inside the footprint) or perimeter
+    // mansard parapet roof cap + masonry chimney on hillside residential apartments
+    if let Some(meta) = spec.get_nn("archetype") {
+        let lift = if plan.base_y.is_finite() { plan.base_y } else { 0.0 };
+        let y0 = plan.envelope.wall_top + lift;
+        if meta.truthy("pitched") {
+            let rise = meta.num("gableRise");
+            if rise > 0.8 {
+                if let Some(front) = frame.edge_for_role("front") {
+                    let basis = front.basis;
+                    let l = front.length;
+                    let [ox, oz] = basis.origin;
+                    let [ux, uz] = basis.u;
+                    let [nx, nz] = basis.n;
+                    let max_d = frame.polygon.iter().map(|p| -((p.x - ox) * nx + (p.z - oz) * nz)).fold(0.0f64, f64::max);
+                    // Step depth inward until rear corners stay inside non-rectangular/notched footprints (zero floating overhangs)
+                    let mut depth = 0.0;
+                    for step in (0..=16).rev() {
+                        let d = 2.8 + (max_d - 2.8).max(0.0) * (step as f64 / 16.0);
+                        let mut ok = true;
+                        for frac in [0.08, 0.50, 0.92] {
+                            let s = l * frac;
+                            let wx = ox + ux * s - nx * d;
+                            let wz = oz + uz * s - nz * d;
+                            if frame.signed_distance(wx, wz) > 0.05 {
+                                ok = false;
+                                break;
+                            }
+                        }
+                        if ok {
+                            depth = d;
+                            break;
+                        }
+                    }
+                    let inset = 0.22;
+                    if depth > 2.6 {
+                        plan.add_plate(
+                            &basis,
+                            PartArgs {
+                                kind: "roof-gable".into(),
+                                slot: "pitchedRoof".into(),
+                                edge: Some(front.index),
+                                profile: vec![[-0.14, y0 - 0.08], [l + 0.14, y0 - 0.08], [l * 0.5, y0 + rise]],
+                                w0: -depth + inset,
+                                w1: -0.06,
+                                cast_shadow: Some(true),
+                                receive_shadow: Some(true),
+                                meta: Some(json!({ "archetype": KIND, "part": "gable-roof", "roof": true })),
+                                ..Default::default()
+                            },
+                        );
+                        plan.add_plate(
+                            &basis,
+                            PartArgs {
+                                kind: "gable".into(),
+                                slot: "wall".into(),
+                                edge: Some(front.index),
+                                profile: vec![[0.05, y0], [l - 0.05, y0], [l * 0.5, y0 + rise - 0.08]],
+                                w0: -0.14,
+                                w1: 0.06,
+                                cast_shadow: Some(true),
+                                receive_shadow: Some(true),
+                                meta: Some(json!({ "archetype": KIND, "part": "gable-end", "roof": true })),
+                                ..Default::default()
+                            },
+                        );
+                        let ch_w = -depth * 0.44;
+                        let ch_s = l * 0.72;
+                        let wx = ox + ux * ch_s + nx * ch_w;
+                        let wz = oz + uz * ch_s + nz * ch_w;
+                        if frame.signed_distance(wx, wz) < -0.55 {
+                            let ch_top = y0 + rise + 0.45;
+                            plan.add_box(
+                                &basis,
+                                PartArgs::new("chimney", "trim", ch_s - 0.34, ch_s + 0.34, y0, ch_top, ch_w - 0.28, ch_w + 0.28)
+                                    .edge(front.index)
+                                    .shadow(true)
+                                    .receive(true)
+                                    .meta(json!({ "archetype": KIND, "part": "chimney", "roof": true })),
+                            );
+                        }
+                        if let Some(a) = plan.extra.get_mut("archetype").and_then(|v| v.as_object_mut()) {
+                            a.insert("pitched".into(), json!(true));
+                        } else {
+                            plan.extra.insert("archetype".into(), json!({ "kind": KIND, "pitched": true }));
+                        }
+                    }
+                }
+            }
+        } else if meta.truthy("mansard") {
+            // Terracotta / shingle pitched mansard parapet skirt along street-facing rooflines + brick chimney
+            let mh = 1.45;
+            let md = 1.15;
+            let prof = vec![[0.08, y0 - 0.04], [-md, y0 + mh], [-md - 0.16, y0 + mh], [-md - 0.16, y0 - 0.04]];
+            for edge in &frame.edges {
+                if edge.party || !(edge.role == "front" || edge.role == "front-secondary") || edge.length < 3.5 {
+                    continue;
+                }
+                let [ox, oz] = edge.basis.origin;
+                let [ux, uz] = edge.basis.u;
+                let [nx, nz] = edge.basis.n;
+                let mx = ox + ux * (edge.length * 0.5) - nx * (md + 0.2);
+                let mz = oz + uz * (edge.length * 0.5) - nz * (md + 0.2);
+                if frame.signed_distance(mx, mz) > -0.15 {
+                    continue;
+                }
+                plan.add_profile(
+                    &edge.basis,
+                    PartArgs::profile("roof-gable", "pitchedRoof", 0.05, edge.length - 0.05, prof.clone())
+                        .edge(edge.index)
+                        .shadow(true)
+                        .receive(true)
+                        .meta(json!({ "archetype": KIND, "part": "mansard-skirt", "roof": true })),
+                );
+            }
+            if let Some(front) = frame.edge_for_role("front") {
+                let [ox, oz] = front.basis.origin;
+                let [ux, uz] = front.basis.u;
+                let [nx, nz] = front.basis.n;
+                let ch_s = front.length * 0.24;
+                let ch_w = -2.2;
+                let wx = ox + ux * ch_s + nx * ch_w;
+                let wz = oz + uz * ch_s + nz * ch_w;
+                if frame.signed_distance(wx, wz) < -0.6 {
+                    plan.add_box(
+                        &front.basis,
+                        PartArgs::new("chimney", "trim", ch_s - 0.36, ch_s + 0.36, y0, y0 + mh + 0.9, ch_w - 0.3, ch_w + 0.3)
+                            .edge(front.index)
+                            .shadow(true)
+                            .receive(true)
+                            .meta(json!({ "archetype": KIND, "part": "chimney", "roof": true })),
+                    );
+                }
+            }
+        }
+    }
 }

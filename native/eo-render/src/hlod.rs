@@ -398,7 +398,7 @@ pub fn draw_wgsl() -> String {
             )
             .replace("    return vec4<f32>(-1.0); // @fr-roof-read\n", "    return in.fr_d;\n");
     }
-    s
+    crate::look::sf_select(&s)
 }
 
 /// The pages are BC3 (set by `HlodGpu::new` from the device's features; the
@@ -756,9 +756,9 @@ impl HlodGpu {
 
 enum Msg {
     /// The cell without its geometry and pages (moved into upload bytes on the worker).
-    Cell { entry: u32, cell: Box<BakedCell>, source: CellSource, ms: f64, counts: (u32, u32), vbytes: Vec<u8>, ibytes: Vec<u8>, mips: Vec<Vec<Vec<u8>>> },
+    Cell { entry: u32, cell: Box<BakedCell>, source: CellSource, ms: f64, counts: (u32, u32), vbytes: Vec<u8>, ibytes: Vec<u8>, mips: Vec<Vec<Vec<u8>>>, tops: Vec<(u32, [f32; 2])> },
     /// A district without its geometry (moved into upload bytes on the worker).
-    District { index: usize, mesh: Box<DistrictMesh>, ms: f64, counts: (u32, u32), vbytes: Vec<u8>, ibytes: Vec<u8>, chunks: Vec<hlod_district::DistrictChunk> },
+    District { index: usize, mesh: Box<DistrictMesh>, ms: f64, counts: (u32, u32), vbytes: Vec<u8>, ibytes: Vec<u8>, chunks: Vec<hlod_district::DistrictChunk>, tops: Vec<(u32, [f32; 2])> },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -906,6 +906,7 @@ pub struct HlodRuntime {
     ctx_slot: Arc<Mutex<Option<Arc<BakeContext>>>>,
     means_tx: Option<std::sync::mpsc::Sender<Vec<[f32; 3]>>>,
     pending: Arc<Mutex<Vec<u32>>>,
+    outbox: crate::hitch::Outbox<u32>,
     pending_districts: Arc<Mutex<Vec<usize>>>,
     camera: Arc<Mutex<Vec3>>,
     rx: Receiver<Msg>,
@@ -928,30 +929,66 @@ pub struct HlodRuntime {
     no_space: HashSet<u32>,
     /// each LOD group's drawn span so far (`write_group_tops`).
     group_tops: HashMap<u32, [f32; 2]>,
+    /// Reused per-frame wanted cell bitmap (avoids HashSet churn over all cells).
+    wanted: Vec<u8>,
 }
 
-/// Each building's lowest and highest drawn point in a far mesh's vertices
-/// (`HlodVertex`: 28 bytes, y at 4, the group at 24), written into the
-/// per-group table the crowns read (`HlodGpu::top_buf`): the geometry's own
-/// top, so a crown sits at the roofline the far layer draws.
-/// `seen` keeps each group's widest span over every mesh that drew it (a
-/// district's simplified form is lower than its cell's: the union is written).
-fn write_group_tops(queue: &wgpu::Queue, top_buf: &wgpu::Buffer, seen: &mut HashMap<u32, [f32; 2]>, vbytes: &[u8]) {
+/// Compute each building's lowest and highest drawn point in a far mesh's vertices
+/// on a worker thread, sorted by LOD group so contiguous updates coalesce.
+fn group_tops_of(vertices: &[HlodVertex]) -> Vec<(u32, [f32; 2])> {
     let mut span: HashMap<u32, [f32; 2]> = HashMap::new();
-    for v in vbytes.chunks_exact(std::mem::size_of::<HlodVertex>()) {
-        let y = f32::from_le_bytes([v[4], v[5], v[6], v[7]]);
-        let g = u32::from_le_bytes([v[24], v[25], v[26], v[27]]);
+    for v in vertices {
+        let y = v.pos[1];
+        let g = v.group;
         let e = span.entry(g).or_insert([f32::MAX, f32::MIN]);
         *e = [e[0].min(y), e[1].max(y)];
     }
+    let mut out: Vec<(u32, [f32; 2])> = span.into_iter().collect();
+    out.sort_unstable_by_key(|(g, _)| *g);
+    out
+}
+
+/// Write updated per-group `[min_y, max_y]` spans into `HlodGpu::top_buf`, skipping
+/// unchanged entries and coalescing contiguous group indices into batched writes.
+fn write_group_tops(queue: &wgpu::Queue, top_buf: &wgpu::Buffer, seen: &mut HashMap<u32, [f32; 2]>, tops: &[(u32, [f32; 2])]) {
     let cap = top_buf.size() / 8;
-    for (g, t) in span {
-        let e = seen.entry(g).or_insert(t);
-        let u = [e[0].min(t[0]), e[1].max(t[1])];
-        if (g as u64) < cap && (u != *e || u == t) {
-            queue.write_buffer(top_buf, g as u64 * 8, bytemuck::cast_slice(&u));
+    let mut run_start = 0u32;
+    let mut run: Vec<[f32; 2]> = Vec::new();
+    for &(g, t) in tops {
+        if (g as u64) >= cap {
+            continue;
         }
-        *e = u;
+        let changed = match seen.entry(g) {
+            std::collections::hash_map::Entry::Vacant(v) => {
+                v.insert(t);
+                Some(t)
+            }
+            std::collections::hash_map::Entry::Occupied(mut o) => {
+                let prev = *o.get();
+                let u = [prev[0].min(t[0]), prev[1].max(t[1])];
+                if u != prev {
+                    *o.get_mut() = u;
+                    Some(u)
+                } else {
+                    None
+                }
+            }
+        };
+        if let Some(u) = changed {
+            if !run.is_empty() && g == run_start + run.len() as u32 {
+                run.push(u);
+            } else {
+                if !run.is_empty() {
+                    queue.write_buffer(top_buf, run_start as u64 * 8, bytemuck::cast_slice(&run));
+                    run.clear();
+                }
+                run_start = g;
+                run.push(u);
+            }
+        }
+    }
+    if !run.is_empty() {
+        queue.write_buffer(top_buf, run_start as u64 * 8, bytemuck::cast_slice(&run));
     }
 }
 
@@ -1024,12 +1061,13 @@ impl HlodRuntime {
                         // The pages come with their mips, in the GPU's format (baked so).
                         let mips = cell.pages.iter().map(|p| hlod_bake::split_levels(p, cell.bc3).into_iter().map(|l| l.to_vec()).collect()).collect();
                         let counts = (cell.vertices.len() as u32, cell.indices.len() as u32);
+                        let tops = group_tops_of(&cell.vertices);
                         let vbytes = bytemuck::cast_slice(&cell.vertices).to_vec();
                         let ibytes = bytemuck::cast_slice(&cell.indices).to_vec();
                         cell.vertices = vec![];
                         cell.indices = vec![];
                         cell.pages = vec![];
-                        let m = Msg::Cell { entry, cell: Box::new(cell), source, ms: t.elapsed().as_secs_f64() * 1e3, counts, vbytes, ibytes, mips };
+                        let m = Msg::Cell { entry, cell: Box::new(cell), source, ms: t.elapsed().as_secs_f64() * 1e3, counts, vbytes, ibytes, mips, tops };
                         in_flight.fetch_sub(1, Ordering::SeqCst);
                         if tx.send(m).is_err() {
                             break;
@@ -1059,11 +1097,12 @@ impl HlodRuntime {
                     // One chunk per cell, so the cull drops what the resident cells draw.
                     let chunks = hlod_district::chunk_by_cell(&mut mesh, &set.group_cell, &districts[index].cells);
                     let counts = (mesh.vertices.len() as u32, mesh.indices.len() as u32);
+                    let tops = group_tops_of(&mesh.vertices);
                     let vbytes = bytemuck::cast_slice(&mesh.vertices).to_vec();
                     let ibytes = bytemuck::cast_slice(&mesh.indices).to_vec();
                     mesh.vertices = vec![];
                     mesh.indices = vec![];
-                    let m = Msg::District { index, mesh: Box::new(mesh), ms: t.elapsed().as_secs_f64() * 1e3, counts, vbytes, ibytes, chunks };
+                    let m = Msg::District { index, mesh: Box::new(mesh), ms: t.elapsed().as_secs_f64() * 1e3, counts, vbytes, ibytes, chunks, tops };
                     in_flight.fetch_sub(1, Ordering::SeqCst);
                     if tx.send(m).is_err() {
                         break;
@@ -1073,12 +1112,14 @@ impl HlodRuntime {
         }
         let stats = HlodStats { cells: set.cells.len(), districts: districts.len(), texel_m_min: f32::MAX, ..Default::default() };
         let nd = districts.len();
+        let n_cells = set.cells.len().min(MAX_CELLS as usize);
         Self {
             set,
             opts,
             ctx_slot,
             means_tx: Some(means_tx),
             pending,
+            outbox: Default::default(),
             pending_districts,
             camera: cam,
             rx,
@@ -1099,6 +1140,7 @@ impl HlodRuntime {
             stats,
             no_space: HashSet::new(),
             group_tops: HashMap::new(),
+            wanted: vec![0; n_cells],
         }
     }
 
@@ -1147,22 +1189,32 @@ impl HlodRuntime {
             self.pending_districts.lock().unwrap().extend(all);
         }
         // Wanted: every cell within the load radius (kept to the drop radius).
+        // Short-circuit `d <= load_m` and `d > drop_m` before probing `self.slots`.
         let n = self.set.cells.len().min(MAX_CELLS as usize);
-        let mut wanted = HashSet::new();
-        for c in 0..n {
+        self.wanted.resize(n, 0);
+        let (load_m, drop_m) = (self.opts.load_m, self.opts.drop_m);
+        for (c, w) in self.wanted.iter_mut().enumerate() {
             let d = self.set.cell_distance(c, cam);
-            let have = self.slots.contains_key(&(c as u32));
-            if d <= self.opts.load_m || (have && d <= self.opts.drop_m) {
-                wanted.insert(c as u32);
-            }
+            *w = if d <= load_m {
+                1
+            } else if d <= drop_m && self.slots.contains_key(&(c as u32)) {
+                2
+            } else {
+                0
+            };
         }
         // Evict (at most 16 a frame: two flag words and a table entry each) and cancel.
-        let gone: Vec<u32> = self.slots.keys().filter(|k| !wanted.contains(k)).copied().take(16).collect();
+        let mut restored_buildings = 0u64;
+        let gone: Vec<u32> = self.slots.keys().filter(|&&k| (k as usize) >= n || self.wanted[k as usize] == 0).copied().take(16).collect();
         for e in gone {
             match self.slots.remove(&e) {
                 Some(Slot::Resident(a)) => {
                     // Not resident first; the ranges are reused only by later writes.
+                    let was_covered = self.flags[e as usize] != 0;
                     self.flags[e as usize] &= !FLAG_CELL;
+                    if was_covered && self.flags[e as usize] == 0 {
+                        restored_buildings += self.set.cells[e as usize].buildings.len() as u64;
+                    }
                     self.flags_dirty = true;
                     gpu.write_entry(queue, e, &GpuCell::zeroed());
                     self.account(a, false, false);
@@ -1178,25 +1230,27 @@ impl HlodRuntime {
                     }
                 }
                 Some(Slot::Requested) => {
-                    self.pending.lock().unwrap().retain(|&p| p != e);
+                    self.outbox.cancel(e);
                 }
                 None => {}
             }
         }
-        let mut new = vec![];
-        for &e in &wanted {
-            if !self.slots.contains_key(&e) && !self.no_space.contains(&e) {
-                self.slots.insert(e, Slot::Requested);
-                new.push(e);
+        for (c, &w) in self.wanted.iter().enumerate() {
+            if w == 1 {
+                let e = c as u32;
+                if !self.slots.contains_key(&e) && !self.no_space.contains(&e) {
+                    self.slots.insert(e, Slot::Requested);
+                    self.outbox.request(e);
+                }
             }
         }
-        if !new.is_empty() {
-            self.pending.lock().unwrap().extend(new);
-        }
-        // Arrivals.
-        while let Ok(m) = self.rx.try_recv() {
+        self.outbox.flush(&self.pending); // try_lock only
+        // Arrivals (capped per frame so bursts of cached cells do not hitch one frame).
+        const MAX_ARRIVALS_PER_FRAME: usize = 16;
+        for _ in 0..MAX_ARRIVALS_PER_FRAME {
+            let Ok(m) = self.rx.try_recv() else { break };
             match m {
-                Msg::Cell { entry, cell, source, ms, counts, vbytes, ibytes, mips } => {
+                Msg::Cell { entry, cell, source, ms, counts, vbytes, ibytes, mips, tops } => {
                     match source {
                         CellSource::Cache => {
                             self.stats.from_cache += 1;
@@ -1212,20 +1266,20 @@ impl HlodRuntime {
                     self.stats.texel_m_min = self.stats.texel_m_min.min(cell.texel_m);
                     self.stats.texel_m_max = self.stats.texel_m_max.max(cell.texel_m);
                     if !matches!(self.slots.get(&entry), Some(Slot::Requested)) {
-                        crate::upload::bury(Box::new((cell, vbytes, ibytes, mips)));
+                        crate::upload::bury(Box::new((cell, vbytes, ibytes, mips, tops)));
                         continue;
                     }
-                    write_group_tops(queue, &gpu.top_buf, &mut self.group_tops, &vbytes); // (`--tower-crowns`) each building's drawn top
+                    write_group_tops(queue, &gpu.top_buf, &mut self.group_tops, &tops); // (`--tower-crowns`) each building's drawn top
                     if let Some(u) = self.make_cell_upload(entry, counts, vbytes, ibytes, mips, (cell.min, cell.max)) {
                         self.slots.insert(entry, Slot::Uploading);
                         self.uploads.push_back(u);
                     }
-                    crate::upload::bury(cell);
+                    crate::upload::bury(Box::new((cell, tops)));
                 }
-                Msg::District { index, mesh, ms, counts, vbytes, ibytes, chunks } => {
+                Msg::District { index, mesh, ms, counts, vbytes, ibytes, chunks, tops } => {
                     self.stats.district_ms_sum += ms;
                     self.stats.district_buildings += mesh.buildings as u64;
-                    write_group_tops(queue, &gpu.top_buf, &mut self.group_tops, &vbytes); // (`--tower-crowns`) each building's drawn top
+                    write_group_tops(queue, &gpu.top_buf, &mut self.group_tops, &tops); // (`--tower-crowns`) each building's drawn top
                     match self.make_district_upload(index, &mesh, counts, vbytes, ibytes, &chunks) {
                         Some(u) => {
                             self.dstate[index] = DState::Uploading;
@@ -1233,7 +1287,7 @@ impl HlodRuntime {
                         }
                         None => self.dstate[index] = DState::Failed,
                     }
-                    crate::upload::bury(mesh);
+                    crate::upload::bury(Box::new((mesh, tops)));
                 }
             }
         }
@@ -1306,11 +1360,11 @@ impl HlodRuntime {
             self.flags_dirty = true;
         }
         if self.flags_dirty {
-            renderer.write_hlod_flags(queue, &self.flags); // (+ the CPU copy the fixed-slot lists' ranges read)
+            renderer.write_hlod_flags_delta(queue, &self.flags, restored_buildings); // (+ the CPU copy the fixed-slot lists' ranges read)
             bytes += self.flags.len() as u64 * 4;
             self.flags_dirty = false;
         }
-        renderer.note_streamed(bytes);
+        renderer.note_streamed_bytes(bytes);
         self.stats.bytes_uploaded += bytes;
         self.stats.max_frame_bytes = self.stats.max_frame_bytes.max(bytes);
     }
@@ -1404,7 +1458,8 @@ impl HlodRuntime {
         if self.ctx().is_none() {
             return false;
         }
-        self.pending.lock().unwrap().is_empty()
+        self.outbox.is_empty()
+            && self.pending.lock().unwrap().is_empty()
             && self.pending_districts.lock().unwrap().is_empty()
             && self.in_flight.load(Ordering::SeqCst) == 0
             && self.uploads.is_empty()

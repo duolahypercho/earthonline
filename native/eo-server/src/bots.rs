@@ -450,7 +450,7 @@ fn drive_bots(mut bots: Vec<Bot>, base: usize, link: Link, cfg: BotConfig, graph
                     Some(v) => format!("dev:{}", v.name),
                     None => format!("dev:bot{}", base + by_salt.get(&b.salt).copied().unwrap_or(0)),
                 };
-                let h = Hello { client_salt: b.salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures: proto::structures_code(cfg.structures), token: token.into_bytes(), spawn: Some(b.spawn), resume: None, server_salt: 0, cookie: 0 };
+                let h = Hello { vehicle: Default::default(), client_salt: b.salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures: proto::structures_code(cfg.structures), token: token.into_bytes(), spawn: Some(b.spawn), resume: None, server_salt: 0, cookie: 0 };
                 let mut out = Vec::with_capacity(proto::REQUEST_PAD);
                 match &b.challenge {
                     Some(c) => Hello { server_salt: c.server_salt, cookie: c.cookie, ..h }.write(Kind::Response, &mut out),

@@ -1,0 +1,2161 @@
+{
+ "version": "street-signs-v1",
+ "builder": "scripts/assets/build-street-signs-v1.py",
+ "note": "SFMTA inventory sign plates (eo-props Model::SignPlate faces) modelled in Blender from the official sign art; nothing imported, generated or traced. Frame: glTF Y up, the face toward +Z, the post axis at x = z = 0, the plate frame (the face's most common inventory plate size, frameM) from y = 0 to y = frameM[1]; the art fitted into it uniformly (fit) and centred, as the game's sign atlas fits it. One material on one atlas: the face above a strip of metal swatches (aluminium back, stainless bolts and bands, cast saddles, nylon washers); albedo 512 px, ORM (R 1, G roughness, B metal) and normal 256 px, JPEG. lods: the plates with their hardware; the plates; the plates' outlines simplified, unchamfered. variants: the same face worn otherwise (rusty: rust bled from the steel bolts, bands and saddles, edges corroded; battered: a corner creased, the plate knocked crooked on its pole, sheeting peeled to the aluminium, dents, marker scribbles), each with its own first two levels and the aged far level.",
+ "seed": 7,
+ "postRadiusM": 0.0302,
+ "postRadiusSource": "signPostRadiusM (native/eo-props/data/props-js.json.gz)",
+ "sheetIn": 0.08,
+ "sheetSource": "modelling value: common 0.080 in aluminium blank; no primary source read in this pass",
+ "art": {
+  "manifest": "native/eo-props/data/sign-art-manifest.json",
+  "sha256": "accd79e3b8021b77da575efe186d9c795f2dcbe0aef050c4866a96504e93c1a4",
+  "licence": "FHWA Standard Highway Signs and Caltrans sheets: public domain (see the manifest per file)"
+ },
+ "faces": {
+  "allWay": {
+   "faceIndex": 1,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/allWay-v1.glb",
+     "sha256": "b6d6c27da07b515bdb4fad0d1220a8635d87874decb40904b0dcb288b8fe1da2",
+     "bytes": 85032,
+     "triangles": 1052
+    },
+    {
+     "path": "public/assets/street-signs/allWay-v1-lod1.glb",
+     "sha256": "16986a48df1febf3a6810e15fadf930c416f02c5595e7303400793f34822f301",
+     "bytes": 16264,
+     "triangles": 212
+    },
+    {
+     "path": "public/assets/street-signs/allWay-v1-lod2.glb",
+     "sha256": "41aeb382bcc3f3f3f2e73584da792d0304da12826b234c9c78ff446634557cc4",
+     "bytes": 3532,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/allWay-v1-rusty.glb",
+       "sha256": "1a32082f7901a6c60e9b46c947cd6705408369e05d58f7cac66fa69c3039e12a",
+       "bytes": 83532,
+       "triangles": 1052
+      },
+      {
+       "path": "public/assets/street-signs/allWay-v1-rusty-lod1.glb",
+       "sha256": "aa5d1fb2be572f69c8b01f3b6c42bd7b4ac3afcc9b41d9143ccc8c24e36d0b53",
+       "bytes": 16280,
+       "triangles": 212
+      },
+      {
+       "path": "public/assets/street-signs/allWay-v1-lod2.glb",
+       "sha256": "41aeb382bcc3f3f3f2e73584da792d0304da12826b234c9c78ff446634557cc4",
+       "bytes": 3532,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/allWay-v1-battered.glb",
+       "sha256": "2dd126372cf7931b56e37110cec2eea7254973e74798f2a1de78be001d189ce5",
+       "bytes": 90792,
+       "triangles": 1136
+      },
+      {
+       "path": "public/assets/street-signs/allWay-v1-battered-lod1.glb",
+       "sha256": "4bea03b7690604475ba433524f209b3032fa55e431b73287b9a2cf9295ba5a3f",
+       "bytes": 22700,
+       "triangles": 296
+      },
+      {
+       "path": "public/assets/street-signs/allWay-v1-lod2.glb",
+       "sha256": "41aeb382bcc3f3f3f2e73584da792d0304da12826b234c9c78ff446634557cc4",
+       "bytes": 3532,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    12.0
+   ],
+   "frameIn": [
+    18.0,
+    6.0
+   ],
+   "frameM": [
+    0.4572,
+    0.1524
+   ],
+   "fit": 0.5,
+   "plates": 1,
+   "spec": {
+    "svg": "R1-3P"
+   }
+  },
+  "bikeGuide": {
+   "faceIndex": 19,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/bikeGuide-v1.glb",
+     "sha256": "685801db7b124f3e91fa52e52d38688b6b02ed50a4eda8e4c39f4f802a556fa5",
+     "bytes": 82448,
+     "triangles": 1022
+    },
+    {
+     "path": "public/assets/street-signs/bikeGuide-v1-lod1.glb",
+     "sha256": "b1d69a5304a1c5dc76f37eae371c176b5e23c5a9d09ec575709aea300e6f459b",
+     "bytes": 14508,
+     "triangles": 182
+    },
+    {
+     "path": "public/assets/street-signs/bikeGuide-v1-lod2.glb",
+     "sha256": "f3631d3d2b444d5b32585397f558915cd6e26dc57ff66ace2e6c5251c3c68338",
+     "bytes": 3684,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/bikeGuide-v1-rusty.glb",
+       "sha256": "2f335c31d104b9f12ca135f93dbb5584437ffdb6c3e36af6c30be94f8f735825",
+       "bytes": 83688,
+       "triangles": 1022
+      },
+      {
+       "path": "public/assets/street-signs/bikeGuide-v1-rusty-lod1.glb",
+       "sha256": "be9e470abdb446ec5653b70a405e419af7b45f54a814a80238ab0775d1dfdde9",
+       "bytes": 14528,
+       "triangles": 182
+      },
+      {
+       "path": "public/assets/street-signs/bikeGuide-v1-lod2.glb",
+       "sha256": "f3631d3d2b444d5b32585397f558915cd6e26dc57ff66ace2e6c5251c3c68338",
+       "bytes": 3684,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/bikeGuide-v1-battered.glb",
+       "sha256": "39210389701f1c215003d916766a8b97c43b1317a17e3818d946df8911a7fbf6",
+       "bytes": 89252,
+       "triangles": 1094
+      },
+      {
+       "path": "public/assets/street-signs/bikeGuide-v1-battered-lod1.glb",
+       "sha256": "b1f80632d7c58a1118fd9ad65aee7e0781d2e75f2a1e1d0121af1da8c4aa90f2",
+       "bytes": 19096,
+       "triangles": 254
+      },
+      {
+       "path": "public/assets/street-signs/bikeGuide-v1-lod2.glb",
+       "sha256": "f3631d3d2b444d5b32585397f558915cd6e26dc57ff66ace2e6c5251c3c68338",
+       "bytes": 3684,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    24.0,
+    18.0
+   ],
+   "frameIn": [
+    24.0,
+    30.0
+   ],
+   "frameM": [
+    0.6096,
+    0.762
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "svg": "D11-1"
+   }
+  },
+  "disabledParking": {
+   "faceIndex": 22,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/disabledParking-v1.glb",
+     "sha256": "13db39ddc97a7349972c32cbef62c117682747bf94003820aeb7c927f0b8f539",
+     "bytes": 84648,
+     "triangles": 980
+    },
+    {
+     "path": "public/assets/street-signs/disabledParking-v1-lod1.glb",
+     "sha256": "e3d0e2b5717bb89f31ae7a93c64a3781ea5de80c151b9d232b917b6b5279125c",
+     "bytes": 11328,
+     "triangles": 140
+    },
+    {
+     "path": "public/assets/street-signs/disabledParking-v1-lod2.glb",
+     "sha256": "02cc44100691bf18680084ec5ceb7984e8c795f3d09e6e8dbc8929c3ca8f4ed9",
+     "bytes": 3576,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/disabledParking-v1-rusty.glb",
+       "sha256": "792198d6374c90d382d861d8754b87e7b7b8fa0ddef42cc094cfd643b6a14a02",
+       "bytes": 83356,
+       "triangles": 980
+      },
+      {
+       "path": "public/assets/street-signs/disabledParking-v1-rusty-lod1.glb",
+       "sha256": "21522c27b592ea6047fbbb62a4a37fd70c17a8edc7326a87bdd66f19a3304f6c",
+       "bytes": 11348,
+       "triangles": 140
+      },
+      {
+       "path": "public/assets/street-signs/disabledParking-v1-lod2.glb",
+       "sha256": "02cc44100691bf18680084ec5ceb7984e8c795f3d09e6e8dbc8929c3ca8f4ed9",
+       "bytes": 3576,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/disabledParking-v1-battered.glb",
+       "sha256": "b3efae73866566f6f2bf108594264de8614d699e3d35af11d994b947eabd7388",
+       "bytes": 91156,
+       "triangles": 1040
+      },
+      {
+       "path": "public/assets/street-signs/disabledParking-v1-battered-lod1.glb",
+       "sha256": "85b0c28bca2d734154d3729ff964cac1505bf3ee3557439ac8278a9cf235a4f9",
+       "bytes": 15592,
+       "triangles": 200
+      },
+      {
+       "path": "public/assets/street-signs/disabledParking-v1-lod2.glb",
+       "sha256": "02cc44100691bf18680084ec5ceb7984e8c795f3d09e6e8dbc8929c3ca8f4ed9",
+       "bytes": 3576,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    12.0,
+    18.0
+   ],
+   "frameIn": [
+    12.0,
+    24.0
+   ],
+   "frameM": [
+    0.3048,
+    0.6096
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "layout": "R99(CA)"
+   }
+  },
+  "doNotEnter": {
+   "faceIndex": 17,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/doNotEnter-v1.glb",
+     "sha256": "3f0ede1b477189ddd591eec970ed566464b1921c222e8744e64e85ded8801620",
+     "bytes": 83156,
+     "triangles": 1052
+    },
+    {
+     "path": "public/assets/street-signs/doNotEnter-v1-lod1.glb",
+     "sha256": "c84b0626c7606481f9c51d2a6781af984164d16a8d1c29064bdd1adbedb930bc",
+     "bytes": 16660,
+     "triangles": 212
+    },
+    {
+     "path": "public/assets/street-signs/doNotEnter-v1-lod2.glb",
+     "sha256": "6617a783dc109178f524d13d6582c9955df693bab256b29e4b24b3f159d1a2cc",
+     "bytes": 3540,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/doNotEnter-v1-rusty.glb",
+       "sha256": "b370065ad6c203ed1ee6d7539b0ab5aa0b7f3dbd4a8e524871e51f562e139d37",
+       "bytes": 83676,
+       "triangles": 1052
+      },
+      {
+       "path": "public/assets/street-signs/doNotEnter-v1-rusty-lod1.glb",
+       "sha256": "79fcc382dce638061ad396492374534f393ed84785861f861d0caeb5ed33c909",
+       "bytes": 16676,
+       "triangles": 212
+      },
+      {
+       "path": "public/assets/street-signs/doNotEnter-v1-lod2.glb",
+       "sha256": "6617a783dc109178f524d13d6582c9955df693bab256b29e4b24b3f159d1a2cc",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/doNotEnter-v1-battered.glb",
+       "sha256": "c1241f99c3747c5fd08c22f4ec93649ff8a9a979015e04f75f06ba6df1533f31",
+       "bytes": 88988,
+       "triangles": 1138
+      },
+      {
+       "path": "public/assets/street-signs/doNotEnter-v1-battered-lod1.glb",
+       "sha256": "91d620fb4b78145cc000f63e24728fa9bccde09773e5b7706322201ff7250464",
+       "bytes": 22628,
+       "triangles": 298
+      },
+      {
+       "path": "public/assets/street-signs/doNotEnter-v1-lod2.glb",
+       "sha256": "6617a783dc109178f524d13d6582c9955df693bab256b29e4b24b3f159d1a2cc",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    30.0
+   ],
+   "frameIn": [
+    30.0,
+    30.0
+   ],
+   "frameM": [
+    0.762,
+    0.762
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "svg": "R5-1"
+   }
+  },
+  "guide": {
+   "faceIndex": 18,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/guide-v1.glb",
+     "sha256": "93a710a5a25abbcdee701d3c45c502d6c3cf3d9607d54ca15a3472cfc2f72db5",
+     "bytes": 76604,
+     "triangles": 956
+    },
+    {
+     "path": "public/assets/street-signs/guide-v1-lod1.glb",
+     "sha256": "b3e514b442becc9d7005b7121584edcb98faf6c86ba85c2bdfcee737cfd90543",
+     "bytes": 9600,
+     "triangles": 116
+    },
+    {
+     "path": "public/assets/street-signs/guide-v1-lod2.glb",
+     "sha256": "5a74e2c17d714426214b0f4a169cae73fa8b9d613fe01a7261149b91fc979e79",
+     "bytes": 3528,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/guide-v1-rusty.glb",
+       "sha256": "8df3cd95ec6d5e4fb87654b27dcb18bc9aee7003846e4d03d6936c129f8609d0",
+       "bytes": 76612,
+       "triangles": 956
+      },
+      {
+       "path": "public/assets/street-signs/guide-v1-rusty-lod1.glb",
+       "sha256": "e90df72a727b21d65c2cc25784d77bf7c27bda644d92d09aceb3526702db1ee1",
+       "bytes": 9616,
+       "triangles": 116
+      },
+      {
+       "path": "public/assets/street-signs/guide-v1-lod2.glb",
+       "sha256": "5a74e2c17d714426214b0f4a169cae73fa8b9d613fe01a7261149b91fc979e79",
+       "bytes": 3528,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/guide-v1-battered.glb",
+       "sha256": "5914c5cfe07c043ce8001c11c47004ee0b44939170b807bd55ac3d23f3a8f440",
+       "bytes": 81056,
+       "triangles": 1002
+      },
+      {
+       "path": "public/assets/street-signs/guide-v1-battered-lod1.glb",
+       "sha256": "5178d8d0ab4fe9bbce8140f2d79458ebd90b7b9428feccc87ffcb99969ab47b8",
+       "bytes": 13220,
+       "triangles": 162
+      },
+      {
+       "path": "public/assets/street-signs/guide-v1-lod2.glb",
+       "sha256": "5a74e2c17d714426214b0f4a169cae73fa8b9d613fe01a7261149b91fc979e79",
+       "bytes": 3528,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    18.0,
+    30.0
+   ],
+   "frameIn": [
+    18.0,
+    30.0
+   ],
+   "frameM": [
+    0.4572,
+    0.762
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "drawn": "OTHER GUIDE: a catch-all inventory category that names no single sign; the JS green plate is kept with its legend reduced to BUS STOP (the JS names a transit operator, and no face carries a brand)"
+   }
+  },
+  "noDoubleParking": {
+   "faceIndex": 23,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/noDoubleParking-v1.glb",
+     "sha256": "c51bbfe45f561d40eddd656c392c1ef637bbede35409b5ae5ec5e0c594003d6a",
+     "bytes": 106136,
+     "triangles": 980
+    },
+    {
+     "path": "public/assets/street-signs/noDoubleParking-v1-lod1.glb",
+     "sha256": "9d61076e3251530db536ae6882ac4e7cb7f8577c805ebf1f7237189a9d911e74",
+     "bytes": 11308,
+     "triangles": 140
+    },
+    {
+     "path": "public/assets/street-signs/noDoubleParking-v1-lod2.glb",
+     "sha256": "d81f3e0461f9af8d1d5f959cf4aba0ffdfd4f31b718a0704b95ffbd8ac46065c",
+     "bytes": 3556,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noDoubleParking-v1-rusty.glb",
+       "sha256": "1a6b937796c144644752d27ffd78212c0102a36af60da7b65c23ca65b0b55a08",
+       "bytes": 98908,
+       "triangles": 980
+      },
+      {
+       "path": "public/assets/street-signs/noDoubleParking-v1-rusty-lod1.glb",
+       "sha256": "19aef792646c3f0f748b3155ebc6b99614df138960553f3d21f31f52cd0db4c0",
+       "bytes": 11328,
+       "triangles": 140
+      },
+      {
+       "path": "public/assets/street-signs/noDoubleParking-v1-lod2.glb",
+       "sha256": "d81f3e0461f9af8d1d5f959cf4aba0ffdfd4f31b718a0704b95ffbd8ac46065c",
+       "bytes": 3556,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noDoubleParking-v1-battered.glb",
+       "sha256": "a60dfbb1e98b34239d0f6bc5f0b514d33c34a7763c091427c8249f165d553cc0",
+       "bytes": 109868,
+       "triangles": 1044
+      },
+      {
+       "path": "public/assets/street-signs/noDoubleParking-v1-battered-lod1.glb",
+       "sha256": "9e9bcb2a29196364528ac4678608208eeb0a26a21828c38eefb434367b42121b",
+       "bytes": 15744,
+       "triangles": 204
+      },
+      {
+       "path": "public/assets/street-signs/noDoubleParking-v1-lod2.glb",
+       "sha256": "d81f3e0461f9af8d1d5f959cf4aba0ffdfd4f31b718a0704b95ffbd8ac46065c",
+       "bytes": 3556,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    12.0,
+    18.0
+   ],
+   "frameIn": [
+    18.0,
+    21.0
+   ],
+   "frameM": [
+    0.4572,
+    0.5334
+   ],
+   "fit": 1.16667,
+   "plates": 1,
+   "spec": {
+    "layout": "R39-1(CA)"
+   }
+  },
+  "noLeftTurn": {
+   "faceIndex": 10,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/noLeftTurn-v1.glb",
+     "sha256": "1a3b34c7f489299df3e17f21d7dc4cf464d38009f64f201eb8506b38d4837d78",
+     "bytes": 87376,
+     "triangles": 1058
+    },
+    {
+     "path": "public/assets/street-signs/noLeftTurn-v1-lod1.glb",
+     "sha256": "dc2a07147e6e2bbe98ab93c90259acc5cc08f2831f5a10fa15a1b8fb02eabde0",
+     "bytes": 16760,
+     "triangles": 218
+    },
+    {
+     "path": "public/assets/street-signs/noLeftTurn-v1-lod2.glb",
+     "sha256": "d14565d146e474752f169c1a9d5006e7b1ba4f3cbc2eacc830f4d826be79fc46",
+     "bytes": 3540,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noLeftTurn-v1-rusty.glb",
+       "sha256": "12fd4e6201ee300950c3e7e4a802cbbe92ee66ca7a1ca6768f1f7c19f08dcc51",
+       "bytes": 89376,
+       "triangles": 1058
+      },
+      {
+       "path": "public/assets/street-signs/noLeftTurn-v1-rusty-lod1.glb",
+       "sha256": "e534482df2913d743bb938ad9f3c281c4856f12278fb6d71ec50d9ac6c9d9823",
+       "bytes": 16776,
+       "triangles": 218
+      },
+      {
+       "path": "public/assets/street-signs/noLeftTurn-v1-lod2.glb",
+       "sha256": "d14565d146e474752f169c1a9d5006e7b1ba4f3cbc2eacc830f4d826be79fc46",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noLeftTurn-v1-battered.glb",
+       "sha256": "8fbc46d4d1a3d7ba81d697997f63df10a0771305bd5ecf46273a9fb2bd5c2ef3",
+       "bytes": 93204,
+       "triangles": 1142
+      },
+      {
+       "path": "public/assets/street-signs/noLeftTurn-v1-battered-lod1.glb",
+       "sha256": "219b3c882d2d00c016b4c114090d808f402caee0ce63c67de9ea939c09351c4e",
+       "bytes": 22812,
+       "triangles": 302
+      },
+      {
+       "path": "public/assets/street-signs/noLeftTurn-v1-lod2.glb",
+       "sha256": "d14565d146e474752f169c1a9d5006e7b1ba4f3cbc2eacc830f4d826be79fc46",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    36.0,
+    36.0
+   ],
+   "frameIn": [
+    30.0,
+    30.0
+   ],
+   "frameM": [
+    0.762,
+    0.762
+   ],
+   "fit": 0.83333,
+   "plates": 1,
+   "spec": {
+    "svg": "R3-2"
+   }
+  },
+  "noParking": {
+   "faceIndex": 5,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/noParking-v1.glb",
+     "sha256": "0b1e78a2bfc395102fcfe27b4add99f61395a66086371b41ad28d3b11431c884",
+     "bytes": 97780,
+     "triangles": 980
+    },
+    {
+     "path": "public/assets/street-signs/noParking-v1-lod1.glb",
+     "sha256": "7cfe4233e7d7b5e8ae4ae59171689896bd2a5dfb484d75fadba03715a1e039be",
+     "bytes": 11292,
+     "triangles": 140
+    },
+    {
+     "path": "public/assets/street-signs/noParking-v1-lod2.glb",
+     "sha256": "92f1e2b81a3324ed985c5292b332c22052a2278721b6fc57ab7dbdecbfe532a0",
+     "bytes": 3540,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noParking-v1-rusty.glb",
+       "sha256": "80b360e7bfc859dc4db2307c2279b274a45ce4f61655864bb07d30708ce4f9c4",
+       "bytes": 94652,
+       "triangles": 980
+      },
+      {
+       "path": "public/assets/street-signs/noParking-v1-rusty-lod1.glb",
+       "sha256": "d433908c627821322853c82a399d66e9f6f1a412505af42ea315bcb0851f2267",
+       "bytes": 11312,
+       "triangles": 140
+      },
+      {
+       "path": "public/assets/street-signs/noParking-v1-lod2.glb",
+       "sha256": "92f1e2b81a3324ed985c5292b332c22052a2278721b6fc57ab7dbdecbfe532a0",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noParking-v1-battered.glb",
+       "sha256": "558df1f1f6e73518df5428f668dfbbbaf9e2ef6bf331e846e756019fff5969ac",
+       "bytes": 101132,
+       "triangles": 1040
+      },
+      {
+       "path": "public/assets/street-signs/noParking-v1-battered-lod1.glb",
+       "sha256": "435b596015a17af9f737eee4990109c128b8f8ba9c453a8cdc7d8249b868f75d",
+       "bytes": 15124,
+       "triangles": 200
+      },
+      {
+       "path": "public/assets/street-signs/noParking-v1-lod2.glb",
+       "sha256": "92f1e2b81a3324ed985c5292b332c22052a2278721b6fc57ab7dbdecbfe532a0",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    12.0,
+    18.0
+   ],
+   "frameIn": [
+    18.0,
+    18.0
+   ],
+   "frameM": [
+    0.4572,
+    0.4572
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "layout": "R26(CA)"
+   }
+  },
+  "noRightTurn": {
+   "faceIndex": 11,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/noRightTurn-v1.glb",
+     "sha256": "275f15e175e32895e9991263bccd0faa09f6d253f7051c08ce63f14951cf70ca",
+     "bytes": 87560,
+     "triangles": 1058
+    },
+    {
+     "path": "public/assets/street-signs/noRightTurn-v1-lod1.glb",
+     "sha256": "a74c9446bf8ea677a67acb2139b1052c80e80ecd7e304ca584f93d58954d201e",
+     "bytes": 16844,
+     "triangles": 218
+    },
+    {
+     "path": "public/assets/street-signs/noRightTurn-v1-lod2.glb",
+     "sha256": "fd783b58ef883411ef93119bb419a959a1ec95b76d1a916cdfc407b03a7d5e4d",
+     "bytes": 3628,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noRightTurn-v1-rusty.glb",
+       "sha256": "19d048909fb7114517edc2811c806e569d9395e076c6f531bea7329cb597f473",
+       "bytes": 89264,
+       "triangles": 1058
+      },
+      {
+       "path": "public/assets/street-signs/noRightTurn-v1-rusty-lod1.glb",
+       "sha256": "c574eed0eb88e20b681592868d22c7c3e8bbd4247d9b1a50d6e137368ac3cdbe",
+       "bytes": 16860,
+       "triangles": 218
+      },
+      {
+       "path": "public/assets/street-signs/noRightTurn-v1-lod2.glb",
+       "sha256": "fd783b58ef883411ef93119bb419a959a1ec95b76d1a916cdfc407b03a7d5e4d",
+       "bytes": 3628,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/noRightTurn-v1-battered.glb",
+       "sha256": "0d6fde0c92c21f94c140ac19478aa0bf8e5a36fbe89ba5627efe9c9bd17c9438",
+       "bytes": 92564,
+       "triangles": 1138
+      },
+      {
+       "path": "public/assets/street-signs/noRightTurn-v1-battered-lod1.glb",
+       "sha256": "aee13cbc4f0ded1150fe3db0b7030b7e39f858785d52dbc843dca274f3febd48",
+       "bytes": 22596,
+       "triangles": 298
+      },
+      {
+       "path": "public/assets/street-signs/noRightTurn-v1-lod2.glb",
+       "sha256": "fd783b58ef883411ef93119bb419a959a1ec95b76d1a916cdfc407b03a7d5e4d",
+       "bytes": 3628,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    36.0,
+    36.0
+   ],
+   "frameIn": [
+    24.0,
+    36.0
+   ],
+   "frameM": [
+    0.6096,
+    0.9144
+   ],
+   "fit": 0.66667,
+   "plates": 1,
+   "spec": {
+    "svg": "R3-1"
+   }
+  },
+  "oneWayLeft": {
+   "faceIndex": 8,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/oneWayLeft-v1.glb",
+     "sha256": "4095cd9221827978e8180ff6bd4fc9c8c349b3f07116d0f2f13603b29272f79d",
+     "bytes": 79352,
+     "triangles": 1010
+    },
+    {
+     "path": "public/assets/street-signs/oneWayLeft-v1-lod1.glb",
+     "sha256": "cd8ce4e9ceb7acf6bc82e37932b2efe626702156418ef49079b729327798fc04",
+     "bytes": 13416,
+     "triangles": 170
+    },
+    {
+     "path": "public/assets/street-signs/oneWayLeft-v1-lod2.glb",
+     "sha256": "dac974f947765b1de4bd46bbb5be68f473114e92fed8ae90a4c9f67941b33add",
+     "bytes": 3560,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/oneWayLeft-v1-rusty.glb",
+       "sha256": "81a1a56dd28f740ffd2b663b90d1efeaac129a56fafded766fd35f0bc1afd09c",
+       "bytes": 85232,
+       "triangles": 1010
+      },
+      {
+       "path": "public/assets/street-signs/oneWayLeft-v1-rusty-lod1.glb",
+       "sha256": "76d713e1e13b9b216a2d7817ab40cbb4c844481d690883aef41fafd02279e2f2",
+       "bytes": 13436,
+       "triangles": 170
+      },
+      {
+       "path": "public/assets/street-signs/oneWayLeft-v1-lod2.glb",
+       "sha256": "dac974f947765b1de4bd46bbb5be68f473114e92fed8ae90a4c9f67941b33add",
+       "bytes": 3560,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/oneWayLeft-v1-battered.glb",
+       "sha256": "a89f6ad83378e50f3880702e0af02dbc167cea91aa494e8b00a56db66130606d",
+       "bytes": 86476,
+       "triangles": 1078
+      },
+      {
+       "path": "public/assets/street-signs/oneWayLeft-v1-battered-lod1.glb",
+       "sha256": "4bba19719a8e7e48f170ab7a160ce2410b54d49f15bb96f9284d3513ccbea30c",
+       "bytes": 18492,
+       "triangles": 238
+      },
+      {
+       "path": "public/assets/street-signs/oneWayLeft-v1-lod2.glb",
+       "sha256": "dac974f947765b1de4bd46bbb5be68f473114e92fed8ae90a4c9f67941b33add",
+       "bytes": 3560,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    36.0,
+    12.0
+   ],
+   "frameIn": [
+    48.0,
+    16.0
+   ],
+   "frameM": [
+    1.2192,
+    0.4064
+   ],
+   "fit": 1.33333,
+   "plates": 1,
+   "spec": {
+    "svg": "R6-1L"
+   }
+  },
+  "oneWayRight": {
+   "faceIndex": 7,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/oneWayRight-v1.glb",
+     "sha256": "f728c7ff7d6d93d98cb57201a727fb3ed40696dde7d6314e157aa1139e934681",
+     "bytes": 80416,
+     "triangles": 1010
+    },
+    {
+     "path": "public/assets/street-signs/oneWayRight-v1-lod1.glb",
+     "sha256": "4e4f02ef01a70faf1dc8ea68ae989c6c239bdc7de75aaf139c1b6b5cc9f7549d",
+     "bytes": 13420,
+     "triangles": 170
+    },
+    {
+     "path": "public/assets/street-signs/oneWayRight-v1-lod2.glb",
+     "sha256": "5dd8a16d494e12deb06b4600c54b1e6c1410a50beb98d353819fe472f7a01e67",
+     "bytes": 3564,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/oneWayRight-v1-rusty.glb",
+       "sha256": "0537005dc5f3389026ffb1cbaf4eb2581e6a567a870fba0caa2c9bb155fdf420",
+       "bytes": 82908,
+       "triangles": 1010
+      },
+      {
+       "path": "public/assets/street-signs/oneWayRight-v1-rusty-lod1.glb",
+       "sha256": "e973f22552b5a3c6c355daeb6cbfd15792f04b42a980612a720fb4547e94e47b",
+       "bytes": 13440,
+       "triangles": 170
+      },
+      {
+       "path": "public/assets/street-signs/oneWayRight-v1-lod2.glb",
+       "sha256": "5dd8a16d494e12deb06b4600c54b1e6c1410a50beb98d353819fe472f7a01e67",
+       "bytes": 3564,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/oneWayRight-v1-battered.glb",
+       "sha256": "a32911e46ab0a4caac518bcc046a442d023b514b598967081cc1f0fd9f0ed1d3",
+       "bytes": 86040,
+       "triangles": 1078
+      },
+      {
+       "path": "public/assets/street-signs/oneWayRight-v1-battered-lod1.glb",
+       "sha256": "08c7dd2c884123f1770595ed6f1c10a03cd741debffacfd9ee5c615a732e7a75",
+       "bytes": 18848,
+       "triangles": 238
+      },
+      {
+       "path": "public/assets/street-signs/oneWayRight-v1-lod2.glb",
+       "sha256": "5dd8a16d494e12deb06b4600c54b1e6c1410a50beb98d353819fe472f7a01e67",
+       "bytes": 3564,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    36.0,
+    12.0
+   ],
+   "frameIn": [
+    48.0,
+    16.0
+   ],
+   "frameM": [
+    1.2192,
+    0.4064
+   ],
+   "fit": 1.33333,
+   "plates": 1,
+   "spec": {
+    "svg": "R6-1R"
+   }
+  },
+  "parkingAngle": {
+   "faceIndex": 21,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/parkingAngle-v1.glb",
+     "sha256": "b5f57080d63cc1a60f64d6818b2ec310c3f6482b685858fc5a50dbc4ff7d6360",
+     "bytes": 86552,
+     "triangles": 956
+    },
+    {
+     "path": "public/assets/street-signs/parkingAngle-v1-lod1.glb",
+     "sha256": "d042d36ad30683d2786215a641a50c7a21d89de0ad292ce3ed3779172c96fdca",
+     "bytes": 9364,
+     "triangles": 116
+    },
+    {
+     "path": "public/assets/street-signs/parkingAngle-v1-lod2.glb",
+     "sha256": "99b141ce04ae96f3d23638e7d0dd4c89147f9c961022a1d13067c6740676f92c",
+     "bytes": 3548,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/parkingAngle-v1-rusty.glb",
+       "sha256": "27deb68d7c0bed8d073d1e3de9438eda896c922f6f627f4a6882bdd61a9ac752",
+       "bytes": 86152,
+       "triangles": 956
+      },
+      {
+       "path": "public/assets/street-signs/parkingAngle-v1-rusty-lod1.glb",
+       "sha256": "f2c607df59ec02fa86c688fde271bfbfdb133c417f6631b9c717c3ee465cb342",
+       "bytes": 9384,
+       "triangles": 116
+      },
+      {
+       "path": "public/assets/street-signs/parkingAngle-v1-lod2.glb",
+       "sha256": "99b141ce04ae96f3d23638e7d0dd4c89147f9c961022a1d13067c6740676f92c",
+       "bytes": 3548,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/parkingAngle-v1-battered.glb",
+       "sha256": "31eaf2ba194838f16b474d7b727aec73cc6f0f2fb4099d2b2d70f5fea9e52849",
+       "bytes": 90572,
+       "triangles": 1002
+      },
+      {
+       "path": "public/assets/street-signs/parkingAngle-v1-battered-lod1.glb",
+       "sha256": "aa21ba430cf934db66e7965073ddcfd9d06d8768b7d9cdadfbacfe2b0f3c4fd9",
+       "bytes": 12700,
+       "triangles": 162
+      },
+      {
+       "path": "public/assets/street-signs/parkingAngle-v1-lod2.glb",
+       "sha256": "99b141ce04ae96f3d23638e7d0dd4c89147f9c961022a1d13067c6740676f92c",
+       "bytes": 3548,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    18.0,
+    18.0
+   ],
+   "frameIn": [
+    18.0,
+    18.0
+   ],
+   "frameM": [
+    0.4572,
+    0.4572
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "drawn": "PARKING:PARK AT 90 / PARALLEL: no CA or federal code for PARK AT 90 DEGREE ANGLE (R24(CA) is PARK PARALLEL only)"
+   }
+  },
+  "pedestrian": {
+   "faceIndex": 14,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/pedestrian-v1.glb",
+     "sha256": "013486d2d93031b86ddb01dca92761c7197dd9aef9cbec0a4d2f9024bb737d40",
+     "bytes": 78876,
+     "triangles": 1046
+    },
+    {
+     "path": "public/assets/street-signs/pedestrian-v1-lod1.glb",
+     "sha256": "0faeab6338f625dec12830b0bf8de8568fa53a8ce78bdd2a07e5a53c496a2147",
+     "bytes": 15856,
+     "triangles": 206
+    },
+    {
+     "path": "public/assets/street-signs/pedestrian-v1-lod2.glb",
+     "sha256": "78b7f5fe9560fda59c38193dde490d5442716136ddd0f9b1d38682c561ba5d14",
+     "bytes": 3540,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/pedestrian-v1-rusty.glb",
+       "sha256": "5f54891b55422373d9cf3ae92c5436e3860722c54f3fcecd0e3db2cf4ead2027",
+       "bytes": 81428,
+       "triangles": 1046
+      },
+      {
+       "path": "public/assets/street-signs/pedestrian-v1-rusty-lod1.glb",
+       "sha256": "fd2faccb01d421dd53927f2c86318054708588d11cdf9a3c641dc694e9d37735",
+       "bytes": 15872,
+       "triangles": 206
+      },
+      {
+       "path": "public/assets/street-signs/pedestrian-v1-lod2.glb",
+       "sha256": "78b7f5fe9560fda59c38193dde490d5442716136ddd0f9b1d38682c561ba5d14",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/pedestrian-v1-battered.glb",
+       "sha256": "aef5397cd8542ec3822de60635e1913ce04a88b858eca039a516488b81dd4a0c",
+       "bytes": 79744,
+       "triangles": 1046
+      },
+      {
+       "path": "public/assets/street-signs/pedestrian-v1-battered-lod1.glb",
+       "sha256": "d511aa7f904e2427ca9975526b229db09c3f0cc08a27d16c17bc98b0a2d83928",
+       "bytes": 16476,
+       "triangles": 206
+      },
+      {
+       "path": "public/assets/street-signs/pedestrian-v1-lod2.glb",
+       "sha256": "78b7f5fe9560fda59c38193dde490d5442716136ddd0f9b1d38682c561ba5d14",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    30.0
+   ],
+   "frameIn": [
+    30.0,
+    30.0
+   ],
+   "frameM": [
+    0.762,
+    0.762
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "svg": "W11-2"
+   }
+  },
+  "permitParking": {
+   "faceIndex": 3,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/permitParking-v1.glb",
+     "sha256": "dff1bc362c73d527bbfe5f1759b84f43c030e2a7529428eac5282daaaa48cc85",
+     "bytes": 102212,
+     "triangles": 980
+    },
+    {
+     "path": "public/assets/street-signs/permitParking-v1-lod1.glb",
+     "sha256": "fa97bfff1ced4f81b3055ef64edad56f55940fae30084f022f8baab9d33132ca",
+     "bytes": 11304,
+     "triangles": 140
+    },
+    {
+     "path": "public/assets/street-signs/permitParking-v1-lod2.glb",
+     "sha256": "94fb2006d79ed906001e2e8f8709ee5d45c6912684c6c399499a1f2ab2be098f",
+     "bytes": 3548,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/permitParking-v1-rusty.glb",
+       "sha256": "c272e97225168d58705791faff955c142a48b38df473f3b2931e01056178e208",
+       "bytes": 97564,
+       "triangles": 980
+      },
+      {
+       "path": "public/assets/street-signs/permitParking-v1-rusty-lod1.glb",
+       "sha256": "f96a6b9ba09d207eaf3b4b494d8823385d16f92acb3d314a6d7bc71d651c03d3",
+       "bytes": 11320,
+       "triangles": 140
+      },
+      {
+       "path": "public/assets/street-signs/permitParking-v1-lod2.glb",
+       "sha256": "94fb2006d79ed906001e2e8f8709ee5d45c6912684c6c399499a1f2ab2be098f",
+       "bytes": 3548,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/permitParking-v1-battered.glb",
+       "sha256": "8f682b9db495bc6ed39c223f909c13e5da9209e6b3891183596abbf24c2b5e21",
+       "bytes": 103364,
+       "triangles": 1044
+      },
+      {
+       "path": "public/assets/street-signs/permitParking-v1-battered-lod1.glb",
+       "sha256": "64e41919550534879252a388b0c0ec406c5be08893bde1f69a28c1312dd7b8e4",
+       "bytes": 15612,
+       "triangles": 204
+      },
+      {
+       "path": "public/assets/street-signs/permitParking-v1-lod2.glb",
+       "sha256": "94fb2006d79ed906001e2e8f8709ee5d45c6912684c6c399499a1f2ab2be098f",
+       "bytes": 3548,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    12.0,
+    18.0
+   ],
+   "frameIn": [
+    18.0,
+    21.0
+   ],
+   "frameM": [
+    0.4572,
+    0.5334
+   ],
+   "fit": 1.16667,
+   "plates": 1,
+   "spec": {
+    "layout": "R32C(CA)"
+   }
+  },
+  "regulatory": {
+   "faceIndex": 16,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/regulatory-v1.glb",
+     "sha256": "396e7b590bb0baa039dd1d58d6fcdd5298fc0e4e66ab8681b76de051b73a4e19",
+     "bytes": 89980,
+     "triangles": 956
+    },
+    {
+     "path": "public/assets/street-signs/regulatory-v1-lod1.glb",
+     "sha256": "fcdf1dd0361f69e900c61c66eee4fb39792ea280b949273ce0472bc80f2cae20",
+     "bytes": 9484,
+     "triangles": 116
+    },
+    {
+     "path": "public/assets/street-signs/regulatory-v1-lod2.glb",
+     "sha256": "d75eb9d121e3c612c7f88e9cd99b3e72f74f8d74d32abfd5ca2b384791d9d8d1",
+     "bytes": 3540,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/regulatory-v1-rusty.glb",
+       "sha256": "d4ee594c33bc7a94e8f985a9b9039959e0fd751d02a04598b36b0917d0d71d5e",
+       "bytes": 89572,
+       "triangles": 956
+      },
+      {
+       "path": "public/assets/street-signs/regulatory-v1-rusty-lod1.glb",
+       "sha256": "bb4be7382f7f84233356cd01a52c62c777498f1f4523de2f219ad1725ff3a416",
+       "bytes": 9504,
+       "triangles": 116
+      },
+      {
+       "path": "public/assets/street-signs/regulatory-v1-lod2.glb",
+       "sha256": "d75eb9d121e3c612c7f88e9cd99b3e72f74f8d74d32abfd5ca2b384791d9d8d1",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/regulatory-v1-battered.glb",
+       "sha256": "f09d7ea0fb00d0090cc47f6c3bece929ba8bf3afddbb5316a7374fc6470192d4",
+       "bytes": 94972,
+       "triangles": 1010
+      },
+      {
+       "path": "public/assets/street-signs/regulatory-v1-battered-lod1.glb",
+       "sha256": "df163395d423a6e04dd762c43b0d4316b661a2e050d07417a24fc3f3ac0d0b4b",
+       "bytes": 13092,
+       "triangles": 170
+      },
+      {
+       "path": "public/assets/street-signs/regulatory-v1-lod2.glb",
+       "sha256": "d75eb9d121e3c612c7f88e9cd99b3e72f74f8d74d32abfd5ca2b384791d9d8d1",
+       "bytes": 3540,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    14.0,
+    21.0
+   ],
+   "frameIn": [
+    14.0,
+    21.0
+   ],
+   "frameM": [
+    0.3556,
+    0.5334
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "drawn": "OTHER REGULATORY / BIKE REG / BIKE: a catch-all inventory category that names no single sign"
+   }
+  },
+  "school": {
+   "faceIndex": 12,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/school-v1.glb",
+     "sha256": "01a666072c4c6069ed823874edf56dcaa6c1c96c7cd0b5a912a377a5adfd5d5c",
+     "bytes": 134936,
+     "triangles": 2170
+    },
+    {
+     "path": "public/assets/street-signs/school-v1-lod1.glb",
+     "sha256": "9c69a5e7ff87f8c27b57af6ea95448e33245be16f5fe6e72c0ba4dff0d72de26",
+     "bytes": 36432,
+     "triangles": 490
+    },
+    {
+     "path": "public/assets/street-signs/school-v1-lod2.glb",
+     "sha256": "cb4bb03eb092af11b88a572a02b775e91c65b6721646eda1ded8da3ad5c5e5ad",
+     "bytes": 5848,
+     "triangles": 88
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/school-v1-rusty.glb",
+       "sha256": "d03b9513ae4618bf0fac55e009bb6200f4b03eca46afd1b4f84edb4bf9e3a77b",
+       "bytes": 136168,
+       "triangles": 2170
+      },
+      {
+       "path": "public/assets/street-signs/school-v1-rusty-lod1.glb",
+       "sha256": "920d5364365e4773d9c2a55882741c65b34247426469782f583343b047913c79",
+       "bytes": 36452,
+       "triangles": 490
+      },
+      {
+       "path": "public/assets/street-signs/school-v1-lod2.glb",
+       "sha256": "cb4bb03eb092af11b88a572a02b775e91c65b6721646eda1ded8da3ad5c5e5ad",
+       "bytes": 5848,
+       "triangles": 88
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/school-v1-battered.glb",
+       "sha256": "9d4626c28a60caa0d92a43af9994915bfaa0d009d1ccc99fa2f5b14a2b38fd14",
+       "bytes": 135928,
+       "triangles": 2170
+      },
+      {
+       "path": "public/assets/street-signs/school-v1-battered-lod1.glb",
+       "sha256": "b9a4b8e18d07b9ec7b46ecb33229e353cc3de2ddd4492c759a5b2718f30dbce4",
+       "bytes": 37760,
+       "triangles": 490
+      },
+      {
+       "path": "public/assets/street-signs/school-v1-lod2.glb",
+       "sha256": "cb4bb03eb092af11b88a572a02b775e91c65b6721646eda1ded8da3ad5c5e5ad",
+       "bytes": 5848,
+       "triangles": 88
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    42.0
+   ],
+   "frameIn": [
+    30.0,
+    42.0
+   ],
+   "frameM": [
+    0.762,
+    1.0668
+   ],
+   "fit": 1.0,
+   "plates": 2,
+   "spec": {
+    "stack": [
+     {
+      "svg": "S1-1"
+     },
+     {
+      "sizeIn": [
+       24,
+       12
+      ],
+      "svg": "W16-7PL"
+     }
+    ]
+   }
+  },
+  "schoolAhead": {
+   "faceIndex": 13,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/schoolAhead-v1.glb",
+     "sha256": "56fd016b49296e62a831472cce07f8df6bc8730ca5752a793257c489dbba39ed",
+     "bytes": 132292,
+     "triangles": 2098
+    },
+    {
+     "path": "public/assets/street-signs/schoolAhead-v1-lod1.glb",
+     "sha256": "5e041bdcdbc73d4e644ad8bb938e94bdfc79410df1ee514705d8a493c6bab644",
+     "bytes": 31340,
+     "triangles": 418
+    },
+    {
+     "path": "public/assets/street-signs/schoolAhead-v1-lod2.glb",
+     "sha256": "dc7feec8763ac4e247e806c3248136ad0d3589cd14a83be24f800cbee0561476",
+     "bytes": 5864,
+     "triangles": 88
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/schoolAhead-v1-rusty.glb",
+       "sha256": "8014e9325a51fd5d9f9e7b6986539f9314004c24660f82d8c708c9c909ccf477",
+       "bytes": 131272,
+       "triangles": 2098
+      },
+      {
+       "path": "public/assets/street-signs/schoolAhead-v1-rusty-lod1.glb",
+       "sha256": "f17c7c01329e57addc4cbeb39c711aa6584b0d89418e70fd15deb3b847e2b5d8",
+       "bytes": 31360,
+       "triangles": 418
+      },
+      {
+       "path": "public/assets/street-signs/schoolAhead-v1-lod2.glb",
+       "sha256": "dc7feec8763ac4e247e806c3248136ad0d3589cd14a83be24f800cbee0561476",
+       "bytes": 5864,
+       "triangles": 88
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/schoolAhead-v1-battered.glb",
+       "sha256": "5ed8a5804c637fcb24c179ee8acd6b49faab600ec3d6662ceafd2f54437d044f",
+       "bytes": 131452,
+       "triangles": 2098
+      },
+      {
+       "path": "public/assets/street-signs/schoolAhead-v1-battered-lod1.glb",
+       "sha256": "dda373431d55f0a9b84ef2ba317f139188bfb64136681e53c5b826409da3230b",
+       "bytes": 32860,
+       "triangles": 418
+      },
+      {
+       "path": "public/assets/street-signs/schoolAhead-v1-lod2.glb",
+       "sha256": "dc7feec8763ac4e247e806c3248136ad0d3589cd14a83be24f800cbee0561476",
+       "bytes": 5864,
+       "triangles": 88
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    42.0
+   ],
+   "frameIn": [
+    30.0,
+    42.0
+   ],
+   "frameM": [
+    0.762,
+    1.0668
+   ],
+   "fit": 1.0,
+   "plates": 2,
+   "spec": {
+    "stack": [
+     {
+      "svg": "S1-1"
+     },
+     {
+      "svg": "W16-9P"
+     }
+    ]
+   }
+  },
+  "speedLimit": {
+   "faceIndex": 9,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/speedLimit-v1.glb",
+     "sha256": "3917cc1aef618a3ff011d4a84059b253698a8e790b38e2405f1981bb26bc21d2",
+     "bytes": 86960,
+     "triangles": 1034
+    },
+    {
+     "path": "public/assets/street-signs/speedLimit-v1-lod1.glb",
+     "sha256": "0b742d1af5d53ab5bdf4b1646f7c957f1f6b15f80918ad02c5f1d672c1a165bb",
+     "bytes": 15268,
+     "triangles": 194
+    },
+    {
+     "path": "public/assets/street-signs/speedLimit-v1-lod2.glb",
+     "sha256": "6e9ffad7ab78346994bbc73ff5996a594927ce01b760f96feba05eeaaa004c20",
+     "bytes": 3560,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/speedLimit-v1-rusty.glb",
+       "sha256": "9244a62afbe12ca1f764ee53d243be6d5985d6645b67374a7efb2f8019986a83",
+       "bytes": 89376,
+       "triangles": 1034
+      },
+      {
+       "path": "public/assets/street-signs/speedLimit-v1-rusty-lod1.glb",
+       "sha256": "7f6cdb545aa8453cd4898bfdb610021984088b94f5ae55a4e0e1347572b9049d",
+       "bytes": 15288,
+       "triangles": 194
+      },
+      {
+       "path": "public/assets/street-signs/speedLimit-v1-lod2.glb",
+       "sha256": "6e9ffad7ab78346994bbc73ff5996a594927ce01b760f96feba05eeaaa004c20",
+       "bytes": 3560,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/speedLimit-v1-battered.glb",
+       "sha256": "c95df9123322b41c33278ae7070db6e3f5bd7abf533b1816e57e946d12bbb341",
+       "bytes": 92368,
+       "triangles": 1110
+      },
+      {
+       "path": "public/assets/street-signs/speedLimit-v1-battered-lod1.glb",
+       "sha256": "213d8330d216e57756024317909d16ba43bfd575c1e3663eb8690c7a40b51e69",
+       "bytes": 20576,
+       "triangles": 270
+      },
+      {
+       "path": "public/assets/street-signs/speedLimit-v1-lod2.glb",
+       "sha256": "6e9ffad7ab78346994bbc73ff5996a594927ce01b760f96feba05eeaaa004c20",
+       "bytes": 3560,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    24.0,
+    30.0
+   ],
+   "frameIn": [
+    24.0,
+    30.0
+   ],
+   "frameM": [
+    0.6096,
+    0.762
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "replace": [
+     {
+      "colour": "black",
+      "fitWidth": true,
+      "note": "the layout's sample numerals (x 208-1520, y 1140-1885) replaced by SF's prima facie 25 at their height and width",
+      "region": [
+       150,
+       1100,
+       1430,
+       830
+      ],
+      "text": "25"
+     }
+    ],
+    "svg": "R2-1"
+   }
+  },
+  "stop": {
+   "faceIndex": 0,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/stop-v1.glb",
+     "sha256": "4c7c92ec88acf3ae9f958fb145622151495e17e2b41d0951a06860d40f33da47",
+     "bytes": 65188,
+     "triangles": 884
+    },
+    {
+     "path": "public/assets/street-signs/stop-v1-lod1.glb",
+     "sha256": "a98b0e1fabcca712ee08720cf833f9660f2e3e4f8ac6c7c4ae90a93963c2357f",
+     "bytes": 4036,
+     "triangles": 44
+    },
+    {
+     "path": "public/assets/street-signs/stop-v1-lod2.glb",
+     "sha256": "d616b5d0ad9ed8bcdce8881b4e4550d329e02b495da4e7896356a7094bd00474",
+     "bytes": 3460,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/stop-v1-rusty.glb",
+       "sha256": "56cd2233f0146790eab255c701b42c7b3809ab887f3ec6f7039a60d86a72cc97",
+       "bytes": 65364,
+       "triangles": 884
+      },
+      {
+       "path": "public/assets/street-signs/stop-v1-rusty-lod1.glb",
+       "sha256": "007dee4cdb79fea9c6281b79db62d1c2a09e99bf17160eb4531dca539e8b4744",
+       "bytes": 4056,
+       "triangles": 44
+      },
+      {
+       "path": "public/assets/street-signs/stop-v1-lod2.glb",
+       "sha256": "d616b5d0ad9ed8bcdce8881b4e4550d329e02b495da4e7896356a7094bd00474",
+       "bytes": 3460,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/stop-v1-battered.glb",
+       "sha256": "8efc78e27b20c901cc59174ba5d7327625e23697a80c36ba9dc9fc53f5b17d63",
+       "bytes": 70268,
+       "triangles": 914
+      },
+      {
+       "path": "public/assets/street-signs/stop-v1-battered-lod1.glb",
+       "sha256": "e01ce8737e6689374261dd2c935d9f0ba9dbdd5ec9e93457d4398716688b9ef1",
+       "bytes": 6576,
+       "triangles": 74
+      },
+      {
+       "path": "public/assets/street-signs/stop-v1-lod2.glb",
+       "sha256": "d616b5d0ad9ed8bcdce8881b4e4550d329e02b495da4e7896356a7094bd00474",
+       "bytes": 3460,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    30.0
+   ],
+   "frameIn": [
+    30.0,
+    30.0
+   ],
+   "frameM": [
+    0.762,
+    0.762
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "svg": "R1-1"
+   }
+  },
+  "streetCleaning": {
+   "faceIndex": 2,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/streetCleaning-v1.glb",
+     "sha256": "88f3ae4ef835c3d2e1da6663ee5e63d7dc555d6c8f7149c0268a29ac26e4be2f",
+     "bytes": 96368,
+     "triangles": 1052
+    },
+    {
+     "path": "public/assets/street-signs/streetCleaning-v1-lod1.glb",
+     "sha256": "33995437e1573f96b4181f92d852edc952e5871b206b4f9154e1cd852ef380e3",
+     "bytes": 16352,
+     "triangles": 212
+    },
+    {
+     "path": "public/assets/street-signs/streetCleaning-v1-lod2.glb",
+     "sha256": "6301bf7dad3727cf0bb2cad9ef397003f2e0905620b7567ce32c46258a98db5c",
+     "bytes": 3552,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/streetCleaning-v1-rusty.glb",
+       "sha256": "895f2ad0f70d6d682b005dd59f52f4ecfcaf51788975b9c1f46673a5ec2ad217",
+       "bytes": 94036,
+       "triangles": 1052
+      },
+      {
+       "path": "public/assets/street-signs/streetCleaning-v1-rusty-lod1.glb",
+       "sha256": "772fc57ab3154f85fb489148ed48e044de64c9c097ba9fd8f8466b4beb246e77",
+       "bytes": 16368,
+       "triangles": 212
+      },
+      {
+       "path": "public/assets/street-signs/streetCleaning-v1-lod2.glb",
+       "sha256": "6301bf7dad3727cf0bb2cad9ef397003f2e0905620b7567ce32c46258a98db5c",
+       "bytes": 3552,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/streetCleaning-v1-battered.glb",
+       "sha256": "5c2f0ffa737644563faaca202b45f3d9ddf9a01445862eaaaa34c4cae2fde3ee",
+       "bytes": 102336,
+       "triangles": 1140
+      },
+      {
+       "path": "public/assets/street-signs/streetCleaning-v1-battered-lod1.glb",
+       "sha256": "d06686e6820109ace03e08958ca1518d572419119d6157937fa0e870b2f1dd04",
+       "bytes": 22560,
+       "triangles": 300
+      },
+      {
+       "path": "public/assets/street-signs/streetCleaning-v1-lod2.glb",
+       "sha256": "6301bf7dad3727cf0bb2cad9ef397003f2e0905620b7567ce32c46258a98db5c",
+       "bytes": 3552,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    18.0,
+    24.0
+   ],
+   "frameIn": [
+    18.0,
+    18.0
+   ],
+   "frameM": [
+    0.4572,
+    0.4572
+   ],
+   "fit": 0.75,
+   "plates": 1,
+   "spec": {
+    "layout": "R30B(CA)"
+   }
+  },
+  "timeParking": {
+   "faceIndex": 4,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/timeParking-v1.glb",
+     "sha256": "1ed47568e4ba3c003b157bb78b95073ca1832fb1c71cb7fd706c78752ae83c34",
+     "bytes": 95516,
+     "triangles": 980
+    },
+    {
+     "path": "public/assets/street-signs/timeParking-v1-lod1.glb",
+     "sha256": "ed6bbdd61f6ae5691d3eff419db7c2eb7506b40d71eadb834aae098a61900623",
+     "bytes": 11300,
+     "triangles": 140
+    },
+    {
+     "path": "public/assets/street-signs/timeParking-v1-lod2.glb",
+     "sha256": "ac3ecde6b698dade07e556abc30530126e7b13bf9cc6e7d3b5316bc6dfd912e1",
+     "bytes": 3544,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/timeParking-v1-rusty.glb",
+       "sha256": "6ac8d380f0ef85f2745cde0a7bc2645d85e97d2de5c5349d75cd93c77cba179f",
+       "bytes": 93528,
+       "triangles": 980
+      },
+      {
+       "path": "public/assets/street-signs/timeParking-v1-rusty-lod1.glb",
+       "sha256": "108bb3682c34f535a61fd1c0190cace1b7b294daacdb7d75a1e56033b103bbe0",
+       "bytes": 11316,
+       "triangles": 140
+      },
+      {
+       "path": "public/assets/street-signs/timeParking-v1-lod2.glb",
+       "sha256": "ac3ecde6b698dade07e556abc30530126e7b13bf9cc6e7d3b5316bc6dfd912e1",
+       "bytes": 3544,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/timeParking-v1-battered.glb",
+       "sha256": "1020815d3f4e6ea136dc92adc58165a5c05155a6809bac60b6c2067e4000abbd",
+       "bytes": 98568,
+       "triangles": 1044
+      },
+      {
+       "path": "public/assets/street-signs/timeParking-v1-battered-lod1.glb",
+       "sha256": "6adcd36ae131767cef8db93a4cc64ad1f76fa25720c99b1c238ee06ff417dcb4",
+       "bytes": 15636,
+       "triangles": 204
+      },
+      {
+       "path": "public/assets/street-signs/timeParking-v1-lod2.glb",
+       "sha256": "ac3ecde6b698dade07e556abc30530126e7b13bf9cc6e7d3b5316bc6dfd912e1",
+       "bytes": 3544,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    12.0,
+    18.0
+   ],
+   "frameIn": [
+    18.0,
+    18.0
+   ],
+   "frameM": [
+    0.4572,
+    0.4572
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "layout": "R32(CA)"
+   }
+  },
+  "towAway": {
+   "faceIndex": 6,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/towAway-v1.glb",
+     "sha256": "20541dffc55e1e27303804d8dc401a2c2eab0620219d68d035124401e21c1a0d",
+     "bytes": 93168,
+     "triangles": 956
+    },
+    {
+     "path": "public/assets/street-signs/towAway-v1-lod1.glb",
+     "sha256": "38b68a5a086ba22052a93b262adfec24d7b81357182e213f19304ee4452f453c",
+     "bytes": 9412,
+     "triangles": 116
+    },
+    {
+     "path": "public/assets/street-signs/towAway-v1-lod2.glb",
+     "sha256": "d9d56bdd3a17096069387969a182e57be12684b21d628ca90ca07cd281f976f3",
+     "bytes": 3532,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/towAway-v1-rusty.glb",
+       "sha256": "da155aec1746724fd3c6fc259d8c224ef198d9a11de0bbd7b08327b73a601416",
+       "bytes": 89808,
+       "triangles": 956
+      },
+      {
+       "path": "public/assets/street-signs/towAway-v1-rusty-lod1.glb",
+       "sha256": "99de893abefd2457f2c85ff90b3fff036e99812f569a10cc0bccd7475398d3c3",
+       "bytes": 9432,
+       "triangles": 116
+      },
+      {
+       "path": "public/assets/street-signs/towAway-v1-lod2.glb",
+       "sha256": "d9d56bdd3a17096069387969a182e57be12684b21d628ca90ca07cd281f976f3",
+       "bytes": 3532,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/towAway-v1-battered.glb",
+       "sha256": "823a3340723f27d7b95ab513f556ef52c1389e4a6412838df5461d4ca7e212c8",
+       "bytes": 96432,
+       "triangles": 1002
+      },
+      {
+       "path": "public/assets/street-signs/towAway-v1-battered-lod1.glb",
+       "sha256": "3d90cb99213ad5286ed91aa7bc7b0720b1cb0a6611e0fb1999a1aece22e07cb1",
+       "bytes": 12844,
+       "triangles": 162
+      },
+      {
+       "path": "public/assets/street-signs/towAway-v1-lod2.glb",
+       "sha256": "d9d56bdd3a17096069387969a182e57be12684b21d628ca90ca07cd281f976f3",
+       "bytes": 3532,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    18.0,
+    21.0
+   ],
+   "frameIn": [
+    18.0,
+    21.0
+   ],
+   "frameM": [
+    0.4572,
+    0.5334
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "drawn": "TOW (TANSAT / TANP ANY TIME): the California sign is R107(CA) Tow-Away NO STOPPING 4 TO 6 PM, whose tow-away symbol is published only as a grid sheet (R107 GRID(CA)); not vectorised in this pass"
+   }
+  },
+  "transitLane": {
+   "faceIndex": 20,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/transitLane-v1.glb",
+     "sha256": "347f1429dbd0d1c22df2b42a78afccd410c3e7692ccb86ad7e15008f7b1bdb59",
+     "bytes": 85112,
+     "triangles": 1022
+    },
+    {
+     "path": "public/assets/street-signs/transitLane-v1-lod1.glb",
+     "sha256": "8349c9f59639e480c65fb13f9d6122059998622b234bfadbe1030ada1d21a61c",
+     "bytes": 14560,
+     "triangles": 182
+    },
+    {
+     "path": "public/assets/street-signs/transitLane-v1-lod2.glb",
+     "sha256": "a4d39417b3269e345c276a2a88a64eec766c23a8376592e592178afada44cb85",
+     "bytes": 3608,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/transitLane-v1-rusty.glb",
+       "sha256": "8e839e8b8468547c1adc953b4e47a7940d1e116ce1ff2e990355899539083c07",
+       "bytes": 86168,
+       "triangles": 1022
+      },
+      {
+       "path": "public/assets/street-signs/transitLane-v1-rusty-lod1.glb",
+       "sha256": "793fc06900ab214d3ef161924da1de8410f9104af40fb6ef72e28291153ea5f9",
+       "bytes": 14580,
+       "triangles": 182
+      },
+      {
+       "path": "public/assets/street-signs/transitLane-v1-lod2.glb",
+       "sha256": "a4d39417b3269e345c276a2a88a64eec766c23a8376592e592178afada44cb85",
+       "bytes": 3608,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/transitLane-v1-battered.glb",
+       "sha256": "33bb6e2803cb2f511c1ffc5f489da99fd3917c51eaea974488b888eb99d3456a",
+       "bytes": 91640,
+       "triangles": 1094
+      },
+      {
+       "path": "public/assets/street-signs/transitLane-v1-battered-lod1.glb",
+       "sha256": "4c3e3ce5f2b43943ebd84115e63851add084ad815c264d661bbfb10330fc9a63",
+       "bytes": 20572,
+       "triangles": 254
+      },
+      {
+       "path": "public/assets/street-signs/transitLane-v1-lod2.glb",
+       "sha256": "a4d39417b3269e345c276a2a88a64eec766c23a8376592e592178afada44cb85",
+       "bytes": 3608,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    42.0
+   ],
+   "frameIn": [
+    30.0,
+    42.0
+   ],
+   "frameM": [
+    0.762,
+    1.0668
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "svg": "R3-11e"
+   }
+  },
+  "warning": {
+   "faceIndex": 15,
+   "lods": [
+    {
+     "path": "public/assets/street-signs/warning-v1.glb",
+     "sha256": "3dce0f504feac1aa2da48f6d1bff814c84d918dc3fe2bb7295607581c42492fd",
+     "bytes": 81664,
+     "triangles": 1046
+    },
+    {
+     "path": "public/assets/street-signs/warning-v1-lod1.glb",
+     "sha256": "3dcc23fa241d575fcfaa591129c4d24009080e57c37d1aad9ac1387dff9c4151",
+     "bytes": 15844,
+     "triangles": 206
+    },
+    {
+     "path": "public/assets/street-signs/warning-v1-lod2.glb",
+     "sha256": "0ad5eb3df467bcce59eade2b9255567822e6daaddea6ce7e89cc69eedee4f98e",
+     "bytes": 3532,
+     "triangles": 44
+    }
+   ],
+   "variants": [
+    {
+     "name": "rusty",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/warning-v1-rusty.glb",
+       "sha256": "594907f8fdab2dd4f7e6d9d33cff5d33b4af211575d26335555e66f56225cc7d",
+       "bytes": 83236,
+       "triangles": 1046
+      },
+      {
+       "path": "public/assets/street-signs/warning-v1-rusty-lod1.glb",
+       "sha256": "c83ae3c80a93f274441d8a65405d5ac226fc9ed222e2aabd8748c7cba7f4856f",
+       "bytes": 15864,
+       "triangles": 206
+      },
+      {
+       "path": "public/assets/street-signs/warning-v1-lod2.glb",
+       "sha256": "0ad5eb3df467bcce59eade2b9255567822e6daaddea6ce7e89cc69eedee4f98e",
+       "bytes": 3532,
+       "triangles": 44
+      }
+     ]
+    },
+    {
+     "name": "battered",
+     "lods": [
+      {
+       "path": "public/assets/street-signs/warning-v1-battered.glb",
+       "sha256": "dcc39886659f57582c87cf1c8427ebeecc972315d4572c7147d6633066af0a2b",
+       "bytes": 80872,
+       "triangles": 1046
+      },
+      {
+       "path": "public/assets/street-signs/warning-v1-battered-lod1.glb",
+       "sha256": "020e75657cf092667e75b12d4717807fc2a6c13e2fc0d0022779d0ee15832fe0",
+       "bytes": 16596,
+       "triangles": 206
+      },
+      {
+       "path": "public/assets/street-signs/warning-v1-lod2.glb",
+       "sha256": "0ad5eb3df467bcce59eade2b9255567822e6daaddea6ce7e89cc69eedee4f98e",
+       "bytes": 3532,
+       "triangles": 44
+      }
+     ]
+    }
+   ],
+   "artIn": [
+    30.0,
+    30.0
+   ],
+   "frameIn": [
+    30.0,
+    30.0
+   ],
+   "frameM": [
+    0.762,
+    0.762
+   ],
+   "fit": 1.0,
+   "plates": 1,
+   "spec": {
+    "svg": "W17-1"
+   }
+  }
+ }
+}

@@ -261,4 +261,176 @@ fn the_glazing_is_a_dielectric_pane() {
     let rows = skyline::facade_rows_for(true);
     let i = skyline::data_for(true).facades.keys().position(|k| k == "fremont-181").unwrap();
     assert!(rows[i][12] > 0.5 && rows[i][15] > 0.0, "pane metalness and window luminance");
+    // Phase 3: v4 LM_FACADES row 5 carries diverse cool/warm nightTemp (r5.z) and nightAccent (r5.w) while v2/v3 stay 0.
+    let r2 = skyline::facade_rows_at(2);
+    let r3 = skyline::facade_rows_at(3);
+    let r4 = skyline::facade_rows_at(4);
+    assert!(r2.iter().all(|r| r[22] == 0.0 && r[23] == 0.0), "v2 keeps row 5 z/w zero");
+    assert!(r3.iter().all(|r| r[22] == 0.0 && r[23] == 0.0), "v3 keeps row 5 z/w zero");
+    assert!(r4.iter().any(|r| r[22] <= -0.8), "v4 includes cool 6000K tech glass towers");
+    assert!(r4.iter().any(|r| r[22] >= 0.75), "v4 includes warm 2500K residential/historic towers");
+    assert!(r4.iter().any(|r| (r[23] - 2.0).abs() < 1e-3), "v4 includes Embarcadero champagne outline accent");
+    assert!(r4.iter().any(|r| (r[23] - 3.0).abs() < 1e-3) && r4.iter().any(|r| (r[23] - 4.0).abs() < 1e-3), "v4 includes red/green pierhead beacons");
+}
+
+/// The expanded 70-tower San Francisco skyline builds cleanly within lean Near/Far
+/// triangle budgets, preserves crowns/spires/X-braces in `Role::Far` with separate
+/// roof/metal draws, claims overlapping extra records (e.g. MIRA's 120 Folsom), and
+/// keeps every vertex/normal finite.
+#[test]
+fn the_expanded_sf_skyline_has_rich_silhouettes_and_lean_budgets() {
+    eo_data::groundscale::pin(1.0);
+    let (g, root) = elevation();
+    let d = skyline::data();
+    assert!(d.buildings.len() >= 60, "expected >= 60 SF skyline towers, got {}", d.buildings.len());
+    let recs = skyline::load_records(&root).unwrap();
+    let ground = |x: f64, z: f64| g.sample(x, z).unwrap_or(0.0);
+    let (mut near_tris, mut far_tris, mut total_ms) = (0usize, 0usize, 0.0f64);
+    for b in &d.buildings {
+        let points = recs.get(&b.record).unwrap_or_else(|| panic!("{}: missing {}", b.id, b.record));
+        let built = skyline::build_tower(b, points, &ground).unwrap_or_else(|| panic!("{}: build_tower failed", b.id));
+        total_ms += built.landmark.build_ms;
+        for dr in &built.landmark.draws {
+            assert!(dr.mesh.positions.iter().all(|v| v.is_finite()), "{}: non-finite pos in {}", b.id, dr.key);
+            assert!(dr.mesh.normals.iter().all(|v| v.is_finite()), "{}: non-finite nrm in {}", b.id, dr.key);
+            match dr.role {
+                eo_landmarks::Role::Near => near_tris += dr.mesh.triangles(),
+                eo_landmarks::Role::Far => far_tris += dr.mesh.triangles(),
+                eo_landmarks::Role::Always => {}
+            }
+        }
+        // Key metal-crown / braced towers preserve metal silhouettes in Role::Far.
+        if matches!(
+            b.id.as_str(),
+            "skyline-181-fremont" | "skyline-345-california" | "skyline-millennium-tower" | "skyline-one-rincon-hill" | "skyline-100-first" | "skyline-505-montgomery" | "skyline-one-maritime"
+        ) {
+            assert!(
+                built.landmark.draws.iter().any(|dr| dr.key == "far-metal" && dr.role == eo_landmarks::Role::Far && !dr.mesh.is_empty()),
+                "{}: missing far-metal silhouette draw",
+                b.id
+            );
+        }
+        // Far facade wall vertices carry `stone` (not double-darkened `far_c`).
+        let stone = skyline::hex_linear(&b.stone_srgb);
+        let far_draw = built.landmark.draws.iter().find(|dr| dr.key == "far").unwrap();
+        let has_stone = far_draw.mesh.colors.chunks_exact(3).any(|c| (c[0] as f64 - stone[0]).abs() < 0.05 && (c[1] as f64 - stone[1]).abs() < 0.05);
+        assert!(has_stone, "{}: far draw does not preserve stone tone for lm_authored", b.id);
+        // Round 9 regression guard: night accent-edge ribbons strictly hug the real tier parapet (`<= roofY + 0.75 m`, never floating at `tipY`!).
+        let roof_y = built.landmark.stats["roofY"].as_f64().unwrap();
+        for dr in &built.landmark.draws {
+            if dr.key.contains("crown-edge") || dr.key.contains("embarcadero-edge") {
+                assert!(
+                    dr.mesh.max_y <= roof_y + 0.75,
+                    "{}: accent draw {} floats above roofY ({:.1} > {:.1})",
+                    b.id,
+                    dr.key,
+                    dr.mesh.max_y,
+                    roof_y + 0.75
+                );
+            }
+        }
+        // Embarcadero 4 tight fixed-metre cornice & accent bounds (no multiplicative slab-end ears).
+        if b.id == "skyline-embarcadero-4" {
+            let far_max_r = far_draw
+                .mesh
+                .positions
+                .chunks_exact(3)
+                .map(|p| ((p[0] as f64) - built.landmark.anchor[0]).hypot((p[2] as f64) - built.landmark.anchor[1]))
+                .fold(0.0f64, f64::max);
+            for dr in &built.landmark.draws {
+                if dr.key == "roof" || dr.key == "metal" || dr.key.contains("embarcadero-edge") {
+                    let dr_max_r = dr
+                        .mesh
+                        .positions
+                        .chunks_exact(3)
+                        .map(|p| ((p[0] as f64) - built.landmark.anchor[0]).hypot((p[2] as f64) - built.landmark.anchor[1]))
+                        .fold(0.0f64, f64::max);
+                    assert!(
+                        dr_max_r <= far_max_r + 1.10,
+                        "skyline-embarcadero-4: draw {} protrudes {:.2} m past facade ({:.2} vs {:.2})",
+                        dr.key,
+                        dr_max_r - far_max_r,
+                        dr_max_r,
+                        far_max_r
+                    );
+                }
+            }
+        }
+    }
+    println!("skyline ({} towers): near {} tris, far {} tris, build {:.1} ms", d.buildings.len(), near_tris, far_tris, total_ms);
+    assert!(near_tris < 250_000, "skyline near triangle budget exceeded: {near_tris}");
+    assert!(far_tris < 65_000, "skyline far triangle budget exceeded: {far_tris}");
+    // Extra overlapping record (MIRA's 120 Folsom) is claimed only while skyline is on.
+    assert!(skyline::claims().iter().any(|r| r == "693630796"));
+    // Salesforce v4 far mesh stays within registry's 600-triangle far budget.
+    let js = LandmarksJs::get();
+    let sf_ground = js.registry["salesforce-tower"].ground.sampled(&|x, z| g.sample(x, z));
+    let sf4 = eo_landmarks::towers3::build_v("salesforce-tower", &js.buildings["salesforce-tower"], &sf_ground, true).unwrap();
+    let sf_far_budget = js.registry["salesforce-tower"].budget["farTriangles"].as_f64().unwrap() as usize;
+    assert!(sf4.far.triangles() > 0 && sf4.far.triangles() <= sf_far_budget, "salesforce v4 far {} > {sf_far_budget}", sf4.far.triangles());
+}
+
+/// Historic Embarcadero waterfront pier bulkheads & low-rise landmarks (`waterfront`)
+/// build cleanly with finite geometry, pitched roof silhouettes in Near and Far, no
+/// aviation lights, lean triangle budgets, and clean `--no-skyline` record claiming.
+#[test]
+fn the_embarcadero_waterfront_landmarks_build_cleanly() {
+    eo_data::groundscale::pin(1.0);
+    let (g, root) = elevation();
+    let d = skyline::data();
+    assert!(d.waterfront.len() >= 15, "expected >= 15 waterfront landmarks, got {}", d.waterfront.len());
+    let recs = skyline::load_records(&root).unwrap();
+    let claims = skyline::claims();
+    let ground = |x: f64, z: f64| g.sample(x, z).unwrap_or(0.0);
+    let (mut near_tris, mut far_tris) = (0usize, 0usize);
+    for w in &d.waterfront {
+        assert!(skyline::facade_index(&w.facade).is_some(), "{}: unknown facade {}", w.id, w.facade);
+        assert!(w.height_m > 0.0 && w.height_m <= 50.0, "{}: invalid waterfront height {}", w.id, w.height_m);
+        assert!(!w.aviation, "{}: waterfront landmark must not carry aviation light", w.id);
+        assert!(claims.iter().any(|r| r == &w.record), "{}: record {} not claimed", w.id, w.record);
+        let points = recs.get(&w.record).unwrap_or_else(|| panic!("{}: missing {}", w.id, w.record));
+        let built = skyline::build_tower(w, points, &ground).unwrap_or_else(|| panic!("{}: build_tower failed", w.id));
+        assert!(built.lights.is_empty(), "{}: unexpected lights", w.id);
+        assert!(built.landmark.draws.iter().any(|dr| dr.key == "far" && !dr.mesh.is_empty()), "{}: missing far draw", w.id);
+        for dr in &built.landmark.draws {
+            assert!(dr.mesh.positions.iter().all(|v| v.is_finite()), "{}: non-finite pos in {}", w.id, dr.key);
+            assert!(dr.mesh.normals.iter().all(|v| v.is_finite()), "{}: non-finite nrm in {}", w.id, dr.key);
+            match dr.role {
+                eo_landmarks::Role::Near => near_tris += dr.mesh.triangles(),
+                eo_landmarks::Role::Far => far_tris += dr.mesh.triangles(),
+                eo_landmarks::Role::Always => {}
+            }
+        }
+    }
+    println!("waterfront ({} landmarks): near {} tris, far {} tris", d.waterfront.len(), near_tris, far_tris);
+    assert!(near_tris < 35_000, "waterfront near triangle budget exceeded: {near_tris}");
+    assert!(far_tris < 15_000, "waterfront far triangle budget exceeded: {far_tris}");
+    // Bogus DataSF ferry-gangway/promenade polygons beside Ferry Building & Pier 1 are claimed only while skyline is on.
+    for bogus in ["ds8789", "ds9288", "ds5521", "ds855"] {
+        assert!(claims.iter().any(|r| r == bogus), "expected bogus ferry-gangway footprint {bogus} to be claimed");
+    }
+    // Roof/trim draws carry the `precast` (bayM=0) weathering contract for landmarks_surface.wgsl.
+    let ag = d.waterfront.iter().find(|w| w.id == "waterfront-agriculture-bldg").unwrap();
+    let ag_built = skyline::build_tower(ag, recs.get(&ag.record).unwrap(), &ground).unwrap();
+    let ag_roof = ag_built.landmark.draws.iter().find(|dr| dr.key == "roof").unwrap();
+    assert_eq!(ag_roof.material.surface.as_deref(), Some("precast"));
+    // Moored Bay vessels (incl. glossy glass cabin/pilothouse windows) and Ferry Building night illumination build cleanly.
+    let vessels = skyline::build_moored_bay_vessels(-0.55);
+    assert_eq!(vessels.len(), 3);
+    for v in &vessels {
+        assert!(v.draws.iter().any(|dr| dr.role == eo_landmarks::Role::Near && !dr.mesh.is_empty()), "{}: near", v.id);
+        assert!(v.draws.iter().any(|dr| dr.role == eo_landmarks::Role::Far && !dr.mesh.is_empty()), "{}: far", v.id);
+        assert!(v.draws.iter().any(|dr| dr.key == "glass" && !dr.mesh.is_empty()), "{}: glossy glass", v.id);
+        for dr in &v.draws {
+            assert!(dr.mesh.positions.iter().all(|p| p.is_finite()), "{}: non-finite", v.id);
+            assert!(dr.mesh.normals.iter().all(|n| n.is_finite()), "{}: non-finite nrm", v.id);
+        }
+    }
+    let fb_night = skyline::build_ferry_night_illumination(&|x, z| g.sample(x, z)).expect("ferry night glow");
+    assert!(fb_night.draws.iter().any(|dr| dr.role == eo_landmarks::Role::Near && !dr.mesh.is_empty()));
+    assert!(fb_night.draws.iter().any(|dr| dr.role == eo_landmarks::Role::Far && !dr.mesh.is_empty()));
+    for dr in &fb_night.draws {
+        assert!(dr.mesh.positions.iter().all(|p| p.is_finite()), "ferry-night: non-finite");
+        assert!(dr.mesh.normals.iter().all(|n| n.is_finite()), "ferry-night: non-finite nrm");
+    }
 }

@@ -22,7 +22,10 @@ fn city_counts_match_meta_and_js_merge() {
     let c = city();
     // meta.counts, as written by the atlas builder.
     assert_eq!(c.meta.counts.roads, 62025);
-    assert_eq!(c.roads.len(), c.meta.counts.roads);
+    assert_eq!(c.roads.len(), c.meta.counts.roads + 3);
+    for way in ["667768321", "667768323", "675892536"] {
+        assert_eq!(c.roads.iter().filter(|r| r.id == way && r.bridge).count(), 1);
+    }
     assert_eq!(c.meta.counts.detail_buildings, 28000);
     assert_eq!(c.signals, c.meta.counts.signals);
     assert_eq!(c.signals, 1877);
@@ -58,8 +61,11 @@ fn building_heights_match_js_resolution() {
 fn vehicle_ways_and_lane_widths() {
     eo_data::groundscale::pin(1.0); // the JS game this compares with is 1:1
     let c = city();
-    let vehicle = c.roads.iter().filter(|r| standards::is_vehicle_way(&r.highway)).count();
-    assert_eq!(vehicle, 22478);
+    let (leaves, original): (Vec<_>, Vec<_>) = c.roads.iter()
+        .filter(|r| standards::is_vehicle_way(&r.highway))
+        .partition(|r| movable_spans::is_leaf(&r.id));
+    assert_eq!(original.len(), 22478);
+    assert_eq!(leaves.len(), 3);
     let ca = CaStandards::load(&paths()).unwrap();
     assert_eq!(ca.metric(standards::CITY_LANE_ID).unwrap(), 3.048);
     assert_eq!(ca.metric(standards::STATE_LANE_ID).unwrap(), 3.658);
@@ -112,7 +118,7 @@ fn roads_keep_their_layer() {
     for r in &c.roads {
         *by_layer.entry(r.layer).or_default() += 1;
     }
-    assert_eq!(by_layer.into_iter().collect::<Vec<_>>(), vec![(-2, 4), (-1, 160), (0, 61023), (1, 684), (2, 89), (3, 49), (4, 15), (5, 1)]);
+    assert_eq!(by_layer.into_iter().collect::<Vec<_>>(), vec![(-2, 4), (-1, 160), (0, 61023), (1, 687), (2, 89), (3, 49), (4, 15), (5, 1)]);
     let sim = eo_data::sim_source::SimSource::load(&paths()).unwrap();
     assert_eq!(sim.roads.len(), c.roads.len());
     let layer: std::collections::HashMap<&str, i32> = c.roads.iter().map(|r| (r.id.as_str(), r.layer)).collect();

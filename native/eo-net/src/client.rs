@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub struct ClientConfig {
+    pub vehicle: eo_player::vehicle::VehicleConfig,
     pub server: SocketAddr,
     pub bind: String,
     pub token: Vec<u8>,
@@ -40,7 +41,7 @@ pub struct ClientConfig {
 
 impl ClientConfig {
     pub fn new(server: SocketAddr, token: &str) -> Self {
-        Self { server, bind: "127.0.0.1:0".into(), token: token.as_bytes().to_vec(), spawn: None, conditions: Conditions::NONE, seed: 1, timeout_s: 3.0, reconnect: true, send_hz: 60.0, structures: None }
+        Self { vehicle: Default::default(), server, bind: "127.0.0.1:0".into(), token: token.as_bytes().to_vec(), spawn: None, conditions: Conditions::NONE, seed: 1, timeout_s: 3.0, reconnect: true, send_hz: 60.0, structures: None }
     }
 }
 
@@ -365,7 +366,7 @@ fn run(inner: Arc<Mutex<Inner>>, link: Arc<Link>, stop: Arc<AtomicBool>, cfg: Cl
             Phase::Connecting | Phase::Reconnecting => {
                 if g.last_hello.is_none_or(|t| now - t > Duration::from_millis(100)) {
                     g.last_hello = Some(now);
-                    let hello = Hello { client_salt: g.client_salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures: proto::structures_code(cfg.structures), token: cfg.token.clone(), spawn: cfg.spawn, resume: g.resume, server_salt: 0, cookie: 0 };
+                    let hello = Hello { vehicle: cfg.vehicle, client_salt: g.client_salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures: proto::structures_code(cfg.structures), token: cfg.token.clone(), spawn: cfg.spawn, resume: g.resume, server_salt: 0, cookie: 0 };
                     let mut out = Vec::with_capacity(proto::REQUEST_PAD);
                     match &g.challenge {
                         Some(c) => {

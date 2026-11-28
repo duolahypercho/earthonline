@@ -126,6 +126,8 @@ pub struct Dims {
     pole_r: f64,
     head_half: f64,
     post_r: f64,
+    /// Per `signals::ArmClass` row, the arm's rise (a `MastArm` of variant 1 + row).
+    arm_rise: Vec<f64>,
 }
 
 impl Dims {
@@ -151,6 +153,7 @@ impl Dims {
             pole_r: w.js.num("signalHardware", "poleRadiusBaseM"),
             head_half: w.js.num("signalHardware", "headHalfHeightM"),
             post_r: w.js.consts["signPostRadiusM"].as_f64().unwrap_or(0.03),
+            arm_rise: w.std.signal_arms.iter().map(|c| c.rise).collect(),
         }
     }
 
@@ -179,8 +182,9 @@ pub fn extents(d: &Dims, p: &Prop, out: &mut Vec<Extent>) {
     match p.model {
         Model::SignalPole => out.push(Extent::new(x, z, d.pole_r, y, y + sc(1))),
         Model::MastArm => {
-            // local +X (three.js rotation.y = yaw): (cos yaw, -sin yaw).
-            along(out, [x, z], [p.yaw.cos(), -p.yaw.sin()], sc(0), 0.15, y - 0.25, y + 0.25, 1.0);
+            // local +X (three.js rotation.y = yaw): (cos yaw, -sin yaw); a rising arm up to its rise.
+            let rise = (p.variant as usize).checked_sub(1).and_then(|c| d.arm_rise.get(c)).copied().unwrap_or(0.0);
+            along(out, [x, z], [p.yaw.cos(), -p.yaw.sin()], sc(0), 0.15, y - 0.25, y + rise + 0.25, 1.0);
         }
         Model::SignalHead => out.push(Extent::new(x, z, 0.35, y - d.head_half - 0.1, y + d.head_half + 0.1)),
         Model::PedHead => out.push(Extent::new(x, z, 0.3, y - 0.35, y + 0.35)),
@@ -506,8 +510,13 @@ pub(crate) fn place_deck_lamps(w: &PropsWorld, s: &StructureWorld) -> std::colle
             continue;
         }
         // the landmark deck rule: both edges, every DECK_PITCH_M from half a pitch in.
+        let skyway = eo_structures::skyway_lights::coverage(c);
         let mut st = DECK_PITCH_M / 2.0;
         while st < c.length() {
+            if skyway.is_some_and(|[start, end]| (start..=end).contains(&c.frame(st).x)) {
+                st += DECK_PITCH_M;
+                continue;
+            }
             for b in s.barrier_at(c.id, st) {
                 // the pole stands on the barrier; the head DECK_HEAD_M over the deck beside it.
                 let foot = [b.x, b.top_y, b.z];
