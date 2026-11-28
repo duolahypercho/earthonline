@@ -266,6 +266,8 @@ pub struct Switches {
     photo_finish: Option<u8>,
     // the facade clutter (`--facade-clutter [1|2]`, `--no-facade-clutter`; wins over the tier).
     facade_clutter: Option<u8>,
+    // high-detail modular kit geometry (`--kit-detail`, `--no-kit-detail`; wins over the tier).
+    kit_detail: Option<bool>,
     // the lit shop windows (`--shop-light [1|2]`, `--no-shop-light`; wins over the tier).
     shop_light: Option<u8>,
     // the cars' detail (`--car-detail [1|2]`, `--no-car-detail`; wins over the tier).
@@ -429,6 +431,10 @@ impl Switches {
             }
             "--no-facade-clutter" => {
                 self.facade_clutter = Some(0);
+                0
+            }
+            "--kit-detail" | "--no-kit-detail" => {
+                self.kit_detail = Some(flag == "--kit-detail");
                 0
             }
             "--shop-light" => {
@@ -625,6 +631,7 @@ impl Switches {
         if let Some(v) = self.facade_clutter.or(t.facade_clutter) {
             a.facade_clutter = v;
         }
+        a.kit_detail = self.kit_detail.unwrap_or(matches!(q, Quality::High | Quality::Hyper));
         if let Some(v) = self.shop_light.or(t.shop_light) {
             a.look.sky.shop_light = v;
         }
@@ -1251,6 +1258,31 @@ mod tests {
         let j = facade_clutter_json(&parse(&["--facade-clutter", "2"]));
         assert_eq!((j["on"].as_bool(), j["level"].as_u64()), (Some(true), Some(2)));
         assert_eq!(facade_clutter_json(&parse(&[]))["on"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn kit_detail_comes_with_high_and_hyper_and_its_switch_wins() {
+        assert!(!parse(&[]).kit_detail, "off on default medium tier");
+        for (line, want) in [
+            (&["--quality", "low"][..], false),
+            (&["--quality", "medium"], false),
+            (&["--quality", "high"], true),
+            (&["--quality", "hyper"], true),
+            (&["--kit-detail"], true),
+            (&["--no-kit-detail"], false),
+            (&["--quality", "medium", "--kit-detail"], true),
+            (&["--kit-detail", "--quality", "low"], true),
+            (&["--quality", "high", "--no-kit-detail"], false),
+            (&["--no-kit-detail", "--quality", "hyper"], false),
+            (&["--kit-detail", "--no-kit-detail"], false),
+            (&["--no-kit-detail", "--kit-detail"], true),
+        ] {
+            assert_eq!(parse(line).kit_detail, want, "{line:?}");
+        }
+        let mut a = parse(&["--bench", "--kit-detail"]);
+        a.kit_detail = false;
+        assert!(same(&a, &parse(&["--bench"])));
+        assert!(same(&parse(&["--no-kit-detail", "--bench"]), &parse(&["--bench"])));
     }
 
     #[test]

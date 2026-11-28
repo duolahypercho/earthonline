@@ -132,6 +132,7 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
     }
     Some(parse_full(&raw).and_then(|(args, opts, globals)| {
         globals.apply();
+        eo_kit::typology::set_detail(args.kit_detail);
         if opts.bench { bench(&args, &opts, process_start) } else { window::run(&args, &opts, process_start) }
     }))
 }
@@ -227,6 +228,7 @@ fn base_args() -> Args {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        kit_detail: false, // `--kit-detail` (quality::Switches)
         player_contact: false, // set by net.rs (`--connect`)
         landmark_access: true,
         car_detail: 0, // `--car-detail` (quality::Switches)
@@ -3179,6 +3181,7 @@ mod play_defaults_tests {
     fn interactive_play_enables_full_metal_safe_aaa_stack() {
         let (a, o, g) = parse_full(&raw(&["--play"])).unwrap();
         assert_eq!(a.quality, crate::quality::Quality::High);
+        assert!(a.kit_detail);
         assert!(a.look.lighting.smooth_time);
         assert!(a.look.look.is_cinematic());
         assert!(a.structures.is_some_and(|s| s.tunnels));
@@ -3253,6 +3256,7 @@ mod play_defaults_tests {
         let (a, o, g) = parse_full(&raw(&["--play", "--bench"])).unwrap();
         assert!(o.bench);
         assert_eq!(a.quality, crate::quality::Quality::Medium);
+        assert!(!a.kit_detail);
         assert!(a.structures.is_none());
         assert!(!a.beaver_house && !a.look.ocean_life && !a.look.dome_env && !a.look.sky.cine_camera);
         assert!(!g.play_street_defaults && !g.play_facade_defaults);

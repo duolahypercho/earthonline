@@ -181,6 +181,10 @@ pub struct Args {
     /// clutter.rs): fire escapes, awnings, signs, services and roof clutter on
     /// the kit buildings; 0 (the default) none. Set by `quality::Switches::apply`.
     pub facade_clutter: u8,
+    /// high-detail modular kit geometry (`--kit-detail`, `--no-kit-detail`;
+    /// eo-kit `typology::set_detail`): off on `low`/`medium` to keep the 10 ms
+    /// triangle budget, on in `high`/`hyper`/`--play`. Set by `quality::Switches::apply`.
+    pub kit_detail: bool,
     /// other players' ground contact is drawn (`--connect` without
     /// `--no-player-contact` or `--no-remote-bodies`; net.rs): its shader
     /// code is compiled in (`ShaderFeatures::player_contact`). False
@@ -415,6 +419,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        kit_detail: false, // `--kit-detail` (quality::Switches)
         player_contact: false, // set by net.rs (`--connect`)
         landmark_access: true,
         car_detail: 0, // `--car-detail` (quality::Switches)
@@ -1281,6 +1286,7 @@ pub fn load_world(args: &Args) -> Result<World> {
 }
 
 fn load_world_with_footways(args: &Args, keep_footways: bool) -> Result<World> {
+    eo_kit::typology::set_detail(args.kit_detail);
     // Each world build starts its own terrain workers. Let unit tests share
     // the machine by constructing one world at a time.
     #[cfg(test)]
@@ -1483,6 +1489,7 @@ fn load_world_with_footways(args: &Args, keep_footways: bool) -> Result<World> {
         }).unwrap_or_default();
         // the facade clutter the kit tiles are cooked with (`--facade-clutter`; 0: none, the tiles and their key as before).
         eo_kit::clutter::set_level(args.facade_clutter);
+        eo_kit::typology::set_detail(args.kit_detail);
         kit_city_rx = Some(eo_render::kit::spawn_kit_city(city.clone(), paths.repo_root.clone(), set.palette.clone(), args.streets, street_tag));
         set.streets = street_world.clone();
         kit_set = Some(Arc::new(set));
@@ -2210,6 +2217,7 @@ fn main() -> Result<()> {
     }
     // ---- end eo-ui ----
     let args = parse_args()?;
+    eo_kit::typology::set_detail(args.kit_detail);
     // Enable play-mode facade defaults (glass depth, weather, canyon glass, patina, window depth)
     // whenever `--aaa-buildings` (`--quality high`/`hyper`) is active so `--shots` captures match `--play`
     // while keeping default `medium` untouched and honoring every `--no-<feature>` kill switch.

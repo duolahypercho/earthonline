@@ -54,11 +54,20 @@ use crate::rng::Rng;
 pub const VERSION: u32 = 8;
 
 static PINNED: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+static DETAIL_TIER: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 /// Tests that compare the plan with the JS planner pin the typology off
 /// (the JS game draws the port's one module), as they pin the ground plan to 1:1.
 pub fn pin(on: bool) {
     PINNED.store(if on { 2 } else { 1 }, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Sets whether high-detail modular kit geometry is enabled by the active
+/// quality tier (`Low`/`Medium` = `false`, `High`/`Hyper`/`--play` = `true`).
+/// Explicit `EO_KIT_DETAIL` env and `--kit-detail` / `--no-kit-detail` CLI
+/// overrides still take precedence over the tier default.
+pub fn set_detail(on: bool) {
+    DETAIL_TIER.store(if on { 2 } else { 1 }, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// `EO_FACADE_TYPOLOGY=off` (or 0) turns the typology off (eo-app `--no-facade-typology`).
@@ -71,8 +80,10 @@ pub fn enabled() -> bool {
 }
 
 /// High-detail modular architectural geometry and LOD silhouette retention.
-/// Follows `enabled()` (so JS parity tests pinning typology off stay untouched) and
-/// can be disabled independently via `EO_KIT_DETAIL=off` or `--no-kit-detail`.
+/// Follows `enabled()` (so JS parity tests pinning typology off stay untouched).
+/// Defaults off for lean `low`/`medium` budgets unless enabled by `set_detail(true)`
+/// (`high`/`hyper`/`--play`), `EO_KIT_DETAIL=on|1`, or `--kit-detail`;
+/// `EO_KIT_DETAIL=off|0` or `--no-kit-detail` disables it independently.
 pub fn detail_enabled() -> bool {
     if !enabled() {
         return false;
@@ -80,8 +91,15 @@ pub fn detail_enabled() -> bool {
     if PINNED.load(std::sync::atomic::Ordering::Relaxed) == 2 {
         return true;
     }
-    !matches!(std::env::var("EO_KIT_DETAIL").as_deref(), Ok("off") | Ok("0"))
-        && !std::env::args().any(|a| a == "--no-kit-detail")
+    match std::env::var("EO_KIT_DETAIL").as_deref() {
+        Ok("off") | Ok("0") => return false,
+        Ok("on") | Ok("1") => return true,
+        _ => {}
+    }
+    if let Some(flag) = std::env::args().rev().find(|a| a == "--kit-detail" || a == "--no-kit-detail") {
+        return flag == "--kit-detail";
+    }
+    DETAIL_TIER.load(std::sync::atomic::Ordering::Relaxed) == 2
 }
 
 /// A tag for the kit tile cache key (empty when off).
