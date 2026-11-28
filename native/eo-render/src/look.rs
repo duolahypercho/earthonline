@@ -1923,7 +1923,9 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// the city overview's early draw took about 1 ms more by day, when no light
 /// runs; with it in the props' alone, nothing measurable).
 pub fn props_city_source(src: String) -> String {
-    let s = src.replace("const SKY_LEAF_ON: bool = false;", "const SKY_LEAF_ON: bool = true;");
+    let s = src
+        .replace("const SKY_LEAF_ON: bool = false;", "const SKY_LEAF_ON: bool = true;")
+        .replace("const LK_GLASS_COAT: bool = true;", "const LK_GLASS_COAT: bool = false;");
     fold_const_false(
         s,
         &[

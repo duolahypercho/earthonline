@@ -599,6 +599,12 @@ fn aaa_building_env(r: vec3<f32>, rough: f32, world: vec3<f32>, ng: vec3<f32>, a
 }
 // sf:end
 
+// Whether this pipeline can shade glass (`F_GLASS`) or clearcoat (`sky_coat`).
+// `look.rs` `props_city_source` folds this to `false` for street props (whose
+// material flags start at bit 8 and never set `F_GLASS` or `sky_coat`), dropping
+// two dead `pg_reflect` + `lk_sky_sample` clearcoat blocks from prop fragment IR.
+const LK_GLASS_COAT: bool = true;
+
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
     if ((m.flags & F_GLASS) == 0u && s.env <= 0 && (!SF_HOUSE || room_enclosure < 0.5)) { // (not inside the house's rooms)
@@ -651,7 +657,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     if (SF_HOUSE && dielectric_scale > 0.0) {
         f0 = mix(vec3<f32>(0.04 * dielectric_scale), s.albedo, s.metal); // (the house's fitted cloth and oiled boards)
     }
-    let glass = (m.flags & F_GLASS) != 0u;
+    let glass = LK_GLASS_COAT && (m.flags & F_GLASS) != 0u;
     // envMapIntensity class: glass, roads and the street surface (asphalt),
     // terrain (sidewalk), else painted facade.
     let kind = objects[object].kind & 255u;
@@ -917,7 +923,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     // glossy (wet) ground reflects the previous frame where its ray finds it.
     // (`--look cinematic`, stage L3) on car paint the clearcoat's sharper reflection (below)
-    let coat_on = SKY_CINE_FULL && sky_coat > 0.0;
+    let coat_on = LK_GLASS_COAT && SKY_CINE_FULL && sky_coat > 0.0;
     // the house's kitchen and its other local probes reflect their own captured room
     // (draw.wgsl `kitchen_reflection`, `floor_reflected_room`): no screen-space term,
     // ambient volume or environment intensity over it.

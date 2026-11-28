@@ -35,6 +35,17 @@ struct PgSel {
     y: f32,
 }
 
+// Keeps the probe table's header reads (`lx_probe_table[0..1]`) in the fragment
+// body rather than Apple AGX's uniform preamble: hoisting device-buffer header
+// loads alongside a large fragment shader's uniforms and `discard` aborts
+// `MTLCompilerService` in `MCObjectStreamer::emitInstruction`
+// (`XPC_ERROR_CONNECTION_INTERRUPTED`, e.g. `prop-opaque` / `prop-cutout`).
+// Always 0u for any finite shader value (and NaN); even if an input were
+// infinite, 0u + 1u and 1u + 1u stay inside the 4-row stand-in buffer.
+fn pg_nu(x: f32) -> u32 {
+    return u32(abs(x) > 1e30);
+}
+
 fn pg_live() -> bool {
     return PG_SHADER && lk_lx_on(LX_BIT_PROBE_GRID) && lx_probe_table[0].x > 0.5;
 }
@@ -44,8 +55,9 @@ fn pg_live() -> bool {
 // is zero, so the pair changes with no step. `cover`: the largest presence x
 // reach over the entries (the sky where no probe stands near or none is in).
 fn pg_select(world: vec3<f32>) -> PgSel {
-    let n = u32(lx_probe_table[0].x + 0.5);
-    let k = lx_probe_table[1];
+    let nu = pg_nu(world.y);
+    let n = u32(lx_probe_table[nu].x + 0.5);
+    let k = lx_probe_table[1u + nu];
     var w1 = 0.0;
     var w2 = 0.0;
     var w3 = 0.0;
@@ -106,7 +118,7 @@ fn pg_select(world: vec3<f32>) -> PgSel {
 
 // three's cubeUV roughness -> level at the grid's face size (as fa_probe_lod).
 fn pg_lod(rough: f32) -> f32 {
-    let h = lx_probe_table[0];
+    let h = lx_probe_table[pg_nu(rough)];
     return clamp(h.y + 2.0 * log2(max(1.16 * rough, 1e-4)), 0.0, h.z);
 }
 
@@ -132,7 +144,7 @@ fn pg_sample(s: PgSel, d: vec3<f32>, lod: f32) -> vec3<f32> {
     }
     let right = cross(fw, up);
     let k = 1.0 / max(dot(d, fw), 1e-6);
-    let h = 0.5 * exp2(ceil(lod) - lx_probe_table[0].y);
+    let h = 0.5 * exp2(ceil(lod) - lx_probe_table[pg_nu(d.x)].y);
     let uv = clamp(vec2<f32>(dot(d, right) * k * 0.5 + 0.5, 0.5 - dot(d, up) * k * 0.5), vec2<f32>(h), vec2<f32>(1.0 - h));
     var c = vec3<f32>(0.0);
     for (var i = 0u; i < s.n; i = i + 1u) {
@@ -174,9 +186,10 @@ fn pg_irradiance(s: PgSel, n: vec3<f32>) -> vec3<f32> {
     let x = n.x;
     let y = n.y;
     let z = n.z;
+    let nu = pg_nu(x);
     var e = vec3<f32>(0.0);
     for (var i = 0u; i < s.n; i = i + 1u) {
-        let b = u32(lx_probe_table[0].w + 0.5) + 16u * u32(s.slots[i] + 0.5) + 1u;
+        let b = u32(lx_probe_table[nu].w + 0.5) + 16u * u32(s.slots[i] + 0.5) + 1u;
         var c = lx_probe_table[b].xyz * 0.282095;
         c = c + lx_probe_table[b + 1u].xyz * (0.488603 * y) + lx_probe_table[b + 2u].xyz * (0.488603 * z) + lx_probe_table[b + 3u].xyz * (0.488603 * x);
         c = c + lx_probe_table[b + 4u].xyz * (1.092548 * x * y) + lx_probe_table[b + 5u].xyz * (1.092548 * y * z) + lx_probe_table[b + 6u].xyz * (0.315392 * (3.0 * z * z - 1.0));
