@@ -168,7 +168,7 @@ fn classify(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let s = pr_sphere(inst, m);
     let d = max(distance(s.c, pr.cam.xyz) - s.r, 0.0);
-    if (d >= m.lod.w) {
+    if (d * pr_reach(inst) >= m.lod.w) {
         return;
     }
     let dl = pr_lod_dist(inst, d);
@@ -192,11 +192,14 @@ fn classify(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     // Sun casters: the model's cascades, a coarser level further out (the
     // role of the JS caster policy: small kit casts into the near cascade only).
+    // A yard plant (pr_reach under 1) casts into the near cascade only, at its
+    // coarsest level: a garden holds thousands, and a shrub's shadow is a soft mass.
+    let yard = pr_reach(inst) < 1.0;
     for (var c = 0u; c < 3u; c = c + 1u) {
-        if ((pr.mode.x & (2u << c)) == 0u || c >= m.casts.x || !pr_in_cascade(c, s)) {
+        if ((pr.mode.x & (2u << c)) == 0u || c >= m.casts.x || !pr_in_cascade(c, s) || (yard && c > 0u)) {
             continue;
         }
-        let mesh = pr_mesh_at(m, max(lod, min(c + 1u, 2u)));
+        let mesh = pr_mesh_at(m, select(max(lod, min(c + 1u, 2u)), 2u, yard));
         if (mesh != PR_NONE) {
             pr_records[i * PR_VIEWS + 1u + c] = pr_take(1u + c, mesh);
         }

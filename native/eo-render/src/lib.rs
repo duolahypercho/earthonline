@@ -57,6 +57,8 @@ pub mod cine_post; // the cinematic look's post pass (`--look cinematic`, stage 
 pub mod props; // props
 pub mod props_lib; // props
 pub mod props_lib2;
+pub mod props_yards; // the rear-yard fence's model (`--yard-detail`)
+pub mod yards; // the rear yards' ground classes in the terrain's shader (`--yard-detail`)
 pub mod probe; // facade
 pub mod probe_grid; // the reflection probes on the streets round the camera (lighting)
 pub mod front_daylight; // the playable house's measured garden daylight (`--house-front-daylight`)
@@ -706,6 +708,8 @@ pub struct Renderer {
     pub aerial: aerial_ground::AerialGround,
     /// the 24-room interior parallax texture array (group 0 binding 30, rooms.rs).
     pub rooms: rooms::RoomsGpu,
+    /// The rear yards' ground classes (`--yard-detail`), group 0 binding 31.
+    pub yards: yards::YardGroundGpu,
     /// runtime switches (facade::RUN_*), read by draw.wgsl from the frame uniform.
     pub facade_flags: std::sync::atomic::AtomicU32,
     pub bytes: GpuBytes,
@@ -853,6 +857,7 @@ fn make_draw_bg(
     signs: &wgpu::TextureView, // the shop signs' lettering (stage S1)
     aerial: &wgpu::TextureView, // the open ground's colour from the aerial survey (`--no-aerial-ground`)
     rooms: &wgpu::TextureView, // 24-room interior parallax texture array (rooms.rs)
+    yards: &wgpu::Buffer, // the rear yards' ground classes (`--yard-detail`)
 ) -> wgpu::BindGroup {
     let (av, nv, mv) = (array_view(kit[0]), array_view(kit[1]), array_view(kit[2]));
     let cb = cc0.bind(); // cc0
@@ -898,6 +903,8 @@ fn make_draw_bg(
             wgpu::BindGroupEntry { binding: 29, resource: wgpu::BindingResource::TextureView(aerial) },
             // 24-room interior parallax texture array (rooms.rs; stand-in with `--no-room-atlas`).
             wgpu::BindGroupEntry { binding: 30, resource: wgpu::BindingResource::TextureView(rooms) },
+            // the rear yards' ground classes (`--yard-detail`, yards.rs; the header alone without it).
+            wgpu::BindGroupEntry { binding: 31, resource: yards.as_entire_binding() },
         ],
     })
 }
@@ -1248,6 +1255,8 @@ impl Renderer {
                 },
                 // 24-room interior parallax texture array (rooms.rs; rooms.wgsl `rm_atlas`).
                 tex_entry(30),
+                // the rear yards' ground classes (`--yard-detail`, yards.rs; yards.wgsl `yd_map`).
+                buf_entry(31, fs, storage(true)),
             ],
         });
         // the JS street scans' sampler (`configureSurfaceTexture`: repeat, trilinear, anisotropy 8).
@@ -1394,8 +1403,9 @@ impl Renderer {
         let aerial_gpu = aerial_ground::AerialGround::new(d, &ctx.queue); // (`--no-aerial-ground`)
         // 24-room interior parallax texture array (rooms.rs; stand-in when `--no-room-atlas`).
         let rooms_gpu = rooms::RoomsGpu::new(d, &ctx.queue);
-        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view));
-        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view));
+        let yard_gpu = yards::YardGroundGpu::new(d); // the rear yards' ground (`--yard-detail`)
+        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view, &yard_gpu.buf));
+        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view, &yard_gpu.buf));
 
         let bytes = GpuBytes {
             vertex: vb_bytes,
@@ -1490,6 +1500,7 @@ impl Renderer {
             signs: sign_gpu,
             aerial: aerial_gpu,
             rooms: rooms_gpu,
+            yards: yard_gpu,
             facade_flags: std::sync::atomic::AtomicU32::new(facade::RUN_AGE | facade::RUN_DETAIL | facade::RUN_ATLAS2 | facade::RUN_PROBE | facade::RUN_ROOMS | facade::RUN_AGENT_HZB | facade::RUN_PROBE_DEFER), // + rooms, agent pyramid test, probe deferral
             bytes,
             multiplier: n,
@@ -2201,8 +2212,8 @@ impl Renderer {
         hitch::mark(hitch::Mark::BindGroupCreated, 4);
         let st = self.street_textures.lock().unwrap();
         let kit = [&self.kit_textures[0], &self.kit_textures[1], &self.kit_textures[2]];
-        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view));
-        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view));
+        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view, &self.yards.buf));
+        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view, &self.yards.buf));
         *self.draw_bg.lock().unwrap() = bg;
         *self.probe_draw_bg.lock().unwrap() = pbg;
     }

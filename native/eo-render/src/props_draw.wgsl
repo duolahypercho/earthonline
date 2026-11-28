@@ -29,6 +29,8 @@ const PR_MEADOW_MAT: u32 = 1048576u;
 const PR_BLADE_PBR: u32 = 2097152u;
 const PR_MEADOW_THICK: u32 = 4194304u;
 const PR_MEADOW_SOIL: u32 = 8388608u;
+// a tree's crown core (`--tree-crowns`): its leaves are drawn on it (`pr_crown_leaves`; props_lib2.rs `P_CROWN`, clear of the lens bits 24..25).
+const PR_CROWN: u32 = 67108864u;
 // (signal models) the lens and face images: a 2 x 2 grid, each lens or face inset by
 // PR_SIGNAL_INSET of the image in its cell (the provenance's `cellInset`, props_lib
 // SIGNAL_CELL_INSET); a cell spans PR_SIGNAL_CELL of the image.
@@ -1501,6 +1503,14 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     if (inst.model == PR_TREE_BASIN) {
         pr_basin(&s, inst, in.local, dlx, dly);
     }
+// yd:on+
+    if (inst.model == PR_YARD_FENCE) {
+        pr_fence(&s, inst, in.local, dlx, dly); // a rear-yard fence's boards (props_yards.wgsl, `--yard-detail`)
+    }
+    if (inst.model >= PR_YARD_ITEM_BASE && inst.model < PR_YARD_ITEM_END) {
+        pr_yard_item(&s, inst, m.params.w, in.local, in.uv, dlx, dly); // the yards' objects and back stairs (props_yards.wgsl)
+    }
+// yd:end
     m.emissive = vec4<f32>(0.0);
 // sl:on+
     // (`--signal-light`) a lens's, a face's or a lit visor's pixel, marked for the bounce (`PR_SL_AO_MARK`).
@@ -2114,6 +2124,11 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         }
     }
 // sf:end
+// cr:on+
+    if ((m.flags & PR_CROWN) != 0u) {
+        pr_crown_leaves(&s, in.local * inst.scale, dlx * inst.scale, dly * inst.scale, dpx, dpy);
+    }
+// cr:end
     s.rough = clamp(s.rough, 0.03, 1.0);
 // sf:CROWN+
     if ((m.flags & PR_LEAF) != 0u) {
@@ -2283,6 +2298,15 @@ fn pr_cut(in: PrOut) {
     let dly = dpdy(in.local);
     let inst = pr_instances[in.inst];
     var a = 1.0;
+// cr:on+
+    if ((m.flags & PR_CROWN) != 0u) {
+        // a crown core (`--tree-crowns`): its leafy outline.
+        if (!pr_crown_edge(in, inst, dlx, dly)) {
+            discard;
+        }
+        return;
+    }
+// cr:end
     if (inst.model == PR_TREE_BASIN) {
         // a tree basin: the bed, and past its cut edge the spilled crumbs and leaves only.
         if (!pr_basin_cut(inst, in.local, dlx, dly)) {

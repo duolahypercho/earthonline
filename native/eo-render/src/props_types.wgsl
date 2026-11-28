@@ -101,6 +101,13 @@ fn pr_is_veg(model: u32) -> bool {
     return model >= PR_VEG_BASE && model < PR_VEG_BASE + PR_VEG_COUNT;
 }
 
+// How much of its true distance an instance's draw distance and thinning
+// count (its levels keep the true one): PR_YARD_REACH for a yard plant (its `variant` carries
+// PR_YARD_PLANT, vegetation_models.rs `YARD_PLANT_BIT`), 1 for everything else.
+fn pr_reach(i: PrInstance) -> f32 {
+    return select(1.0, PR_YARD_REACH, pr_is_veg(i.model) && (i.variant & PR_YARD_PLANT) != 0u);
+}
+
 // the vegetation's distance thinning (props_lib2/vegetation_models.rs, whose
 // `thin_wgsl` defines PR_VEG_* and `pr_veg_thin` ahead of this file): the
 // share of a thinned model's instances kept falls linearly from 1 at the thin
@@ -130,7 +137,7 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
     if (t.x <= 0.0) {
         return 1.0;
     }
-    let d = distance(i.pos, pr.cam.xyz);
+    let d = distance(i.pos, pr.cam.xyz) * pr_reach(i);
     let f = clamp((d - t.x) / max(t.y - t.x, 1.0), 0.0, 1.0);
     if (f <= 0.0) {
         return 1.0;
@@ -179,7 +186,8 @@ fn pr_local(i: PrInstance, p: vec3<f32>) -> vec3<f32> {
     if (pr_afloat_on(i)) {
         return pr_afloat_turn(pr_afloat(i), l);
     }
-    if (i.model == PR_TACTILE_PAD || i.model == PR_TREE_BASIN) {
+    if (i.model == PR_TACTILE_PAD || i.model == PR_TREE_BASIN || i.model == PR_YARD_FENCE) {
+        // (a rear-yard fence piece: the ground's grade along its length, its boards plumb.)
         // The pad takes the ramp's running slope along its depth; a tree basin the street's grade along the kerb.
         l.y = l.y + l.z * i.slope;
     }

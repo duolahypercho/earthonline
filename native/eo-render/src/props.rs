@@ -167,7 +167,7 @@ struct PrFrame {
 // Street props use the lean props base shader (ambient plane, near cascades, no unused city/house/room/landmark modules).
 fn prop_draw_source() -> String {
     format!("{}\n{}\n{}", crate::look::props_city_base_source(), pr_types_src(),
-        signal_light_select(&crate::look::sf_select(include_str!("props_draw.wgsl"))))
+        signal_light_select(&crate::look::sf_select(&crate::props_yards::draw_wgsl())))
 }
 
 #[test]
@@ -189,8 +189,17 @@ fn prop_shader_validates_each_combination_using_tree_wind_weight() {
 /// props_types.wgsl takes it from here (light_shadow.rs's props variant too).
 pub(crate) fn pr_types_src() -> String {
     let boats = crate::props_lib2::BOAT_BASE..crate::props_lib2::SIGN_MODEL_BASE;
-    format!("{}\n{}\nconst PR_BOAT_START: u32 = {}u;\nconst PR_BOAT_END: u32 = {}u;\n{}",
-        crate::props_lib2::vegetation_models::thin_wgsl(), signal_light_wgsl(), boats.start, boats.end, include_str!("props_types.wgsl"))
+    format!(
+        "{}\n{}\nconst PR_BOAT_START: u32 = {}u;\nconst PR_BOAT_END: u32 = {}u;\n// the rear-yard fence (props_lib2.rs `YARD_FENCE`, `--yard-detail`): sheared along its length (local +Z) by its grade.\nconst PR_YARD_FENCE: u32 = {}u;\n// the yards' objects and the houses' backs (props_lib2.rs `YARD_ITEM_BASE` .. the end of `YARD_BACK_BASE`'s).\nconst PR_YARD_ITEM_BASE: u32 = {}u;\nconst PR_YARD_ITEM_END: u32 = {}u;\n{}",
+        crate::props_lib2::vegetation_models::thin_wgsl(),
+        signal_light_wgsl(),
+        boats.start,
+        boats.end,
+        crate::props_lib2::YARD_FENCE,
+        crate::props_lib2::YARD_ITEM_BASE,
+        crate::props_lib2::YARD_BACK_BASE + crate::props_lib2::yard_backs::COUNT,
+        include_str!("props_types.wgsl")
+    )
 }
 
 // ---- (`--signal-light`, eo-app `--no-signal-light`) the signal lenses as lights ----

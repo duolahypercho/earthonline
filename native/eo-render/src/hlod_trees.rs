@@ -7,12 +7,32 @@
 //! All resident (one instance buffer, ordered by 128 m block): the GPU culls
 //! the blocks (frustum, near distance, the occlusion pyramid; hlod_trees_cull.wgsl)
 //! and the vertex shader drops the trees nearer than `NEAR_M` or behind the camera.
+//!
+//! `--tree-crowns` (off by default; eo-props `eztree::tree_crowns_enabled`):
+//! the cards take over where the street props' trees end, by the props' own
+//! measure (the 3D distance to the tree's bounding sphere, not the ground
+//! distance: from the air the props stop long before 270 m of ground, and
+//! straight down from 400 m nothing was drawn): each card is whole from the
+//! start of the props' fade-out band (`CROWN_NEAR_M`), standing inside the
+//! fading prop's crown, and the props library ends its trees at `CROWN_FAR_M`
+//! under the switch, so no screen-door fade-in. And each card faces the eye, not
+//! only round the vertical: the crown is the ellipsoid's outline as seen from
+//! the eye's elevation, a disc of the crown's radius from straight above,
+//! the trunk below it only as far as it shows.
 
 use bytemuck::{Pod, Zeroable};
 use crate::cove_canopy;
 
 pub const NEAR_M: f32 = 270.0;
 pub const FULL_M: f32 = 330.0;
+/// `--tree-crowns`: where the street props' trees end and the cards are whole (the
+/// props library's tree draw distance under the switch, 3D, to the bounding sphere).
+/// Inside the 3D tile load distance (eo-app props.rs `LOAD_M`), so every tree nearer
+/// is a loaded prop.
+pub const CROWN_FAR_M: f32 = 300.0;
+/// `--tree-crowns`: where the cards start, whole: the start of the props' fade-out
+/// band before `CROWN_FAR_M` (props_lib2.rs `FADE_BAND`, props_cull.wgsl `PR_FADE_BAND`).
+pub const CROWN_NEAR_M: f32 = CROWN_FAR_M * (1.0 - crate::props_lib2::FADE_BAND);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable, PartialEq)]
@@ -378,9 +398,9 @@ pub fn into_blocks(mut trees: Vec<FarTree>) -> FarTreeList {
 struct CullParams {
     planes: [[f32; 4]; 6],
     view_proj: [[f32; 4]; 4],
-    /// The camera; w the near distance (`NEAR_M`).
+    /// The camera; w the near distance (`NEAR_M`, `CROWN_NEAR_M` under `--tree-crowns`).
     cam: [f32; 4],
-    /// x the blocks.
+    /// x the blocks, y 1 under `--tree-crowns` (the near distance in 3D, not on the ground).
     counts: [u32; 4],
     /// the bounded list's guards (bounds.rs): the widened frustum, and x the ring's reach, y 1 to count them.
     wide: [[f32; 4]; 6],
@@ -427,6 +447,8 @@ pub const WRITE_BYTES_PER_FRAME: usize = 512 << 10;
 
 pub struct FarTrees {
     cove_only: bool,
+    /// `--tree-crowns`: the cards from the props' 3D hand-over, facing the eye.
+    crowns: bool,
     canopy: wgpu::Texture,
     pending_canopy: std::sync::Mutex<std::collections::VecDeque<cove_canopy::Level>>,
     pipeline: wgpu::RenderPipeline,
@@ -615,6 +637,7 @@ impl FarTrees {
             cull_hzb,
             cull_bg,
             cove_only,
+            crowns: eo_props::eztree::tree_crowns_enabled(),
             canopy,
             pending_canopy: Default::default(),
             list,
@@ -717,9 +740,12 @@ impl FarTrees {
         } else {
             0.0
         };
-        let p = Params { range: [NEAR_M, FULL_M, if on { 1.0 } else { 0.0 }, w] };
+        // `--tree-crowns`: the cards from the props' 3D hand-over, facing the eye (z 2: on, with the crowns).
+        let (near, full) = if self.crowns { (CROWN_NEAR_M, CROWN_FAR_M) } else { (NEAR_M, FULL_M) };
+        let z = if !on { 0.0 } else if self.crowns { 2.0 } else { 1.0 };
+        let p = Params { range: [near, full, z, w] };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
-        let c = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), cam: [eye.x, eye.y, eye.z, NEAR_M], counts: [self.block_count(), 0, 0, 0], wide: [[0.0; 4]; 6], guard: [0.0; 4] };
+        let c = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), cam: [eye.x, eye.y, eye.z, near], counts: [self.block_count(), self.crowns as u32, 0, 0], wide: [[0.0; 4]; 6], guard: [0.0; 4] };
         queue.write_buffer(&self.cull_params, 0, bytemuck::bytes_of(&c));
     }
 

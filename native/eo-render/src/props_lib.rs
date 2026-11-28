@@ -576,6 +576,18 @@ impl PropLibrary {
         h.update([eo_landmarks::flora::flora().species as u8]);
         // (and their species' forms and colours, eo_landmarks::flora::SPECIES).
         h.update(include_bytes!("../../eo-landmarks/src/flora.rs"));
+        // the rear-yard fence's model only with `--yard-detail` (off: the key as before).
+        if eo_props::yards::enabled() {
+            h.update(include_bytes!("props_yards.rs"));
+        }
+        // the yards' objects only with them (off: the key as before).
+        if eo_props::yards::items_enabled() {
+            h.update(include_bytes!("props_lib2/yard_items.rs"));
+        }
+        // the backs' stairs, doors and downspouts only with them (off: the key as before).
+        if eo_props::yards::backs_enabled() {
+            h.update(include_bytes!("props_lib2/yard_backs.rs"));
+        }
         for p in js.street_props.values() {
             h.update(p.sha256.as_bytes());
         }
@@ -595,8 +607,8 @@ impl PropLibrary {
             }
         }
         if let Some(ez) = x.ez {
-            // the coastal species' builds (vegetation_models.rs).
-            for id in eo_props::eztree::COASTAL_TREES.iter().chain(eo_props::eztree::COASTAL_SHRUBS.iter()) {
+            // the coastal species' and the yards' garden species' builds (vegetation_models.rs).
+            for id in eo_props::eztree::COASTAL_TREES.iter().chain(eo_props::eztree::COASTAL_SHRUBS.iter()).chain(eo_props::eztree::GARDEN_SHRUBS.iter()).chain(eo_props::eztree::GARDEN_TREES.iter()) {
                 for tier in ["near", "coarse", "distant"] {
                     if let Some(m) = ez.get(id, tier, 0) {
                         h.update(id.as_bytes());
@@ -623,6 +635,10 @@ impl PropLibrary {
         // (`--luminaires`) the lamps' glass split out only when on (off: the key as before).
         if x.luminaires {
             h.update(b"luminaires");
+        }
+        // The crown cores (`LibExtras::tree_crowns`) likewise only when on.
+        if x.tree_crowns {
+            h.update(b"tree-crowns");
         }
         // The boats only when drawn (`--no-boats`: the key over the inputs before them).
         if let Some(bodies) = x.boats {
@@ -1175,7 +1191,17 @@ impl PropLibrary {
         let alpha_test = atlas["alphaTest"].as_f64().unwrap_or(0.42) as f32;
         let info = {
             let mut out = crate::props_lib2::Out { b: Builder::default(), meshes: &mut meshes, v: &mut all_v, i: &mut all_i, models: &mut models, materials: &mut materials, layers: &mut layers, sources: &mut sources, missing: &mut missing };
-            crate::props_lib2::cook_extras(&mut out, repo, js, extras, m_bark, m_leaf, alpha_test)
+            let info = crate::props_lib2::cook_extras(&mut out, repo, js, extras, m_bark, m_leaf, alpha_test);
+            if eo_props::yards::enabled() {
+                crate::props_yards::cook_fence(&mut out); // the rear-yard fence (`--yard-detail`; off: the library as before)
+            }
+            if eo_props::yards::items_enabled() {
+                crate::props_lib2::yard_items::cook(&mut out); // the yards' objects (`--no-yard-objects`: the library as before)
+            }
+            if eo_props::yards::backs_enabled() {
+                crate::props_lib2::yard_backs::cook(&mut out); // the houses' backs (`--no-yard-stairs`: the library as before)
+            }
+            info
         };
 
         // Plate faces (sRGB linearised in the shader) and the plate back.

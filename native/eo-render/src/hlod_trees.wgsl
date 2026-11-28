@@ -23,8 +23,8 @@ struct FarTree {
 };
 
 struct FtParams {
-    // x near (none closer), y full (faded in), z on, w 0 (round 2's light and
-    // dither) or 1 + the frame's dither phase (the leaf-volume light)
+    // x near (none closer), y full (faded in), z on (2: on, with `--tree-crowns`),
+    // w 0 (round 2's light and dither) or 1 + the frame's dither phase (the leaf-volume light)
     range: vec4<f32>,
 };
 
@@ -59,7 +59,12 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     }
     let t = ft_trees[ft_index(ii)];
     let rel = t.pos - frame.cam_pos.xyz;
-    let d = length(rel.xz);
+    // `--tree-crowns`: the hand-over at the props' own measure, the 3D distance to the crown.
+    let crowns = ft.range.z > 1.5;
+    var d = length(rel.xz);
+    if (crowns) {
+        d = ft_crown_distance(t);
+    }
 // sf:FAR_PALMS-
     if (d < ft.range.x || dot(rel, look.cam_fwd.xyz) < 0.0) {
         return out;
@@ -110,14 +115,25 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
         let d_xz = wd * (wave * amp * c.y * c.y);
         sway = vec3<f32>(d_xz.x, -dot(d_xz, d_xz) / max(2.0 * tree_h, 2.0), d_xz.y);
     }
-    let p = t.pos + right * (c.x * crown_w) + vec3<f32>(0.0, c.y * tree_h, 0.0) + sway;
+    var p = t.pos + right * (c.x * crown_w) + vec3<f32>(0.0, c.y * tree_h, 0.0) + sway;
 // sf:end
 // sf:WEATHER_FX-
-    let p = t.pos + right * (c.x * crown_w) + vec3<f32>(0.0, c.y * tree_h, 0.0);
+    var p = t.pos + right * (c.x * crown_w) + vec3<f32>(0.0, c.y * tree_h, 0.0);
 // sf:end
+    // `--tree-crowns`: a plain crown's card faces the eye (`ft_crown_card`), uv the crown's unit disc.
+    var card_uv = c;
+    var card_right = right;
+    var card_rise = -1.0;
+    if (crowns && (t.species & FT_FORM_MASK) == 0u && (t.species & FT_BAKED) == 0u) {
+        let k = ft_crown_card(t, c);
+        p = k.p + (p - (t.pos + right * (c.x * crown_w) + vec3<f32>(0.0, c.y * tree_h, 0.0))); // (the sway kept)
+        card_uv = k.uv;
+        card_right = k.right;
+        card_rise = k.rise;
+    }
     out.clip = frame.view_proj * vec4<f32>(p, 1.0);
     out.world = p;
-    out.uv = c;
+    out.uv = card_uv;
     out.tint = srgb_decode(raw_tint);
 // sf:FAR_PALMS-
     out.fade = smoothstep(ft.range.x, ft.range.y, d);
@@ -128,9 +144,17 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
 // sf:CROWN|FAR_PALMS+
     out.size = vec3<f32>(crown_w, tree_h, f32(t.species & FT_FORM_MASK));
 // sf:end
+    if (crowns) {
+        // whole from the start of the props' fade-out band: the card stands inside
+        // the fading prop's crown, so no screen-door fade-in.
+        out.fade = 1.0;
+    }
     out.seed = f32(t.seed & 1023u);
-    out.right = right;
+    out.right = card_right;
     out.view = vec3<f32>(-1.0);
+    if (card_rise >= 0.0) {
+        out.view = vec3<f32>(-2.0, card_rise, 0.0); // (the crown card: x -2, y its up axis' rise)
+    }
     let model = t.species >> FT_MODEL_SHIFT;
     if ((t.species & FT_BAKED) != 0u && model != 0u) {
         // A stable rotation per stem. The projected view blends continuously
@@ -428,6 +452,7 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     var n = vec3<f32>(0.0, 1.0, 0.0);
     var cy = 0.0;
     var r = 0.0;
+<<<<<<< HEAD
     var aaa_open = 0.5;
     let baked = in.view.x >= 0.0;
     let toward_h = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
@@ -467,6 +492,26 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
             crown = r < 0.92 + lobes;
             // The trunk: the lower part, a narrow column.
             trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
+=======
+    // `--tree-crowns`: the crown card facing the eye (`ft_crown_card`), uv the crown's unit disc.
+    let card = in.view.x < -1.5;
+    if (sp == 0u) {
+        // The crown: an ellipse over the upper 70 % of the card, a lobed edge.
+        cy = (in.uv.y - 0.62) / 0.38;
+        if (card) {
+            cy = in.uv.y;
+        }
+        r = length(vec2<f32>(in.uv.x, cy));
+        let ang = atan2(cy, in.uv.x);
+        let lobes = 0.08 * sin(ang * 5.0 + in.seed) + 0.05 * sin(ang * 11.0 + in.seed * 1.7);
+        crown = r < 0.92 + lobes;
+        // The trunk: the lower part, a narrow column.
+        trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
+        if (card) {
+            // seen from well above (the eye more than 37 degrees up) the crown and
+            // the ground cover beneath it hide the trunk: none, no lollipops.
+            trunk = in.uv.y < 0.0 && abs(in.uv.x) < 0.07 && in.view.y > FT_CROWN_TRUNK_RISE;
+>>>>>>> 131ab04d (feat(render): crown cores, garden shrubs, yard ground, fences, objects and house backs)
         }
     } else {
         let p = vec2<f32>(in.uv.x * in.dims.x, in.uv.y * in.dims.y);
@@ -526,7 +571,10 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     } else if (crown) {
         if (sp == 0u && !SF_AAA_DETAIL) {
             let z = sqrt(max(0.0, 1.0 - min(r * r, 1.0)));
-            if (light3) {
+            if (card) {
+                // the card's own axes: across, up it (toward the sky as far as it tilts), toward the eye.
+                n = normalize(in.right * in.uv.x + normalize(cross(in.right, v)) * cy + v * z);
+            } else if (light3) {
                 // the crown's sphere seen from the eye (its view from above shows the lit top)
                 let up = vec3<f32>(0.0, 1.0, 0.0);
                 let upp = normalize(up - v * dot(up, v));
@@ -555,11 +603,18 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     s.albedo = albedo;
     s.rough = 0.92;
     s.metal = 0.0;
+<<<<<<< HEAD
     s.ao = select(
         select(1.0, aaa_ph.ao, aaa_palm),
         select(0.7 + 0.3 * in.uv.y, select(mix(0.72, 1.0, clamp(0.42 * in.uv.y + 0.58 * aaa_open, 0.0, 1.0)), aaa_ph.ao, aaa_palm), SF_AAA_DETAIL && !baked),
         crown
     );
+=======
+    s.ao = select(1.0, 0.7 + 0.3 * in.uv.y, crown);
+    if (card && crown) {
+        s.ao = 0.7 + 0.3 * clamp(0.5 + 0.5 * n.y, 0.0, 1.0);
+    }
+>>>>>>> 131ab04d (feat(render): crown cores, garden shrubs, yard ground, fences, objects and house backs)
     s.n = n;
     s.alpha = 1.0;
     s.env = -1;
@@ -581,7 +636,11 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     // key light is left out of look_light (a geometric normal facing from the sun
     // turns it off there) and added below with that one shadow.
     let l = look.key_dir.xyz;
+<<<<<<< HEAD
     let vol_light = light3 && crown && !baked && !aaa_palm;
+=======
+    let vol_light = light3 && crown && !baked && !card; // (a crown card's uv is the crown's disc, not the card's place)
+>>>>>>> 131ab04d (feat(render): crown cores, garden shrubs, yard ground, fences, objects and house backs)
     let ng = select(fn_, -l, vol_light);
     var lit = look_light(s, m, v, in.world, ng, 0u);
     if (vol_light) {
@@ -1102,4 +1161,54 @@ fn far_tree_fs_ids(in: FtOut) -> IdsOut {
 // sf:end
     out.ids = vec2<u32>(0xfffffffeu, 0u);
     return out;
+}
+
+// ---- `--tree-crowns` (hlod_trees.rs: `CROWN_NEAR_M`, `CROWN_FAR_M`) ----
+
+// The crown card's trunk shows only while its up axis rises at least this
+// much (cos of the eye's elevation over the crown: 37 degrees).
+const FT_CROWN_TRUNK_RISE: f32 = 0.8;
+
+// The street props' measure of a tree's distance: the 3D distance to its
+// bounding sphere (props_cull.wgsl `classify`), the sphere estimated from the
+// card's crown and height (an ez-tree's box centre, half its height up, and
+// the box's half diagonal) so the hand-over follows the props' own fade.
+fn ft_crown_distance(t: FarTree) -> f32 {
+    let half = 0.5 * t.height;
+    return max(length(t.pos + vec3<f32>(0.0, half, 0.0) - frame.cam_pos.xyz) - length(vec2<f32>(half, t.crown)), 0.0);
+}
+
+struct FtCrownCorner {
+    p: vec3<f32>,
+    uv: vec2<f32>,
+    right: vec3<f32>,
+    // the card's up axis' rise (1 seen level, 0 from straight above).
+    rise: f32,
+};
+
+// A card facing the eye about the crown's centre (the old card's crown: an
+// ellipsoid of the crown's half width, 0.38 of the height half high, its
+// centre 0.62 of the height up). Across: the crown's half width; up the
+// card: the ellipsoid's outline seen from the eye's elevation, and below it
+// the trunk as far as it shows. uv: the crown's unit disc (below -1 the trunk).
+fn ft_crown_card(t: FarTree, c: vec2<f32>) -> FtCrownCorner {
+    let centre = t.pos + vec3<f32>(0.0, 0.62 * t.height, 0.0);
+    let a = max(t.crown, 0.3);
+    let b = max(0.38 * t.height, 0.3);
+    let e = normalize(frame.cam_pos.xyz - centre);
+    let hl = length(e.xz);
+    var right = vec3<f32>(1.0, 0.0, 0.0);
+    if (hl > 1e-4) {
+        right = vec3<f32>(-e.z, 0.0, e.x) / hl;
+    }
+    let up = cross(right, e);
+    let half_h = sqrt(b * b * hl * hl + a * a * e.y * e.y);
+    let trunk = 0.62 * t.height * up.y;
+    let y = mix(-max(half_h, trunk), half_h, c.y);
+    var k: FtCrownCorner;
+    k.p = centre + right * (c.x * a) + up * y;
+    k.uv = vec2<f32>(c.x, y / half_h);
+    k.right = right;
+    k.rise = up.y;
+    return k;
 }

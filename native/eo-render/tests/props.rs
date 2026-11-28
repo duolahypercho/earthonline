@@ -212,7 +212,7 @@ fn setup2_with(ctx: &GpuContext, stand_ins: bool) -> (Renderer, eo_render::props
     let fonts = eo_props::sign_atlas::Fonts::system().unwrap();
     let (signs, _) = eo_props::sign_atlas::load_or_cook(&cache, &js, &fonts, &[], eo_props::sign_atlas::SIGN_FALLBACK_STREETS).unwrap();
     let oh = eo_props::overhead::OverheadJs::load().unwrap();
-    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins, boats: None, luminaires: false, sign_models: None, signal_poles: None, name_signs: None, pole_lamps: false, rising_arm_far: false };
+    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins, tree_crowns: false, boats: None, luminaires: false, sign_models: None, signal_poles: None, name_signs: None, pole_lamps: false, rising_arm_far: false };
     let lib = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &x, lib2::dome_standards(&ca).unwrap()).unwrap();
     r.attach_props(ctx, &lib).unwrap();
     (r, lib)
@@ -321,6 +321,48 @@ fn props2_luminaire_sockets_stand_in_their_glass() {
     let glow = |l: &eo_render::props_lib::PropLibrary| l.materials.iter().filter(|m| m.flags & eo_render::props_lib::P_LAMP_GLOW != 0).count();
     assert_eq!(glow(&lib_off), 0, "off: no glass material");
     assert_eq!(glow(&lib_on), sockets.len(), "on: one glass material per district light GLB");
+}
+
+/// The crown cores' switch (`--tree-crowns`, `LibExtras::tree_crowns`): off, the
+/// library is the one before it (no crown material, the trees' meshes and level
+/// edges as they were); on, every leafy species' window and far forms gain the
+/// core's triangles in their cutout part, the near forms are untouched, the trees
+/// end at the distant cards' hand-over, and the cache keys differ.
+#[test]
+fn props2_tree_crowns_only_with_their_switch() {
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let js = eo_props::JsProps::load().unwrap();
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let lens = ca.metric_key("signal-lens-size", "circularNewFaces").unwrap();
+    let dome = lib2::dome_standards(&ca).unwrap();
+    let ez = eo_props::eztree::cook_all(Some(&eo_assets::default_cache_dir())).unwrap();
+    let off = LibExtras { ez: Some(&ez), ..Default::default() };
+    let on = LibExtras { tree_crowns: true, ..off };
+    assert!(!LibExtras::default().tree_crowns, "off by default");
+    let lib_off = PropLibrary::cook_full(&paths.repo_root, &js, lens, &off, dome).unwrap();
+    let lib_on = PropLibrary::cook_full(&paths.repo_root, &js, lens, &on, dome).unwrap();
+    assert_ne!(PropLibrary::key_with(&js, &off, dome), PropLibrary::key_with(&js, &on, dome), "on and off cook different libraries");
+    assert!(lib_off.materials.iter().all(|m| m.flags & lib2::P_CROWN == 0), "off: no crown material");
+    assert_eq!(lib_on.materials.iter().filter(|m| m.flags & lib2::P_CROWN != 0).count(), 1, "on: one crown material");
+    for (i, sp) in lib_off.tree_species.iter().enumerate() {
+        let (mo, mn) = (lib_off.models[(lib2::TREE_BASE as usize) + i], lib_on.models[(lib2::TREE_BASE as usize) + i]);
+        assert_eq!(mo.lod[3], 360.0, "{sp}: off, the trees end where they did");
+        assert_eq!(mn.lod[3], eo_render::hlod_trees::CROWN_FAR_M, "{sp}: on, at the distant cards' hand-over");
+        assert_eq!(mo.lod[..3], mn.lod[..3]);
+        let tris = |l: &PropLibrary, m: u32| {
+            let g = l.meshes[m as usize];
+            (g.count / 3, g.cut_count / 3)
+        };
+        assert_eq!(tris(&lib_off, mo.meshes[0]), tris(&lib_on, mn.meshes[0]), "{sp}: the near form is untouched");
+        let leafy = eo_props::eztree::ez_species(sp).unwrap().crown_cover;
+        for k in 1..3 {
+            let (o, n) = (tris(&lib_off, mo.meshes[k]), tris(&lib_on, mn.meshes[k]));
+            assert_eq!(o.0, n.0, "{sp} form {k}: the opaque part is untouched");
+            if leafy {
+                assert!(n.1 > o.1, "{sp} form {k}: a crown core in the cutout part");
+            }
+        }
+    }
 }
 
 fn kinds_fade_wires_lights(ctx: &GpuContext, r: Renderer, lib: eo_render::props_lib::PropLibrary) {

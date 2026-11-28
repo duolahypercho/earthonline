@@ -249,9 +249,9 @@ pub fn dithered(share: f64, h: f64) -> f64 {
 // scrub dark (forest floor), dry grass with red close to green (withered
 // grass), a muted straw rather than a yellow.
 const ASPHALT: [u8; 3] = [90, 90, 87];
-const CONCRETE: [u8; 3] = [122, 122, 117];
-const YARD: [u8; 3] = [74, 92, 56];
-const CANOPY: [u8; 3] = [46, 60, 38];
+pub(crate) const CONCRETE: [u8; 3] = [122, 122, 117]; // (also the yards' paving, yards.rs)
+pub(crate) const YARD: [u8; 3] = [74, 92, 56]; // (also the yards' lawn, yards.rs)
+pub(crate) const CANOPY: [u8; 3] = [46, 60, 38]; // (also the yards' planting, yards.rs)
 const DRY_A: [u8; 3] = [146, 140, 108];
 const DRY_B: [u8; 3] = [160, 154, 120];
 const SCRUB: [u8; 3] = [60, 68, 44];

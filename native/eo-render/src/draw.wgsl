@@ -1884,7 +1884,8 @@ fn shade(in: VOut) -> vec4<f32> {
     // the terrain surface pass's ground (its vertices' alpha GG3_MATERIAL_ALPHA): cc0.wgsl gg3_terrain
     let gg3_ground = GG3_MATERIALS && cc0_terrain && abs(in.aux.x - GG3_MATERIAL_ALPHA) < 0.5;
     let surveyed_landing = LM_GG_APPROACH && cc0_terrain && in.aux.y < -0.985 && in.aux.x > 254.5;
-    let cc0_plain = cc0_terrain && !cc0_sand && !gg3_ground && !surveyed_landing;
+    // (`--yard-detail`) a rear yard's measured ground first (yards.wgsl; false off the yards or without the switch).
+    let cc0_plain = cc0_terrain && !cc0_sand && !gg3_ground && !surveyed_landing && !yd_ground(&s, in.world, n, dpx, dpy);
     if (surveyed_landing) {
         s.albedo = in.color;
         s.rough = 0.9;

@@ -18,7 +18,7 @@ struct TcParams {
     view_proj: mat4x4<f32>,
     // the camera; w the near distance (ground distance, as the vertex shader's)
     cam: vec4<f32>,
-    // x = blocks
+    // x = blocks, y = 1 under `--tree-crowns`: the near distance is 3D (the props' measure)
     counts: vec4<u32>,
     // the bounded list's guards (bounds.rs): the camera's frustum widened by
     // WIDE_DEG a side; x the ring's reach, y 1 to count them, z the near sphere
@@ -41,7 +41,13 @@ fn tc_keep(i: u32) -> bool {
     }
     let fx = max(abs(tc.cam.x - b.min.x), abs(tc.cam.x - b.max.x));
     let fz = max(abs(tc.cam.z - b.min.z), abs(tc.cam.z - b.max.z));
-    if (length(vec2<f32>(fx, fz)) < tc.cam.w) {
+    if (tc.counts.y != 0u) {
+        // (`--tree-crowns`) a tree's 3D distance to its sphere is below its base's, which is below the far corner's.
+        let fy = max(abs(tc.cam.y - b.min.y), abs(tc.cam.y - b.max.y));
+        if (length(vec3<f32>(fx, fy, fz)) < tc.cam.w) {
+            return false;
+        }
+    } else if (length(vec2<f32>(fx, fz)) < tc.cam.w) {
         return false;
     }
     for (var p = 0u; p < 6u; p = p + 1u) {
@@ -69,7 +75,13 @@ fn tc_count_guards(i: u32) {
     }
     let fx = max(abs(tc.cam.x - b.min.x), abs(tc.cam.x - b.max.x));
     let fz = max(abs(tc.cam.z - b.min.z), abs(tc.cam.z - b.max.z));
-    if (length(vec2<f32>(fx, fz)) < tc.cam.w) {
+    if (tc.counts.y != 0u) {
+        // a tree's 3D distance to its sphere is below its base's, which is below the far corner's.
+        let fy = max(abs(tc.cam.y - b.min.y), abs(tc.cam.y - b.max.y));
+        if (length(vec3<f32>(fx, fy, fz)) < tc.cam.w) {
+            return;
+        }
+    } else if (length(vec2<f32>(fx, fz)) < tc.cam.w) {
         return;
     }
     let gd = distance(clamp(tc.cam.xyz, b.min, b.max), tc.cam.xyz);

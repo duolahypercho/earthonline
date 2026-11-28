@@ -41,7 +41,25 @@ pub const V_ROCKS: u32 = 4;
 /// Meadow patches (`eo_landmarks::vegetation::MEADOW_SWARD` .. `MEADOW_THATCH`; the second grass pass).
 pub const V_MEADOW: u32 = V_ROCK + V_ROCKS;
 pub const V_MEADOWS: u32 = eo_landmarks::vegetation::MEADOW_TYPES as u32;
-pub const COUNT: u32 = (V_MEADOW - VEG_BASE) + V_MEADOWS;
+/// The rear yards' garden plants (`--yard-detail`, eo-app yards.rs; drawn only
+/// where the yards plant them): the ez-tree garden shrubs
+/// (`eo_props::eztree::GARDEN_SHRUBS`, three levels each), then a mown lawn patch.
+pub const V_GARDEN: u32 = V_MEADOW + V_MEADOWS;
+pub const V_GARDEN_SHRUBS: u32 = eo_props::eztree::GARDEN_SHRUBS.len() as u32;
+/// The yards' trees (`eo_props::eztree::GARDEN_TREES`), drawn as the coastal trees are.
+pub const V_GARDEN_TREE: u32 = V_GARDEN + V_GARDEN_SHRUBS;
+pub const V_GARDEN_TREES: u32 = eo_props::eztree::GARDEN_TREES.len() as u32;
+pub const V_LAWN: u32 = V_GARDEN_TREE + V_GARDEN_TREES;
+pub const V_GARDENS: u32 = V_GARDEN_SHRUBS + V_GARDEN_TREES + 1;
+pub const COUNT: u32 = (V_GARDEN - VEG_BASE) + V_GARDENS;
+
+/// The mown lawn patch's blades' green (linear): a well-watered cool-season
+/// turf (perennial rye and fescue) is darker and bluer than the headlands'
+/// sward (green leaf reflectance 0.04-0.10, USGS Spectral Library v7, as
+/// `MEADOW_LIVE`; the value INFERRED inside it), its blue at 0.44 of its green
+/// (a turf in photographs reads blue at 0.6-0.75 of green in sRGB; 0.33 drew a
+/// saturated yellow-green under the play look's camera).
+pub const LAWN_LIVE: [f32; 3] = [0.050, 0.090, 0.040];
 
 /// A material flag of our own: procedural rock grain in the colour pass.
 pub const P_ROCK: u32 = 1 << 17;
@@ -108,15 +126,34 @@ pub const THIN: [(f32, f32, f32); COUNT as usize] = [
     (70.0, 110.0, 1.1),
     // the city's annual grassland (`--no-city-grass`): the meadow patches' thinning.
     (70.0, 110.0, 1.3),
+    // the yards' garden shrubs (the yards' shrubs seen to 1 / YARD_REACH of these,
+    // their beds' plants to these) and lawn (its own reach: a lawn's blades are a
+    // texture past 28 m, where the ground's lawn tone carries it).
+    (70.0, 220.0, 1.3),
+    (70.0, 220.0, 1.3),
+    (70.0, 220.0, 1.3),
+    // the yards' trees: as the coastal trees, never thinned.
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (12.0, 28.0, 1.15),
 ];
 /// The share kept at the draw distance (thinned models).
 pub const THIN_FLOOR: f32 = 0.12;
+/// A yard plant (`--yard-detail`, eo-app yards.rs) carries this bit in its
+/// `variant` word: it is seen past the scrub's own reach (a backyard's shrubs
+/// are its canopy from the air), its distance counting `YARD_REACH` of the true
+/// one for its draw distance and its thinning (props_types.wgsl `pr_reach`;
+/// its levels keep the true distance, so the near ones cost what the scrub's do).
+pub const YARD_PLANT_BIT: u32 = 1 << 20;
+pub const YARD_REACH: f32 = 0.75;
 
 /// WGSL appended to props_types.wgsl: the vegetation range and its thinning
 /// (the same numbers as `THIN`, so the cull, colour and shadow passes agree).
 pub fn thin_wgsl() -> String {
     let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_VEG_TREES: u32 = {}u;\nconst PR_VEG_GRASS: u32 = {}u;\nconst PR_VEG_ROCK: u32 = {}u;\nconst PR_VEG_MEADOW: u32 = {}u;\n", V_SHRUB - V_TREE, V_GRASS - V_TREE, V_ROCK - V_TREE, V_MEADOW - V_TREE);
     s += &format!("const PR_VEG_FLOOR: f32 = {THIN_FLOOR:?};\nconst PR_VEG_GRASS_CELL_MEAN: f32 = {GRASS_CELL_MEAN:?};\n");
+    s += &format!("const PR_YARD_PLANT: u32 = {YARD_PLANT_BIT}u;\nconst PR_YARD_REACH: f32 = {YARD_REACH:?};\n");
     // the third grass pass's break-up (`--no-meadow-breakup`): props_types.wgsl
     // `pr_lod_dist`, props_draw.wgsl's lobed mat rims.
     s += &format!("const PR_MEADOW_BREAKUP: bool = {};\n", eo_landmarks::vegetation::grass3().breakup);
@@ -606,7 +643,60 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
         let (z, w) = thin(model);
         out.set(model, ids, [8.0, 24.0, z, w], 0, 0.1);
     }
-    out.sources.push("vegetation: grass, tufts, wildflowers, rock blocks, meadow patches (props_lib2/vegetation_models.rs)".into());
+    // --- the yards' garden shrubs (ez-tree builds, as the coastal shrubs) and lawn
+    // (drawn only where the yards plant them).
+    if let Some(ez) = ez {
+        // (a garden holds thousands: past the near level a shrub's stems and a tree's
+        // limbs are hidden in its leaves and left out, a tree keeping its trunk.)
+        for (k, id) in eo_props::eztree::GARDEN_SHRUBS.iter().enumerate() {
+            let mut ids = [NONE; 3];
+            for (l, tier) in ["near", "coarse", "distant"].iter().enumerate() {
+                match ez.get(id, tier, 0) {
+                    Some(m) => {
+                        super::tree_mesh_bark(&mut out.b, m, m_bark, m_leaf, if l == 0 { f32::INFINITY } else { 0.0 });
+                        ids[l] = out.finish();
+                    }
+                    None => out.missing.push(format!("garden species {id} {tier}: not cooked")),
+                }
+            }
+            if ids.iter().all(|i| *i != NONE) {
+                let model = V_GARDEN + k as u32;
+                let (z, w) = thin(model);
+                // (the near level to 12 m: past it a shrub's leaves are a few pixels each.)
+                out.set(model, ids, [12.0, 45.0, z, w], 2, 0.15);
+            }
+        }
+        for (k, id) in eo_props::eztree::GARDEN_TREES.iter().enumerate() {
+            let mut ids = [NONE; 3];
+            for (l, tier) in ["near", "coarse", "distant"].iter().enumerate() {
+                match ez.get(id, tier, 0) {
+                    Some(m) => {
+                        super::tree_mesh_bark(&mut out.b, m, m_bark, m_leaf, [f32::INFINITY, 0.45, 0.3][l]);
+                        ids[l] = out.finish();
+                    }
+                    None => out.missing.push(format!("garden species {id} {tier}: not cooked")),
+                }
+            }
+            if ids.iter().all(|i| *i != NONE) {
+                let model = V_GARDEN_TREE + k as u32;
+                let (z, w) = thin(model);
+                // (two sun cascades: the third's reach is the aerial view's, where the
+                // garden's trees are a few pixels and their shadows the ground's.)
+                // (the near level to 35 m: a garden tree is half a street tree's height.)
+                out.set(model, ids, [35.0, 120.0, z, w], 2, 0.15);
+            }
+        }
+    }
+    // (the far level is the mid one: past 16 m a lawn's blades are a texture.)
+    let mut ids = [NONE; 3];
+    for (l, id) in ids.iter_mut().take(2).enumerate() {
+        lawn(&mut out.b, &mats, l as u32, 977);
+        *id = out.finish();
+    }
+    ids[2] = ids[1];
+    let (z, w) = thin(V_LAWN);
+    out.set(V_LAWN, ids, [5.0, 12.0, z, w], 0, 0.1);
+    out.sources.push("vegetation: grass, tufts, wildflowers, rock blocks, meadow patches, garden shrubs and lawn (props_lib2/vegetation_models.rs)".into());
 }
 
 // ------------------------------------------------------------------ scrub mounds (the third grass pass)
@@ -822,8 +912,15 @@ fn sprig(b: &mut Builder, m: u32, uv: [f32; 4], p: [f32; 3], up: [f32; 3], side:
 fn species_shrub(b: &mut Builder, mats: &MoundMats, m_sprig: u32, kind: u8, lod: u32, seed: u32) {
     use eo_landmarks::flora as fl;
     let sp = fl::species(kind).expect("a scrub species");
-    let f = sp.form;
-    let live = fl::leaf_linear(kind);
+    let balls = shrub_body(b, mats, m_sprig, sp.form, fl::leaf_linear(kind), lod, seed);
+    if kind == eo_landmarks::vegetation::MEADOW_LUPINE {
+        lupine_spikes(b, mats, &balls, lod, seed);
+    }
+}
+
+/// A shrub of growth form `f` and leaf `live` (linear) at level `lod`: the leaf
+/// masses and the sprig cards over them (`species_shrub`); the masses returned.
+fn shrub_body(b: &mut Builder, mats: &MoundMats, m_sprig: u32, f: eo_landmarks::flora::Form, live: [f32; 3], lod: u32, seed: u32) -> Vec<([f32; 3], f32)> {
     let (unit, faces) = icosphere([2u32, 1, 0][lod as usize]);
     let centre = [0.0f32, 0.35 * f.h, 0.0];
     let clumps = (f.clumps * [3u32, 2, 1][lod as usize] / 3).max(4);
@@ -911,8 +1008,70 @@ fn species_shrub(b: &mut Builder, mats: &MoundMats, m_sprig: u32, kind: u8, lod:
         let s = size * (0.7 + 0.6 * hash3(k as i32, 21, 9, seed));
         sprig(b, m_sprig, uv, p, up, side, s, f.aspect, n, col, 0.62);
     }
-    if kind == eo_landmarks::vegetation::MEADOW_LUPINE {
-        lupine_spikes(b, mats, &balls, lod, seed);
+    balls
+}
+
+/// A mown lawn patch at level `lod`, about 1.4 m across: its thatch mat, and
+/// short blades (5-11 cm at scale 1, 3-5 mm wide; the mid and far levels
+/// fewer and wider), a few dead and yellowed, with clover's trifoliate leaves
+/// in some of it. Blades take the instance tint (P_MEADOW_LIVE).
+fn lawn(b: &mut Builder, mats: &MeadowMats, lod: u32, seed: u32) {
+    // (no mat: the ground's own lawn scan is the turf between the blades, so a patch
+    // has no edge of its own against the paving or the beds.)
+    let f = [1.0f32, 0.35, 0.1][lod as usize];
+    let wide = [1.0f32, 1.6, 2.8][lod as usize];
+    let n = ((2400.0 * f) as u32).max(1);
+    let dead = eo_landmarks::vegetation::MEADOW_THATCH_ALBEDO;
+    // the turf grows in clumps: its height and green follow a 25 cm field across
+    // the patch (a tiller clump's spread), each blade its own round that.
+    let clump = |x: f32, z: f32| value3([x * 4.0, 0.0, z * 4.0], seed + 3);
+    for k in 0..n {
+        // a soft edge: the blades thin out toward the rim (a quarter of them reach
+        // past 0.6 of it), so neither a patch nor a weed tuft shows a circle.
+        let (x, z) = disc(k, 0.8, seed);
+        let rim = (x * x + z * z).sqrt() / 0.8;
+        if rim > 0.55 && hash3(k as i32, 38, 7, seed) < (rim - 0.55) / 0.45 * 0.85 {
+            continue;
+        }
+        let q = clump(x, z);
+        let h = (0.045 + 0.07 * hash3(k as i32, 31, 7, seed)) * (0.75 + 0.5 * q);
+        let mut c = vary(LAWN_LIVE, k, seed).map(|v| v * (0.85 + 0.3 * q));
+        let r = hash3(k as i32, 37, 7, seed);
+        if r < 0.06 {
+            c = mix3(c, dead, 0.75); // a dead blade
+        } else if r < 0.16 {
+            c = mix3(c, [0.11, 0.105, 0.035], 0.4); // yellowed
+        }
+        let tip = [c[0] * 1.08, c[1] * 1.08, c[2]];
+        let yaw = hash3(k as i32, 33, 7, seed) * std::f32::consts::TAU;
+        let reach = h * (0.05 + 0.3 * hash3(k as i32, 34, 7, seed));
+        let w = 0.006 * wide * (0.75 + 0.5 * hash3(k as i32, 36, 7, seed));
+        blade(b, mats.live, [x, MEADOW_GROUND - 0.01, z], yaw, h, w, reach, 0.15, 1, [c[0] * 0.8, c[1] * 0.8, c[2] * 0.85], tip, 0.3);
+    }
+    // a broadleaf weed's rosette (dandelion, plantain: 6-9 leaves 8-15 cm, flat) in a
+    // fifth of the patches.
+    if lod < 2 && hash3(3, 4, 7, seed) < 0.2 {
+        let (x, z) = disc(9000, 0.5, seed);
+        let weed = [0.040, 0.075, 0.022];
+        let leaves = 6 + (hash3(5, 6, 7, seed) * 4.0) as u32;
+        for j in 0..leaves {
+            let yaw = j as f32 / leaves as f32 * std::f32::consts::TAU + hash3(j as i32, 51, 7, seed);
+            let len = 0.08 + 0.07 * hash3(j as i32, 52, 7, seed);
+            leaflet(b, mats.live, [x, MEADOW_GROUND + 0.012, z], yaw, len, 0.3 * len, 0.12, vary(weed, j, seed + 9));
+        }
+    }
+    // clover in a third of the patches (white clover, Trifolium repens: leaflets 1-2 cm).
+    if lod < 2 && hash3(1, 2, 7, seed) < 0.34 {
+        let clover = [0.032, 0.070, 0.020];
+        for k in 0..[36u32, 10][lod as usize] {
+            let (x, z) = disc(k + 5000, 0.6, seed);
+            let y = MEADOW_GROUND + 0.03 + 0.03 * hash3(k as i32, 41, 7, seed);
+            let a = hash3(k as i32, 42, 7, seed) * std::f32::consts::TAU;
+            for j in 0..3 {
+                let yaw = a + j as f32 * 2.094;
+                leaflet(b, mats.live, [x, y, z], yaw, 0.014 * wide.sqrt(), 0.012 * wide.sqrt(), 0.25, vary(clover, k * 3 + j, seed));
+            }
+        }
     }
 }
 
@@ -1378,6 +1537,7 @@ pub const P_MEADOW_THICK: u32 = 1 << 22;
 /// its own small green share at every distance.
 pub const P_MEADOW_SOIL: u32 = 1 << 23;
 
+#[derive(Clone, Copy)]
 struct MeadowMats {
     live: u32,
     dead: u32,
@@ -1728,7 +1888,8 @@ mod tests {
         // the grass survivors grow at most a tenth (no long strokes).
         assert!(THIN[(V_GRASS - VEG_BASE) as usize].2 <= 1.1);
         assert_eq!(V_ROCK + V_ROCKS, V_MEADOW);
-        assert_eq!(V_MEADOW + V_MEADOWS, VEG_BASE + COUNT);
+        assert_eq!(V_MEADOW + V_MEADOWS, V_GARDEN);
+        assert_eq!(V_GARDEN + V_GARDENS, VEG_BASE + COUNT);
     }
 
     /// The meadow patches' triangles per level (the cost the frame pays per

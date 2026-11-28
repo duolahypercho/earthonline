@@ -16,7 +16,8 @@
 //! * Street trees: one render model per `STREET_TREE_SPECIES` entry, levels
 //!   near / window / far from `eo_props::eztree` (`buildStreetTreeGeometry`;
 //!   window and far by the species' silhouette, as the JS rings draw them),
-//!   bark opaque and leaves alpha-tested on the JS vegetation atlas.
+//!   bark opaque and leaves alpha-tested on the JS vegetation atlas; under
+//!   `--tree-crowns` the window and far forms add a crown core (`CrownCores`).
 //! * The overhead (`street-overhead.js`): span and support poles (tapered
 //!   tubes at `STREET_OVERHEAD`'s radii), the distribution pole and cobra arm
 //!   GLBs, the controller cabinet, the corner sign cluster, the lantern GLB
@@ -36,6 +37,9 @@ use eo_props::{JsProps, Model};
 
 /// Street furniture drawn in code where a kind's GLB is missing (`--no-furniture-models`: boxes).
 pub mod furniture_models;
+pub mod yard_items;
+/// The backs of the houses round the rear yards: back stairs, doors, downspouts (`--no-yard-stairs` off).
+pub mod yard_backs;
 /// The Golden Gate's coastal trees, scrub, grass, wildflowers and hill rock (render ids from `VEG_BASE`).
 pub mod vegetation_models;
 
@@ -72,7 +76,13 @@ pub const SIGNAL_POLE_MODELS: u32 = (eo_props::signal_poles::FINISHES.len() * eo
 /// the pole. `SIGNAL_LAMP_BASE + 0` the cobra light, `+ 1` the banner light.
 pub const SIGNAL_LAMP_BASE: u32 = SIGNAL_POLE_BASE + SIGNAL_POLE_MODELS;
 pub const SIGNAL_LAMP_MODELS: u32 = 2;
-pub const RENDER_MODEL_COUNT: usize = (SIGNAL_LAMP_BASE + SIGNAL_LAMP_MODELS) as usize;
+/// The rear-yard fence (props_yards.rs, eo-app `--yard-detail`), after the signal lamps.
+pub const YARD_FENCE: u32 = SIGNAL_LAMP_BASE + SIGNAL_LAMP_MODELS;
+/// The rear yards' objects (`yard_items.rs`; `--yard-detail` with the canopy map, off with `--no-yard-objects`).
+pub const YARD_ITEM_BASE: u32 = YARD_FENCE + 1;
+/// The backs of the yards' houses (`yard_backs.rs`; with the objects' switch's plants, off with `--no-yard-stairs`).
+pub const YARD_BACK_BASE: u32 = YARD_ITEM_BASE + yard_items::COUNT;
+pub const RENDER_MODEL_COUNT: usize = (YARD_BACK_BASE + yard_backs::COUNT) as usize;
 /// A pole lamp leaves out the triangles of its light's mesh wholly below this (m over its foot):
 /// the district lights' base cover (`lampCobra-v2`, `lampBanner-v2`: 0.185 m round to 0.39 m
 /// up, wider than the mast pole). The post (one tube from 0.3 m inside the cover to its top)
@@ -128,6 +138,11 @@ pub struct LibExtras<'a> {
     /// With every GLB present it changes nothing. `PropLibrary::key_with`
     /// hashes it only when on.
     pub stand_ins: bool,
+    /// The street trees' window and far forms take a crown core
+    /// (`eo_props::eztree::crown_core`, eo-app `--tree-crowns`): an opaque leaf
+    /// mass inside their cards, so a crown past 70 m reads full. Off (the
+    /// default): the forms as before. `PropLibrary::key_with` hashes it only when on.
+    pub tree_crowns: bool,
     /// The moored boats' bodies (`eo_props::boats`; eo-app `--no-boats` leaves them out):
     /// render models `BOAT_BASE + i`, the three levels from the body's three GLBs.
     pub boats: Option<&'a [eo_props::boats::Body]>,
@@ -676,7 +691,7 @@ fn cascades_for(height: f32) -> u32 {
 /// layers (0 the vegetation atlas, 1 the sign faces, 2 the printed faces).
 pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x: &LibExtras, m_bark: u32, m_leaf: u32, alpha_test: f32) -> ExtraInfo {
     let mut info = ExtraInfo::default();
-    let _ = alpha_test;
+    // `alpha_test`: the leaf texels a crown core takes its colour from (`--tree-crowns`).
     // Plain response materials (base colour is the vertex colour).
     let white = [255u8; 3];
     let m_paint = push_mat(out.materials, white, 0.62, 0.1, 0, 0);
@@ -966,6 +981,7 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
         let mode = eo_props::eztree::StreetTreeMode::default();
         let species = eo_props::eztree::street_tree_species().map(|s| s.to_vec()).unwrap_or_default();
         let mut cache: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let crowns = x.tree_crowns.then(|| CrownCores::new(repo, js, alpha_test, out.materials));
         for (si, sp) in species.iter().enumerate().take(MAX_TREE_SPECIES as usize) {
             let sil = eo_props::eztree::street_tree_silhouette_for(si, mode).unwrap_or(0);
             let forms = [ez.street_tree(si, false, false, mode), ez.street_tree(sil, true, false, mode), ez.street_tree(sil, true, true, mode)];
@@ -982,6 +998,10 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
                     continue;
                 }
                 tree_mesh(&mut out.b, &f.mesh, m_bark, m_leaf);
+                // `--tree-crowns`: the window and far forms' crown core.
+                if let Some(c) = crowns.as_ref().filter(|_| k > 0) {
+                    c.add(&mut out.b, &f.species, &f.mesh, k);
+                }
                 let id = out.finish();
                 cache.insert(key, id);
                 ids[k] = id;
@@ -991,7 +1011,9 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
                 continue;
             }
             // JS streamed rings: near 120 m, window 260 m, far silhouettes beyond (tiles drop at 360 m).
-            out.set(TREE_BASE + si as u32, ids, [70.0, 200.0, 0.0, 360.0], 3, 0.15);
+            // `--tree-crowns`: to `CROWN_FAR_M`, where the distant cards take over (hlod_trees.rs).
+            let far = if x.tree_crowns { crate::hlod_trees::CROWN_FAR_M } else { 360.0 };
+            out.set(TREE_BASE + si as u32, ids, [TREE_NEAR_M, 200.0, 0.0, far], 3, 0.15);
             let s = eo_props::eztree::ez_species(sp).ok();
             info.tree_dims.push([s.map(|s| s.height_m as f32).unwrap_or(9.0), s.map(|s| s.max_half_crown_m as f32).unwrap_or(3.0)]);
         }
@@ -1380,6 +1402,12 @@ fn sign_plate(b: &mut Builder, m: u32, p: &PlateSpec, face_z: f32, plate: [u8; 3
 /// vertex colours (linear tint x tone) to sRGB, UV v flipped (rows top first),
 /// and a wind weight per vertex (height fraction; leaves more than wood).
 fn tree_mesh(b: &mut Builder, m: &eo_props::eztree::EzMesh, m_bark: u32, m_leaf: u32) {
+    tree_mesh_bark(b, m, m_bark, m_leaf, f32::INFINITY);
+}
+
+/// `tree_mesh` keeping only the bark under `bark_to` of the build's height (a far
+/// level: its limbs are hidden in the leaves; 0 keeps none, a shrub's stems).
+pub(crate) fn tree_mesh_bark(b: &mut Builder, m: &eo_props::eztree::EzMesh, m_bark: u32, m_leaf: u32, bark_to: f32) {
     let base = b.v.len() as u32;
     let height = m.positions.iter().map(|p| p[1]).fold(1.0f32, f32::max);
     for k in 0..m.positions.len() {
@@ -1391,9 +1419,104 @@ fn tree_mesh(b: &mut Builder, m: &eo_props::eztree::EzMesh, m_bark: u32, m_leaf:
         let w = if leaf { 0.15 + 0.85 * f.powf(1.5) } else { 0.6 * f * f };
         b.v[id as usize].pad = w.to_bits();
     }
+    let cut = bark_to * height;
     for t in m.indices.chunks_exact(3) {
         let leaf = t.iter().any(|&v| m.part.get(v as usize).copied().unwrap_or(0) != 0);
+        if !leaf && t.iter().any(|&v| m.positions[v as usize][1] > cut) {
+            continue;
+        }
         b.tri(leaf, base + t[0], base + t[1], base + t[2]);
+    }
+}
+
+/// A crown core's material flag (props_draw.wgsl `PR_CROWN`: the leaves drawn on the hull).
+pub const P_CROWN: u32 = 1 << 26;
+
+/// The street trees' near ring: their near form to here, the window form past it.
+const TREE_NEAR_M: f32 = 70.0;
+
+/// `--tree-crowns` (`LibExtras::tree_crowns`): the crown core of a window or
+/// far form (`eo_props::eztree::crown_core`) on the atlas's white cell in its
+/// own material (`P_CROWN`: props_draw.wgsl draws its leaves and frays its
+/// outline, so it is in the cutout part; props_shadow.wgsl dapples its
+/// shadow), its colour the cards' tint times the mean of the species' leaf cell
+/// over the texels that pass the alpha test, so the core is the colour the
+/// cards are where they stand. Leafless species take none.
+struct CrownCores {
+    material: u32,
+    /// Mean linear colour of the opaque texels, by atlas cell.
+    leaf_mean: std::collections::HashMap<String, [f32; 3]>,
+    /// The white cell's centre (rows top first, as `tree_mesh` writes UVs).
+    white_uv: [f32; 2],
+}
+
+impl CrownCores {
+    /// The core's roughness (the leaf cards' material has 0.7; a mass of leaves seen whole is duller).
+    const ROUGHNESS: f32 = 0.85;
+
+    fn new(repo: &std::path::Path, js: &JsProps, alpha_test: f32, materials: &mut Vec<PropMaterial>) -> Self {
+        // the big array's layer 0, the vegetation atlas (its white cell). params.w: the
+        // distance (to the trunk) inside which the core casts no sun shadow (props_shadow.wgsl):
+        // a tree there draws its near form, whose cards cast their own, and its sun-cascade
+        // caster, the window form, would shade them as a solid crown.
+        let material = push_mat(materials, [255; 3], Self::ROUGHNESS, 0.0, P_TEX | P_BIG | P_CROWN, 0);
+        materials[material as usize].params[3] = TREE_NEAR_M;
+        let mut leaf_mean = std::collections::HashMap::new();
+        let mut white_uv = [0.5, 0.5];
+        let atlas = &js.consts["vegetationAtlas"];
+        let path = repo.join("public").join(atlas["url"].as_str().unwrap_or("assets/vegetation/ez-vegetation-atlas-v1.png"));
+        let img = std::fs::read(&path).map_err(anyhow::Error::from).and_then(|b| decode_png(&b));
+        if let (Ok(d), Ok((w, h, rgba))) = (eo_props::eztree::EzData::get(), img) {
+            for (name, c) in &d.cells {
+                // UVs y-up; the PNG rows top first.
+                let (x0, x1) = ((c.u0 * w as f64) as usize, ((c.u1 * w as f64) as usize).min(w));
+                let (y0, y1) = (((1.0 - c.v1) * h as f64) as usize, (((1.0 - c.v0) * h as f64) as usize).min(h));
+                let (mut s, mut n) = ([0f64; 3], 0f64);
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        let p = &rgba[(y * w + x) * 4..][..4];
+                        if p[3] as f32 / 255.0 >= alpha_test {
+                            for k in 0..3 {
+                                s[k] += lin(p[k]) as f64;
+                            }
+                            n += 1.0;
+                        }
+                    }
+                }
+                if n > 0.0 {
+                    leaf_mean.insert(name.clone(), [(s[0] / n) as f32, (s[1] / n) as f32, (s[2] / n) as f32]);
+                }
+            }
+            if let Some(c) = d.cells.get("white") {
+                white_uv = [((c.u0 + c.u1) / 2.0) as f32, 1.0 - ((c.v0 + c.v1) / 2.0) as f32];
+            }
+        }
+        CrownCores { material, leaf_mean, white_uv }
+    }
+
+    /// Add the core of `form` (form `k`: 1 window, 2 far) of `species` to the builder's cutout part.
+    fn add(&self, b: &mut Builder, species: &str, form: &eo_props::eztree::EzMesh, k: usize) {
+        let Ok(sp) = eo_props::eztree::ez_species(species) else { return };
+        if !sp.crown_cover {
+            return;
+        }
+        let sub = if k == 1 { eo_props::eztree::crown::WINDOW_SUBDIVISIONS } else { eo_props::eztree::crown::FAR_SUBDIVISIONS };
+        let core = eo_props::eztree::crown_core(form, sub, eo_props::eztree::crown::INSET);
+        let mean = self.leaf_mean.get(&sp.leaf).copied().unwrap_or([1.0; 3]);
+        // the form's height, for the sway weight (as `tree_mesh` takes it).
+        let height = form.positions.iter().map(|p| p[1]).fold(1.0f32, f32::max);
+        let base = b.v.len() as u32;
+        for (i, p) in core.positions.iter().enumerate() {
+            let c = core.colors[i];
+            let col = [to_srgb8(c[0] * mean[0]), to_srgb8(c[1] * mean[1]), to_srgb8(c[2] * mean[2])];
+            let id = b.vert(*p, core.normals[i], self.white_uv, col, self.material);
+            let f = (p[1] / height).clamp(0.0, 1.0);
+            b.v[id as usize].pad = (0.15 + 0.85 * f.powf(1.5)).to_bits();
+        }
+        // the cutout part: its outline frays into leaves (props_draw.wgsl `pr_crown_edge`).
+        for t in core.indices.chunks_exact(3) {
+            b.tri(true, base + t[0], base + t[1], base + t[2]);
+        }
     }
 }
 
@@ -2815,9 +2938,13 @@ mod stand_in_tests {
     #[test]
     fn the_shaders_model_ids_are_the_enums() {
         let src = include_str!("props_types.wgsl");
-        for (name, m) in [("PR_TACTILE_PAD", Model::TactilePad), ("PR_TREE_BASIN", Model::TreeBasin)] {
+        for (name, m) in [("PR_TREE", Model::Tree), ("PR_PALM", Model::Palm), ("PR_TACTILE_PAD", Model::TactilePad), ("PR_TREE_BASIN", Model::TreeBasin)] {
             assert!(src.contains(&format!("const {name}: u32 = {}u;", m as u32)), "{name} is not Model::{m:?}");
         }
+        assert!(src.contains(&format!("const PR_TREE_BASE: u32 = {}u;", TREE_BASE)), "PR_TREE_BASE is not TREE_BASE");
+        assert!(src.contains(&format!("const PR_OH_BASE: u32 = {}u;", OH_BASE)), "PR_OH_BASE is not OH_BASE");
+        assert!(include_str!("props_draw.wgsl").contains(&format!("const PR_CROWN: u32 = {}u;", P_CROWN)), "PR_CROWN is not P_CROWN");
+        assert!(include_str!("props_shadow.wgsl").contains(&format!("const PR_S_CROWN: u32 = {}u;", P_CROWN)), "PR_S_CROWN is not P_CROWN");
         // the basin's trunk offset the shader decodes is the one eo-props encodes.
         let draw = include_str!("props_draw.wgsl");
         assert!(draw.contains(&format!("const PR_BASIN_TRUNK_STEP_M: f32 = {};", eo_props::basins::TRUNK_STEP_M)), "PR_BASIN_TRUNK_STEP_M is not basins::TRUNK_STEP_M");
