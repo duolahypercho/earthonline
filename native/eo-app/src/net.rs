@@ -326,7 +326,9 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
             "--no-external" => {} // main's `external_flag`
             "--traffic-street-plan" | "--no-traffic-street-plan" | "--no-traffic-passing" | "--no-traffic-model-footprints"
-            | "--traffic-bend-braking" | "--no-traffic-bend-braking" => {}
+            | "--traffic-bend-braking" | "--no-traffic-bend-braking"
+            | "--street-tapers" | "--no-street-tapers" | "--bikeways" | "--no-bikeways"
+            | "--survey-parking" | "--no-survey-parking" | "--midblock-crossings" | "--no-midblock-crossings" => {}
             other => anyhow::bail!("--connect: unknown argument {other} (see native/eo-app/src/net.rs)"),
         }
     }
