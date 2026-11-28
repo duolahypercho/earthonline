@@ -441,12 +441,28 @@ fn fa_detail_sample(cell: f32, tile_m: f32, wall_m: vec2<f32>, fw: vec2<f32>) ->
 // Apply weathering / ageing to a surface. `world` and `ng` are world space;
 // `mirror` the authoring mirror (Blender buildings). Kit: `kit_age` true.
 fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f32>, object: u32, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let ob = objects[object];
+    let kind = ob.kind & 255u;
+    // Guard all dry non-glass building flat roofs (kit & Blender, including CC0-unmapped
+    // finishes and weathered metal roof decks) above `SKY_CINE_SSR_ROUGH.y = 0.50` so
+    // `--screen-reflect` and probe reflections never turn dry roofs into mirror-blue pools
+    // (excluding playable-house interior surfaces with `SF_HOUSE` kind bits or local probes).
+    let bldg_roof = (kind == 5u || (kind == 4u && (*s).env <= 0 && (!SF_HOUSE || (ob.kind & 0xfffffe00u) == 0u)))
+        && (m.flags & F_GLASS) == 0u && ng.y > 0.65;
+    let roof_min_r = select(0.78, 0.62, (*s).metal >= 0.25);
+    if (bldg_roof) {
+        (*s).rough = max((*s).rough, roof_min_r);
+        if (SF_AAA_DETAIL && ng.y > 0.85 && (*s).metal >= 0.25) {
+            // Horizontal rooftop solar modules & oxidized roof-cap metal: realistic anti-reflective
+            // photovoltaic / weathered zinc response so direct sun never blasts white starbursts (`05a`).
+            (*s).metal = min((*s).metal, 0.16);
+            (*s).rough = max((*s).rough, 0.82);
+        }
+    }
     let run = fa_run();
     if ((run & FA_RUN_AGE) == 0u || (m.flags & FA_KIT_WEATHER) == 0u) {
         return;
     }
-    let ob = objects[object];
-    let kind = ob.kind & 255u;
     if (kind == 4u) {
         // A Blender building: the kit weathering with its literal scalars.
         if (ob.lod_group >= arrayLength(&fa_weather_recs) / 13u) {
@@ -460,18 +476,59 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
         let pa = vec3<f32>(world.x, world.y, -world.z);
         let na = vec3<f32>(ng.x, ng.y, -ng.z);
         let wo = fa_weather(w, pa, na);
+        let min_r = select(0.03, roof_min_r, bldg_roof);
+        let blender_ext = ob.lod_role == 1u && (!SF_HOUSE || (ob.kind & 0xfffffe00u) == 0u);
         if (wx_level() != 0u && dot(ng.xz, ng.xz) > 0.25) {
             // weathering (`--grime`, weathering.wgsl): the graph's darkening deepened, splash-back at the foot.
             (*s).albedo = (*s).albedo * wx_authored(wo.color, world.y - w.base_y, dot(world.xz, vec2<f32>(-ng.z, ng.x)), w.patch_seed);
-            (*s).rough = clamp((*s).rough + wo.rough, 0.03, 1.0);
+            (*s).rough = clamp((*s).rough + wo.rough, min_r, 1.0);
             // stage W2c: the plumes and the damp that read from a block away (not on glossy glass or metal)
             if ((*s).rough > 0.35) {
                 wx_mid_authored(s, world, ng, w.base_y, ob.max.y, w.patch_seed, wx_fw(dpx, dpy));
             }
-            return;
+        } else {
+            (*s).albedo = (*s).albedo * wo.color;
+            (*s).rough = clamp((*s).rough + wo.rough, min_r, 1.0);
         }
-        (*s).albedo = (*s).albedo * wo.color;
-        (*s).rough = clamp((*s).rough + wo.rough, 0.03, 1.0);
+        // Exterior Blender GLB architectural grounding & rain-drip patina (`05b_hills_street` & FiDi):
+        // parapet coping run-off streaks, storey sill-band wash, and tight sidewalk contact crevice AO.
+        if (blender_ext && SF_FACADE_PATINA && (m.flags & F_GLASS) == 0u && dot(ng.xz, ng.xz) > 0.25 && (*s).rough > 0.35) {
+            let fw_b = max(length(dpx), length(dpy));
+            let keep_b = 1.0 - smoothstep(0.03, 0.24, fw_b);
+            let along_b = dot(world.xz, vec2<f32>(-ng.z, ng.x)) + w.patch_seed * 7.31;
+            let ly_b = world.y - w.base_y;
+            let dtop_b = max(ob.max.y - world.y, 0.0);
+            var dirt_b = 0.0;
+            // Parapet / cornice coping drip streaks & overhang contact AO
+            if (dtop_b < 5.5 && (ob.max.y - w.base_y) > 3.5) {
+                let st_n = mix(0.35, smoothstep(0.30, 0.85, fa_noise(vec2<f32>(along_b / 0.42, w.patch_seed * 1.9), 41.0)), keep_b);
+                let len_b = mix(0.7, 3.2, fa_noise(vec2<f32>(along_b / 2.2, w.patch_seed * 3.1), 42.0));
+                let crust_b = 1.0 - smoothstep(0.04, 0.52, dtop_b);
+                dirt_b = dirt_b + st_n * exp(-dtop_b / len_b) * 0.34 + crust_b * 0.18;
+                (*s).ao = (*s).ao * (1.0 - 0.30 * (1.0 - smoothstep(0.0, 0.52, dtop_b)));
+            }
+            // Subtle storey sill-line run-off wash (breaks smooth uniform plaster/stucco walls)
+            if (ly_b > 1.2 && dtop_b > 0.6) {
+                let sp = 3.25;
+                let sy_f = fract((ly_b - 0.85) / sp);
+                let below_s = (1.0 - sy_f) * sp;
+                let drip = mix(0.30, smoothstep(0.36, 0.84, fa_noise(vec2<f32>(along_b / 0.48, floor(ly_b / sp) * 2.7 + w.patch_seed), 47.0)), keep_b);
+                dirt_b = dirt_b + drip * exp(-below_s / 0.88) * 0.21;
+            }
+            // Tight sidewalk-to-wall contact crevice AO & rising damp at building foot
+            var h_walk_b = max(ly_b, 0.0);
+            if (amb_on()) {
+                h_walk_b = max(world.y - amb_plane(world.xz + ng.xz * 0.6).z, 0.0);
+            }
+            let contact_b = 1.0 - smoothstep(0.0, 0.44, h_walk_b);
+            let crevice_b = 1.0 - smoothstep(0.0, 0.12, h_walk_b);
+            let damp_b = 1.0 - smoothstep(0.0, 0.65 + 0.30 * fa_noise(vec2<f32>(along_b / 1.4, w.patch_seed), 83.0), h_walk_b);
+            dirt_b = dirt_b + crevice_b * 0.22 + damp_b * 0.18;
+            (*s).ao = clamp((*s).ao * (1.0 - 0.42 * contact_b) * (1.0 - 0.24 * crevice_b), 0.14, 1.0);
+            let kd_b = clamp(dirt_b, 0.0, 0.72);
+            (*s).albedo = mix((*s).albedo, (*s).albedo * FW_DIRT, kd_b);
+            (*s).rough = clamp((*s).rough + kd_b * 0.06 - damp_b * 0.08, min_r, 1.0);
+        }
         return;
     }
     if (kind != 5u) {
@@ -483,8 +540,41 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
     }
     let packed = fa_ages[ob.lod_group];
     let d = fa_drivers(packed);
-    // The foundation skirt below the floor is not the wall's finish (archetype-tile-stream.js).
+    // The foundation skirt below the floor on sloped SF hills (`world.y < d.base_y`):
+    // when CC0 scans are resident (`cc0_wall_hit`), cc0.wgsl already applied board-formed poured
+    // concrete texture, formwork joints, water-table shadow, and sloped-sidewalk contact AO; here
+    // we add per-building wear grime & splash-back (or full procedural concrete fallback if CC0 is off).
     if (world.y < d.base_y - 0.02) {
+        if (abs(ng.y) < 0.35) {
+            let local_f = world.xz - d.origin;
+            let along_f = dot(local_f, vec2<f32>(-ng.z, ng.x)) + d.seed * 7.31;
+            let below_floor = max(d.base_y - world.y, 0.0);
+            var h_walk = max(world.y - ob.min.y, 0.0);
+            if (amb_on()) {
+                h_walk = max(world.y - amb_plane(world.xz + ng.xz * 0.6).z, 0.0);
+            }
+            let damp_f = 1.0 - smoothstep(0.0, 0.72, h_walk);
+            let contact_f = 1.0 - smoothstep(0.0, 0.42, h_walk);
+            let under_wt = 1.0 - smoothstep(0.0, 0.26, below_floor);
+            if (cc0_wall_hit) {
+                let streak_f = fa_noise(vec2<f32>(along_f / 1.4, world.y / 2.2), 17.0);
+                let grime_f = clamp(0.10 + 0.16 * d.wear * streak_f + 0.14 * damp_f, 0.0, 0.55);
+                (*s).albedo = (*s).albedo * (1.0 - grime_f * 0.45);
+                (*s).ao = clamp((*s).ao * (1.0 - 0.18 * contact_f), 0.14, 1.0);
+            } else {
+                let fw_f = max(length(dpx), length(dpy));
+                let keep_f = 1.0 - smoothstep(0.02, 0.12, fw_f);
+                let pour = fa_noise(vec2<f32>(along_f / 2.4, world.y / 1.1), 17.0) * 0.65
+                    + fa_noise(vec2<f32>(along_f / 0.55, world.y / 0.45), 19.0) * 0.35;
+                let lift_f = fract(below_floor / 0.55);
+                let seam = (1.0 - smoothstep(0.0, 0.045, min(lift_f, 1.0 - lift_f))) * keep_f;
+                let grime_f = clamp(0.18 + 0.18 * d.wear + 0.24 * damp_f + 0.18 * under_wt + 0.18 * seam, 0.0, 0.78);
+                let concrete_tint = mix(vec3<f32>(0.76, 0.74, 0.70), vec3<f32>(0.50, 0.49, 0.46), damp_f) * (0.86 + 0.28 * pour);
+                (*s).albedo = (*s).albedo * concrete_tint * (1.0 - grime_f * 0.55);
+                (*s).rough = clamp(max((*s).rough, 0.78) - damp_f * 0.10 + seam * 0.08, 0.58, 0.98);
+                (*s).ao = clamp((*s).ao * (1.0 - 0.38 * under_wt) * (1.0 - 0.46 * contact_f) * (1.0 - 0.24 * seam), 0.14, 1.0);
+            }
+        }
         return;
     }
     let w = fa_kit(d, cls);
@@ -547,7 +637,13 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
         }
         let tone = mix(FP_RUST_DARK, FA_RUST * 1.35, fa_ss(0.3, 0.8, field));
         color = mix(color, tone, clamp(rust, 0.0, 1.0) * 0.85);
-        rough = rough + rust * 0.3;
+        // Anodized / painted metallic mullions: crisp micro-sheen variation on clean metal, matte rust in crevices
+        let brush = (fa_noise(vec2<f32>(along * 3.5, local_y * 0.8), 33.0) - 0.5) * 0.10 * keep;
+        rough = rough + rust * 0.34 + brush - (1.0 - rust) * 0.04 * (*s).metal;
+        if (SF_AAA_DETAIL && !bldg_roof && abs(ng.y) < 0.55) {
+            rough = clamp(rough - (1.0 - rust) * 0.10, 0.20, 0.90);
+            (*s).metal = max((*s).metal, mix(0.78, 0.14, rust));
+        }
     } else if (cls == FA_AGE_METAL) {
         let ra = clamp(fa_row(AW_RUST, d), 0.0, 1.0);
         let p = vec2<f32>(local.x + local.y * 0.61, local_y + local.y * 0.27) / 0.3;
@@ -618,6 +714,9 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
         }
         // stage W5: old painted sashes and frames chalked and peeling, dirt on the trim's ledges, drip lines under them.
         wx_window_trim(&color, &rough, world, ng, local_y, d, di, wx_fw(dpx, dpy));
+    }
+    if (bldg_roof) {
+        rough = max(rough, roof_min_r);
     }
     (*s).albedo = color;
     (*s).rough = clamp(rough, 0.03, 1.0);
@@ -897,8 +996,10 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
                     }
                 }
             }
-            // the sheltered strip right under the sill
-            dirt = dirt + 0.22 * k * (1.0 - smoothstep(0.0, 0.16, depth));
+            // the sheltered strip right under the sill (dirt + tight overhang contact AO)
+            let under_sill = 1.0 - smoothstep(0.0, 0.20, depth);
+            dirt = dirt + 0.30 * k * under_sill;
+            (*s).ao = (*s).ao * (1.0 - 0.34 * under_sill);
             if (SF_FACADE_PATINA) {
                 // (`--facade-patina`) the sill's wash: the dirty water off its front edge soils the wall
                 // under the window across its width, fading down toward the head below, its foot ragged
@@ -930,8 +1031,10 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
             if (dtop < 8.0) {
                 let streak = mix(0.35, smoothstep(0.3, 0.85, fw_n1(along / FP_PARAPET_STREAK_M, kb, 41u)), keep);
                 let len = mix(FP_PARAPET_LEN.x, FP_PARAPET_LEN.y, fw_n1(along / 2.1 + 3.7, kb, 42u)) * mix(0.6, 1.2, wear);
-                let crust = 1.0 - smoothstep(0.05, 0.6, dtop);
-                dirt = dirt + (streak * exp(-dtop / len) * FP_PARAPET + crust * 0.2) * mix(0.45, 1.0, wear);
+                let crust = 1.0 - smoothstep(0.05, 0.65, dtop);
+                dirt = dirt + (streak * exp(-dtop / len) * FP_PARAPET + crust * 0.28) * mix(0.50, 1.05, wear);
+                // Cornice / parapet overhang contact AO
+                (*s).ao = (*s).ao * (1.0 - 0.32 * (1.0 - smoothstep(0.0, 0.58, dtop)));
             }
             let h_wall = max(ob.max.y - d.base_y, 1.0);
             let pitch = mix(FP_PLUME_PITCH_M.x, FP_PLUME_PITCH_M.y, fw_h(kb, 43u));
@@ -955,34 +1058,41 @@ fn fw_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
             }
         }
     }
-    // the wall's foot
+    // the wall's foot: strong building-to-sidewalk contact AO, damp plinth transition, splash-back & rising damp
     var salt = 0.0;
+    var damp_sheen = 0.0;
     let ly = world.y - d.base_y;
-    if (ly < 3.0 && ly > -0.05) {
+    if (ly < 3.0 && ly > -0.10) {
         let along = dot(world.xz, t.xz);
         let edge = max(0.025, fw);
         let keep = 1.0 - smoothstep(0.01, 0.04, fw);
+        // Tight building-to-sidewalk contact crevice AO (grounds every building firmly into the footway)
+        let contact_seam = 1.0 - smoothstep(-0.02, 0.45, ly);
+        let tight_crevice = 1.0 - smoothstep(-0.02, 0.10, ly);
+        (*s).ao = (*s).ao * (1.0 - select(0.44, 0.52, SF_AAA_DETAIL) * contact_seam) * (1.0 - select(0.26, 0.34, SF_AAA_DETAIL) * tight_crevice);
+        dirt = dirt + tight_crevice * select(0.22, 0.28, SF_AAA_DETAIL);
         // the splash-back: a ragged band of mud specks
-        let top = mix(0.22, 0.45, wear) * (0.75 + 0.5 * fa_noise(vec2<f32>(along / 0.9, 1.3 + d.seed), 81.0));
+        let top = mix(0.24, 0.50, wear) * (0.75 + 0.5 * fa_noise(vec2<f32>(along / 0.9, 1.3 + d.seed), 81.0));
         let ragged = top + 0.06 * (fa_noise(vec2<f32>(along / 0.13, ly / 0.11), 82.0) - 0.5) * keep;
         let splash = 1.0 - smoothstep(ragged - edge, ragged + edge, ly);
         let speck = mix(fa_ss(0.45, 0.8, fa_noise(vec2<f32>(along / 0.025, ly / 0.025), 84.0)), 0.3, 1.0 - keep);
-        dirt = dirt + splash * (0.32 + 0.4 * speck) * mix(0.5, 1.0, wear);
-        // rising damp on render and masonry, its tide line pale with salt
+        dirt = dirt + splash * (0.34 + 0.42 * speck) * mix(0.55, 1.0, wear);
+        // rising damp & damp plinth transition on render and masonry, its tide line pale with salt
         if (cls == FA_AGE_RENDER || cls == FA_AGE_MASONRY) {
-            let damp_top = mix(0.45, 1.15, fract(d.seed * 0.618)) * mix(0.55, 1.0, wear) * (0.85 + 0.3 * fa_noise(vec2<f32>(along / 1.7, 7.7), 83.0));
+            let damp_top = mix(0.50, 1.25, fract(d.seed * 0.618)) * mix(0.58, 1.0, wear) * (0.85 + 0.3 * fa_noise(vec2<f32>(along / 1.7, 7.7), 83.0));
             let damp = 1.0 - smoothstep(damp_top - edge, damp_top + edge, ly);
-            dirt = dirt + damp * 0.2 * wear;
+            dirt = dirt + damp * 0.24 * mix(0.55, 1.0, wear);
+            damp_sheen = damp * mix(0.08, 0.18, wear) * (1.0 - smoothstep(0.0, 0.75, ly));
             let tl = (ly - damp_top) / max(0.03, fw);
-            salt = exp(-tl * tl) * wear * 0.3 * (0.5 + 0.5 * fa_noise(vec2<f32>(along / 0.4, 3.3), 86.0));
+            salt = exp(-tl * tl) * wear * 0.32 * (0.5 + 0.5 * fa_noise(vec2<f32>(along / 0.4, 3.3), 86.0));
         }
         // the street's grime over the ground floor
-        dirt = dirt + 0.14 * wear * (1.0 - smoothstep(0.3, 2.4, ly)) * (0.55 + 0.45 * fa_noise(vec2<f32>(along / 2.3, ly / 0.8), 85.0));
+        dirt = dirt + 0.15 * wear * (1.0 - smoothstep(0.3, 2.4, ly)) * (0.55 + 0.45 * fa_noise(vec2<f32>(along / 2.3, ly / 0.8), 85.0));
     }
     let kd = clamp(dirt, 0.0, 0.92);
     (*s).albedo = mix((*s).albedo, (*s).albedo * FW_DIRT, kd);
     (*s).albedo = mix((*s).albedo, FW_SALT * max(max((*s).albedo.r, (*s).albedo.g), (*s).albedo.b) * 1.15, salt);
-    (*s).rough = clamp((*s).rough + kd * 0.08, 0.03, 1.0);
+    (*s).rough = clamp((*s).rough + kd * 0.08 - damp_sheen, 0.03, 1.0);
     // in the rain: the wall wet where the driven rain reaches it (more up the wall and under the
     // roof's edge, less on the sheltered ground floor) and in the run-off's paths under each sill
     let w = skyu.wet.x;

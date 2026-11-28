@@ -151,6 +151,8 @@ pub struct Tier {
     pub water_wind: Option<bool>,
     /// `--water-lean` (eo-water `switches::LEAN`, left out through `LookOptions::water_parts_off` below high).
     pub water_lean: Option<bool>,
+    /// `--aaa-buildings` (`LookOptions::aaa_buildings`, AAA photoreal building & skyline shaders: high and hyper).
+    pub aaa_buildings: Option<u32>,
     pub lighting: LightingOptions,
 }
 
@@ -197,13 +199,13 @@ impl Quality {
     /// What the tier sets. The sky quality and the shadow map only where they
     /// differ from the defaults (the default sky quality is 1, the map 3072).
     pub fn tier(self) -> Tier {
-        let none = Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, surveyed_furniture: None, tree_basins: None, photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, water_wind: None, water_lean: None, lighting: LightingOptions::OFF };
+        let none = Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, surveyed_furniture: None, tree_basins: None, photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, water_wind: None, water_lean: None, aaa_buildings: None, lighting: LightingOptions::OFF };
         let high = LightingOptions { cascade_blend: true, far_shadows: 1, ambient_volume: 1, probe_grid: 0, light_shadows: 1, light_shadow_moving: false, headlight_shadows: 2, lit_fog: 1, smooth_time: true, ground_bounce: true, rt_gi: false, rt_reflect: false };
         match self {
             Quality::Low => Tier { shadow_map: Some(2048), ssr: Some(false), contact_shadows: Some(false), sky_quality: Some(0), ao: Some(false), shafts: Some(false), bloom: Some(false), surveyed_furniture: Some(true), tree_basins: Some(true), ..none },
             // the street look, the default since the owner's approval of 2026-11-20 (citywide street audit).
             Quality::Medium => Tier { grime: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), ..none },
-            Quality::High => Tier { shadow_slope_bias: Some(true), grime: Some(1), street_life: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: Some(1), facade_clutter: Some(1), shop_light: Some(1), car_detail: Some(1), look: Some(LookProfile::Cinematic), water_wind: Some(true), water_lean: Some(true), lighting: high, ..none },
+            Quality::High => Tier { shadow_slope_bias: Some(true), grime: Some(1), street_life: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: Some(1), facade_clutter: Some(1), shop_light: Some(1), car_detail: Some(1), look: Some(LookProfile::Cinematic), water_wind: Some(true), water_lean: Some(true), aaa_buildings: Some(eo_render::look::AAA_ALL), lighting: high, ..none },
             Quality::Hyper => Tier {
                 shadow_map: Some(4096),
                 sky_quality: Some(2),
@@ -220,6 +222,7 @@ impl Quality {
                 look: Some(LookProfile::Cinematic),
                 water_wind: Some(true),
                 water_lean: Some(true),
+                aaa_buildings: Some(eo_render::look::AAA_ALL),
                 lighting: LightingOptions { far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, ..high },
                 ..none
             },
@@ -272,6 +275,10 @@ pub struct Switches {
     // the sea's wind texture and lean (`--water-wind-texture`, `--water-lean` and their `--no-` forms; win over the tier).
     water_wind: Option<bool>,
     water_lean: Option<bool>,
+    // AAA photoreal building & skyline shaders (`--aaa-buildings` / `--no-aaa-buildings` + per-feature bits).
+    aaa_buildings: Option<u32>,
+    aaa_set: u32,
+    aaa_clr: u32,
     // the world switches (no tier sets them).
     structures: Option<bool>,
     tunnels: Option<bool>,
@@ -493,6 +500,47 @@ impl Switches {
                 self.water_lean = Some(false);
                 0
             }
+            "--aaa-buildings" => {
+                self.aaa_buildings = Some(eo_render::look::AAA_ALL);
+                self.aaa_set = 0;
+                self.aaa_clr = 0;
+                0
+            }
+            "--no-aaa-buildings" => {
+                self.aaa_buildings = Some(0);
+                self.aaa_set = 0;
+                self.aaa_clr = 0;
+                0
+            }
+            "--skyline-brdf" | "--no-skyline-brdf"
+            | "--building-clouds" | "--no-building-clouds"
+            | "--skyline-bounce" | "--no-skyline-bounce"
+            | "--skyline-aerial" | "--no-skyline-aerial"
+            | "--skyline-detail" | "--no-skyline-detail"
+            | "--skyline-field" | "--no-skyline-field" => {
+                let (bit, on) = match flag {
+                    "--skyline-brdf" => (eo_render::look::AAA_BRDF, true),
+                    "--no-skyline-brdf" => (eo_render::look::AAA_BRDF, false),
+                    "--building-clouds" => (eo_render::look::AAA_CLOUD_REFL, true),
+                    "--no-building-clouds" => (eo_render::look::AAA_CLOUD_REFL, false),
+                    "--skyline-bounce" => (eo_render::look::AAA_BOUNCE, true),
+                    "--no-skyline-bounce" => (eo_render::look::AAA_BOUNCE, false),
+                    "--skyline-aerial" => (eo_render::look::AAA_AERIAL, true),
+                    "--no-skyline-aerial" => (eo_render::look::AAA_AERIAL, false),
+                    "--skyline-detail" => (eo_render::look::AAA_DETAIL, true),
+                    "--no-skyline-detail" => (eo_render::look::AAA_DETAIL, false),
+                    "--skyline-field" => (eo_render::look::AAA_SKYLINE_FIELD, true),
+                    _ => (eo_render::look::AAA_SKYLINE_FIELD, false),
+                };
+                if on {
+                    self.aaa_set |= bit;
+                    self.aaa_clr &= !bit;
+                } else {
+                    self.aaa_clr |= bit;
+                    self.aaa_set &= !bit;
+                }
+                0
+            }
             "--structures" | "--no-structures" => {
                 self.structures = Some(flag == "--structures");
                 0
@@ -595,6 +643,9 @@ impl Switches {
             a.look.water_features &= !eo_render::water::FEAT_WIND;
         }
         a.look.water_parts_off = if self.water_lean.or(t.water_lean).unwrap_or(false) { 0 } else { eo_water::switches::LEAN };
+        let aaa = (self.aaa_buildings.or(t.aaa_buildings).unwrap_or(0) | self.aaa_set) & !self.aaa_clr;
+        a.look.aaa_buildings = aaa;
+        a.look.sky.aaa_aerial = (aaa & eo_render::look::AAA_AERIAL) != 0;
         let mut l = t.lighting;
         let given = |v: &mut u8, s: Option<u8>| *v = s.unwrap_or(*v);
         let given_b = |v: &mut bool, s: Option<bool>| *v = s.unwrap_or(*v);
@@ -788,7 +839,7 @@ mod tests {
         assert!(same(&parse(&["--bench", "--no-ssr"]), &parse(&["--bench", "--no-ssr", "--quality", "medium"])));
         let t = Quality::Medium.tier();
         // medium is the street look (the owner's approval of 2026-11-20) and nothing else.
-        assert_eq!(t, Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: Some(1), street_life: None, stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, water_wind: None, water_lean: None, lighting: LightingOptions::OFF });
+        assert_eq!(t, Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: Some(1), street_life: None, stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, water_wind: None, water_lean: None, aaa_buildings: None, lighting: LightingOptions::OFF });
         assert_eq!((none.look.grime, none.props2.stand_ins, none.props2.surveyed_furniture), (1, true, true), "no flag is the street look");
     }
 
@@ -830,6 +881,7 @@ mod tests {
             assert!(t.car_detail != Some(d.car_detail), "{q:?}");
             assert!(t.water_wind != Some(d.look.water_features & eo_render::water::FEAT_WIND != 0), "{q:?}");
             assert!(t.water_lean != Some(d.look.water_parts_off & eo_water::switches::LEAN == 0), "{q:?}");
+            assert!(t.aaa_buildings != Some(d.look.aaa_buildings), "{q:?}");
         }
         let budgets: Vec<f64> = Quality::ALL.iter().map(|q| q.budget_ms()).collect();
         assert_eq!(budgets, vec![8.0, 10.0, 16.6, 33.3]);
@@ -1330,5 +1382,36 @@ mod tests {
         // the other features and switches are untouched by the tier.
         let a = parse(&["--quality", "high", "--no-water-glint"]);
         assert_eq!(a.look.water_features, eo_render::water::FEAT_ALL & !eo_render::water::FEAT_GLINT);
+    }
+
+    #[test]
+    fn aaa_buildings_comes_with_high_and_hyper_and_its_switches_win() {
+        use eo_render::look::{AAA_AERIAL, AAA_ALL, AAA_BOUNCE, AAA_BRDF, AAA_CLOUD_REFL, AAA_DETAIL, AAA_SKYLINE_FIELD};
+        assert_eq!(parse(&[]).look.aaa_buildings, 0, "off by default (medium untouched)");
+        assert!(!parse(&[]).look.sky.aaa_aerial);
+        for (line, want) in [
+            (&["--quality", "low"][..], 0),
+            (&["--quality", "medium"], 0),
+            (&["--quality", "high"], AAA_ALL),
+            (&["--quality", "hyper"], AAA_ALL),
+            (&["--aaa-buildings"], AAA_ALL),
+            (&["--quality", "high", "--no-aaa-buildings"], 0),
+            (&["--no-aaa-buildings", "--quality", "hyper"], 0),
+            (&["--aaa-buildings", "--quality", "low"], AAA_ALL),
+            (&["--quality", "high", "--no-skyline-aerial"], AAA_ALL & !AAA_AERIAL),
+            (&["--no-building-clouds", "--quality", "high"], AAA_ALL & !AAA_CLOUD_REFL),
+            (&["--skyline-brdf", "--skyline-bounce"], AAA_BRDF | AAA_BOUNCE),
+            (&["--aaa-buildings", "--no-skyline-detail"], AAA_ALL & !AAA_DETAIL),
+            (&["--quality", "high", "--no-skyline-field"], AAA_ALL & !AAA_SKYLINE_FIELD),
+        ] {
+            let a = parse(line);
+            assert_eq!(a.look.aaa_buildings, want, "{line:?}");
+            assert_eq!(a.look.sky.aaa_aerial, (want & AAA_AERIAL) != 0, "{line:?}");
+        }
+        let mut a = parse(&["--bench", "--aaa-buildings"]);
+        a.look.aaa_buildings = 0;
+        a.look.sky.aaa_aerial = false;
+        assert!(same(&a, &parse(&["--bench"])));
+        assert!(same(&parse(&["--no-aaa-buildings", "--bench"]), &parse(&["--bench"])));
     }
 }

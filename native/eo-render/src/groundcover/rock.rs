@@ -157,14 +157,60 @@ pub struct RockGpu {
     clip_kind: [bool; KINDS as usize],
 }
 
+/// Test a placed scan after its slope rotation and scaling. A rock may be
+/// rooted outside the cut and still project through a lane, or stand above
+/// an entirely enclosed tunnel. Only intersection with the traffic space
+/// disqualifies it. This runs once while preparing the instances.
+fn rock_obstructs_traffic(
+    piece: &scans::Piece,
+    kind: &scans::Kind,
+    openings: &eo_street::road_openings::RoadOpenings,
+) -> bool {
+    let world = |point: [f32; 3]| {
+        let scaled = std::array::from_fn(|i| f64::from(point[i]) * piece.scale[i]);
+        let rotated = scans::quat_rotate(piece.rot, scaled);
+        std::array::from_fn(|i| piece.pos[i] + rotated[i])
+    };
+    let mut lo = [f64::INFINITY; 3];
+    let mut hi = [f64::NEG_INFINITY; 3];
+    for corner in 0..8 {
+        let point = world(std::array::from_fn(|i| {
+            if corner & (1 << i) == 0 { kind.min[i] } else { kind.max[i] }
+        }));
+        for i in 0..3 {
+            lo[i] = lo[i].min(point[i]);
+            hi[i] = hi[i].max(point[i]);
+        }
+    }
+    if !openings.overlaps_bounds(lo, hi) {
+        return false;
+    }
+    let vertices: Vec<_> = kind.mesh.positions.iter().copied().map(world).collect();
+    kind.mesh.lods.iter().any(|indices| {
+        indices.chunks_exact(3).any(|tri| {
+            openings.obstructed_by([0, 1, 2].map(|j| vertices[tri[j] as usize]))
+        })
+    })
+}
+
+/// The instances the renderer admits, with the same traffic space used by
+/// the tunnel linings. A missing opening set preserves every placement.
+pub fn drawn_rocks<'a>(
+    lib: &'a Library,
+    placed: &'a Placed,
+    openings: Option<&'a eo_street::road_openings::RoadOpenings>,
+) -> impl Iterator<Item = &'a scans::Piece> + 'a {
+    placed.pieces.iter().filter(move |piece| {
+        !openings.is_some_and(|o| rock_obstructs_traffic(piece, &lib.kinds[piece.kind as usize], o))
+    })
+}
+
 /// The pieces as the GPU reads them (the bounding sphere in the world).
-pub fn gpu_rocks(lib: &Library, placed: &Placed) -> Vec<GcRock> {
-    placed
-        .pieces
-        .iter()
+fn gpu_rocks(lib: &Library, placed: &Placed, openings: Option<&eo_street::road_openings::RoadOpenings>) -> Vec<GcRock> {
+    let spheres: Vec<_> = lib.kinds.iter().map(scans::Kind::sphere).collect();
+    drawn_rocks(lib, placed, openings)
         .map(|p| {
-            let k = &lib.kinds[p.kind as usize];
-            let (c, r) = k.sphere();
+            let (c, r) = spheres[p.kind as usize];
             let cw = scans::quat_rotate(p.rot, [c[0] as f64 * p.scale[0], c[1] as f64 * p.scale[1], c[2] as f64 * p.scale[2]]);
             let smax = p.scale[0].max(p.scale[1]).max(p.scale[2]);
             GcRock {
@@ -205,8 +251,16 @@ pub fn fray_of(kind: &scans::Kind) -> [f32; 4] {
 }
 
 impl RockGpu {
-    pub fn new(setup: &RockSetup, lib: &Library, placed: &Placed) -> RockGpu {
+    pub fn new(setup: &RockSetup, lib: &Library, placed: &Placed, openings: Option<&eo_street::road_openings::RoadOpenings>) -> Option<RockGpu> {
         let t0 = std::time::Instant::now();
+        let rocks = gpu_rocks(lib, placed, openings);
+        if rocks.len() != placed.pieces.len() {
+            eprintln!("tunnel rock clearance: {} of {} placed scans intersect the swept traffic lanes",
+                placed.pieces.len() - rocks.len(), placed.pieces.len());
+        }
+        if rocks.is_empty() {
+            return None;
+        }
         let d = &setup.device;
         let queue = &setup.queue;
         use wgpu::BufferUsages as U;
@@ -229,7 +283,6 @@ impl RockGpu {
                 indices.extend_from_slice(lod);
             }
         }
-        let rocks = gpu_rocks(lib, placed);
         let n = rocks.len().max(1) as u64;
         let mut per_kind = [0u64; KINDS as usize];
         for r in &rocks {
@@ -439,13 +492,18 @@ impl RockGpu {
                 wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },
             ],
         });
-        let draw_src = format!("{}\n{types}\n{}", crate::look::city_shader_source(), include_str!("rock_draw.wgsl"));
+        // This pass binds the scans' material arrays and a stand-in probe.
+        // Use the object shader: the city's house, pavement and facade paths
+        // cannot run here. Their inclusion exhausted Metal's compiler on the
+        // clipped coastal pieces, losing the entire rock library at runtime.
+        let lighting = crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false);
+        let draw_src = format!("{lighting}\n{types}\n{}", include_str!("rock_draw.wgsl"));
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rock_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         // the clipped scans (an open scan's frayed rim, a discard) take the props' lighter city shader
         // (the ambient volume's plane, the cascades without the far map): with play mode's look
         // compiled in, Apple's compiler service dies on the full one (XPC_ERROR_CONNECTION_INTERRUPTED,
         // as it does on the props' cut-outs: look.rs `ShadowLevels`)
-        let clip_src = format!("{}\n{types}\n{}", crate::look::city_shader_source_with(crate::ambient::ShaderLevels::Plane), include_str!("rock_draw.wgsl"));
+        let clip_src = format!("{}\n{types}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), include_str!("rock_draw.wgsl"));
         let clip_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rock_draw.wgsl (clipped)"), source: wgpu::ShaderSource::Wgsl(clip_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("gc-rock-draw"), bind_group_layouts: &[Some(&draw_bgl), Some(&setup.main_bgl), Some(&data_bgl)], immediate_size: 0 });
         let attrs = [
@@ -519,7 +577,7 @@ impl RockGpu {
             build_ms,
             lod.iter().take(lib.kinds.len()).map(|e| [e[0].min(9999.0).round(), e[1].min(9999.0).round(), e[2].min(9999.0).round()]).collect::<Vec<_>>()
         );
-        RockGpu {
+        Some(RockGpu {
             count: rocks.len() as u32,
             bytes,
             lod,
@@ -546,7 +604,7 @@ impl RockGpu {
             stats_on,
             frames: AtomicU32::new(0),
             clip_kind,
-        }
+        })
     }
 
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, occlusion: bool) {

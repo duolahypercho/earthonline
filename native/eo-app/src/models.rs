@@ -273,6 +273,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "probe_sky" => features.probe_sky = true, // (`--probe-sky`)
             "wet_relief" => features.wet_relief = true, // (`--wet-relief`)
             "lamp_streaks" => features.lamp_streaks = true, // (`--lamp-streaks`)
+            "aaa_buildings" => features.aaa_buildings = eo_render::look::AAA_ALL, // (`--aaa-buildings`)
             _ => {}
         }
     }
@@ -458,6 +459,21 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
         let inputs = eo_render::ambient::AmbientInputs::city(world.city.clone(), lift, std::sync::Arc::new(world.elevation.clone()), world.structures.clone(), cache_dir(args), AMBIENT_THREADS);
         r.bytes.textures += r.ambient.attach(ctx, &r.look, inputs, [0.0, 0.0]);
+    }
+    // citywide 2.5D skyline heightfield + horizon sky-vis / bent normal (`--skyline-field`, group 1 binding 24).
+    if (args.look.aaa_buildings & eo_render::look::AAA_SKYLINE_FIELD) != 0 {
+        let t_sf = std::time::Instant::now();
+        let baked = eo_render::skyline_field::load_or_bake(&world.city, &world.elevation, &[], cache_dir(args).as_deref(), AMBIENT_THREADS);
+        let b = r.attach_skyline_field(ctx, &baked);
+        r.bytes.textures += b;
+        eprintln!(
+            "skyline field: {}x{} ({} mips, {:.1} MB, {:.0} ms)",
+            baked.bounds.size,
+            baked.bounds.size,
+            baked.mips.len(),
+            b as f64 / 1e6,
+            t_sf.elapsed().as_secs_f64() * 1e3
+        );
     }
     // the far sun shadow maps (`--far-shadows`): a ring (two at level 2) past the cascades (lighting).
     if args.look.lighting.far_shadows > 0 {

@@ -1402,6 +1402,11 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     let duvy = dpdy(in.uv);
     let dlx = dpdx(in.local);
     let dly = dpdy(in.local);
+// sf:AAA_DETAIL+
+    let pr_dnx = dpdx(in.normal);
+    let pr_dny = dpdy(in.normal);
+    let pr_dn = dot(pr_dnx, pr_dnx) + dot(pr_dny, pr_dny);
+// sf:end
     var albedo_tex = vec4<f32>(1.0);
     if ((m.flags & PR_TEX) != 0u) {
         if ((m.flags & PR_BIG) != 0u) {
@@ -1629,6 +1634,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     if (SF_LUMINAIRES && (m.flags & PR_LAMP_GLOW) != 0u && (m.flags & PR_MEADOW) == 0u) {
         // (`--luminaires`) a district light's glass lit by its own lamp (`pr_lamp_glass`, in the
         // vertex stage: its radiance rides the colour), over the glass's small diffuse return.
+        // Exclude `PR_MEADOW` because `PR_MEADOW_MAT` shares bit 20 (`1 << 20`) with `PR_LAMP_GLOW`.
         m.emissive = vec4<f32>(in.color, 0.0); // (the division below takes look_light's gain back off)
         s.albedo = m.base.rgb * albedo_tex.rgb * 0.3;
     }
@@ -2219,9 +2225,22 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let lobe = pow(max(dot(-v, l), 0.0), 6.0);
         let sh = lk_shadow(in.world, n) * select(1.0, sky_cloud_transmittance(in.world), SF_VOL_CLOUDS && sky_vol_clouds_on(skyu.cirrus));
         let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
-        let fog = lk_smooth(look.fog.x, look.fog.y, vd);
-        let trans = look.key.xyz * s.albedo * (through * 0.35 + lobe * 0.6) * sh / LK_PI;
+        let fog = select(lk_smooth(look.fog.x, look.fog.y, vd), lk_fog_out, SF_AAA_DETAIL);
+        let t_col = select(s.albedo, s.albedo * vec3<f32>(0.86, 0.96, 0.38), SF_AAA_DETAIL);
+        let trans = look.key.xyz * t_col * (through * 0.35 + lobe * 0.6) * sh / LK_PI;
         c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
+    }
+// sf:end
+// sf:AAA_DETAIL+
+    if ((m.flags & PR_LEAF) != 0u) {
+        // Gentle sky-dome porous-canopy scatter weighted by canopy occlusion (`s.ao`,
+        // zero direct sun leak into shaded canyons so `04`/`05a` stay grounded deep olive-green).
+        let day_f = smoothstep(-0.04, 0.08, look.sun.y);
+        if (day_f > 0.001) {
+            let sky_dome = look.hemi_sky.xyz * 0.52 + look.ambient.xyz;
+            let sky_wrap = sky_dome * (s.albedo * vec3<f32>(0.86, 0.96, 0.72)) * (0.20 * s.ao * s.ao / LK_PI) * day_f;
+            c = vec4<f32>(c.rgb + sky_wrap * (1.0 - lk_fog_out), c.a);
+        }
     }
 // sf:end
     if (blade_t.g > 0.0) {
@@ -2234,7 +2253,8 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let sh = lk_shadow(in.world, n);
         let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
         let fog = lk_smooth(look.fog.x, look.fog.y, vd);
-        let trans = look.key.xyz * blade_t * (through + lobe * 0.8) * sh / LK_PI;
+        let blade_day = select(1.0, smoothstep(-0.04, 0.08, look.sun.y), SF_AAA_DETAIL);
+        let trans = look.key.xyz * blade_t * (through + lobe * 0.8) * sh * blade_day / LK_PI;
         c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
     }
 // sl:on+

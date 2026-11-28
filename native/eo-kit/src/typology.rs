@@ -51,7 +51,7 @@ use crate::js::*;
 use crate::rng::Rng;
 
 /// Bump when a draw changes (names the kit tile cache folder).
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 8;
 
 static PINNED: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
@@ -70,9 +70,29 @@ pub fn enabled() -> bool {
     }
 }
 
+/// High-detail modular architectural geometry and LOD silhouette retention.
+/// Follows `enabled()` (so JS parity tests pinning typology off stay untouched) and
+/// can be disabled independently via `EO_KIT_DETAIL=off` or `--no-kit-detail`.
+pub fn detail_enabled() -> bool {
+    if !enabled() {
+        return false;
+    }
+    if PINNED.load(std::sync::atomic::Ordering::Relaxed) == 2 {
+        return true;
+    }
+    !matches!(std::env::var("EO_KIT_DETAIL").as_deref(), Ok("off") | Ok("0"))
+        && !std::env::args().any(|a| a == "--no-kit-detail")
+}
+
 /// A tag for the kit tile cache key (empty when off).
 pub fn cache_tag() -> String {
-    if enabled() { format!("typology-v{VERSION}") } else { String::new() }
+    if !enabled() {
+        String::new()
+    } else if detail_enabled() {
+        format!("typology-v{VERSION}")
+    } else {
+        format!("typology-v{VERSION}-nodetail")
+    }
 }
 
 /// A tower glazes every face off a lot line (downtown_tower.rs `glazed_edges`).
@@ -124,24 +144,24 @@ pub fn period_trim(trim: &'static str) -> &'static str {
 /// Ladies: San Francisco's Resplendent Victorians, 1978). Every body is
 /// under the wall chroma cap (wall_paint.rs, C* 25; unit tested).
 pub const PERIOD_BODY: [(u32, f64); 18] = [
-    (0xffffff, 2.6), // white
-    (0xf1e7d2, 1.6), // cream
-    (0xc8cacc, 1.4), // pale grey
-    (0xecdfb3, 1.3), // butter yellow
-    (0xc0d2de, 1.3), // pale blue
-    (0xa9c4cc, 0.8), // robin's egg
-    (0xebcbb8, 0.9), // peach
-    (0xe4c6c4, 0.6), // blush
-    (0xc9d7bf, 1.0), // mint
-    (0xd8d2c0, 0.8), // putty
-    (0xa2ad90, 1.0), // sage
-    (0x7f91a4, 0.8), // slate blue
-    (0x5c6066, 0.7), // charcoal
-    (0x5d6b80, 0.7), // slate navy
-    (0x858b66, 0.4), // olive
-    (0x7c9894, 0.5), // teal
-    (0x8a6763, 0.4), // oxblood, weathered
-    (0xc4b38a, 0.6), // ochre
+    (0xffffff, 1.8), // white
+    (0xf1e7d2, 1.4), // cream
+    (0xc8cacc, 1.2), // pale grey
+    (0xecdfb3, 1.4), // butter yellow
+    (0xb8cee0, 1.6), // dusty blue
+    (0xa3c2cc, 1.1), // robin's egg
+    (0xebcbb8, 1.0), // peach
+    (0xe2c1c2, 0.9), // blush rose
+    (0xc8d1c2, 1.1), // muted SF sage
+    (0xd8d2c0, 0.7), // putty
+    (0xa2ac98, 1.1), // eucalyptus sage
+    (0x74899e, 1.1), // slate blue
+    (0x6c727a, 0.8), // slate charcoal (stays >= 0.11 linear in shade)
+    (0x647690, 0.9), // coastal slate navy
+    (0x888f6e, 0.6), // olive
+    (0x74928f, 0.9), // teal
+    (0x966c67, 0.8), // oxblood burgundy
+    (0xc2b28f, 0.8), // warm ochre
 ];
 
 /// The Postcard Row's bodies, house by house (710-720 Steiner Street): a

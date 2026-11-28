@@ -319,7 +319,9 @@ pub fn add(plan: &mut Plan, frame: &Frame, c: &Classified) {
     let roof_y = plan.envelope.wall_top + base_y;
     let ceiling = plan.envelope.roof_top + plan.envelope.roof_plant_allowance + base_y - 0.05;
     let area = if frame.area.is_nan() { 0.0 } else { frame.area };
-    if !(area >= 40.0) || !(ceiling > roof_y + 0.5) {
+    let detail = crate::typology::detail_enabled();
+    let min_area = if detail { 26.0 } else { 40.0 };
+    if !(area >= min_area) || !(ceiling > roof_y + 0.5) {
         return;
     }
     let random = Rng::from_num(hash_seed(&format!("{}|roof-plant", c.seed)) as f64);
@@ -398,6 +400,9 @@ pub fn add(plan: &mut Plan, frame: &Frame, c: &Classified) {
             ctx.place(t, t, h, "roof-vent", ms, "vent-stack", Stream::V3);
         }
         roofscape_v5(&mut ctx, &rolls);
+        if detail {
+            roofscape_v6(&mut ctx, c, true, area);
+        }
         return;
     }
 
@@ -433,4 +438,320 @@ pub fn add(plan: &mut Plan, frame: &Frame, c: &Classified) {
         ctx.place(sx, sz, h, "roof-vent", ms, "exhaust-fan", Stream::V3);
     }
     roofscape_v5(&mut ctx, &rolls);
+    if detail {
+        roofscape_v6(&mut ctx, c, false, area);
+    }
+}
+
+/// High-detail lived-in SF flat-rooftop pass (`typology::detail_enabled()`):
+/// stair/elevator penthouses on bare courtyard roofs, iconic SF wooden/steel
+/// rooftop water tanks on steel trestles, multi-unit chiller/HVAC mechanical
+/// yards with slatted screen walls & duct runs, glazed lightwell skylights,
+/// timber rooftop decks, expanded solar, and hillside condensers.
+/// Uses an isolated RNG stream (`|roof-plant-v6`) so legacy v3/v4/v5 streams stay untouched.
+fn roofscape_v6(ctx: &mut Ctx, c: &Classified, residential: bool, area: f64) {
+    let mut rng = Rng::from_num(hash_seed(&format!("{}|roof-plant-v6", c.seed)) as f64);
+    let ms = ctx.metal_slot;
+    let ry = ctx.roof_y;
+    let ceiling = ctx.ceiling;
+    // Allow disciplined headroom for sculpted rooftop assemblies beyond legacy budget caps
+    if ctx.tri_cap.is_finite() {
+        ctx.tri_cap += 460.0;
+    }
+
+    // Precompute wing-aligned interior anchors (inset inward along every roof edge >= 3.5 m) so
+    // U-shaped, L-shaped, and courtyard apartment roofs (`05a` foreground U-roof) reliably place
+    // stair/elevator bulkheads, water tanks, and chiller yards directly on their solid roof wings.
+    let mut wing_anchors: Vec<[f64; 2]> = Vec::new();
+    for e in &ctx.frame.edges {
+        if e.length < 3.5 {
+            continue;
+        }
+        let s = e.length * 0.5;
+        for inset in [2.2, 3.6] {
+            let wx = e.basis.origin[0] + e.basis.u[0] * s - e.basis.n[0] * inset;
+            let wz = e.basis.origin[1] + e.basis.u[1] * s - e.basis.n[1] * inset;
+            let p = ctx.frame.to_plan(wx, wz);
+            if rect_inside(ctx.frame, p.x - 0.4, p.x + 0.4, p.z - 0.4, p.z + 0.4, 0.2) {
+                wing_anchors.push([p.x, p.z]);
+            }
+        }
+    }
+
+    let find_free = |ctx: &Ctx, rng: &mut Rng, sx: f64, sz: f64, margin: f64, gap: f64| -> Option<Rect> {
+        let b = ctx.frame.plan_bounds.clone();
+        let inset_margin = (margin * 0.52).max(0.38);
+        // Pass 1: probe wing-aligned interior anchors (fast & reliable for U-shaped / L-shaped wings)
+        if !wing_anchors.is_empty() {
+            let n = wing_anchors.len();
+            let start = (rng.next() * n as f64).floor() as usize % n;
+            for step in 0..n.min(20) {
+                let [cx, cz] = wing_anchors[(start + step) % n];
+                let (ax, az) = if (step & 1) == 0 { (sx, sz) } else { (sz, sx) };
+                let x0 = cx - ax * 0.5;
+                let x1 = cx + ax * 0.5;
+                let z0 = cz - az * 0.5;
+                let z1 = cz + az * 0.5;
+                if rect_inside(ctx.frame, x0, x1, z0, z1, inset_margin)
+                    && !overlaps(&ctx.placed, x0, x1, z0, z1, gap)
+                    && !overlaps(&ctx.blocked, x0, x1, z0, z1, 0.25)
+                {
+                    return Some(Rect { x0, x1, z0, z1, y1: ry });
+                }
+            }
+        }
+        // Pass 2: random bounding-box search (48 attempts)
+        for _ in 0..48 {
+            let (ax, az) = if rng.next() < 0.5 { (sx, sz) } else { (sz, sx) };
+            let span_x = (b.max_x - b.min_x) - ax - 2.0 * inset_margin;
+            let span_z = (b.max_z - b.min_z) - az - 2.0 * inset_margin;
+            if span_x < 0.0 || span_z < 0.0 {
+                continue;
+            }
+            let x0 = b.min_x + inset_margin + rng.next() * span_x;
+            let z0 = b.min_z + inset_margin + rng.next() * span_z;
+            let x1 = x0 + ax;
+            let z1 = z0 + az;
+            if !rect_inside(ctx.frame, x0, x1, z0, z1, inset_margin) {
+                continue;
+            }
+            if overlaps(&ctx.placed, x0, x1, z0, z1, gap) || overlaps(&ctx.blocked, x0, x1, z0, z1, 0.25) {
+                continue;
+            }
+            return Some(Rect { x0, x1, z0, z1, y1: ry });
+        }
+        None
+    };
+
+    // 0a. Wing-friendly stair / elevator bulkhead penthouse on mid-size & large courtyard roofs
+    //     (adds a primary penthouse if missing, plus a 2nd stair bulkhead on large >= 260 m2 U/L wings)
+    let bulkhead_count = ctx.plan.parts.iter().filter(|p| matches!(p.kind.as_str(), "roof-bulkhead" | "roof-penthouse")).count();
+    let want_bulkheads = if area >= 260.0 { 2usize } else if area >= 95.0 { 1usize } else { 0usize };
+    for _ in bulkhead_count..want_bulkheads {
+        if !(ceiling > ry + 1.8 && ctx.affords(4.0)) {
+            break;
+        }
+        let pw = 2.2 + rng.next() * 1.1;
+        let pd = 2.4 + rng.next() * 1.2;
+        let ph = (2.15 + rng.next() * 0.75).min(ceiling - ry - 0.14);
+        if ph >= 1.45 {
+            if let Some(p) = find_free(ctx, &mut rng, pw, pd, 0.72, 0.65) {
+                let y1 = ry + ph;
+                ctx.detail(p.x0, p.x1, p.z0, p.z1, ry - 0.02, y1, "roof-penthouse", "wall", "wing-bulkhead");
+                // Overhanging coping cap + dark rooftop access door panel
+                ctx.detail(p.x0 - 0.10, p.x1 + 0.10, p.z0 - 0.10, p.z1 + 0.10, y1 - 0.02, (y1 + 0.12).min(ceiling), "roof-curb", ms, "bulkhead-cap");
+                let dw = 0.88f64.min((p.x1 - p.x0) * 0.45);
+                let cx = 0.5 * (p.x0 + p.x1);
+                let dh = (ph - 0.25).min(2.05);
+                if dh > 1.2 {
+                    ctx.detail(cx - dw * 0.5, cx + dw * 0.5, p.z1 - 0.02, p.z1 + 0.05, ry + 0.04, ry + dh, ROOF_DETAIL_KIND, ms, "bulkhead-door");
+                }
+                ctx.placed.push(Rect { y1: y1 + 0.14, ..p });
+            }
+        }
+    }
+
+    // 0b. Iconic SF rooftop wooden/steel water tank on 4-leg steel trestle (older/larger flat roofs)
+    let tank_share = if area >= 220.0 { 0.65 } else { 0.44 };
+    if area >= 165.0 && c.storeys >= 3.0 && ceiling > ry + 1.95 && rng.next() < tank_share && ctx.affords(8.0) {
+        let rad = 0.92 + rng.next() * 0.32;
+        let foot = rad * 2.10;
+        let avail_h = (ceiling - ry - 0.08).min(4.2);
+        if avail_h >= 1.85 {
+            if let Some(t) = find_free(ctx, &mut rng, foot, foot, 0.75, 0.70) {
+                let cx = 0.5 * (t.x0 + t.x1);
+                let cz = 0.5 * (t.z0 + t.z1);
+                let leg_h = (avail_h * 0.34).clamp(0.75, 1.35);
+                let tank_y0 = ry + leg_h;
+                let tank_y1 = (ry + avail_h - 0.38).max(tank_y0 + 1.0);
+                let wood_tank = rng.next() < 0.72;
+                let tank_slot = if wood_tank {
+                    ctx.plan.materials.entry("waterTankWood".into()).or_insert_with(|| "wood-siding".into());
+                    "waterTankWood"
+                } else {
+                    ms
+                };
+                ctx.plan.materials.entry("roofRail".into()).or_insert_with(|| "painted-steel".into());
+                // 4 dark steel trestle legs + timber dunnage platform under the cylindrical tank
+                let off = rad * 0.62;
+                for sx in [-off, off] {
+                    for sz in [-off, off] {
+                        ctx.detail(cx + sx - 0.07, cx + sx + 0.07, cz + sz - 0.07, cz + sz + 0.07, ry - 0.02, tank_y0 + 0.04, "roof-water-tank", "roofRail", "tank-leg");
+                    }
+                }
+                ctx.detail(cx - rad * 0.92, cx + rad * 0.92, cz - rad * 0.92, cz + rad * 0.92, tank_y0 - 0.08, tank_y0 + 0.06, "roof-water-tank", "roofRail", "tank-deck");
+                // 8-sided cylindrical tank body + stepped conical cap
+                let oct = |r: f64| -> Vec<P2> {
+                    (0..8)
+                        .map(|i| {
+                            let a = std::f64::consts::TAU * (i as f64 + 0.5) / 8.0;
+                            ctx.frame.to_world(cx + r * a.cos(), cz + r * a.sin())
+                        })
+                        .collect()
+                };
+                ctx.plan.add_prism(PartArgs {
+                    kind: "roof-water-tank".into(),
+                    slot: tank_slot.into(),
+                    points: oct(rad),
+                    y0: tank_y0,
+                    y1: tank_y1,
+                    cast_shadow: Some(true),
+                    receive_shadow: Some(true),
+                    meta: Some(ctx.meta("water-tank-body")),
+                    ..Default::default()
+                });
+                ctx.plan.add_prism(PartArgs {
+                    kind: "roof-water-tank".into(),
+                    slot: ms.into(),
+                    points: oct(rad * 1.07),
+                    y0: tank_y1 - 0.02,
+                    y1: (tank_y1 + 0.16).min(ceiling),
+                    cast_shadow: Some(true),
+                    receive_shadow: Some(true),
+                    meta: Some(ctx.meta("water-tank-eave")),
+                    ..Default::default()
+                });
+                let cone_y1 = (tank_y1 + 0.36).min(ceiling);
+                if cone_y1 > tank_y1 + 0.18 {
+                    ctx.plan.add_prism(PartArgs {
+                        kind: "roof-water-tank".into(),
+                        slot: ms.into(),
+                        points: oct(rad * 0.62),
+                        y0: tank_y1 + 0.14,
+                        y1: cone_y1,
+                        cast_shadow: Some(true),
+                        receive_shadow: Some(true),
+                        meta: Some(ctx.meta("water-tank-cap")),
+                        ..Default::default()
+                    });
+                }
+                ctx.tri_used += 96.0;
+                ctx.placed.push(Rect { y1: cone_y1, ..t });
+            }
+        }
+    }
+
+    // 1. Timber rooftop decks on ~30% of mid/larger SF residential flat roofs (lean 5-box silhouette)
+    if residential && area >= 72.0 && rng.next() < 0.30 && ceiling > ry + 1.15 && ctx.affords(6.0) {
+        let dw = (3.4 + rng.next() * 2.8).min((area * 0.24).sqrt() * 1.15);
+        let dd = (2.6 + rng.next() * 2.0).min((area * 0.24).sqrt() * 0.90);
+        if let Some(d) = find_free(ctx, &mut rng, dw, dd, 1.0, 0.75) {
+            ctx.plan.materials.entry("roofDeck".into()).or_insert_with(|| "wood-siding".into());
+            ctx.plan.materials.entry("roofRail".into()).or_insert_with(|| "painted-steel".into());
+            ctx.detail(d.x0, d.x1, d.z0, d.z1, ry - 0.02, ry + 0.18, "roof-deck", "roofDeck", "roof-deck");
+            let rail_y0 = ry + 0.98;
+            let rail_y1 = ry + 1.05;
+            let rt = 0.06;
+            ctx.detail(d.x0, d.x1, d.z0, d.z0 + rt, rail_y0, rail_y1, "roof-deck-rail", "roofRail", "deck-rail");
+            ctx.detail(d.x0, d.x1, d.z1 - rt, d.z1, rail_y0, rail_y1, "roof-deck-rail", "roofRail", "deck-rail");
+            ctx.detail(d.x0, d.x0 + rt, d.z0, d.z1, rail_y0, rail_y1, "roof-deck-rail", "roofRail", "deck-rail");
+            ctx.detail(d.x1 - rt, d.x1, d.z0, d.z1, rail_y0, rail_y1, "roof-deck-rail", "roofRail", "deck-rail");
+            ctx.placed.push(Rect { y1: rail_y1, ..d });
+        }
+    }
+
+    // 2. Glazed lightwell skylights (lean 2-box curb + lid; wing-friendly margin for courtyard roofs)
+    let skylight_count = if area >= 220.0 { 4 } else if area >= 95.0 { 2 } else if area >= 48.0 { 1 } else { 0 };
+    let mut has_sky_slot = false;
+    for _ in 0..skylight_count {
+        if !ctx.affords(2.0) {
+            break;
+        }
+        let sw = 1.15 + rng.next() * 1.05;
+        let sd = 0.95 + rng.next() * 0.80;
+        let sh = (0.28 + rng.next() * 0.18).min(ceiling - ry - 0.12);
+        if sh < 0.16 {
+            break;
+        }
+        if let Some(sk) = find_free(ctx, &mut rng, sw, sd, 0.75, 0.55) {
+            if !has_sky_slot {
+                ctx.plan.materials.entry("skylightGlass".into()).or_insert_with(|| "glass-sky".into());
+                has_sky_slot = true;
+            }
+            ctx.detail(sk.x0, sk.x1, sk.z0, sk.z1, ry - 0.02, ry + sh, "roof-curb", ms, "skylight-curb");
+            ctx.detail(sk.x0 + 0.05, sk.x1 - 0.05, sk.z0 + 0.05, sk.z1 - 0.05, ry + sh - 0.01, ry + sh + 0.09, "roof-skylight", "skylightGlass", "skylight-pane");
+            ctx.placed.push(Rect { y1: ry + sh + 0.09, ..sk });
+        }
+    }
+
+    // 3. Wing-friendly packaged HVAC chiller yard, slatted mechanical screen & duct runs on courtyard/apartment roofs (area >= 130 m2)
+    //    so U-shaped / L-shaped residential & mixed-use flat roofs look richly architectural instead of bare slabs.
+    if area >= 130.0 && ceiling > ry + 1.1 {
+        let extra_hvac = if area >= 340.0 { 4 } else if area >= 200.0 { 3 } else { 2 };
+        let mut screened = false;
+        for _ in 0..extra_hvac {
+            if !ctx.affords(3.0) {
+                break;
+            }
+            let uw = 1.50 + rng.next() * 1.05;
+            let ud = 1.10 + rng.next() * 0.70;
+            let uh = (0.95 + rng.next() * 0.55).min(ceiling - ry - 0.15);
+            if uh > 0.45 {
+                if let Some(u) = find_free(ctx, &mut rng, uw, ud, 0.75, 0.60) {
+                    let y1 = ry + uh;
+                    ctx.detail(u.x0, u.x1, u.z0, u.z1, ry - 0.02, y1, "roof-plant", ms, "wing-hvac");
+                    ctx.detail(u.x0 + 0.15, u.x1 - 0.15, u.z0 + 0.15, u.z1 - 0.15, y1 - 0.01, y1 + 0.14, ROOF_DETAIL_KIND, ms, "unit-grille");
+                    // Low louvered mechanical screen wall framing the primary rooftop chiller unit
+                    if !screened && area >= 200.0 && ctx.affords(4.0) {
+                        let sh = (uh + 0.22).min(ceiling - ry - 0.08);
+                        let st = 0.09;
+                        let pad = 0.22;
+                        ctx.detail(u.x0 - pad, u.x1 + pad, u.z0 - pad, u.z0 - pad + st, ry - 0.02, ry + sh, "roof-screen", ms, "hvac-screen");
+                        ctx.detail(u.x0 - pad, u.x1 + pad, u.z1 + pad - st, u.z1 + pad, ry - 0.02, ry + sh, "roof-screen", ms, "hvac-screen");
+                        ctx.detail(u.x0 - pad, u.x0 - pad + st, u.z0 - pad, u.z1 + pad, ry - 0.02, ry + sh, "roof-screen", ms, "hvac-screen");
+                        screened = true;
+                    }
+                    ctx.placed.push(Rect { y1: y1 + 0.18, ..u });
+                }
+            }
+        }
+        let duct_runs = if area >= 280.0 { 2 } else { 1 };
+        for _ in 0..duct_runs {
+            if !ctx.affords(2.0) {
+                break;
+            }
+            let dl = 3.2 + rng.next() * 3.0;
+            let dw = 0.52 + rng.next() * 0.24;
+            let dh = (0.44 + rng.next() * 0.18).min(ceiling - ry - 0.15);
+            if dh > 0.25 {
+                if let Some(dr) = find_free(ctx, &mut rng, dl, dw, 0.72, 0.48) {
+                    ctx.detail(dr.x0, dr.x1, dr.z0, dr.z1, ry + 0.10, ry + 0.10 + dh, "roof-duct", ms, "wing-duct");
+                    ctx.placed.push(Rect { y1: ry + 0.12 + dh, ..dr });
+                }
+            }
+        }
+    }
+
+    // 4. Expanded rooftop solar adoption on flat SF roofs without an existing array
+    let has_solar = ctx.plan.parts.iter().any(|p| p.kind == "roof-solar");
+    if !has_solar && area >= 68.0 && rng.next() < 0.22 {
+        let side = (area * 0.25).sqrt() * (0.60 + rng.next() * 0.35);
+        let aspect = 1.2 + rng.next() * 0.8;
+        for k in [1.0, 0.75, 0.55] {
+            let sx = 18.0f64.min(side * k * aspect.sqrt());
+            let sz = 12.0f64.min(side * k / aspect.sqrt());
+            if sx < 3.6 || sz < 2.8 {
+                break;
+            }
+            let Some(rect) = find_free(ctx, &mut rng, sx, sz, 0.9, 0.8) else { continue };
+            if ctx.solar_array(rect) > 0.0 {
+                ctx.placed.push(Rect { y1: ry + 0.36, ..rect });
+                break;
+            }
+        }
+    }
+
+    // 5. Compact mini-split AC condenser on mid hillside residential roofs
+    if residential && area >= 42.0 && area < 160.0 && rng.next() < 0.48 && ctx.affords(2.0) {
+        let cw = 0.85 + rng.next() * 0.30;
+        let cd = 0.42 + rng.next() * 0.16;
+        let ch = (0.72 + rng.next() * 0.22).min(ceiling - ry - 0.1);
+        if ch > 0.35 {
+            if let Some(ac) = find_free(ctx, &mut rng, cw, cd, 0.80, 0.50) {
+                let y1 = ry + ch;
+                ctx.detail(ac.x0, ac.x1, ac.z0, ac.z1, ry - 0.02, y1, "roof-plant", ms, "mini-split");
+                ctx.placed.push(Rect { y1: y1 + 0.1, ..ac });
+            }
+        }
+    }
 }

@@ -42,10 +42,10 @@ use std::f64::consts::PI;
 /// cd/m2 at the peak where beams overlap), the IES ratio between the two
 /// kept as overlap (City Hall's beams overlap two to three deep): INFERRED.
 pub const IES_DARK_LUX: f64 = 50.0;
-pub const AIM_LUX_DARK: f64 = 5.5;
+pub const AIM_LUX_DARK: f64 = 8.5;
 pub const AIM_LUX_BRIGHT: f64 = 10.0;
-/// The luminance (cd/m2) of the Transamerica spire's skin lit from within, INFERRED (under the night exposure's clip).
-pub const SPIRE_GLOW_CD: f64 = 2.4;
+/// The luminance (cd/m2) of the Transamerica spire's skin lit from within, INFERRED (crisp white-gold under night exposure without clipping).
+pub const SPIRE_GLOW_CD: f64 = 6.2;
 
 /// One projector of a rig.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -192,7 +192,7 @@ fn transamerica_rig(js: &LandmarksJs) -> Vec<Projector> {
     let (h_total, spire) = (n(d, "heightM"), n(d, "spireM"));
     let half_at = |y_from_spire: f64| fhalf * (1.0 - (h_total - spire + y_from_spire) / h_total);
     let rho = crate::geometry::srgb_hex(n(d, "metalSrgb") as u32)[1];
-    [0.15, 0.45, 0.75]
+    [0.06, 0.38, 0.72]
         .iter()
         .map(|f| {
             let y = spire * f;
@@ -406,11 +406,14 @@ pub fn transamerica_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
         }
         *pre = m.freeze();
     }
-    // the spire glows from within (its interior rig) in place of the lit band.
+    // the spire glows from within (its interior rig) in place of the lit band — in both Near (`metal`) and Far (`far`, above spire_y).
     if let Some(m) = registry_material("transamerica-pyramid", "metal") {
         let spire = with_rig(&facade_material("solid", m.roughness, m.metalness, None), "transamerica-spire", base + spire_y);
         o.materials.retain(|(k, _)| k != "metal");
         o.materials.push(("metal".into(), spire));
+    }
+    if let Some((_, far_m)) = o.materials.iter_mut().find(|(k, _)| k == "far") {
+        *far_m = with_rig(far_m, "transamerica-spire", base + spire_y);
     }
     o.version = o.version.replace("+towers2", "+towers3");
     o
@@ -541,7 +544,9 @@ pub fn coit_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     }
     let mut materials = vec![];
     if let Some(m) = registry_material("coit-tower", "concrete") {
-        materials.push(("concrete".into(), with_rig(&m, "coit-tower", base)));
+        let rigged = with_rig(&m, "coit-tower", base);
+        materials.push(("concrete".into(), rigged.clone()));
+        materials.push(("far".into(), rigged));
     }
     if let Some(m) = registry_material("coit-tower", "openings") {
         materials.push(("openings".into(), with_rig(&m, "coit-tower", base)));
@@ -577,7 +582,11 @@ pub fn city_hall(site: &Value, g: &GroundGrid) -> Out {
     o.version = format!("{}+towers3", o.version);
     for key in ["stone", "dome"] {
         if let Some(m) = registry_material("city-hall", key) {
-            o.materials.push((key.into(), with_rig(&m, "city-hall", base)));
+            let rigged = with_rig(&m, "city-hall", base);
+            if key == "stone" {
+                o.materials.push(("far".into(), rigged.clone()));
+            }
+            o.materials.push((key.into(), rigged));
         }
     }
     o.materials.push(("windows".into(), with_origin(facade_material("city-hall-window", 0.3, 0.1, None), base)));
@@ -834,6 +843,18 @@ pub fn transamerica4_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
             }
         }
     }
+    // Also brighten the spire triangles in the far item to aluminium's weathered F0 so the gleaming cap reads past 1.5 km.
+    let spire_from_y = o.stats["spireFromY"].as_f64().unwrap_or(f64::INFINITY) as f32;
+    for (p, c) in o.far.positions.chunks_exact(3).zip(o.far.colors.chunks_exact_mut(3)) {
+        if p[1] >= spire_from_y - 0.5 {
+            // Distinguish the central spire from the side wings (the spire vertices carry metalSrgb, darker than precast).
+            if c[0] < 0.55 {
+                for k in 0..3 {
+                    c[k] = (ALUMINIUM_F0[k] * SPIRE4_WEATHER) as f32;
+                }
+            }
+        }
+    }
     if let Some((_, m)) = o.materials.iter_mut().find(|(k, _)| k == "metal") {
         m.roughness = SPIRE4_ROUGHNESS;
         m.metalness = SPIRE4_METALNESS;
@@ -966,18 +987,34 @@ pub fn salesforce4_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
             }
         }
     }
-    // the sunshades: a ring each storey, from the panels out to the fins' edge.
+    // the sunshades: curved tapering silvery-white perforated crown rings wrapping the superellipse
+    // shoulder (one each storey along the LED screen, tightening to half-storey filigree bands over
+    // the transparent upper lantern so the summit curves cleanly into a smooth rim instead of spiky teeth).
     let storey = crate::skyline::data().facades.get("salesforce-curtain").map(|f| f.storey_m).unwrap_or(4.557);
+    let screen_top = top_floor + CROWN_SCREEN_TOP * crown_h;
+    let mut ring_ys: Vec<(f64, f64, f64)> = Vec::new();
     let mut y = top_floor + storey;
-    while y < h_total - 1.0 {
-        let inner = at(y);
-        let outer = offset_ring(&inner, c, CROWN_FIN_DEPTH_M);
+    while y < screen_top - 0.4 {
+        ring_ys.push((y, CROWN_FIN_DEPTH_M, CROWN_SHADE_THICK_M));
+        y += storey;
+    }
+    // Upper open crown filigree rings (curved tapering silvery-white perforated horizontal bands).
+    let upper_steps = 5usize;
+    for k in 0..=upper_steps {
+        let u = k as f64 / upper_steps as f64;
+        let ry = screen_top + (h_total - 0.28 - screen_top) * u;
+        let depth = CROWN_FIN_DEPTH_M * (1.0 - 0.42 * u);
+        let thick = if k == upper_steps { 0.46 } else { 0.24 };
+        ring_ys.push((ry, depth, thick));
+    }
+    for (ry, rdepth, rthick) in ring_ys {
+        let inner = at(ry);
+        let outer = offset_ring(&inner, c, rdepth);
         let nr = inner.len();
-        let (ya, yb) = (base + y - CROWN_SHADE_THICK_M / 2.0, base + y + CROWN_SHADE_THICK_M / 2.0);
+        let (ya, yb) = (base + ry - rthick * 0.5, base + ry + rthick * 0.5);
         for k in 0..nr {
             let j = (k + 1) % nr;
             let (ia, ib, oa, ob) = (inner[k], inner[j], outer[k], outer[j]);
-            // top, outer edge, underside (each wound to face out).
             let q = |a: [f64; 2], b: [f64; 2], yy: f64| -> (V3, V3) { ([a[0], yy, a[1]], [b[0], yy, b[1]]) };
             let (t0, t1) = q(ia, ib, yb);
             let (t3, t2) = q(oa, ob, yb);
@@ -996,10 +1033,8 @@ pub fn salesforce4_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
             let mid = [(oa[0] + ob[0]) / 2.0 - c[0], 0.0, (oa[1] + ob[1]) / 2.0 - c[1]];
             add([oa[0], ya, oa[1]], [ob[0], ya, ob[1]], [ob[0], yb, ob[1]], [oa[0], yb, oa[1]], mid);
         }
-        y += storey;
     }
     // the perforated panels, a hair inside the fins' roots, up to the screen's top.
-    let screen_top = top_floor + CROWN_SCREEN_TOP * crown_h;
     for i in 0..bands {
         let (y0, y1) = (ty(i), ty(i + 1).min(screen_top));
         if y0 >= screen_top {
@@ -1010,7 +1045,93 @@ pub fn salesforce4_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     // the structure inside, seen over the panels' top: a dark floor at their top, the lip and the well as towers2.
     crate::skyline::cap(&mut screen, &scale_ring(&at(screen_top), c[0], c[1], 0.99), base + screen_top, well_c);
     let top = at(h_total);
-    fins.loft(&top, base + h_total, &scale_ring(&top, c[0], c[1], 0.9), base + h_total, crown_c, false);
+    fins.loft(&offset_ring(&top, c, 0.34), base + h_total, &scale_ring(&top, c[0], c[1], 0.9), base + h_total, crown_c, false);
+    // Express primary pearl-white vertical accent fins and periodic horizontal
+    // sunshade rings down the 61-storey shaft as real 3D geometry (added into the
+    // pearl `crown` mesh) so Salesforce Tower's pearlescent vertical/horizontal
+    // metal filigree catches raking sunlight and backlit rim light instead of reading
+    // as a dull monolithic tube.
+    let k_tf_shaft = n(d, "scaleAtTopFloor");
+    let shaft_ring = |y: f64| scale_ring(&ring, c[0], c[1], 1.0 + (k_tf_shaft - 1.0) * (y / top_floor));
+    let shaft_fin_c = fin_c.map(|v| (v * 1.08).min(0.95));
+    let n_accent_fins = 20usize;
+    let shaft_segs = 6usize;
+    for f in 0..n_accent_fins {
+        let t = (f as f64 + 0.5) / n_accent_fins as f64;
+        for i in 0..shaft_segs {
+            let y0 = top_floor * i as f64 / shaft_segs as f64;
+            let y1 = top_floor * (i + 1) as f64 / shaft_segs as f64;
+            let (p0, n0) = ring_at(&shaft_ring(y0), c, t);
+            let (p1, n1) = ring_at(&shaft_ring(y1), c, t);
+            let depth = CROWN_FIN_DEPTH_M * 0.92;
+            let hw = 0.14;
+            let corner = |pp: [f64; 2], nn: [f64; 2], out: f64, s: f64, yy: f64| -> V3 {
+                [pp[0] + nn[0] * out - nn[1] * s * hw, base + yy, pp[1] + nn[1] * out + nn[0] * s * hw]
+            };
+            fins.quad(corner(p0, n0, 0.0, 1.0, y0), corner(p0, n0, depth, 1.0, y0), corner(p1, n1, depth, 1.0, y1), corner(p1, n1, 0.0, 1.0, y1), shaft_fin_c);
+            fins.quad(corner(p0, n0, depth, -1.0, y0), corner(p0, n0, 0.0, -1.0, y0), corner(p1, n1, 0.0, -1.0, y1), corner(p1, n1, depth, -1.0, y1), shaft_fin_c);
+            fins.quad(corner(p0, n0, depth, 1.0, y0), corner(p0, n0, depth, -1.0, y0), corner(p1, n1, depth, -1.0, y1), corner(p1, n1, depth, 1.0, y1), shaft_fin_c);
+        }
+    }
+    // Horizontal pearl sunshade accent rings every 3 storeys up the shaft.
+    let mut sy = storey * 3.0;
+    while sy < top_floor - 1.5 {
+        let inner = shaft_ring(sy);
+        let outer = offset_ring(&inner, c, CROWN_FIN_DEPTH_M * 0.85);
+        let nr = inner.len();
+        let (ya, yb) = (base + sy - 0.14, base + sy + 0.14);
+        for k in 0..nr {
+            let j = (k + 1) % nr;
+            let (ia, ib, oa, ob) = (inner[k], inner[j], outer[k], outer[j]);
+            let mid = [(oa[0] + ob[0]) / 2.0 - c[0], 0.0, (oa[1] + ob[1]) / 2.0 - c[1]];
+            let mut add = |a: V3, b: V3, cc: V3, dd: V3, want: [f64; 3]| {
+                let nn = cross3(sub3(b, a), sub3(dd, a));
+                if dot3(nn, want) >= 0.0 {
+                    fins.quad(a, b, cc, dd, shaft_fin_c);
+                } else {
+                    fins.quad(dd, cc, b, a, shaft_fin_c);
+                }
+            };
+            add([ia[0], yb, ia[1]], [ib[0], yb, ib[1]], [ob[0], yb, ob[1]], [oa[0], yb, oa[1]], [0.0, 1.0, 0.0]);
+            add([oa[0], ya, oa[1]], [ob[0], ya, ob[1]], [ob[0], yb, ob[1]], [oa[0], yb, oa[1]], mid);
+        }
+        sy += storey * 3.0;
+    }
+    // Rebuild the far item for the fourth pass: smoother rounded superellipse crown
+    // open at the top with a crisp lip (never a solid flat cap) and luminous pearl tone
+    // fading upward so the perforated crown dissolves against the sky past 1.5 km too.
+    let mut far4 = MeshArrays::new("salesforce:far");
+    let floors = n(d, "floors");
+    let (vis0, vis1) = ((floors - 1.0) * top_floor / floors, (floors - 1.0) * top_floor / floors + top_floor / floors - 0.6);
+    let k_tf_far = n(d, "scaleAtTopFloor");
+    let shaft_at = |y: f64| scale_ring(&ring, c[0], c[1], 1.0 + (k_tf_far - 1.0) * (y / top_floor));
+    let around_far = |y0: f64, y1: f64| -> Vec<(f64, f64)> {
+        if open && y0 < vis1 && y1 > vis0 {
+            [(y0, vis0.max(y0)), (vis1.min(y1), y1)].into_iter().filter(|(a, b)| b > a).collect()
+        } else {
+            vec![(y0, y1)]
+        }
+    };
+    for (y0, y1) in [(0.0, 100.0), (100.0, 200.0), (200.0, top_floor)].into_iter().flat_map(|(y0, y1)| around_far(y0, y1)) {
+        far4.loft(&shaft_at(y0), base + y0, &shaft_at(y1), base + y1, fin_c, false);
+    }
+    let fb = 10usize;
+    for i in 0..fb {
+        let (t0, t1) = (i as f64 / fb as f64, (i + 1) as f64 / fb as f64);
+        let (y0, y1) = (top_floor + crown_h * (t0 * std::f64::consts::FRAC_PI_2).sin(), top_floor + crown_h * (t1 * std::f64::consts::FRAC_PI_2).sin());
+        let lift = 1.0 + 0.16 * (0.5 * (t0 + t1));
+        let band_c = fin_c.map(|v| (v * lift).min(0.96));
+        far4.loft(&at(y0), base + y0, &at(y1), base + y1, band_c, false);
+    }
+    // Sculpted silvery-white horizontal crown shoulder rings & open top rim lip (keeps <= 600 far tris!).
+    for f_ring in [0.55, 0.85] {
+        let yr = top_floor + crown_h * f_ring;
+        let r_out = offset_ring(&at(yr), c, 0.72);
+        let ring_c = fin_c.map(|v| (v * 1.15).min(0.96));
+        far4.loft(&r_out, base + yr - 0.55, &r_out, base + yr + 0.55, ring_c, false);
+    }
+    far4.loft(&offset_ring(&top, c, 0.45), base + h_total, &scale_ring(&top, c[0], c[1], 0.9), base + h_total, crown_c, false);
+    o.far = far4.freeze();
     o.groups.retain(|(k, _)| k != "crown");
     o.groups.push(("crown".into(), fins.freeze()));
     o.groups.push(("screen".into(), screen.freeze()));

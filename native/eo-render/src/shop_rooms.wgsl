@@ -915,6 +915,11 @@ fn sr_light(p: vec3<f32>, nrm: vec3<f32>, r: SrRoom) -> f32 {
         let spot = exp(-su * su / 0.18 - sy * sy / 0.5);
         e = e * 0.8 + 0.7 * spot;
     }
+    // Front showcase / window-display warm wash (0..2.6 m inside the glass) so storefront merchandise,
+    // dining tables, bakery cases, and bookshelves read richly from the night sidewalk.
+    let front_zone = 1.0 - smoothstep(0.25, 2.75, p.z);
+    let display_wash = front_zone * (0.28 + 0.24 * smoothstep(0.15, 2.2, p.y));
+    e = e + display_wash;
     return e;
 }
 

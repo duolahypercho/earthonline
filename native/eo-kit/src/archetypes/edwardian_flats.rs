@@ -407,13 +407,16 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     let secondary_pitch = pitch_for("front-secondary", 3.0, 24.0);
     let back_pitch = pitch_for("back", 3.3, 12.0);
 
+    let detail_on = crate::typology::detail_enabled();
+    let cornice_h = if detail_on { 0.52 } else { CORNICE_M };
+    let cornice_p = if detail_on { 0.56 } else { CORNICE_PROJECTION_M };
     let ornate = |with_bays: bool| -> J {
         let mut e = json!({
             "bayWidth": if with_bays { 3.0 } else { secondary_pitch },
             "align": "start",
             "endPier": if with_bays { END_PIER_M } else { 0.45 },
             "pierMin": 0.5,
-            "reveal": 0.16,
+            "reveal": if detail_on { 0.24 } else { 0.16 },
             "window": "punched",
             "ground": if retail { "storefront" } else { "punched" },
             "windowSpec": { "sillHeight": SILL_M, "head": head, "widthRatio": 0.48, "frameWidth": 0.07, "frameDepth": 0.08, "mullions": 0, "transoms": 1 },
@@ -426,7 +429,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             } else {
                 json!([])
             },
-            "cornice": { "height": CORNICE_M, "projection": CORNICE_PROJECTION_M, "profile": "ogee", "slot": "trim" },
+            "cornice": { "height": cornice_h, "projection": cornice_p, "profile": "ogee", "slot": "trim" },
             "base": if rusticated || retail { json!(false) } else { json!({ "height": 0.42, "projection": 0.04, "slot": "base" }) },
             "downpipes": false,
         });
@@ -455,7 +458,29 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
         })
         .collect();
 
-    json!({
+    // Optional pitched clay-tile / composition-shingle gable roof on compact 2-4 storey hillside
+    // Edwardian flats (scale-aware via groundscale; disabled when detail_enabled() is off).
+    let gs = eo_data::groundscale::resolve().unwrap_or(1.0).max(0.5);
+    let real_front = front.map(|e| e.length).unwrap_or(0.0) / gs;
+    let real_area = frame.area / (gs * gs);
+    let mut prng = Rng::new(&format!("{}|edw-pitched", c.seed));
+    let p_roll = prng.next();
+    let p_mat_roll = prng.next();
+    let p_pitch = 0.32 + prng.next() * 0.20;
+    let pitched_gable = crate::typology::detail_enabled()
+        && !retail
+        && storeys.len() >= 2
+        && storeys.len() <= 4
+        && front.is_some()
+        && real_front >= 4.8
+        && real_front <= 15.5
+        && real_area <= 420.0
+        && frame.polygon.len() <= 10
+        && p_roll < 0.42;
+    let gable_rise = if pitched_gable { (0.5 * real_front * p_pitch).clamp(1.2, 3.2) } else { 0.0 };
+    let pitched_mat = if p_mat_roll < 0.48 { "clay-barrel-tile" } else { "composition-shingle" };
+
+    let mut out_spec = json!({
         "id": format!("sf-archetype-{}", c.seed),
         "seed": c.seed,
         "height": c.height,
@@ -493,7 +518,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             },
             "default": { "window": "blind", "cornice": false },
         },
-        "roof": { "slab": 0.3 },
+        "roof": if pitched_gable { json!({ "slab": 0.3, "plantAllowance": gable_rise + 0.8 }) } else { json!({ "slab": 0.3 }) },
         "archetype": {
             "kind": KIND,
             "version": EDWARDIAN_FLATS_VERSION,
@@ -513,10 +538,16 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "unitsSource": if civic_units.is_some() { "roll" } else { "storeys" },
             "head": head,
             "parapet": parapet,
-            "corniceHeight": CORNICE_M,
+            "corniceHeight": cornice_h,
             "stacks": stacks_meta,
+            "pitched": pitched_gable,
+            "gableRise": gable_rise,
         },
-    })
+    });
+    if pitched_gable {
+        set(obj_mut(&mut out_spec, "materials"), "pitchedRoof", json!(pitched_mat));
+    }
+    out_spec
 }
 
 // ---------------------------------------------------------------------------
@@ -603,6 +634,10 @@ fn add_sash(plan: &mut Plan, fb: &Basis, edge: usize, a: f64, b: f64, y0: f64, y
     }
     let mid = (y0 + y1) / 2.0 + 0.08;
     plan.add_box(fb, c("mullion", a, b, mid - 0.03, mid + 0.03, w0 + 0.01, w1 - 0.01));
+    if crate::typology::detail_enabled() {
+        plan.add_box(fb, PartArgs::new("sill", "trim", a - 0.05, b + 0.05, y0 - 0.075, y0 + 0.01, w_face - 0.01, w1 + 0.045).edge(edge).meta(meta.clone()));
+        plan.add_box(fb, PartArgs::new("window-head", "trim", a - 0.05, b + 0.05, y1 + 0.01, y1 + 0.11, w_face - 0.01, w1 + 0.045).edge(edge).meta(meta.clone()));
+    }
     plan.add_box(
         fb,
         PartArgs::new("glass", "glass", a + f * 0.5, b - f * 0.5, y0 + f * 0.5, y1 - f * 0.5, w_face + 0.004, w_face + 0.014)
@@ -622,6 +657,7 @@ fn add_cornice_supports(plan: &mut Plan, basis: &Basis, edge: usize, a: f64, b: 
     if style == "bracketed" {
         let count = 1f64.max(js_round(length / BRACKET_PITCH_M));
         let pitch = length / count;
+        let cast = crate::typology::detail_enabled() && where_ == "front";
         for i in 0..=count as usize {
             let s = clamp(a + i as f64 * pitch, a + 0.09, b - 0.09);
             plan.add_box(
@@ -629,7 +665,7 @@ fn add_cornice_supports(plan: &mut Plan, basis: &Basis, edge: usize, a: f64, b: 
                 PartArgs::new("cornice-bracket", "trim", s - 0.075, s + 0.075, cornice_bottom - 0.4, cornice_bottom + 0.01, -0.01, depth)
                     .edge(edge)
                     .meta(meta.clone())
-                    .shadow(false),
+                    .shadow(cast),
             );
         }
         return;
@@ -726,7 +762,8 @@ fn enforce_budget(plan: &mut Plan, frame: &Frame) -> (f64, Vec<&'static str>) {
     let mut shed = vec![];
     let role = |p: &crate::elevation::Part| -> Option<&'static str> { p.edge.and_then(|e| frame.edges.get(e)).map(|e| e.role) };
     let mut triangles = plan_triangles(&plan.parts);
-    let target = EDWARDIAN_FLATS_LOD0_BUDGET - ROOF_PLANT_RESERVE_TRI;
+    let budget = if crate::typology::detail_enabled() { 5200.0 } else { EDWARDIAN_FLATS_LOD0_BUDGET };
+    let target = budget - ROOF_PLANT_RESERVE_TRI;
     for name in SHED_ORDER {
         if triangles <= target {
             break;
@@ -874,6 +911,34 @@ fn add_porch(plan: &mut Plan, front: &Edge, rec: usize, stack: &StackMeta, meta:
             plan.add_box(&basis, PartArgs::new("pilaster", "trim", a, b, y0, y1, -0.01, 0.11).edge(fi).meta(mouth.clone()));
         }
         plan.add_box(&basis, PartArgs::new("window-head", "trim", op.s0 - 0.28, op.s1 + 0.28, y1, y1 + 0.26, -0.01, 0.14).edge(fi).meta(mouth.clone()));
+    }
+    if crate::typology::detail_enabled() && recess >= 0.65 && (op.s1 - op.s0) >= 0.85 {
+        // Hanging wrought-iron vestibule porch lantern inside the arched/columned Edwardian porch mouth
+        let sm = (op.s0 + op.s1) * 0.5;
+        let top_ref = if meta.porch_style == "arched" {
+            (y1 - 0.06) - 0.5f64.min((op.s1 - op.s0) * 0.22) + 0.18
+        } else {
+            y1 - 0.08
+        };
+        let ly1 = top_ref.min(y1 - 0.08);
+        let ly0 = ly1 - 0.30;
+        if ly0 > y0 + 1.55 {
+            let lw0 = -0.44;
+            let lw1 = -0.32;
+            let lm = json!({ "archetype": KIND, "part": "porch-lantern" });
+            plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm - 0.02, sm + 0.02, ly1, y1, lw0 + 0.04, lw1 - 0.04).edge(fi).meta(lm.clone()));
+            plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm - 0.15, sm + 0.15, ly1, ly1 + 0.04, lw0, lw1).edge(fi).meta(lm.clone()));
+            plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm - 0.14, sm + 0.14, ly0 - 0.03, ly0 + 0.01, lw0, lw1).edge(fi).meta(lm.clone()));
+            plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm - 0.15, sm - 0.125, ly0, ly1, lw0, lw1).edge(fi).meta(lm.clone()));
+            plan.add_box(&basis, PartArgs::new("porch-lantern", "metal", sm + 0.125, sm + 0.15, ly0, ly1, lw0, lw1).edge(fi).meta(lm.clone()));
+            plan.add_box(
+                &basis,
+                PartArgs::new("glass", "glass", sm - 0.135, sm + 0.135, ly0, ly1, lw1 - 0.025, lw1 - 0.013)
+                    .edge(fi)
+                    .meta(json!({ "archetype": KIND, "porchLantern": true }))
+                    .shadow(false),
+            );
+        }
     }
 }
 
@@ -1050,7 +1115,8 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                 }
             }
         }
-        let depth = 0.24f64.min(front.allowance - 0.02);
+        let detail_on = crate::typology::detail_enabled();
+        let depth = if detail_on { 0.44f64.min((front.allowance - 0.02).max(0.24)) } else { 0.24f64.min(front.allowance - 0.02) };
         let mut cursor = 0.12;
         covered.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
         covered.push([front.length - 0.12, f64::INFINITY]);
@@ -1066,11 +1132,14 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             .filter(|op| op.type_ == "punched" && !(op.storey == 0 && meta.variant == "corbelled"))
             .map(|op| (op.s0, op.s1, op.y1))
             .collect();
+        let head_p = if detail_on { 0.18f64.min((front.allowance - 0.02).max(0.11)) } else { 0.11 };
+        let head_h = if detail_on { 0.19 } else { 0.15 };
         for (s0, s1, y1) in ops {
             plan.add_profile(
                 &front.basis,
-                PartArgs::profile("window-head", "trim", s0 - 0.2, s1 + 0.2, trim_profile_d("cove", 0.11, 0.15, y1 + 0.12))
+                PartArgs::profile("window-head", "trim", s0 - 0.2, s1 + 0.2, trim_profile_d("cove", head_p, head_h, y1 + 0.12))
                     .edge(front.index)
+                    .shadow(detail_on)
                     .meta(json!({ "archetype": KIND, "where": "front" })),
             );
         }
@@ -1081,15 +1150,132 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             continue;
         }
         let Some(r) = plan.edges.iter().position(|e| e.index == edge.index) else { continue };
-        add_cornice_supports(plan, &edge.basis, edge.index, 0.12, edge.length - 0.12, cornice_bottom, &meta.cornice_style, 0.24f64.min(edge.allowance - 0.02), "secondary");
+        let detail_on = crate::typology::detail_enabled();
+        let s_depth = if detail_on { 0.38f64.min((edge.allowance - 0.02).max(0.24)) } else { 0.24f64.min(edge.allowance - 0.02) };
+        add_cornice_supports(plan, &edge.basis, edge.index, 0.12, edge.length - 0.12, cornice_bottom, &meta.cornice_style, s_depth, "secondary");
         let ops: Vec<(f64, f64, f64)> = plan.edges[r].openings.iter().filter(|op| op.type_ == "punched").map(|op| (op.s0, op.s1, op.y1)).collect();
+        let head_p = if detail_on { 0.16f64.min((edge.allowance - 0.02).max(0.11)) } else { 0.11 };
+        let head_h = if detail_on { 0.18 } else { 0.15 };
         for (s0, s1, y1) in ops {
             plan.add_profile(
                 &edge.basis,
-                PartArgs::profile("window-head", "trim", s0 - 0.2, s1 + 0.2, trim_profile_d("cove", 0.11, 0.15, y1 + 0.12))
+                PartArgs::profile("window-head", "trim", s0 - 0.2, s1 + 0.2, trim_profile_d("cove", head_p, head_h, y1 + 0.12))
                     .edge(edge.index)
                     .meta(json!({ "archetype": KIND, "where": "secondary" })),
             );
+        }
+    }
+
+    let mut pitched_added = false;
+    if crate::typology::detail_enabled() {
+        // Optional pitched gable roof + masonry chimney on compact hillside Edwardian flats
+        if m.truthy("pitched") {
+            let rise = m.num("gableRise");
+            if rise > 0.8 {
+                if let Some(front) = front {
+                    let y0 = plan.envelope.wall_top + base_y;
+                    let basis = front.basis;
+                    let l = front.length;
+                    let [ox, oz] = basis.origin;
+                    let [ux, uz] = basis.u;
+                    let [nx, nz] = basis.n;
+                    let max_d = frame.polygon.iter().map(|p| -((p.x - ox) * nx + (p.z - oz) * nz)).fold(0.0f64, f64::max);
+                    let mut depth = 0.0;
+                    for step in (0..=16).rev() {
+                        let d = 2.8 + (max_d - 2.8).max(0.0) * (step as f64 / 16.0);
+                        let mut ok = true;
+                        for frac in [0.08, 0.50, 0.92] {
+                            let s = l * frac;
+                            let wx = ox + ux * s - nx * d;
+                            let wz = oz + uz * s - nz * d;
+                            if frame.signed_distance(wx, wz) > 0.05 {
+                                ok = false;
+                                break;
+                            }
+                        }
+                        if ok {
+                            depth = d;
+                            break;
+                        }
+                    }
+                    if depth > 2.6 {
+                        plan.add_plate(
+                            &basis,
+                            PartArgs {
+                                kind: "roof-gable".into(),
+                                slot: "pitchedRoof".into(),
+                                edge: Some(front.index),
+                                profile: vec![[-0.14, y0 - 0.08], [l + 0.14, y0 - 0.08], [l * 0.5, y0 + rise]],
+                                w0: -depth + 0.22,
+                                w1: -0.06,
+                                cast_shadow: Some(true),
+                                receive_shadow: Some(true),
+                                meta: Some(json!({ "archetype": KIND, "part": "gable-roof", "roof": true })),
+                                ..Default::default()
+                            },
+                        );
+                        plan.add_plate(
+                            &basis,
+                            PartArgs {
+                                kind: "gable".into(),
+                                slot: "wall".into(),
+                                edge: Some(front.index),
+                                profile: vec![[0.05, y0], [l - 0.05, y0], [l * 0.5, y0 + rise - 0.08]],
+                                w0: -0.14,
+                                w1: 0.06,
+                                cast_shadow: Some(true),
+                                receive_shadow: Some(true),
+                                meta: Some(json!({ "archetype": KIND, "part": "gable-end", "roof": true })),
+                                ..Default::default()
+                            },
+                        );
+                        let ch_w = -depth * 0.45;
+                        let ch_s = l * 0.26;
+                        let wx = ox + ux * ch_s + nx * ch_w;
+                        let wz = oz + uz * ch_s + nz * ch_w;
+                        if frame.signed_distance(wx, wz) < -0.55 {
+                            plan.add_box(
+                                &basis,
+                                PartArgs::new("chimney", "trim", ch_s - 0.34, ch_s + 0.34, y0, y0 + rise + 0.45, ch_w - 0.28, ch_w + 0.28)
+                                    .edge(front.index)
+                                    .shadow(true)
+                                    .receive(true)
+                                    .meta(json!({ "archetype": KIND, "part": "chimney", "roof": true })),
+                            );
+                        }
+                        pitched_added = true;
+                    }
+                }
+            }
+        }
+        // Cast-stone water-table plinth belt along street edges to ground walls cleanly onto hillside skirts
+        for edge in frame.edges.iter() {
+            if edge.party || !(edge.role == "front" || edge.role == "front-secondary") || edge.length < 2.0 {
+                continue;
+            }
+            let Some(r) = plan.edges.iter().position(|e| e.index == edge.index) else { continue };
+            let mut cuts: Vec<(f64, f64)> = plan.edges[r]
+                .openings
+                .iter()
+                .filter(|o| o.storey == 0 && matches!(o.type_.as_str(), "entrance" | "roller" | "storefront"))
+                .map(|o| (o.s0 - 0.06, o.s1 + 0.06))
+                .collect();
+            cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            cuts.push((edge.length, edge.length));
+            let wp = 0.065f64.min(0.03f64.max(edge.allowance - 0.03));
+            let mut cur = 0.0;
+            for (a, b) in cuts {
+                let end = a.min(edge.length);
+                if end - cur > 0.3 {
+                    plan.add_box(
+                        &edge.basis,
+                        PartArgs::new("water-table", "base", cur, end, base_y - 0.02, base_y + 0.22, -0.01, wp)
+                            .edge(edge.index)
+                            .meta(json!({ "archetype": KIND, "part": "water-table" })),
+                    );
+                }
+                cur = cur.max(b);
+            }
         }
     }
 
@@ -1122,6 +1308,7 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             "bayShape": m.at("bayShape").cloned().unwrap_or(J::Null),
             "garage": first,
             "garages": garages,
+            "pitched": pitched_added,
             "roofPlantTriangles": ROOF_PLANT_RESERVE_TRI.max(EDWARDIAN_FLATS_LOD0_BUDGET - triangles),
         }),
     );

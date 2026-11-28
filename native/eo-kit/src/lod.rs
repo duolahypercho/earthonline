@@ -13,16 +13,41 @@ const LOD1_DROP: &[&str] = &[
     "mullion", "transom", "dentil", "jamb", "corbel", "bay-sash", "fire-escape-rail", "fire-escape-ladder", "slat", "blade-bracket", "gate-picket",
     "roof-solar-rack", "shop-detail", "sign-lamp",
 ];
+/// In high-detail mode (`typology::detail_enabled()`), retain window mullions,
+/// transoms, casings (`jamb`), bay sashes, corbels, and fire-escape rails across
+/// LOD1 (65-170 m) so street & hillside buildings keep crisp sculpted depth.
+const LOD1_DETAIL_DROP: &[&str] = &[
+    "dentil", "fire-escape-ladder", "slat", "blade-bracket", "gate-picket",
+    "roof-solar-rack", "shop-detail", "sign-lamp", "stoop-tread", "roller-hardware",
+];
 const LOD2_EXTRA_DROP: &[&str] = &[
     "frame", "sill", "cornice-bracket", "window-head", "window-surround", "door-frame", "recess", "door-leaf", "stall-riser", "threshold", "signband", "blade-sign",
     "sign-text", "canopy-rod", "fire-escape", "gate-rail", "gate-post", "roof-vent", "roof-plant-detail", "roof-curb", "roof-solar-step",
 ];
+/// In high-detail mode (`typology::detail_enabled()`), keep primary silhouette and
+/// depth-reading architectural relief intact through LOD2 (170-470 m): cornices,
+/// brackets, sills, window heads/surrounds, recessed jambs, bay caps/posts,
+/// canopies, awnings, rooftop water tanks, penthouses, HVAC yards, chimneys, and
+/// parapet rails stay while fine sub-decimeter trim is dropped.
+const LOD2_DETAIL_EXTRA_DROP: &[&str] = &[
+    "frame", "mullion", "transom", "bay-sash", "door-leaf", "threshold", "signband", "blade-sign", "sign-text", "canopy-rod",
+    "fire-escape-rail", "gate-rail", "gate-post", "roof-vent", "roof-plant-detail", "roof-solar-step",
+    "pier-bevel", "bmu-track", "roof-deck-rail", "stoop-rail", "stoop-tread", "roller-hardware", "porch-lantern",
+];
 
 pub fn lod1_drops(kind: &str) -> bool {
-    LOD1_DROP.contains(&kind)
+    if crate::typology::detail_enabled() {
+        LOD1_DETAIL_DROP.contains(&kind)
+    } else {
+        LOD1_DROP.contains(&kind)
+    }
 }
 pub fn lod2_drops(kind: &str) -> bool {
-    LOD1_DROP.contains(&kind) || LOD2_EXTRA_DROP.contains(&kind)
+    if crate::typology::detail_enabled() {
+        LOD1_DETAIL_DROP.contains(&kind) || LOD2_DETAIL_EXTRA_DROP.contains(&kind)
+    } else {
+        LOD1_DROP.contains(&kind) || LOD2_EXTRA_DROP.contains(&kind)
+    }
 }
 
 /// `trianglesForPart`: boxes 12; swept and extruded 4N-4.
@@ -125,7 +150,20 @@ pub fn envelope_parts(plan: &Plan, frame: &Frame) -> Vec<Part> {
         bottom_cap: false,
         fenestration: fenestrated.then_some(Fenestration { u: [0.0, 0.0], v: [0.0, 0.0], storeys: Some(storeys as f64) }),
     };
-    let silhouette: Vec<Part> = plan.parts.iter().filter(|p| p.kind == "bay").cloned().collect();
+    let detail = crate::typology::detail_enabled();
+    let silhouette: Vec<Part> = plan
+        .parts
+        .iter()
+        .filter(|p| {
+            p.kind == "bay"
+                || (detail
+                    && matches!(
+                        p.kind.as_str(),
+                        "oriel" | "roof-penthouse" | "roof-water-tank" | "roof-screen" | "roof-gable" | "gable" | "cooling-tower" | "roof-deck" | "roof-solar" | "roof-skylight" | "chimney" | "cornice"
+                    ))
+        })
+        .cloned()
+        .collect();
     let roof_slab = plan.parts.iter().find(|p| p.kind == "roof-slab" && plan.materials.contains_key(&p.slot));
     let Some(roof_slab) = roof_slab else {
         let mut out = vec![template];

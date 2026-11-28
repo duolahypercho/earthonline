@@ -113,40 +113,41 @@ fn style_palette_bias(style: &str) -> Option<&'static [&'static str]> {
 
 /// `STYLE[style]` (undefined: null).
 fn style_base(style: &str) -> J {
+    let dr = if crate::typology::detail_enabled() { 0.055 } else { 0.0 };
     match style {
         "tract-storybook" => json!({
             "wall": "scanned-painted-plaster", "frame": "painted-white", "parapet": 0.6, "coping": "cast-stone-trim",
-            "reveal": 0.16, "sill": { "height": 0.08, "projection": 0.05, "overhang": 0.06, "profile": "sloped" },
+            "reveal": 0.16 + dr, "sill": { "height": 0.08, "projection": 0.05, "overhang": 0.06, "profile": "sloped" },
             "archedPicture": true, "archedPorch": true, "archedGarage": true, "gable": true, "pent": false,
             "entryHood": true, "pictureHood": true, "pictureMullions": 2, "smallTransoms": 1, "smallMullions": 0,
         }),
         "interwar" => json!({
             "wall": "scanned-painted-plaster", "frame": "painted-white", "parapet": 0.65, "coping": "cast-stone-trim",
-            "reveal": 0.18, "sill": { "height": 0.08, "projection": 0.05, "overhang": 0.06, "profile": "sloped" },
+            "reveal": 0.18 + dr, "sill": { "height": 0.08, "projection": 0.05, "overhang": 0.06, "profile": "sloped" },
             "archedPicture": true, "archedPorch": true, "archedGarage": true, "gable": false, "pent": true,
             "entryHood": true, "pictureHood": false, "pictureMullions": 2, "smallTransoms": 1, "smallMullions": 0,
         }),
         "tract-moderne" => json!({
             "wall": "painted-stucco", "frame": "painted-white", "parapet": 0.5, "coping": "cast-stone-trim",
-            "reveal": 0.12, "sill": { "height": 0.05, "projection": 0.03, "overhang": 0.03, "profile": "flat" },
+            "reveal": 0.12 + dr, "sill": { "height": 0.05, "projection": 0.03, "overhang": 0.03, "profile": "flat" },
             "archedPicture": false, "archedPorch": false, "archedGarage": false, "gable": false, "pent": false,
             "moderneBay": true, "bands": true, "glassBlock": true, "pictureMullions": 2, "smallTransoms": 2, "smallMullions": 0,
         }),
         "tract-postwar" => json!({
             "wall": "scanned-painted-plaster", "frame": "anodized-aluminium", "parapet": 0.4, "coping": "anodized-aluminium",
-            "reveal": 0.12, "sill": false,
+            "reveal": 0.12 + dr, "sill": false,
             "archedPicture": false, "archedPorch": false, "archedGarage": false, "gable": false, "pent": false,
             "eyebrow": true, "veneer": true, "pictureMullions": 2, "smallTransoms": 0, "smallMullions": 1,
         }),
         "marina-mediterranean" => json!({
             "wall": "scanned-painted-plaster", "frame": "painted-white", "parapet": 0.7, "coping": "cast-stone-trim",
-            "reveal": 0.2, "sill": { "height": 0.1, "projection": 0.06, "overhang": 0.08, "profile": "sloped" },
+            "reveal": 0.2 + dr, "sill": { "height": 0.1, "projection": 0.06, "overhang": 0.08, "profile": "sloped" },
             "archedPicture": false, "archedTop": true, "archedPorch": true, "archedGarage": true, "gable": false, "pent": true,
             "entryHood": false, "eyebrows": true, "balconette": true, "pictureMullions": 2, "smallTransoms": 1, "smallMullions": 0,
         }),
         "richmond-row" => json!({
             "wall": "painted-stucco", "frame": "painted-white", "parapet": 0.6, "coping": "cast-stone-trim",
-            "reveal": 0.12, "sill": false,
+            "reveal": 0.12 + dr, "sill": false,
             "archedPicture": false, "archedPorch": false, "archedGarage": false, "gable": false, "pent": false,
             "band": true, "pictureMullions": 1, "smallTransoms": 1, "smallMullions": 0,
         }),
@@ -192,6 +193,27 @@ fn evidence_of(c: &Classified) -> Evidence {
 
 /// `stuccoRowFrontTreatment(style, roll)`.
 pub fn stucco_row_front_treatment(style: &str, roll: f64) -> J {
+    if crate::typology::detail_enabled() {
+        if style == "tract-storybook" {
+            return if roll < 0.55 {
+                json!({ "gable": true, "pent": false })
+            } else if roll < 0.85 {
+                json!({ "gable": false, "pent": true })
+            } else {
+                json!({ "gable": false, "pent": false })
+            };
+        }
+        if style == "interwar" {
+            return if roll < 0.28 {
+                json!({ "gable": true, "pent": false })
+            } else {
+                json!({ "pent": roll < 0.72 })
+            };
+        }
+        if style == "marina-mediterranean" && roll < 0.28 {
+            return json!({ "gable": true, "pent": true });
+        }
+    }
     if style == "tract-storybook" {
         return if roll < 0.4 {
             json!({ "gable": true, "pent": false })

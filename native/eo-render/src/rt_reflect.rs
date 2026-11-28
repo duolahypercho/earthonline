@@ -64,7 +64,7 @@ pub struct RtReflectConfig {
 
 impl Default for RtReflectConfig {
     fn default() -> Self {
-        Self { reach_m: 300.0, origin_m: 0.03, origin_per_m: 0.002, hit_sky: 0.6, max_frames: 12.0, fade_start_m: 260.0, fade_end_m: 340.0, max_rough: 0.6, clamp: 8.0, atrous: 2, weight: 1.0, debug: 0 }
+        Self { reach_m: 380.0, origin_m: 0.03, origin_per_m: 0.002, hit_sky: 0.72, max_frames: 16.0, fade_start_m: 300.0, fade_end_m: 400.0, max_rough: 0.6, clamp: 6.0, atrous: 2, weight: 1.0, debug: 0 }
     }
 }
 
@@ -116,6 +116,7 @@ struct RtRefl {
     prev_fwd: [f32; 4],
     params: [f32; 4],
     limits: [f32; 4],
+    sky_flags: [f32; 4],
     size: [u32; 4],
 }
 
@@ -171,6 +172,7 @@ pub struct RtReflect {
     queue: wgpu::Queue,
     uni_buf: wgpu::Buffer,
     step_bufs: Vec<wgpu::Buffer>,
+    sky_sampler: wgpu::Sampler,
     bgl_frame: wgpu::BindGroupLayout,
     bgl_trace: wgpu::BindGroupLayout,
     bgl_temporal: wgpu::BindGroupLayout,
@@ -216,9 +218,24 @@ impl RtReflect {
         let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::COMPUTE, ty, count: None };
         let ubuf = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None };
         let tex = wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false };
+        let tex_filt = wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false };
+        let samp_filt = wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering);
         let depth_tex = wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false };
         let store = |format| wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format, view_dimension: wgpu::TextureViewDimension::D2 };
-        let bgl_frame = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("rt-reflect-bgl-frame"), entries: &[e(0, ubuf), e(1, depth_tex), e(2, tex), e(3, tex), e(4, tex)] });
+        let sky_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("rt-reflect-sky-samp"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+        let bgl_frame = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("rt-reflect-bgl-frame"),
+            entries: &[e(0, ubuf), e(1, depth_tex), e(2, tex), e(3, tex), e(4, tex), e(5, tex_filt), e(6, tex_filt), e(7, samp_filt)],
+        });
         let bgl_trace = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("rt-reflect-bgl-trace"), entries: &[e(4, store(RESULT_FORMAT)), e(5, store(G_FORMAT))] });
         let bgl_temporal = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("rt-reflect-bgl-temporal"),
@@ -242,6 +259,7 @@ impl RtReflect {
             queue: queue.clone(),
             uni_buf,
             step_bufs,
+            sky_sampler,
             bgl_frame,
             bgl_trace,
             bgl_temporal,
@@ -322,6 +340,7 @@ impl RtReflect {
         if st.frame_bg.as_ref().is_none_or(|(k, _)| *k != key) {
             crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 1);
             let tv = |v| wgpu::BindingResource::TextureView(v);
+            let (atmo_view, _) = look.sky.atmo_tables();
             let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("rt-reflect-bg-frame"),
                 layout: &self.bgl_frame,
@@ -331,12 +350,19 @@ impl RtReflect {
                     wgpu::BindGroupEntry { binding: 2, resource: tv(gb_n) },
                     wgpu::BindGroupEntry { binding: 3, resource: tv(gb_c) },
                     wgpu::BindGroupEntry { binding: 4, resource: tv(gb_d) },
+                    wgpu::BindGroupEntry { binding: 5, resource: tv(look.sky.cloud_refl_view()) },
+                    wgpu::BindGroupEntry { binding: 6, resource: tv(atmo_view) },
+                    wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::Sampler(&self.sky_sampler) },
                 ],
             });
             st.frame_bg = Some((key, bg));
         }
         st.frame = st.frame.wrapping_add(1);
         let prev = st.made;
+        let sky_o = look.sky.options();
+        let clouds_on = if sky_o.clouds && sky_o.volumetric_clouds { 1.0 } else { 0.0 };
+        let phys_on = if sky_o.phys_sky { 1.0 } else { 0.0 };
+        let beam = look.sky.terms().map(|t| (1.0 - t.weather.severity as f32).clamp(0.0, 1.0)).unwrap_or(1.0);
         let u = RtRefl {
             cam: [eye.x, eye.y, eye.z, (st.frame % (1 << 23)) as f32],
             fwd: [fwd.x, fwd.y, fwd.z, cfg.reach_m],
@@ -345,6 +371,7 @@ impl RtReflect {
             prev_fwd: prev.map(|p| p.fwd.extend(0.0).to_array()).unwrap_or([0.0; 4]),
             params: [cfg.origin_m, cfg.origin_per_m, cfg.hit_sky, cfg.max_frames],
             limits: [cfg.fade_start_m, cfg.fade_end_m, cfg.max_rough, cfg.clamp],
+            sky_flags: [clouds_on, phys_on, beam, 0.0],
             size: [size.0, size.1, size_full.0, size_full.1],
         };
         self.queue.write_buffer(&self.uni_buf, 0, bytemuck::bytes_of(&u));

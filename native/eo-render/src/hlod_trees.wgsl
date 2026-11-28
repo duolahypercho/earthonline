@@ -79,6 +79,21 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     let c = k[vi % 6u];
     let to_cam = normalize(vec2<f32>(-rel.x, -rel.z) + vec2<f32>(1e-5, 0.0));
     let right = vec3<f32>(-to_cam.y, 0.0, to_cam.x);
+    let raw_tint = unpack4x8unorm(t.tint).rgb;
+    let sp0 = t.species & FT_FORM_MASK;
+    let is_baked = (t.species & FT_BAKED) != 0u;
+    let aaa_palm_vs = SF_AAA_DETAIL && sp0 == 0u && !is_baked && raw_tint.r > 0.29 && raw_tint.r < 0.32 && abs(raw_tint.g - 96.0 / 255.0) < 0.016 && abs(raw_tint.b - 52.0 / 255.0) < 0.016;
+    var crown_w = t.crown;
+    var tree_h = t.height;
+    if (aaa_palm_vs) {
+        // Widen Embarcadero & street palm cards to natural Canary palm frond reach when `--far-palms` is off.
+        crown_w = max(t.crown, 0.44 * t.height);
+    } else if (SF_AAA_DETAIL && !is_baked) {
+        // Widen narrow vertical tree quads (park pines, columnar/tall street trees) and cap skinny vertical
+        // aspect ratios so canopies read as broad spreading California trees rather than vertical eggs.
+        crown_w = max(t.crown * 1.28, min(t.height * 0.56, t.crown * 1.85));
+        tree_h = min(t.height, crown_w * 2.10);
+    }
 // sf:WEATHER_FX+
     var sway = vec3<f32>(0.0);
     if (sky_weather_fx_on(skyu.cirrus) && c.y > 0.0) {
@@ -86,24 +101,24 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
         let wd = select(vec2<f32>(0.94, 0.34), skyu.wind.xy / max(wx_spd, 1e-4), wx_spd > 0.25);
         let eff_spd = select(1.8, wx_spd, wx_spd > 0.25) * clamp(skyu.wind.z, 0.5, 1.6);
         let ws = clamp((eff_spd - 1.2) / 11.8, 0.0, 1.0);
-        let amp = (0.07 + 0.50 * pow(ws, 1.15)) * (t.height / 8.0);
+        let amp = (0.07 + 0.50 * pow(ws, 1.15)) * (tree_h / 8.0);
         let wt = skyu.wet.w;
         let adv = dot(t.pos.xz, wd) * 0.042;
         let ph = f32(t.seed & 1023u) * 0.37;
         let squall = 0.5 + 0.5 * sin(adv * 0.45 - wt * (0.42 + 0.65 * ws));
         let wave = (0.30 + 0.58 * squall) * (0.55 * ws) + sin(adv - wt * (1.15 + 2.35 * ws) + ph * 0.35) * 0.72;
         let d_xz = wd * (wave * amp * c.y * c.y);
-        sway = vec3<f32>(d_xz.x, -dot(d_xz, d_xz) / max(2.0 * t.height, 2.0), d_xz.y);
+        sway = vec3<f32>(d_xz.x, -dot(d_xz, d_xz) / max(2.0 * tree_h, 2.0), d_xz.y);
     }
-    let p = t.pos + right * (c.x * t.crown) + vec3<f32>(0.0, c.y * t.height, 0.0) + sway;
+    let p = t.pos + right * (c.x * crown_w) + vec3<f32>(0.0, c.y * tree_h, 0.0) + sway;
 // sf:end
 // sf:WEATHER_FX-
-    let p = t.pos + right * (c.x * t.crown) + vec3<f32>(0.0, c.y * t.height, 0.0);
+    let p = t.pos + right * (c.x * crown_w) + vec3<f32>(0.0, c.y * tree_h, 0.0);
 // sf:end
     out.clip = frame.view_proj * vec4<f32>(p, 1.0);
     out.world = p;
     out.uv = c;
-    out.tint = srgb_decode(unpack4x8unorm(t.tint).rgb);
+    out.tint = srgb_decode(raw_tint);
 // sf:FAR_PALMS-
     out.fade = smoothstep(ft.range.x, ft.range.y, d);
 // sf:end
@@ -111,7 +126,7 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     out.fade = smoothstep(near.x, near.y, d);
 // sf:end
 // sf:CROWN|FAR_PALMS+
-    out.size = vec3<f32>(t.crown, t.height, f32(t.species & FT_FORM_MASK));
+    out.size = vec3<f32>(crown_w, tree_h, f32(t.species & FT_FORM_MASK));
 // sf:end
     out.seed = f32(t.seed & 1023u);
     out.right = right;
@@ -126,7 +141,7 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
         let view = u32(azimuth);
         out.view = vec3<f32>(f32(base + view), f32(base + ((view + 1u) % FT_VIEWS)), fract(azimuth));
     }
-    out.dims = vec3<f32>(t.crown, t.height, f32(t.species & FT_FORM_MASK));
+    out.dims = vec3<f32>(crown_w, tree_h, f32(t.species & FT_FORM_MASK));
     return out;
 }
 
@@ -231,6 +246,174 @@ fn ftv_trunk_top(height: f32, sp: u32, seed: f32) -> f32 {
 // cypress's flat layers wider but as thin; INFERRED).
 const FT_CLUMP_R: f32 = 0.4;
 
+// Coastal California foliage calibration (`SF_AAA_DETAIL`): physically measured
+// LOPEX93-range daylight reflectances (linear lum 0.068..0.115, muted coastal
+// G/R 1.14..1.34) so trees read as natural olive/cypress/eucalyptus/plane in
+// bright sun AND keep layered green volume inside building shadows (`08` park).
+fn ft_ca_palette(seed: f32, tint: vec3<f32>, world_xz: vec2<f32>) -> vec3<f32> {
+    let h0 = fract(sin(seed * 12.9898 + dot(floor(world_xz * 0.08), vec2<f32>(78.233, 37.719))) * 43758.5453);
+    let h1 = fract(seed * 0.6180339 + 0.19);
+    let h2 = fract(seed * 1.3247179 + 0.41);
+    var col: vec3<f32>;
+    if (h0 < 0.22) {
+        col = vec3<f32>(0.088, 0.106, 0.066); // Mediterranean olive / holm oak
+    } else if (h0 < 0.44) {
+        col = vec3<f32>(0.066, 0.088, 0.056); // Monterey cypress / coast live oak
+    } else if (h0 < 0.62) {
+        col = vec3<f32>(0.084, 0.106, 0.090); // silvery blue-gum eucalyptus
+    } else if (h0 < 0.80) {
+        col = vec3<f32>(0.098, 0.118, 0.064); // London plane / street sycamore
+    } else if (h0 < 0.90) {
+        col = vec3<f32>(0.074, 0.094, 0.060); // Monterey pine / coastal conifer
+    } else {
+        col = vec3<f32>(0.114, 0.110, 0.062); // late-summer sun-warmed olive accent
+    }
+    let warm = mix(vec3<f32>(0.94, 0.99, 1.05), vec3<f32>(1.07, 1.00, 0.90), h2);
+    return col * warm * (0.88 + 0.26 * h1);
+}
+
+// Identify far palm cards (`hlod_trees.rs:94` sets `rgb(78, 96, 52)` exclusively on palms)
+// even when `--far-palms` is disabled, so Embarcadero palms render as feathered crowns.
+fn ft_is_aaa_palm(tint: vec3<f32>, sp: u32, baked: bool) -> bool {
+    return SF_AAA_DETAIL && sp == 0u && !baked
+        && tint.r > 0.068 && tint.r < 0.085
+        && tint.g > 0.105 && tint.g < 0.130
+        && tint.b > 0.028 && tint.b < 0.042;
+}
+
+struct FtAaaPalm {
+    frond: bool,
+    trunk: bool,
+    n: vec3<f32>,
+    albedo: vec3<f32>,
+    ao: f32,
+    open: f32,
+};
+
+// Compact feathered Canary Island date palm for far cards under `SF_AAA_DETAIL`.
+fn ft_aaa_palm(uv: vec2<f32>, dims: vec2<f32>, seed: f32, right: vec3<f32>, toward: vec3<f32>, px: f32) -> FtAaaPalm {
+    var o: FtAaaPalm;
+    let rc = max(dims.x, 1.5);
+    let h = max(dims.y, 4.0);
+    let x = uv.x * rc;
+    let y = uv.y * h;
+    let yh = h - 0.50 * rc;
+    let rt = clamp(0.030 * h, 0.20, 0.38) * (1.0 + 0.25 * exp(-y / 0.7));
+    o.trunk = y < yh + 0.08 * rc && abs(x) < max(rt, 0.45 * px);
+    let q = vec2<f32>(x, y - yh) / rc;
+    let w_min = 0.45 * px / rc;
+    var best = 1e9;
+    var bt = vec2<f32>(0.0, 1.0);
+    var bh = 0.0;
+    var hang = 0.0;
+    for (var i = 0u; i < 18u; i = i + 1u) {
+        let fi = f32(i);
+        let hs = fract(sin(fi * 12.9898 + seed * 0.731) * 43758.5453);
+        let th = (fi + 0.55 * hs) / 18.0 * 6.2831853 + seed;
+        let dir = vec2<f32>(cos(th), 0.78 * sin(th) + 0.26);
+        let len = 0.96 * (0.54 + 0.46 * abs(cos(th * 1.37 + seed * 2.1)));
+        let s0 = clamp(dot(q, dir) / max(dot(dir, dir), 1e-4), 0.0, len);
+        let p0 = s0 * dir - vec2<f32>(0.0, 0.52 * s0 * s0);
+        let tg0 = dir - vec2<f32>(0.0, 1.04 * s0);
+        let s1 = clamp(s0 + dot(q - p0, tg0) / max(dot(tg0, tg0), 1e-4), 0.0, len);
+        let p1 = s1 * dir - vec2<f32>(0.0, 0.52 * s1 * s1);
+        let f = s1 / max(len, 1e-4);
+        let serrate = 0.76 + 0.28 * sin(f * 26.0 + fi * 1.9);
+        let w = max(0.155 * sin(3.14159 * clamp(f * 0.9 + 0.06, 0.0, 1.0)) * (0.45 + 0.55 * f) * serrate, w_min);
+        let d = length(q - p1) / w;
+        if (d < best) {
+            best = d;
+            bt = normalize(dir - vec2<f32>(0.0, 1.04 * s1));
+            bh = hs;
+            hang = smoothstep(0.0, -0.45, dir.y);
+        }
+    }
+    o.frond = best < 1.0 || length(q * vec2<f32>(1.0, 1.5)) < 0.18;
+    let tone = 0.90 + 0.22 * fract(seed * 0.377);
+    if (o.frond) {
+        let up = vec3<f32>(0.0, 1.0, 0.0);
+        o.n = normalize(right * (0.42 * bt.x) + up * 0.86 + toward * (0.26 + 0.25 * bh));
+        let dead = hang * step(0.50, bh);
+        o.albedo = mix(vec3<f32>(0.086, 0.112, 0.058), vec3<f32>(0.18, 0.145, 0.082), dead) * tone;
+        o.open = smoothstep(0.08, 0.75, length(q));
+        o.ao = mix(0.72, 1.0, o.open);
+    } else {
+        let xn = clamp(x / max(rt, 0.45 * px), -1.0, 1.0);
+        o.n = normalize(right * xn + toward * sqrt(max(1.0 - xn * xn, 0.0)));
+        o.albedo = vec3<f32>(0.16, 0.125, 0.092) * tone;
+        o.open = 0.4;
+        o.ao = mix(0.94, 0.68, smoothstep(yh - 1.8, yh, y));
+    }
+    return o;
+}
+
+// Multi-bough organic crown silhouette for generic far trees (`sp == 0u`) when
+// `SF_AAA_DETAIL` is on: returns (nx, ny, nz, open_ao) with open_ao >= 0 inside crown.
+// Uses separated asymmetric sub-boughs, ragged leaf-sprig edges, and porous outer-rim
+// sky peep-holes so silhouettes read as airy California trees instead of eggs or balls.
+fn ft_aaa_crown(uv: vec2<f32>, seed: f32) -> vec4<f32> {
+    let habit = u32(floor(fract(seed * 0.371 + 0.13) * 4.0));
+    let flip = select(-1.0, 1.0, fract(seed * 0.831 + 0.07) > 0.5);
+    var best_z = -1.0;
+    var best_n = vec3<f32>(0.0, 0.4, 0.9);
+    var best_open = 0.5;
+    let p = vec2<f32>(uv.x, uv.y);
+    let edge_n = st_noise(uv * vec2<f32>(8.5, 10.5) + vec2<f32>(seed * 3.1, seed * 1.9)) - 0.5;
+    let fine_n = st_noise(uv * vec2<f32>(21.0, 25.0) + vec2<f32>(seed * 7.3, 2.1)) - 0.5;
+    let peep_n = st_noise(uv * vec2<f32>(28.0, 32.0) + vec2<f32>(seed * 4.3, 9.7));
+    for (var k = 0; k < 6; k = k + 1) {
+        let kf = f32(k);
+        let jx = ftv_hash(seed, kf * 3.1 + 1.0) - 0.5;
+        let jy = ftv_hash(seed, kf * 3.1 + 2.0) - 0.5;
+        let jr = ftv_hash(seed, kf * 3.1 + 3.0);
+        var c: vec2<f32>;
+        var rad: vec2<f32>;
+        if (habit == 0u) {
+            // Wide spreading Coast Live Oak / London Plane: flat-topped asymmetric broad umbrella
+            var ox = array<f32, 6>(-0.62, -0.32, 0.14, 0.54, 0.66, -0.10);
+            var oy = array<f32, 6>(0.55, 0.72, 0.75, 0.67, 0.53, 0.56);
+            c = vec2<f32>(ox[k] * flip + jx * 0.14, oy[k] + jy * 0.06);
+            rad = vec2<f32>(0.30 + 0.10 * jr, 0.14 + 0.045 * jr);
+        } else if (habit == 1u) {
+            // Wind-sculpted Monterey Cypress / Coastal Pine: flat separated horizontal plates
+            let tier = floor(kf * 0.5) / 2.0; // 3 horizontal tiers, 2 plates each
+            let side = select(-0.38, 0.38, (k & 1) == 1);
+            let shear = flip * (tier * 0.24 - 0.10);
+            c = vec2<f32>(side + shear + jx * 0.18, 0.46 + tier * 0.34 + jy * 0.04);
+            rad = vec2<f32>(0.36 + 0.11 * jr, 0.09 + 0.025 * jr);
+        } else if (habit == 2u) {
+            // Open airy Blue-Gum Eucalyptus: wide separated billowing tufts high on a pale bole
+            var ox = array<f32, 6>(-0.54, 0.48, -0.26, 0.30, -0.02, -0.52);
+            var oy = array<f32, 6>(0.54, 0.58, 0.74, 0.78, 0.64, 0.69);
+            c = vec2<f32>(ox[k] * flip + jx * 0.16, oy[k] + jy * 0.06);
+            rad = vec2<f32>(0.26 + 0.09 * jr, 0.125 + 0.04 * jr);
+        } else {
+            // Asymmetric stepped Mediterranean broadleaf: twin offset shoulders + sprig tufts
+            var ox = array<f32, 6>(-0.56, -0.22, 0.36, 0.60, 0.16, -0.36);
+            var oy = array<f32, 6>(0.52, 0.74, 0.64, 0.54, 0.77, 0.63);
+            c = vec2<f32>(ox[k] * flip + jx * 0.14, oy[k] + jy * 0.06);
+            rad = vec2<f32>(0.29 + 0.09 * jr, 0.135 + 0.04 * jr);
+        }
+        let q = (p - c) / rad;
+        let rr = length(q) + edge_n * 0.34 + fine_n * 0.22;
+        let pore = select(0.0, smoothstep(0.36, 0.14, peep_n) * 0.28, rr > 0.68);
+        if (rr + pore < 0.94) {
+            let z = sqrt(max(0.0, 1.0 - min(rr * rr, 1.0)));
+            let open = clamp(0.42 * clamp(q.y * 0.5 + 0.5, 0.0, 1.0) + 0.38 * (1.0 - z) + 0.20 * clamp((c.y - 0.38) / 0.48, 0.0, 1.0), 0.0, 1.0);
+            let depth_score = z + c.y * 0.24;
+            if (depth_score > best_z) {
+                best_z = depth_score;
+                best_n = normalize(vec3<f32>(q.x * 0.78 + fine_n * 0.50, q.y * 0.78 + 0.32 + edge_n * 0.38, max(z, 0.22)));
+                best_open = open;
+            }
+        }
+    }
+    if (best_z < 0.0) {
+        return vec4<f32>(0.0, 1.0, 0.0, -1.0);
+    }
+    return vec4<f32>(best_n, best_open);
+}
+
 fn ft_shade(in: FtOut) -> vec4<f32> {
     let dpx = dpdx(in.world);
     let dpy = dpdy(in.world);
@@ -245,15 +428,46 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     var n = vec3<f32>(0.0, 1.0, 0.0);
     var cy = 0.0;
     var r = 0.0;
-    if (sp == 0u) {
-        // The crown: an ellipse over the upper 70 % of the card, a lobed edge.
-        cy = (in.uv.y - 0.62) / 0.38;
-        r = length(vec2<f32>(in.uv.x, cy));
-        let ang = atan2(cy, in.uv.x);
-        let lobes = 0.08 * sin(ang * 5.0 + in.seed) + 0.05 * sin(ang * 11.0 + in.seed * 1.7);
-        crown = r < 0.92 + lobes;
-        // The trunk: the lower part, a narrow column.
-        trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
+    var aaa_open = 0.5;
+    let baked = in.view.x >= 0.0;
+    let toward_h = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    let aaa_palm = ft_is_aaa_palm(in.tint, sp, baked);
+    var aaa_ph: FtAaaPalm;
+    if (aaa_palm) {
+        aaa_ph = ft_aaa_palm(in.uv, in.dims.xy, in.seed, in.right, toward_h, max(length(dpx), length(dpy)));
+        crown = aaa_ph.frond;
+        trunk = aaa_ph.trunk;
+        n = aaa_ph.n;
+        aaa_open = aaa_ph.open;
+    } else if (sp == 0u) {
+        if (SF_AAA_DETAIL) {
+            let ac = ft_aaa_crown(in.uv, in.seed);
+            crown = ac.w >= 0.0;
+            aaa_open = max(ac.w, 0.0);
+            cy = ac.y;
+            r = length(ac.xy);
+            if (crown) {
+                let up = vec3<f32>(0.0, 1.0, 0.0);
+                let toward = select(toward_h, v, light3);
+                let upp = normalize(up - toward * dot(up, toward));
+                n = normalize(in.right * ac.x + upp * ac.y + toward * ac.z);
+            }
+            let trunk_w = mix(0.056, 0.030, clamp(in.uv.y / 0.48, 0.0, 1.0));
+            let main_bole = in.uv.y < 0.46 && abs(in.uv.x) < trunk_w;
+            let fork_t = clamp((in.uv.y - 0.30) / 0.24, 0.0, 1.0);
+            let limb_l = in.uv.y >= 0.30 && in.uv.y < 0.54 && abs(in.uv.x + fork_t * 0.22) < mix(0.028, 0.014, fork_t);
+            let limb_r = in.uv.y >= 0.32 && in.uv.y < 0.56 && abs(in.uv.x - fork_t * 0.20) < mix(0.026, 0.013, fork_t);
+            trunk = main_bole || limb_l || limb_r;
+        } else {
+            // The crown: an ellipse over the upper 70 % of the card, a lobed edge.
+            cy = (in.uv.y - 0.62) / 0.38;
+            r = length(vec2<f32>(in.uv.x, cy));
+            let ang = atan2(cy, in.uv.x);
+            let lobes = 0.08 * sin(ang * 5.0 + in.seed) + 0.05 * sin(ang * 11.0 + in.seed * 1.7);
+            crown = r < 0.92 + lobes;
+            // The trunk: the lower part, a narrow column.
+            trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
+        }
     } else {
         let p = vec2<f32>(in.uv.x * in.dims.x, in.uv.y * in.dims.y);
         let lean = select(0.0, dot(vec2<f32>(in.right.x, in.right.z), FT_DOWNWIND) * 0.35, sp == 1u);
@@ -264,10 +478,11 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         trunk = p.y < top && abs(p.x - tx) < max(0.25, 0.012 * in.dims.y);
         cy = b.y;
         r = length(b.xy);
+        aaa_open = clamp(0.45 * (b.y * 0.5 + 0.5) + 0.35 * (1.0 - b.z) + 0.20 * in.uv.y, 0.0, 1.0);
         if (crown) {
             // the clump's sphere, seen from the eye
             let up = vec3<f32>(0.0, 1.0, 0.0);
-            let toward = select(normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0)), v, light3);
+            let toward = select(toward_h, v, light3);
             let upp = normalize(up - toward * dot(up, toward));
             n = normalize(in.right * b.x + upp * b.y + toward * b.z);
         }
@@ -275,7 +490,6 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     // the baked Black Point canopy (`FarTree::species` FT_BAKED): its two nearest
     // views blended, their coverage the card's outline in place of the form's.
     var leaf = vec4<f32>(0.0);
-    let baked = in.view.x >= 0.0;
     let view_a = max(i32(in.view.x), 0);
     let view_b = max(i32(in.view.y), 0);
     let view_blend = smoothstep(0.0, 1.0, in.view.z);
@@ -307,8 +521,10 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         let toward = vec3<f32>(in.right.z, 0.0, -in.right.x);
         n = normalize(in.right * local.x + vec3<f32>(0.0, local.y, 0.0) + toward * local.z + vec3<f32>(0.0, 1e-4, 0.0));
         albedo = srgb_decode(leaf.rgb / max(leaf.a, 0.01));
+    } else if (aaa_palm) {
+        albedo = aaa_ph.albedo;
     } else if (crown) {
-        if (sp == 0u) {
+        if (sp == 0u && !SF_AAA_DETAIL) {
             let z = sqrt(max(0.0, 1.0 - min(r * r, 1.0)));
             if (light3) {
                 // the crown's sphere seen from the eye (its view from above shows the lit top)
@@ -316,13 +532,22 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
                 let upp = normalize(up - v * dot(up, v));
                 n = normalize(in.right * in.uv.x + upp * cy + v * z);
             } else {
-                let toward = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
-                n = normalize(in.right * in.uv.x + vec3<f32>(0.0, cy, 0.0) + toward * z);
+                n = normalize(in.right * in.uv.x + vec3<f32>(0.0, cy, 0.0) + toward_h * z);
             }
         }
-        albedo = in.tint * (0.75 + 0.25 * st_hash(floor(in.world.xz * 0.7) + in.seed));
+        if (SF_AAA_DETAIL) {
+            let base_c = ft_ca_palette(in.seed, in.tint, in.world.xz);
+            let cluster = st_noise(in.uv * vec2<f32>(9.5, 11.5) + vec2<f32>(in.seed * 2.3, in.seed * 4.1));
+            let sprig = st_noise(in.uv * vec2<f32>(24.0, 28.0) + vec2<f32>(in.seed * 5.7, 1.3));
+            let dapple = 0.84 + 0.26 * cluster + 0.14 * (sprig - 0.5);
+            // Sunlit outer crown shoots read slightly warmer yellow-olive; deep crevices retain cool green depth
+            let depth_tint = mix(vec3<f32>(0.84, 0.92, 0.98), vec3<f32>(1.08, 1.04, 0.92), aaa_open);
+            albedo = base_c * dapple * depth_tint;
+        } else {
+            albedo = in.tint * (0.75 + 0.25 * st_hash(floor(in.world.xz * 0.7) + in.seed));
+        }
     } else {
-        n = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
+        n = toward_h;
         // bark: the park trees' dark brown; the blue gum's smooth pale trunk (Cal-IPC: peels to a pale trunk; INFERRED albedo)
         albedo = select(vec3<f32>(0.09, 0.07, 0.05), vec3<f32>(0.22, 0.20, 0.16), sp == 3u);
     }
@@ -330,7 +555,11 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     s.albedo = albedo;
     s.rough = 0.92;
     s.metal = 0.0;
-    s.ao = select(1.0, 0.7 + 0.3 * in.uv.y, crown);
+    s.ao = select(
+        select(1.0, aaa_ph.ao, aaa_palm),
+        select(0.7 + 0.3 * in.uv.y, select(mix(0.72, 1.0, clamp(0.42 * in.uv.y + 0.58 * aaa_open, 0.0, 1.0)), aaa_ph.ao, aaa_palm), SF_AAA_DETAIL && !baked),
+        crown
+    );
     s.n = n;
     s.alpha = 1.0;
     s.env = -1;
@@ -352,7 +581,7 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     // key light is left out of look_light (a geometric normal facing from the sun
     // turns it off there) and added below with that one shadow.
     let l = look.key_dir.xyz;
-    let vol_light = light3 && crown && !baked;
+    let vol_light = light3 && crown && !baked && !aaa_palm;
     let ng = select(fn_, -l, vol_light);
     var lit = look_light(s, m, v, in.world, ng, 0u);
     if (vol_light) {
@@ -365,7 +594,7 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         let centre = base + vec3<f32>(0.0, 0.68 * in.dims.y, 0.0);
         let sh = lk_shadow(centre + l * in.dims.x, l) * sky_cloud_transmittance(in.world);
         let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
-        let fog = lk_smooth(look.fog.x, look.fog.y, vd);
+        let fog = select(lk_smooth(look.fog.x, look.fog.y, vd), lk_fog_out, SF_AAA_DETAIL);
         let trans = look.key.xyz * s.albedo * FT_VOL_LEAF_T_OVER_R * through * s.ao * sh / LK_PI;
         // a crown is a leaf volume, not an opaque sphere: with leaves of every
         // orientation the sun reaches the leaves at the surface with a mean
@@ -383,6 +612,28 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         // leaves this rough), with the tree's one shadow.
         let key = look.key.xyz * s.albedo * max(nl, 0.0) * sh / LK_PI;
         lit = vec4<f32>(lit.rgb + key * (1.0 - fog) + (trans + vol) * (1.0 - fog), lit.a);
+    } else if (SF_AAA_DETAIL && crown && !baked && look.sun.y > 0.0) {
+        // Warm olive-yellow subsurface sun translucency along the outer sunlit/backlit crown rim.
+        let rim = clamp(aaa_open * 0.72 + 0.28 * (1.0 - max(dot(n, v), 0.0)), 0.0, 1.0);
+        let through = max(dot(-n, l), 0.0) * 0.45 + pow(max(dot(-v, l), 0.0), 3.0) * 0.55;
+        let sh = lk_shadow(in.world + l * 0.5, l) * sky_cloud_transmittance(in.world);
+        let sss = look.key.xyz * (s.albedo * vec3<f32>(0.86, 0.96, 0.38)) * (through * rim * 0.46 * sh / LK_PI);
+        lit = vec4<f32>(lit.rgb + sss * (1.0 - lk_fog_out), lit.a);
+    }
+    if (SF_AAA_DETAIL && crown && !baked) {
+        // Porous-canopy hemispheric sky-dome + sunlit-urban-plaza bounce fill (`look.sun.y` so
+        // night stays dark): lifts building-shadowed & backlit park crowns (`08` Sue Bierman Park,
+        // `01`/`07`) from crushed black (`12/255`) to natural layered coastal green (`42..75/255`)
+        // while preserving internal sub-bough depth modulation via `aaa_open`.
+        let day_f = smoothstep(-0.04, 0.08, look.sun.y);
+        if (day_f > 0.001) {
+            let env_f = mix(look.ambient.w * look.env_class.x, 1.0, clamp(look.hemi_sky.w, 0.0, 1.0));
+            let sky_dome = lk_sh(vec3<f32>(0.0, 1.0, 0.0)) * env_f + look.hemi_sky.xyz * 0.35 + look.ambient.xyz;
+            let ghi_f = look.key.xyz * max(look.sun.y, 0.06);
+            let urban_ind = sky_dome * 1.8 + ghi_f * 0.55;
+            let sky_wrap = urban_ind * (s.albedo * vec3<f32>(0.90, 1.06, 0.74)) * (mix(0.45, 1.05, aaa_open) / LK_PI) * day_f;
+            lit = vec4<f32>(lit.rgb + sky_wrap * (1.0 - lk_fog_out), lit.a);
+        }
     }
 // sf:FOLIAGE+
     if ((crown || baked) && !vol_light) {
@@ -661,8 +912,26 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
     let lobes = 0.08 * sin(ang * 5.0 + in.seed) + 0.05 * sin(ang * 11.0 + in.seed * 1.7);
     var crown = r < 0.92 + lobes;
     var trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
-    var leaf = vec4<f32>(0.0);
+    var aaa_c = vec4<f32>(0.0, 1.0, 0.0, -1.0);
     let baked = in.view.x >= 0.0;
+    let v = normalize(frame.cam_pos.xyz - in.world);
+    let toward = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    let aaa_palm2 = ft_is_aaa_palm(in.tint, u32(in.dims.z + 0.5), baked);
+    var aaa_ph2: FtAaaPalm;
+    if (aaa_palm2) {
+        aaa_ph2 = ft_aaa_palm(in.uv, in.dims.xy, in.seed, in.right, toward, max(length(dpx), length(dpy)));
+        crown = aaa_ph2.frond;
+        trunk = aaa_ph2.trunk;
+    } else if (SF_AAA_DETAIL) {
+        aaa_c = ft_aaa_crown(in.uv, in.seed);
+        crown = aaa_c.w >= 0.0;
+        let tw = mix(0.056, 0.030, clamp(in.uv.y / 0.48, 0.0, 1.0));
+        let fork_t = clamp((in.uv.y - 0.30) / 0.24, 0.0, 1.0);
+        let limb_l = in.uv.y >= 0.30 && in.uv.y < 0.54 && abs(in.uv.x + fork_t * 0.22) < mix(0.028, 0.014, fork_t);
+        let limb_r = in.uv.y >= 0.32 && in.uv.y < 0.56 && abs(in.uv.x - fork_t * 0.20) < mix(0.026, 0.013, fork_t);
+        trunk = (in.uv.y < 0.46 && abs(in.uv.x) < tw) || limb_l || limb_r;
+    }
+    var leaf = vec4<f32>(0.0);
     let a = max(i32(in.view.x), 0);
     let b = max(i32(in.view.y), 0);
     let blend = smoothstep(0.0, 1.0, in.view.z);
@@ -672,9 +941,7 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
                    textureSampleGrad(ft_canopy, kit_sampler, atlas_uv, b, gx, gy), blend);
         covered = leaf.a >= 0.34;
     }
-    let v = normalize(frame.cam_pos.xyz - in.world);
-    let toward = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
-    var palm = false;
+    var palm = aaa_palm2;
 // sf:end
 // sf:FAR_PALMS+
     var ph: FtPalm;
@@ -709,10 +976,23 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
         let local = surface.xyz / max(surface.a, 0.01) * 2.0 - 1.0;
         n = normalize(in.right * local.x + vec3<f32>(0.0, local.y, 0.0) + toward * local.z + vec3<f32>(0.0, 1e-4, 0.0));
         albedo = srgb_decode(leaf.rgb / max(leaf.a, 0.01));
+    } else if (aaa_palm2) {
+        n = aaa_ph2.n;
+        albedo = aaa_ph2.albedo;
+        ao = aaa_ph2.ao;
     } else if (crown) {
-        let z = sqrt(max(0.0, 1.0 - min(r * r, 1.0)));
-        n = normalize(in.right * in.uv.x + vec3<f32>(0.0, cy, 0.0) + toward * z);
-        albedo = in.tint * (0.75 + 0.25 * st_hash(floor(in.world.xz * 0.7) + in.seed));
+        if (SF_AAA_DETAIL) {
+            let up = vec3<f32>(0.0, 1.0, 0.0);
+            let upp = normalize(up - toward * dot(up, toward));
+            n = normalize(in.right * aaa_c.x + upp * aaa_c.y + toward * aaa_c.z);
+            let cluster = st_noise(in.uv * vec2<f32>(9.5, 11.5) + vec2<f32>(in.seed * 2.3, in.seed * 4.1));
+            albedo = ft_ca_palette(in.seed, in.tint, in.world.xz) * (0.86 + 0.26 * cluster);
+            ao = mix(0.72, 1.0, clamp(0.42 * in.uv.y + 0.58 * max(aaa_c.w, 0.0), 0.0, 1.0));
+        } else {
+            let z = sqrt(max(0.0, 1.0 - min(r * r, 1.0)));
+            n = normalize(in.right * in.uv.x + vec3<f32>(0.0, cy, 0.0) + toward * z);
+            albedo = in.tint * (0.75 + 0.25 * st_hash(floor(in.world.xz * 0.7) + in.seed));
+        }
     } else {
         n = toward;
         albedo = vec3<f32>(0.09, 0.07, 0.05);
@@ -721,7 +1001,7 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
     var sun = vec3<f32>(0.0);
 // sf:end
 // sf:FAR_PALMS+
-    if (palm) {
+    if (u32(in.size.z + 0.5) == FT_PALM && !baked) {
         n = ph.n;
         albedo = ph.albedo;
         ao = ph.ao;
@@ -734,11 +1014,11 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
             // a leaf medium's albedo (omega / 2) through the leaves above, its sun
             // added after `look_light` (which lays none on it: `lk_leaf_sun`).
             vol = true;
-            let rho = ft_leaf_r(in.tint, in.seed);
+            let rho = select(ft_leaf_r(in.tint, in.seed), ft_ca_palette(in.seed, in.tint, in.world.xz) * 1.15, SF_AAA_DETAIL);
             let cv = ft_crown(in.uv, in.size.xy, in.right, v, rho);
             let om = rho * (vec3<f32>(1.0) + FT_LEAF_T_OVER_R);
             albedo = 0.5 * om * (vec3<f32>(1.0) + 0.5 * om / (vec3<f32>(1.0) - om)); // omega / 2, and its multiple scattering
-            ao = cv.w;
+            ao = select(cv.w, cv.w * mix(0.75, 1.08, max(aaa_c.w, 0.0)), SF_AAA_DETAIL);
             sun = cv.xyz;
             lk_leaf_sun = 0.0;
             lk_vis_wrap = 2.0;
@@ -767,6 +1047,18 @@ fn ft_shade2(in: FtOut) -> vec4<f32> {
     rm_emit = vec3<f32>(0.0);
     let face = normalize(cross(dpx, dpy));
     var lit = look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    if (SF_AAA_DETAIL && crown && !baked) {
+        let day_f = smoothstep(-0.04, 0.08, look.sun.y);
+        if (day_f > 0.001) {
+            let open2 = select(max(aaa_c.w, 0.0), aaa_ph2.open, aaa_palm2);
+            let env_f = mix(look.ambient.w * look.env_class.x, 1.0, clamp(look.hemi_sky.w, 0.0, 1.0));
+            let sky_dome = lk_sh(vec3<f32>(0.0, 1.0, 0.0)) * env_f + look.hemi_sky.xyz * 0.35 + look.ambient.xyz;
+            let ghi_f = look.key.xyz * max(look.sun.y, 0.06);
+            let urban_ind = sky_dome * 1.8 + ghi_f * 0.55;
+            let sky_wrap = urban_ind * (s.albedo * vec3<f32>(0.90, 1.06, 0.74)) * (mix(0.45, 1.05, open2) / LK_PI) * day_f;
+            lit = vec4<f32>(lit.rgb + sky_wrap * (1.0 - lk_fog_out), lit.a);
+        }
+    }
 // sf:end
 // sf:CROWN+
     if (vol) {

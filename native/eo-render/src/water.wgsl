@@ -917,6 +917,20 @@ fn mx_fade(t: f32) -> f32 {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
+// sf:AAA_BUILDINGS+
+fn w_rh2(p: vec2<f32>) -> f32 {
+    var q = fract(p * vec2<f32>(0.1031, 0.1030));
+    q = q + dot(q, q.yx + 33.33);
+    return fract((q.x + q.y) * q.x);
+}
+fn w_rip2(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(w_rh2(i), w_rh2(i + vec2<f32>(1.0, 0.0)), u.x),
+               mix(w_rh2(i + vec2<f32>(0.0, 1.0)), w_rh2(i + vec2<f32>(1.0, 1.0)), u.x), u.y) * 2.0 - 1.0;
+}
+// sf:end
 fn mx_noise(p: vec3<f32>) -> f32 {
     let fl = floor(p);
     let i = vec3<i32>(fl);
@@ -1948,8 +1962,22 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // a band: their mean slope is not zero but varies from pixel to pixel by
         // the band's spread over the square root of N (independent crests), the
         // dashes chop draws in a grazing view; that share of the slopes along the
-        // view stays (at least the band's own fade)
+        // view stays (at least the band's own fade).
+// sf:AAA_BUILDINGS-
         let fb_alg = max(wg_band(fp_alg), min(vec4<f32>(1.0), sqrt(WV_MID_M / fp_alg)));
+// sf:end
+// sf:AAA_BUILDINGS+
+        // Under AAA quality, band-limit unresolved grazing slopes against Nyquist and sample
+        // the `w_deriv` mipmap pyramid with `textureSampleGrad` so grazing Bay water transfers
+        // unresolved variance into `m2` instead of moiré aliasing.
+        let alg_res = vec4<f32>(
+            1.0 - wg_smooth(WV_MID_M.x * 1.2, WV_MID_M.x * 4.5, fp_alg),
+            1.0 - wg_smooth(WV_MID_M.y * 1.2, WV_MID_M.y * 4.5, fp_alg),
+            1.0 - wg_smooth(WV_MID_M.z * 1.2, WV_MID_M.z * 4.5, fp_alg),
+            1.0 - wg_smooth(WV_MID_M.w * 1.2, WV_MID_M.w * 4.5, fp_alg),
+        );
+        let fb_alg = max(wg_band(fp_alg), min(vec4<f32>(1.0), sqrt(WV_MID_M / fp_alg)) * alg_res * fb_lat);
+// sf:end
         let wb_s = select(wb, max(fb_lat, fb) * ab, lean);
         // (foam cover: each cascade's foam only while the pixel spans under
         // about two of its texels; past that its mean cover, not one texel's foam)
@@ -1979,7 +2007,12 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             }
             if (wb_s[c] > 0.0) {
                 let uv = w_casc_uv(p, c);
+// sf:AAA_BUILDINGS-
                 let d = textureSampleLevel(w_deriv, w_repeat, uv, c, 0.0);
+// sf:end
+// sf:AAA_BUILDINGS+
+                let d = textureSampleGrad(w_deriv, w_repeat, uv, c, wdx / wu.sizes[c], wdy / wu.sizes[c]);
+// sf:end
                 var dsl = d.xy;
                 if (wind_tex && c == 1u) {
                     // (wind texture) a share of the wind sea's cascade re-read turned 24 degrees
@@ -1991,10 +2024,34 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
                     let rp = vec2<f32>(p.x * ca - p.y * sa, p.x * sa + p.y * ca) / 0.37;
                     let fr = wg_band(footprint / 0.37).y;
                     if (fr > 0.0) {
+// sf:AAA_BUILDINGS-
                         let d2 = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(rp, 1u), 1u, 0.0).xy;
+// sf:end
+// sf:AAA_BUILDINGS+
+                        let r_dx = vec2<f32>(wdx.x * ca - wdx.y * sa, wdx.x * sa + wdx.y * ca) / (0.37 * wu.sizes.y);
+                        let r_dy = vec2<f32>(wdy.x * ca - wdy.y * sa, wdy.x * sa + wdy.y * ca) / (0.37 * wu.sizes.y);
+                        let d2 = textureSampleGrad(w_deriv, w_repeat, w_casc_uv(rp, 1u), 1u, r_dx, r_dy).xy;
+// sf:end
                         let d2r = vec2<f32>(d2.x * ca + d2.y * sa, -d2.x * sa + d2.y * ca);
                         dsl = d.xy * mix(1.0, 0.75, fr) + d2r * (0.66 * fr);
                     }
+// sf:AAA_BUILDINGS+
+                } else if (c == 2u) {
+                    // Break 61 m cascade-2 periodic wave-cell repetition on open Bay water with
+                    // a variance-preserving rotated incommensurate octave (37 deg, 0.63x = 38.4 m;
+                    // 0.76^2 + 0.65^2 ~ 1.0).
+                    let ca2 = 0.7986;
+                    let sa2 = 0.6018;
+                    let rp2 = vec2<f32>(p.x * ca2 - p.y * sa2, p.x * sa2 + p.y * ca2) / 0.63 + vec2<f32>(17.3, -29.1);
+                    let fr2 = wg_band(footprint / 0.63).z;
+                    if (fr2 > 0.0) {
+                        let r_dx2 = vec2<f32>(wdx.x * ca2 - wdx.y * sa2, wdx.x * sa2 + wdx.y * ca2) / (0.63 * wu.sizes.z);
+                        let r_dy2 = vec2<f32>(wdy.x * ca2 - wdy.y * sa2, wdy.x * sa2 + wdy.y * ca2) / (0.63 * wu.sizes.z);
+                        let d2 = textureSampleGrad(w_deriv, w_repeat, w_casc_uv(rp2, 2u), 2u, r_dx2, r_dy2).xy;
+                        let d2r = vec2<f32>(d2.x * ca2 + d2.y * sa2, -d2.x * sa2 + d2.y * ca2);
+                        dsl = d.xy * mix(1.0, 0.76, fr2) + d2r * (0.65 * fr2);
+                    }
+// sf:end
                 }
                 if (lean) {
                     // (lean) the slope along the view on that footprint, across it on the narrow one
@@ -2448,7 +2505,13 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     if (skyu.night.z > 0.6) {
         // (night only: at blue hour the pink horizon band floored the bay magenta)
         let hg = w_atmo_dome(normalize(vec3<f32>(r.x, 0.03, r.z)));
+// sf:AAA_BUILDINGS-
         sky = max(sky, vec3<f32>(lk_luma(hg)) * 0.5 * wg_smooth(0.6, 0.95, skyu.night.z));
+// sf:end
+// sf:AAA_BUILDINGS+
+        let n_floor = mix(vec3<f32>(lk_luma(hg)), hg * vec3<f32>(0.88, 0.94, 1.16), 0.82);
+        sky = max(sky, n_floor * 0.5 * wg_smooth(0.6, 0.95, skyu.night.z));
+// sf:end
     }
 
     // --- the sun glint (GGX D V F NdL, clamped as tidewater clamps it) under the cascades.
@@ -3006,7 +3069,18 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     s.mirror_w = 0.0;
     s.mirror_uv = uv_here;
     s.smear = min(sigma_unres * WS_SMEAR_GAIN, WS_SMEAR_MAX);
+// sf:AAA_BUILDINGS-
     s.dash = wg_smooth(-0.02, 0.04, dot(n.xz, normalize(v.xz + vec2<f32>(1e-5, 0.0))));
+// sf:end
+// sf:AAA_BUILDINGS+
+    let dash_dot = dot(n.xz, normalize(v.xz + vec2<f32>(1e-5, 0.0)));
+    let dash_raw = wg_smooth(-0.02, 0.04, dash_dot);
+    // Integrate eye-facing wave facet probability smoothly as the grazing pixel footprint
+    // spans multiple wave crests so night reflection columns never moiré-clip to 0/1 bands.
+    let graz_avg = wg_smooth(0.9, 4.5, w_fp_along);
+    let dash_soft = wg_smooth(-0.08, 0.08, dash_dot);
+    s.dash = mix(dash_raw, mix(0.30, 0.84, dash_soft), graz_avg * 0.78);
+// sf:end
     s.side = dot(n.xz, normalize(vec2<f32>(-v.z, v.x) + vec2<f32>(1e-5, 0.0)));
     s.sun_near = wg_smooth(0.9, 0.995, dot(rup, normalize(look.sun.xyz))) * wg_smooth(-0.03, 0.02, look.sun.y) * (1.0 - wg_smooth(0.3, 0.6, skyu.night.z));
     if (vc_on && vc_sh > 0.001) {
@@ -3121,9 +3195,23 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
         // sky round it; at dusk the bright sky itself drew a phantom column)
         let thr = max(0.8, 3.0 * lk_luma(look.horizon.xyz) * ex);
         // (each facet tilted sideways shifts the column across: wavy, not a ruled bar)
+// sf:AAA_BUILDINGS-
         let xw = px.x + s.side * 0.05;
+// sf:end
+// sf:AAA_BUILDINGS+
+        let side_k = mix(0.042, 0.016, wg_smooth(1.0, 6.0, w_fp_along));
+        let xw = px.x + s.side * side_k;
+        // Stratified IGN+frame jitter eliminates 16 discrete vertical dot-comb images of
+        // point tower beacons while TAA integrates them into smooth shimmering columns.
+        let col_jit = sky_ign(i.clip.xy + vec2<f32>(f32(skyu.flags.y & 63u) * 5.588238, f32(skyu.flags.y & 63u) * 3.171573));
+// sf:end
         for (var k = 0; k < 16; k = k + 1) {
+// sf:AAA_BUILDINGS-
             let fk = (f32(k) + 0.5) / 16.0;
+// sf:end
+// sf:AAA_BUILDINGS+
+            let fk = (f32(k) + col_jit) / 16.0;
+// sf:end
             let yy = mix(ym, yh, fk);
             let tilt = (yy - ym) * 0.45;
             let wk = exp(-tilt * tilt / (2.0 * 0.0169));
@@ -3132,13 +3220,46 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
             }
             let c = textureSampleLevel(sky_prev, sky_rep, clamp(w_prev_uv(vec2<f32>(xw, yy)), vec2<f32>(0.001), vec2<f32>(0.999)), 0.0).rgb;
             let lum = lk_luma(c) * ex;
+// sf:AAA_BUILDINGS-
             col = col + c * (max(lum - thr, 0.0) / max(lum, 1e-4)) * wk;
+// sf:end
+// sf:AAA_BUILDINGS+
+            var c_col = c * (max(lum - thr, 0.0) / max(lum, 1e-4));
+            let tap_cap = 2.2 / max(ex, 0.15);
+            c_col = c_col * min(1.0, tap_cap / max(lk_luma(c_col), 1e-5));
+            col = col + c_col * wk;
+// sf:end
             // (lit windows too, dimmer: towers stand in the bay as faint broken columns)
             twr = twr + c * (max(lum - 1.1 * lk_luma(look.horizon.xyz) * ex, 0.0) / max(lum, 1e-4)) * wk;
         }
+// sf:AAA_BUILDINGS-
         // (broken across the column by the chop: a slow along-view wobble)
         // (no per-cell hash: it stamped the columns into a barcode)
         let brk = 0.55 + 0.45 * sin(i.world.z * 0.7 + i.world.x * 0.23 + mx_noise(vec3<f32>(i.world.xz * 0.15, wu.cam.w * 0.3)) * 4.0);
+// sf:end
+// sf:AAA_BUILDINGS+
+        // Band-limited multi-scale anisotropic wind-chop reflection shimmer with off-axis
+        // swell domain warp and 3 incommensurate chop angles using lean 2D value noise (`w_rip2`)
+        // to stay well under Metal LLVM IR limits with zero periodic grid or moiré folding.
+        let e1 = vec2<f32>(0.96, 0.28);
+        let e2 = vec2<f32>(0.84, -0.54);
+        let e3 = vec2<f32>(-0.37, 0.93);
+        let r3 = vec2<f32>(0.891, 0.454);
+        let r3b = vec2<f32>(-0.545, 0.839);
+        let k1 = 1.0 - wg_smooth(1.2, 4.2, w_fp_along);
+        let k2 = 1.0 - wg_smooth(0.35, 1.4, w_fp_along);
+        let k3m = 1.0 - wg_smooth(0.8, 2.8, w_fp_along);
+        let k3 = 1.0 - wg_smooth(6.0, 22.0, w_fp_along);
+        let p3 = vec2<f32>(dot(i.world.xz, r3), dot(i.world.xz, vec2<f32>(-r3.y, r3.x)));
+        let p3b = vec2<f32>(dot(i.world.xz, r3b), dot(i.world.xz, vec2<f32>(-r3b.y, r3b.x)));
+        let n3 = w_rip2(p3 * 0.048 + vec2<f32>(wu.cam.w * 0.14, 3.1));
+        let n3b = w_rip2(p3b * 0.039 + vec2<f32>(11.7 - wu.cam.w * 0.11, -5.3));
+        let pw = i.world.xz + vec2<f32>(n3, n3b) * 5.8;
+        let n1 = w_rip2(vec2<f32>(dot(pw, e1) * 0.22 + wu.cam.w * 0.32, dot(pw, vec2<f32>(-e1.y, e1.x)) * 0.072));
+        let n2 = w_rip2(vec2<f32>(dot(pw, e2) * 0.64 - wu.cam.w * 0.52, dot(pw, vec2<f32>(-e2.y, e2.x)) * 0.20 + 7.3));
+        let n4 = w_rip2(vec2<f32>(dot(pw, e3) * 0.37 + wu.cam.w * 0.39, dot(pw, vec2<f32>(-e3.y, e3.x)) * 0.115 + 13.7));
+        let brk = clamp(0.76 + 0.11 * (n3 + 0.7 * n3b) * k3 + 0.14 * n1 * k1 + 0.13 * n2 * k2 + 0.12 * n4 * k3m, 0.32, 1.15);
+// sf:end
         refl = refl + (col * 0.4 + twr * 0.6) * (s.dash * skyu.night.z * brk);
     }
     // EO_WATER_DEBUG=3: the water's own light only; 4: the reflection only; 5: the bottom only; 6 the body's light; 7 the glint;

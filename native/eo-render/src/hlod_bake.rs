@@ -52,7 +52,7 @@ use std::time::Instant;
 
 /// Side of a neighbourhood cell, metres (two kit tiles).
 pub const CELL_M: f64 = 256.0;
-pub const BAKE_VERSION: u32 = 3; // 2: pages stored with their mips, BC3 where the GPU has it; 3: glass seen through, the summary's wall, window rhythm and tower flag
+pub const BAKE_VERSION: u32 = 7; // 2: mips+BC3; 3: glass_body+rhythm+tower; 4: 3D LiDAR/archetype massing + material class; 5: frame.edges parity + mansards + flat-roof detail; 6: exact tower floorHeight+base_y rhythm, welded VF_ROOF verts, trimmed far roof clutter; 7: 3D projecting cornices, textured bay stacks, SF water tanks, VF_RESIDENTIAL night metadata
 /// Side of one atlas page (a layer of the GPU's page array), texels.
 pub const PAGE: usize = 512;
 /// Border texels round every chart (edge replicated): bilinear and the first
@@ -74,6 +74,30 @@ pub const VF_TEXTURED: u32 = 1;
 pub const VF_ROOF: u32 = 2;
 /// a tower's wall (a downtown tower, or a civic building over `TOWER_MIN_M`): the far shader's curtain-wall look.
 pub const VF_TOWER: u32 = 8;
+/// Architectural facade material/glazing class packed in alpha bits 4..6 (`(class & 7) << 4`).
+pub const VF_MAT_SHIFT: u32 = 4;
+/// Residential building-use flag packed in alpha bit 7 (`0x80`, mirrored in `hlod_draw.wgsl` as
+/// `HL_RESIDENTIAL = 128u`) so night shaders give commercial/tech towers crisp multi-temp cool/neutral
+/// office lighting while residential hillsides & condo/hotel towers glow warm amber + TV/study rooms.
+pub const VF_RESIDENTIAL: u32 = 128;
+pub const MAT_DEFAULT: u8 = 0;
+pub const MAT_CURTAIN_BLUE: u8 = 1;
+pub const MAT_CURTAIN_EMERALD: u8 = 2;
+pub const MAT_CURTAIN_BRONZE: u8 = 3;
+pub const MAT_GRANITE: u8 = 4;
+pub const MAT_PRECAST: u8 = 5;
+pub const MAT_BRICK: u8 = 6;
+pub const MAT_WOOD: u8 = 7;
+
+/// Encoded 3D silhouette massing form carried in `BuildingSummary::massing_form`.
+pub const MASSING_FLAT: f32 = 0.0;
+pub const MASSING_GABLE: f32 = 1.0;
+pub const MASSING_HIP: f32 = 2.0;
+pub const MASSING_SHED: f32 = 3.0;
+pub const MASSING_STEPPED: f32 = 4.0;
+pub const MASSING_CROWN: f32 = 5.0;
+pub const MASSING_MANSARD: f32 = 6.0;
+
 /// a civic building this tall or taller is a tower to the far shader.
 pub const TOWER_MIN_M: f64 = 40.0;
 
@@ -413,6 +437,7 @@ pub fn inputs_key(kit_key: &str, colours: &MaterialColours, authored: &AuthoredS
     h.update(opts.party_scale.to_le_bytes());
     h.update([opts.bc3 as u8]);
     h.update([opts.glass_body as u8]);
+    h.update(eo_data::lidar_buildings::cache_tag().as_bytes());
     let d = h.finalize();
     d.iter().take(8).map(|b| format!("{b:02x}")).collect()
 }
@@ -444,14 +469,58 @@ pub struct BuildingSummary {
     pub rhythm: [f32; 5],
     /// 1 for a tower (a downtown tower, or a civic building over `TOWER_MIN_M`).
     pub tower: f32,
+    /// 3D roof/silhouette form (`MASSING_*`: 0 flat, 1 gable, 2 hip, 3 shed, 4 stepped, 5 crown).
+    pub massing_form: f32,
+    /// Height above `top` of the roof ridge (gable/hip/shed) or upper setback/crown tier, metres.
+    pub ridge_rise: f32,
+    /// Principal roof ridge or slope orientation angle, radians (x-east, z-south; NaN/0 = auto OBB).
+    pub roof_axis: f32,
+    /// Primary rooftop penthouse / setback footprint fraction (`0.0` = none, `0.2..0.82`).
+    pub pent_scale: f32,
+    /// Primary rooftop penthouse / bulkhead height above `top` (or above crown tier), metres.
+    pub pent_h: f32,
+    /// Normalized offset of primary penthouse / gable ridge along OBB `(u, v)` in `[-0.4, +0.4]`.
+    pub pent_off: [f32; 2],
+    /// Architectural facade material/glazing class (`MAT_*` as f32, `0..=7`).
+    pub mat_class: f32,
+    /// 1.0 for residential / apartment / hotel buildings (`VF_RESIDENTIAL` bit 7), 0.0 for office/commercial/civic.
+    pub residential: f32,
 }
 
 impl BuildingSummary {
     /// its floats as stored (after the group and building words).
-    pub const FLOATS: usize = 18;
+    pub const FLOATS: usize = 27;
     pub fn floats(&self) -> [f32; Self::FLOATS] {
         let (f, r, w, y) = (self.facade, self.roof, self.wall, self.rhythm);
-        [f[0], f[1], f[2], self.glass, r[0], r[1], r[2], self.base, self.top, w[0], w[1], w[2], y[0], y[1], y[2], y[3], y[4], self.tower]
+        [
+            f[0],
+            f[1],
+            f[2],
+            self.glass,
+            r[0],
+            r[1],
+            r[2],
+            self.base,
+            self.top,
+            w[0],
+            w[1],
+            w[2],
+            y[0],
+            y[1],
+            y[2],
+            y[3],
+            y[4],
+            self.tower,
+            self.massing_form,
+            self.ridge_rise,
+            self.roof_axis,
+            self.pent_scale,
+            self.pent_h,
+            self.pent_off[0],
+            self.pent_off[1],
+            self.mat_class,
+            self.residential,
+        ]
     }
     pub fn from_floats(group: u32, building: u32, v: &[f32]) -> Self {
         Self {
@@ -465,6 +534,14 @@ impl BuildingSummary {
             wall: [v[9], v[10], v[11]],
             rhythm: [v[12], v[13], v[14], v[15], v[16]],
             tower: v[17],
+            massing_form: v[18],
+            ridge_rise: v[19],
+            roof_axis: v[20],
+            pent_scale: v[21],
+            pent_h: v[22],
+            pent_off: [v[23], v[24]],
+            mat_class: v[25],
+            residential: v[26],
         }
     }
 }
@@ -638,6 +715,1076 @@ struct SrcTri {
     two_sided: bool,
 }
 
+/// Compact 3D silhouette massing descriptor shared by both cell bakes and districts.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MassingDesc {
+    pub form: f32,
+    pub ridge_rise: f32,
+    pub roof_axis: f32,
+    pub pent_scale: f32,
+    pub pent_h: f32,
+    pub pent_off: [f32; 2],
+}
+
+/// Minimum-area oriented 2D bounding box of a footprint ring (x east, z south).
+#[derive(Clone, Copy, Debug)]
+pub struct Obb2D {
+    pub center: [f64; 2],
+    /// Unit axis along the longer (or requested) direction.
+    pub eu: [f64; 2],
+    /// Perpendicular unit axis `(-eu[1], eu[0])`.
+    pub ev: [f64; 2],
+    /// Half-extents along `eu` and `ev`.
+    pub hu: f64,
+    pub hv: f64,
+    /// Footprint area divided by OBB area (`0..=1`; rectangles are `~1.0`, L-shapes `< 0.75`).
+    pub fill: f64,
+}
+
+impl Obb2D {
+    pub fn point(&self, u: f64, v: f64) -> [f64; 2] {
+        [self.center[0] + self.eu[0] * u + self.ev[0] * v, self.center[1] + self.eu[1] * u + self.ev[1] * v]
+    }
+}
+
+/// Ray-casting point-in-polygon test on an open ring.
+pub fn point_in_ring(ring: &[[f64; 2]], p: [f64; 2]) -> bool {
+    let n = ring.len();
+    if n < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let mut j = n - 1;
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[j]);
+        if ((a[1] > p[1]) != (b[1] > p[1])) && (p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+/// Fit an oriented bounding box to `ring`. When `forced_axis` is `Some(rad)`,
+/// aligns `eu` to `(cos(rad), sin(rad))`; otherwise finds the minimum-area OBB
+/// aligned to one of the ring's edges with `hu >= hv`.
+pub fn fit_obb(ring: &[[f64; 2]], forced_axis: Option<f64>) -> Option<Obb2D> {
+    let n = ring.len();
+    if n < 3 {
+        return None;
+    }
+    let poly_area = signed_area(ring).abs();
+    if poly_area < 2.0 {
+        return None;
+    }
+    let eval = |ang: f64| {
+        let (s, c) = ang.sin_cos();
+        let (eu, ev) = ([c, s], [-s, c]);
+        let (mut u0, mut u1, mut v0, mut v1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+        for p in ring {
+            let u = p[0] * eu[0] + p[1] * eu[1];
+            let v = p[0] * ev[0] + p[1] * ev[1];
+            u0 = u0.min(u);
+            u1 = u1.max(u);
+            v0 = v0.min(v);
+            v1 = v1.max(v);
+        }
+        let hu = 0.5 * (u1 - u0);
+        let hv = 0.5 * (v1 - v0);
+        let uc = 0.5 * (u0 + u1);
+        let vc = 0.5 * (v0 + v1);
+        let center = [eu[0] * uc + ev[0] * vc, eu[1] * uc + ev[1] * vc];
+        let area = (4.0 * hu * hv).max(1e-6);
+        Obb2D { center, eu, ev, hu, hv, fill: (poly_area / area).clamp(0.0, 1.0) }
+    };
+    if let Some(ang) = forced_axis {
+        return Some(eval(ang));
+    }
+    let mut best: Option<(f64, Obb2D)> = None;
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        if dx * dx + dz * dz < 1e-4 {
+            continue;
+        }
+        let mut obb = eval(dz.atan2(dx));
+        if obb.hv > obb.hu {
+            let old_eu = obb.eu;
+            obb.eu = obb.ev;
+            obb.ev = [-old_eu[0], -old_eu[1]];
+            std::mem::swap(&mut obb.hu, &mut obb.hv);
+        }
+        let a2 = 4.0 * obb.hu * obb.hv;
+        if best.is_none_or(|(ba, _)| a2 < ba - 1e-9) {
+            best = Some((a2, obb));
+        }
+    }
+    best.map(|(_, o)| o)
+}
+
+/// Deterministic per-building hash in `[0, 1)`.
+pub fn massing_hash(id: u32, salt: u32) -> f64 {
+    let mut h = id.wrapping_mul(0x9E37_79B9) ^ salt.wrapping_mul(0x85EB_CA6B);
+    h ^= h >> 16;
+    h = h.wrapping_mul(0x7FEB_352D);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x846C_A68B);
+    h ^= h >> 16;
+    (h >> 8) as f64 / 16_777_216.0
+}
+
+/// Build an oriented rectangular 2D quad `[c0, c1, c2, c3]` inside `ring` for a
+/// rooftop penthouse / mechanical room / setback tier. Returns `None` if no
+/// clean interior placement fits (e.g. a hollow ring courtyard).
+pub fn fit_interior_box(ring: &[[f64; 2]], obb: &Obb2D, scale: f64, off_u: f64, off_v: f64, min_half_m: f64) -> Option<[[f64; 2]; 4]> {
+    let mut s = scale.clamp(0.18, 0.85);
+    let mut ou = off_u.clamp(-0.35, 0.35);
+    let mut ov = off_v.clamp(-0.35, 0.35);
+    for attempt in 0..3 {
+        let hu = (obb.hu * s).max(min_half_m).min(obb.hu * 0.92);
+        let hv = (obb.hv * s).max(min_half_m).min(obb.hv * 0.92);
+        if hu < min_half_m * 0.8 || hv < min_half_m * 0.8 {
+            return None;
+        }
+        let max_du = (obb.hu - hu - 0.35).max(0.0);
+        let max_dv = (obb.hv - hv - 0.35).max(0.0);
+        let du = (ou * obb.hu).clamp(-max_du, max_du);
+        let dv = (ov * obb.hv).clamp(-max_dv, max_dv);
+        let quad = [
+            obb.point(du - hu, dv - hv),
+            obb.point(du + hu, dv - hv),
+            obb.point(du + hu, dv + hv),
+            obb.point(du - hu, dv + hv),
+        ];
+        // Ensure all 4 corners + center lie inside the building footprint (zero floating over L-notches).
+        if obb.fill >= 0.88 || (point_in_ring(ring, obb.point(du, dv)) && quad.iter().all(|&p| point_in_ring(ring, p))) {
+            return Some(quad);
+        }
+        // Recenter and shrink if an offset box clipped an L-shaped notch.
+        if attempt == 0 {
+            ou = 0.0;
+            ov = 0.0;
+        } else {
+            s *= 0.72;
+        }
+    }
+    None
+}
+
+/// Build the oriented 2D base quad `[c0, c1, c2, c3]` (positive signed area, `c0->c1` along
+/// the longer axis) for a pitched roof (gable, hip, or shed). Full OBB footprint when
+/// `obb.fill >= 0.78`; largest strictly-inscribed main-wing rectangle when `0.60 <= obb.fill < 0.78`
+/// so L-shaped & lightwell-notched SF row houses get crisp pitched silhouettes with zero
+/// floating overhang over lightwells or rear courts.
+pub fn pitched_roof_quad(ring: &[[f64; 2]], obb: &Obb2D) -> Option<[[f64; 2]; 4]> {
+    if obb.hu < 1.8 || obb.hv < 1.5 {
+        return None;
+    }
+    let orient = |mut q: [[f64; 2]; 4], align_longest: bool| -> [[f64; 2]; 4] {
+        if align_longest {
+            let l01 = (q[1][0] - q[0][0]).hypot(q[1][1] - q[0][1]);
+            let l12 = (q[2][0] - q[1][0]).hypot(q[2][1] - q[1][1]);
+            if l12 > l01 {
+                q = [q[1], q[2], q[3], q[0]];
+            }
+        }
+        if signed_area(&q) < 0.0 {
+            q.swap(0, 3);
+            q.swap(1, 2);
+        }
+        q
+    };
+    if obb.fill >= 0.78 {
+        let inset = if obb.fill < 0.92 { 0.96 } else { 0.995 };
+        let (hu, hv) = (obb.hu * inset, obb.hv * inset);
+        return Some(orient([obb.point(-hu, -hv), obb.point(hu, -hv), obb.point(hu, hv), obb.point(-hu, hv)], false));
+    }
+    if obb.fill < 0.60 {
+        return None;
+    }
+    // Candidate interior rectangles in OBB (u0, u1, v0, v1) fractions in [-1, 1]:
+    // centered core, 4 half-wings for L-shaped houses, and 4 quadrant-shifted cores for lightwells.
+    const CANDIDATES: [[f64; 4]; 9] = [
+        [-0.86, 0.86, -0.86, 0.86],
+        [-0.94, 0.94, -0.94, -0.04],
+        [-0.94, 0.94, 0.04, 0.94],
+        [-0.94, -0.04, -0.94, 0.94],
+        [0.04, 0.94, -0.94, 0.94],
+        [-0.90, 0.50, -0.90, 0.50],
+        [-0.50, 0.90, -0.90, 0.50],
+        [-0.90, 0.50, -0.50, 0.90],
+        [-0.50, 0.90, -0.50, 0.90],
+    ];
+    let mut best: Option<(f64, [[f64; 2]; 4])> = None;
+    for [fu0, fu1, fv0, fv1] in CANDIDATES {
+        let (u0, u1) = (obb.hu * fu0, obb.hu * fu1);
+        let (v0, v1) = (obb.hv * fv0, obb.hv * fv1);
+        let w = u1 - u0;
+        let d = v1 - v0;
+        if w < 3.2 || d < 3.2 {
+            continue;
+        }
+        let area = w * d;
+        if best.is_some_and(|(ba, _)| area <= ba) {
+            continue;
+        }
+        let quad = [obb.point(u0, v0), obb.point(u1, v0), obb.point(u1, v1), obb.point(u0, v1)];
+        let mid = obb.point(0.5 * (u0 + u1), 0.5 * (v0 + v1));
+        if point_in_ring(ring, mid) && quad.iter().all(|&p| point_in_ring(ring, p)) {
+            best = Some((area, quad));
+        }
+    }
+    best.map(|(_, q)| orient(q, true))
+}
+
+/// Deterministic pitched-roof material finish (composition charcoal-slate, weathered terracotta tile,
+/// cedar shingle, or slate) blended gently with the building's NAIP measured roof colour so real
+/// SF homeowners recognize their actual roof tone while sloped roofs separate crisply across cells & districts.
+pub fn pitched_roof_color(roof_rgb: [f32; 3], group: u32, form: i32) -> [f32; 3] {
+    pitched_roof_color_measured(roof_rgb, group, form, true)
+}
+
+pub fn pitched_roof_color_measured(roof_rgb: [f32; 3], group: u32, form: i32, has_measured: bool) -> [f32; 3] {
+    let h = massing_hash(group, 109);
+    let finish = if form == 6 {
+        // Classic SF Edwardian/Victorian mansard finishes: dark slate, weathered terracotta, charcoal shingle, sage-slate.
+        if h < 0.36 {
+            [0.068, 0.078, 0.095] // charcoal-blue mansard slate
+        } else if h < 0.62 {
+            [0.31, 0.140, 0.092] // weathered terracotta tile/shingle
+        } else if h < 0.82 {
+            [0.145, 0.102, 0.078] // deep weathered cedar/umber shingle
+        } else {
+            [0.115, 0.132, 0.128] // cool grey-green slate
+        }
+    } else {
+        // Slightly higher Mediterranean terracotta share on hipped roofs; crisp slate/shingle on gables.
+        let terra_cut = if form == 2 { 0.36 } else { 0.25 };
+        if h < terra_cut {
+            [0.34, 0.145, 0.095] // weathered clay barrel tile / terracotta
+        } else if h < 0.66 {
+            [0.072, 0.078, 0.088] // dark charcoal composition shingle
+        } else if h < 0.86 {
+            [0.165, 0.112, 0.082] // warm weathered cedar / brown shingle
+        } else {
+            [0.125, 0.142, 0.138] // cool grey-green slate
+        }
+    };
+    let lum = 0.2126 * roof_rgb[0] + 0.7152 * roof_rgb[1] + 0.0722 * roof_rgb[2];
+    let w = if has_measured {
+        if form == 6 { 0.44 } else if lum > 0.24 { 0.38 } else { 0.30 }
+    } else if form == 6 {
+        0.58
+    } else if lum > 0.22 {
+        0.52
+    } else {
+        0.42
+    };
+    [0, 1, 2].map(|k| roof_rgb[k] * (1.0 - w) + finish[k] * w)
+}
+
+/// Enrich flat-roof membrane colour diversity and add deterministic weathered two-tone
+/// re-roofing patches (charcoal tar, dusty gravel aggregate, silver elastomeric cap-sheet)
+/// when NAIP did not supply a high-confidence second roof patch, eliminating sterile uniform
+/// flat grey roofs across hillside neighborhoods.
+fn enrich_flat_roof(roof_rgb: &mut [f32; 3], roofs: &mut RoofCap, ring: &[[f64; 2]], group: u32) {
+    if roofs.pitched {
+        return;
+    }
+    let area = signed_area(ring).abs();
+    if area < 35.0 {
+        return;
+    }
+    // Break up monotonous neutral mid-grey roofs with authentic SF flat-roof membrane tones.
+    let cmax = roof_rgb[0].max(roof_rgb[1]).max(roof_rgb[2]);
+    let cmin = roof_rgb[0].min(roof_rgb[1]).min(roof_rgb[2]);
+    let chroma = cmax - cmin;
+    let h_mat = massing_hash(group, 127);
+    if chroma < 0.045 {
+        let (target, w) = if h_mat < 0.28 {
+            ([0.078, 0.080, 0.084], 0.36) // weathered dark built-up asphalt tar
+        } else if h_mat < 0.54 {
+            ([0.245, 0.215, 0.175], 0.32) // warm dusty tan pea-gravel ballast
+        } else if h_mat < 0.76 {
+            ([0.205, 0.170, 0.142], 0.28) // warm weathered buff/terracotta aggregate
+        } else if h_mat < 0.90 {
+            ([0.275, 0.285, 0.300], 0.26) // cool silver-grey elastomeric cap-sheet
+        } else {
+            ([0.135, 0.140, 0.142], 0.30) // weathered dark slate membrane
+        };
+        for k in 0..3 {
+            roof_rgb[k] = (roof_rgb[k] * (1.0 - w) + target[k] * w).clamp(0.04, 0.52);
+        }
+    }
+    // Synthesize a clean edge-aligned re-roofed patch when NAIP has none.
+    if roofs.patch.is_none() && area >= 55.0 && eo_data::roof_colours::feature_on("patches") {
+        let h_pat = massing_hash(group, 131);
+        if h_pat < 0.68 {
+            let h_dir = massing_hash(group, 137);
+            let h_sh = massing_hash(group, 139);
+            let h_col = massing_hash(group, 149);
+            let ang = h_dir * std::f64::consts::TAU;
+            let dir = [ang.cos(), ang.sin()];
+            let share = (0.22 + 0.26 * h_sh) as f32;
+            let patch_rgb = if h_col < 0.38 {
+                [roof_rgb[0] * 0.66, roof_rgb[1] * 0.67, roof_rgb[2] * 0.69] // fresh dark tar repair
+            } else if h_col < 0.68 {
+                [(roof_rgb[0] * 1.18).min(0.46), (roof_rgb[1] * 1.13).min(0.44), (roof_rgb[2] * 1.03).min(0.40)] // warm gravel section
+            } else {
+                [(roof_rgb[0] * 1.18).min(0.48), (roof_rgb[1] * 1.20).min(0.49), (roof_rgb[2] * 1.23).min(0.51)] // pale elastomeric coat
+            };
+            roofs.patch = Some((patch_rgb, dir, share));
+        }
+    }
+}
+
+/// Emit compact lived-in San Francisco flat-roof assemblies (256 m cells only, zero district cost):
+/// raised glass skylights / lightwell monitors and occasional warm hillside redwood rooftop decks
+/// strictly inscribed inside `ring`.
+#[allow(clippy::too_many_arguments)]
+pub fn emit_flat_roof_detail(
+    ring: &[[f64; 2]],
+    group: u32,
+    base_y: f64,
+    top: f64,
+    massing: &MassingDesc,
+    out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>,
+) {
+    let form = massing.form.round() as i32;
+    if form != 0 {
+        return;
+    }
+    let Some(obb) = fit_obb(ring, None) else { return };
+    let gs = eo_data::groundscale::scale().max(1e-3);
+    let true_area = signed_area(ring).abs() / (gs * gs);
+    let height = (top - base_y).max(2.0);
+    if true_area < 60.0 || height > 44.0 {
+        return;
+    }
+    let push_tri = |a: [f32; 3], b: [f32; 3], c: [f32; 3], rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        let p = [a, b, c];
+        let n = face_normal(&p);
+        if n[0] * n[0] + n[1] * n[1] + n[2] * n[2] > 0.25 {
+            out.push((p, n, rgb));
+        }
+    };
+    let push_quad = |a: [f32; 3], b: [f32; 3], c: [f32; 3], d: [f32; 3], rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        push_tri(a, b, c, rgb, out);
+        push_tri(a, c, d, rgb, out);
+    };
+    let push_box = |quad: [[f64; 2]; 4], y0: f32, y1: f32, side_rgb: [f32; 3], cap_rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        let mut q = quad;
+        if signed_area(&q) < 0.0 {
+            q.reverse();
+        }
+        let b = q.map(|p| [p[0] as f32, y0, p[1] as f32]);
+        let t = q.map(|p| [p[0] as f32, y1, p[1] as f32]);
+        for i in 0..4 {
+            let j = (i + 1) % 4;
+            push_quad(b[i], b[j], t[j], t[i], side_rgb, out);
+        }
+        push_quad(t[0], t[1], t[2], t[3], cap_rgb, out);
+    };
+
+    let y0 = top as f32;
+    let h0 = massing_hash(group, 151);
+    let h1 = massing_hash(group, 157);
+    let h2 = massing_hash(group, 163);
+    // Offset skylight away from any existing penthouse along OBB axes.
+    let sky_u = if massing.pent_h > 0.8 { -massing.pent_off[0] as f64 * 0.85 } else { (h1 - 0.5) * 0.45 };
+    let sky_v = if massing.pent_h > 0.8 { -massing.pent_off[1] as f64 * 0.85 } else { (h2 - 0.5) * 0.45 };
+
+    // 1. Raised glass skylight / lightwell monitor (classic SF flat-roof detail).
+    if h0 < 0.62 {
+        let sky_scale = (0.18 + 0.08 * h1).clamp(0.16, 0.28);
+        let curb_rgb = [0.54, 0.52, 0.49];
+        let glass_rgb = [0.042, 0.068, 0.088];
+        if let Some(q) = fit_interior_box(ring, &obb, sky_scale, sky_u, sky_v, 1.0) {
+            push_box(q, y0 + 0.02, y0 + 0.48, curb_rgb, glass_rgb, out);
+        }
+    }
+
+    // 2. Warm hillside redwood/cedar rooftop deck on ~26% of bare residential hillside flat roofs
+    // (single 2-triangle flat quad at +0.08 m — 4 welded verts instead of a 10-tri box).
+    if base_y > 12.0 && height <= 28.0 && true_area >= 65.0 && h1 < 0.26 {
+        let deck_u = -sky_u * 0.8 + (h2 - 0.5) * 0.2;
+        let deck_v = -sky_v * 0.8;
+        let deck_rgb = [0.245, 0.145, 0.088];
+        if let Some(mut q) = fit_interior_box(ring, &obb, 0.34, deck_u, deck_v, 1.4) {
+            if signed_area(&q) < 0.0 {
+                q.reverse();
+            }
+            let t = q.map(|p| [p[0] as f32, y0 + 0.08, p[1] as f32]);
+            push_quad(t[0], t[1], t[2], t[3], deck_rgb, out);
+        }
+    }
+}
+
+/// Whether a building qualifies for an iconic SF hexagonal redwood rooftop water tank
+/// (shared deterministically between 256 m cells and 2 km districts).
+pub fn wants_water_tank(group: u32, height: f64, true_area: f64, mat_class: u8, form: i32) -> bool {
+    if !matches!(form, 0 | 4) || !(14.0..=58.0).contains(&height) || true_area < 190.0 {
+        return false;
+    }
+    if matches!(mat_class, MAT_CURTAIN_BLUE | MAT_CURTAIN_EMERALD | MAT_CURTAIN_BRONZE) {
+        return false;
+    }
+    let chance = if mat_class == MAT_BRICK { 0.34 } else { 0.20 };
+    massing_hash(group, 173) < chance
+}
+
+/// Emit a 3D hexagonal weathered SF redwood rooftop water tank perched on a dark steel support base
+/// with a conical roof cap (~20 welded verts / 26 tris in `Far::roof`).
+#[allow(clippy::too_many_arguments)]
+pub fn emit_water_tank(
+    ring: &[[f64; 2]],
+    group: u32,
+    top: f64,
+    height: f64,
+    mat_class: u8,
+    massing: &MassingDesc,
+    out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>,
+) {
+    let form = massing.form.round() as i32;
+    let gs = eo_data::groundscale::scale().max(1e-3);
+    let true_area = signed_area(ring).abs() / (gs * gs);
+    if !wants_water_tank(group, height, true_area, mat_class, form) {
+        return;
+    }
+    let Some(obb) = fit_obb(ring, None) else { return };
+    let h1 = massing_hash(group, 179);
+    let h2 = massing_hash(group, 181);
+    // Offset opposite any penthouse/setback box so the water tank stands cleanly on the main roof deck.
+    let off_u = if massing.pent_h > 0.8 || form == 4 { -massing.pent_off[0] as f64 - 0.18 } else { (h1 - 0.5) * 0.42 };
+    let off_v = if massing.pent_h > 0.8 || form == 4 { -massing.pent_off[1] as f64 + 0.14 } else { (h2 - 0.5) * 0.42 };
+    let Some(q) = fit_interior_box(ring, &obb, 0.22, off_u, off_v, 1.8) else { return };
+    let cx = 0.25 * (q[0][0] + q[1][0] + q[2][0] + q[3][0]);
+    let cz = 0.25 * (q[0][1] + q[1][1] + q[2][1] + q[3][1]);
+    let s0 = (q[1][0] - q[0][0]).hypot(q[1][1] - q[0][1]);
+    let s1 = (q[2][0] - q[1][0]).hypot(q[2][1] - q[1][1]);
+    let r = (1.50 + 0.65 * h1).min(0.45 * s0.min(s1)).max(1.05);
+    let base_y = top as f32;
+    let leg_y1 = base_y + 0.95;
+    let drum_y1 = leg_y1 + (2.55 + 0.90 * h2) as f32;
+    let apex_y = drum_y1 + 0.85;
+    let steel_rgb = [0.068, 0.072, 0.078];
+    let redwood_rgb = [0.235, 0.122, 0.072];
+    let cap_rgb = [0.145, 0.148, 0.152];
+    let push_tri = |a: [f32; 3], b: [f32; 3], c: [f32; 3], rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        let p = [a, b, c];
+        let n = face_normal(&p);
+        if n[0] * n[0] + n[1] * n[1] + n[2] * n[2] > 0.25 {
+            out.push((p, n, rgb));
+        }
+    };
+    const SIDES: usize = 6;
+    let mut ring_leg0 = [[0f32; 3]; SIDES];
+    let mut ring_leg1 = [[0f32; 3]; SIDES];
+    let mut ring_b0 = [[0f32; 3]; SIDES];
+    let mut ring_b1 = [[0f32; 3]; SIDES];
+    let rl = r * 0.62;
+    for k in 0..SIDES {
+        let ang = k as f64 * std::f64::consts::TAU / SIDES as f64;
+        let (sa, ca) = ang.sin_cos();
+        ring_leg0[k] = [(cx + ca * rl) as f32, base_y - 0.05, (cz + sa * rl) as f32];
+        ring_leg1[k] = [(cx + ca * rl) as f32, leg_y1, (cz + sa * rl) as f32];
+        ring_b0[k] = [(cx + ca * r) as f32, leg_y1, (cz + sa * r) as f32];
+        ring_b1[k] = [(cx + ca * r) as f32, drum_y1, (cz + sa * r) as f32];
+    }
+    let apex = [cx as f32, apex_y, cz as f32];
+    for k in 0..SIDES {
+        let j = (k + 1) % SIDES;
+        // Dark steel support trestle core (6 quads).
+        push_tri(ring_leg0[k], ring_leg0[j], ring_leg1[j], steel_rgb, out);
+        push_tri(ring_leg0[k], ring_leg1[j], ring_leg1[k], steel_rgb, out);
+        // Weathered redwood barrel staves (6 quads).
+        push_tri(ring_b0[k], ring_b0[j], ring_b1[j], redwood_rgb, out);
+        push_tri(ring_b0[k], ring_b1[j], ring_b1[k], redwood_rgb, out);
+        // Conical galvanized/shingle tank cap (6 tris).
+        push_tri(ring_b1[k], ring_b1[j], apex, cap_rgb, out);
+    }
+}
+
+/// Emit real 3D projecting cornice overhang rims along up to 2 prominent street-facing non-party
+/// edges of flat-roofed buildings in 256 m cells (top sunlit coping, vertical fascia, darkened eaves
+/// soffit, and watertight end caps; welded to ~8 verts / 8-10 tris per edge in `Far::roof`).
+#[allow(clippy::too_many_arguments)]
+pub fn emit_cornice_rim(
+    ring: &[[f64; 2]],
+    party: &[bool],
+    front_mask: &[bool],
+    top: f64,
+    height: f64,
+    mat_class: u8,
+    wall_rgb: [f32; 3],
+    trim_rgb: [f32; 3],
+    pitched: bool,
+    out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>,
+) {
+    if pitched || height < 9.0 || matches!(mat_class, MAT_CURTAIN_BLUE | MAT_CURTAIN_EMERALD | MAT_CURTAIN_BRONZE) {
+        return;
+    }
+    let gs = eo_data::groundscale::scale().max(1e-3);
+    let true_area = signed_area(ring).abs() / (gs * gs);
+    if true_area < 65.0 {
+        return;
+    }
+    let frames = edge_frames(ring);
+    let has_front = frames.iter().enumerate().any(|(e, &(_, _, len))| !party.get(e).copied().unwrap_or(false) && front_mask.get(e).copied().unwrap_or(false) && len >= 4.5);
+    let mut cands: Vec<(bool, f64, usize)> = frames
+        .iter()
+        .enumerate()
+        .filter(|&(e, &(_, _, len))| {
+            !party.get(e).copied().unwrap_or(false)
+                && len >= 4.5
+                && (!has_front || front_mask.get(e).copied().unwrap_or(false))
+        })
+        .map(|(e, &(_, _, len))| (front_mask.get(e).copied().unwrap_or(false), len, e))
+        .collect();
+    if cands.is_empty() {
+        return;
+    }
+    cands.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.total_cmp(&a.1)));
+
+    let out_m = if height >= 16.0 { 0.58 } else if height >= 12.0 { 0.48 } else { 0.42 };
+    let ch = if height >= 16.0 { 0.62 } else if height >= 12.0 { 0.52 } else { 0.44 };
+    let y_top = (top + 0.14) as f32;
+    let y_bot = (top + 0.14 - ch) as f32;
+    // Blend architectural trim with wall tone so cornices stay crisp and cohesive.
+    let face_rgb = [0, 1, 2].map(|k| (trim_rgb[k] * 0.65 + wall_rgb[k] * 0.35).clamp(0.06, 0.78));
+    let top_rgb = [0, 1, 2].map(|k| (face_rgb[k] * 1.12).min(0.84));
+    let soffit_rgb = mul3(face_rgb, [0.42; 3]);
+    let push_tri = |a: [f32; 3], b: [f32; 3], c: [f32; 3], rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        let p = [a, b, c];
+        let n = face_normal(&p);
+        if n[0] * n[0] + n[1] * n[1] + n[2] * n[2] > 0.25 {
+            out.push((p, n, rgb));
+        }
+    };
+    let push_quad = |a: [f32; 3], b: [f32; 3], c: [f32; 3], d: [f32; 3], rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        push_tri(a, b, c, rgb, out);
+        push_tri(a, c, d, rgb, out);
+    };
+    let n_ring = ring.len();
+    let max_edges = if height >= 14.0 { 2 } else { 1 };
+    for &(_, len, e) in cands.iter().take(max_edges) {
+        let (u, n, _) = frames[e];
+        let a = ring[e];
+        let prev_open = !party.get((e + n_ring - 1) % n_ring).copied().unwrap_or(false);
+        let next_open = !party.get((e + 1) % n_ring).copied().unwrap_or(false);
+        let s0 = if prev_open { -0.14 } else { 0.04 };
+        let s1 = if next_open { len + 0.14 } else { len - 0.04 };
+        if s1 <= s0 + 1.0 {
+            continue;
+        }
+        let pt = |s: f64, d: f64, y: f32| [(a[0] + u[0] * s + n[0] * d) as f32, y, (a[1] + u[1] * s + n[1] * d) as f32];
+        let ib0 = pt(s0, 0.0, y_bot);
+        let ib1 = pt(s1, 0.0, y_bot);
+        let it0 = pt(s0, 0.0, y_top);
+        let it1 = pt(s1, 0.0, y_top);
+        let ob0 = pt(s0, out_m, y_bot);
+        let ob1 = pt(s1, out_m, y_bot);
+        let ot0 = pt(s0, out_m, y_top);
+        let ot1 = pt(s1, out_m, y_top);
+        // Sunlit top coping, projecting front fascia, and darkened underside eaves soffit (6 tris / 8 welded verts).
+        push_quad(it0, it1, ot1, ot0, top_rgb, out);
+        push_quad(ob0, ob1, ot1, ot0, face_rgb, out);
+        push_quad(ib1, ib0, ob0, ob1, soffit_rgb, out);
+    }
+}
+
+/// Emit pitched roof triangles `(tri, outward_normal, linear_rgb)` for a cell mesh (`Far::roof`)
+/// so 256 m cells and 2 km districts show identical 3D silhouettes.
+#[allow(clippy::too_many_arguments)]
+pub fn emit_massing_roof_tris(
+    ring: &[[f64; 2]],
+    group: u32,
+    top: f64,
+    massing: &MassingDesc,
+    wall_rgb: [f32; 3],
+    roof_rgb: [f32; 3],
+    skip_pitched: bool,
+    skip_boxes: bool,
+    out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>,
+) -> bool {
+    let form = massing.form.round() as i32;
+    let forced = (massing.roof_axis.is_finite() && massing.roof_axis.abs() > 1e-5).then_some(massing.roof_axis as f64);
+    let Some(obb) = fit_obb(ring, if matches!(form, 1 | 3) { forced } else { None }) else { return false };
+    let push_tri = |a: [f32; 3], b: [f32; 3], c: [f32; 3], rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        let p = [a, b, c];
+        let n = face_normal(&p);
+        if n[0] * n[0] + n[1] * n[1] + n[2] * n[2] > 0.25 {
+            out.push((p, n, rgb));
+        }
+    };
+    let push_quad = |a: [f32; 3], b: [f32; 3], c: [f32; 3], d: [f32; 3], rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        push_tri(a, b, c, rgb, out);
+        push_tri(a, c, d, rgb, out);
+    };
+    let push_box = |quad: [[f64; 2]; 4], y0: f32, y1: f32, side_rgb: [f32; 3], cap_rgb: [f32; 3], out: &mut Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>| {
+        let mut q = quad;
+        if signed_area(&q) < 0.0 {
+            q.reverse();
+        }
+        let b = q.map(|p| [p[0] as f32, y0, p[1] as f32]);
+        let t = q.map(|p| [p[0] as f32, y1, p[1] as f32]);
+        for i in 0..4 {
+            let j = (i + 1) % 4;
+            push_quad(b[i], b[j], t[j], t[i], side_rgb, out);
+        }
+        push_quad(t[0], t[1], t[2], t[3], cap_rgb, out);
+    };
+
+    let y0 = top as f32;
+    let rise = massing.ridge_rise.max(0.0);
+    let mut emitted_full_pitched = false;
+    if !skip_pitched && rise >= 0.8 && matches!(form, 1..=3 | 6) {
+        if let Some([c0, c1, c2, c3]) = pitched_roof_quad(ring, &obb) {
+            let eave_y = y0 + if obb.fill < 0.90 { 0.05 } else { 0.0 };
+            let yr = eave_y + rise;
+            let p3 = |p: [f64; 2], y: f32| [p[0] as f32, y, p[1] as f32];
+            let slope_rgb = pitched_roof_color(roof_rgb, group, form);
+            let m0 = [0.5 * (c3[0] + c0[0]), 0.5 * (c3[1] + c0[1])];
+            let m1 = [0.5 * (c1[0] + c2[0]), 0.5 * (c1[1] + c2[1])];
+            let u_vec = [m1[0] - m0[0], m1[1] - m0[1]];
+            let u_len = u_vec[0].hypot(u_vec[1]).max(1e-4);
+            let v_vec = [c3[0] - c0[0], c3[1] - c0[1]];
+            let v_len = v_vec[0].hypot(v_vec[1]).max(1e-4);
+            match form {
+                1 => {
+                    // Gable ridge along c0->c1 axis, sloped roof planes + wall-coloured pediment ends.
+                    let shift = (massing.pent_off[0] as f64).clamp(-0.35, 0.35) * 0.5;
+                    let r0 = [m0[0] + v_vec[0] * shift, m0[1] + v_vec[1] * shift];
+                    let r1 = [m1[0] + v_vec[0] * shift, m1[1] + v_vec[1] * shift];
+                    push_quad(p3(c0, eave_y), p3(c1, eave_y), p3(r1, yr), p3(r0, yr), slope_rgb, out);
+                    push_quad(p3(c2, eave_y), p3(c3, eave_y), p3(r0, yr), p3(r1, yr), slope_rgb, out);
+                    push_tri(p3(c3, eave_y), p3(c0, eave_y), p3(r0, yr), wall_rgb, out);
+                    push_tri(p3(c1, eave_y), p3(c2, eave_y), p3(r1, yr), wall_rgb, out);
+                }
+                2 => {
+                    // 4-sided Hip roof: ridge along longer axis, pyramid when nearly square.
+                    let t_inset = (0.42 * v_len / u_len).clamp(0.08, 0.49);
+                    let r0 = [m0[0] + u_vec[0] * t_inset, m0[1] + u_vec[1] * t_inset];
+                    let r1 = [m1[0] - u_vec[0] * t_inset, m1[1] - u_vec[1] * t_inset];
+                    push_quad(p3(c0, eave_y), p3(c1, eave_y), p3(r1, yr), p3(r0, yr), slope_rgb, out);
+                    push_quad(p3(c2, eave_y), p3(c3, eave_y), p3(r0, yr), p3(r1, yr), slope_rgb, out);
+                    push_tri(p3(c3, eave_y), p3(c0, eave_y), p3(r0, yr), slope_rgb, out);
+                    push_tri(p3(c1, eave_y), p3(c2, eave_y), p3(r1, yr), slope_rgb, out);
+                }
+                3 => {
+                    // Mono-pitch shed roof tilting down toward c1/c2.
+                    push_quad(p3(c0, yr), p3(c1, eave_y), p3(c2, eave_y), p3(c3, yr), slope_rgb, out);
+                    push_quad(p3(c3, eave_y), p3(c0, eave_y), p3(c0, yr), p3(c3, yr), wall_rgb, out);
+                    push_tri(p3(c0, eave_y), p3(c1, eave_y), p3(c0, yr), wall_rgb, out);
+                    push_tri(p3(c2, eave_y), p3(c3, eave_y), p3(c3, yr), wall_rgb, out);
+                }
+                6 => {
+                    // Classic SF Mansard roof: steep sloped slate/shingle perimeter skirt + dark flat tar deck.
+                    let iu = (0.26 * v_len / u_len).clamp(0.10, 0.28);
+                    let iv = 0.26;
+                    let lerp2 = |a: [f64; 2], b: [f64; 2], t: f64| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+                    let bilerp = |fu: f64, fv: f64| lerp2(lerp2(c0, c1, fu), lerp2(c3, c2, fu), fv);
+                    let t0 = bilerp(iu, iv);
+                    let t1 = bilerp(1.0 - iu, iv);
+                    let t2 = bilerp(1.0 - iu, 1.0 - iv);
+                    let t3 = bilerp(iu, 1.0 - iv);
+                    let deck_rgb = [0.088, 0.092, 0.098];
+                    push_quad(p3(c0, eave_y), p3(c1, eave_y), p3(t1, yr), p3(t0, yr), slope_rgb, out);
+                    push_quad(p3(c1, eave_y), p3(c2, eave_y), p3(t2, yr), p3(t1, yr), slope_rgb, out);
+                    push_quad(p3(c2, eave_y), p3(c3, eave_y), p3(t3, yr), p3(t2, yr), slope_rgb, out);
+                    push_quad(p3(c3, eave_y), p3(c0, eave_y), p3(t0, yr), p3(t3, yr), slope_rgb, out);
+                    push_quad(p3(t0, yr), p3(t1, yr), p3(t2, yr), p3(t3, yr), deck_rgb, out);
+                }
+                _ => {}
+            }
+            emitted_full_pitched = obb.fill >= 0.78;
+        }
+    }
+
+    if skip_boxes {
+        return emitted_full_pitched;
+    }
+    let mech_wall = mul3(wall_rgb, [0.88, 0.86, 0.83]);
+    let mech_cap = [0.092, 0.096, 0.102];
+    let hvac_wall = [0.50, 0.53, 0.56];
+    let hvac_cap = [0.40, 0.43, 0.46];
+    let crown_wall = mul3(wall_rgb, [0.86, 0.88, 0.90]);
+    match form {
+        4 => {
+            // Stepped setback upper tier + optional mechanical bulkhead above it.
+            let tier_scale = massing.pent_scale.clamp(0.42, 0.80) as f64;
+            let tier_top = y0 + rise.max(2.0);
+            if let Some(q1) = fit_interior_box(ring, &obb, tier_scale, massing.pent_off[0] as f64, massing.pent_off[1] as f64, 1.5) {
+                push_box(q1, y0 - 0.1, tier_top, wall_rgb, roof_rgb, out);
+                if massing.pent_h > 0.8 {
+                    if let Some(q2) = fit_interior_box(&q1, &fit_obb(&q1, None).unwrap_or(obb), 0.45, 0.0, 0.0, 1.0) {
+                        push_box(q2, tier_top - 0.1, tier_top + massing.pent_h, mech_wall, mech_cap, out);
+                    }
+                }
+            }
+        }
+        5 => {
+            // Tall tower stepped crown + rooftop mechanical / elevator core.
+            let crown_top = y0 + rise.max(2.4);
+            let crown_scale = (0.66 + 0.12 * (massing.pent_off[0].abs() as f64)).clamp(0.62, 0.78);
+            if let Some(q1) = fit_interior_box(ring, &obb, crown_scale, 0.0, 0.0, 2.5) {
+                push_box(q1, y0 - 0.15, crown_top, crown_wall, mech_cap, out);
+                if massing.pent_h > 0.8 && massing.pent_scale > 0.15 {
+                    let q1_obb = fit_obb(&q1, None).unwrap_or(obb);
+                    if let Some(q2) = fit_interior_box(&q1, &q1_obb, (massing.pent_scale as f64 / crown_scale).clamp(0.28, 0.68), massing.pent_off[0] as f64, massing.pent_off[1] as f64, 1.5) {
+                        push_box(q2, crown_top - 0.1, crown_top + massing.pent_h, mech_wall, mech_cap, out);
+                    }
+                }
+            }
+        }
+        _ => {
+            // Flat roof with 3D rooftop penthouse / stair bulkhead (+ galvanized HVAC enclosure on wider roofs).
+            if massing.pent_h > 0.8 && massing.pent_scale > 0.15 {
+                if let Some(q) = fit_interior_box(ring, &obb, massing.pent_scale as f64, massing.pent_off[0] as f64, massing.pent_off[1] as f64, 1.1) {
+                    push_box(q, y0 - 0.1, y0 + massing.pent_h, mech_wall, mech_cap, out);
+                }
+                if 4.0 * obb.hu * obb.hv >= 260.0 && massing.pent_h >= 1.7 {
+                    let s2 = (massing.pent_scale as f64 * 0.64).clamp(0.15, 0.28);
+                    let h2 = (massing.pent_h * 0.58).max(1.3);
+                    if let Some(q2) = fit_interior_box(ring, &obb, s2, -massing.pent_off[0] as f64 - 0.18, -massing.pent_off[1] as f64, 1.0) {
+                        push_box(q2, y0 - 0.1, y0 + h2, hvac_wall, hvac_cap, out);
+                    }
+                }
+            }
+        }
+    }
+    emitted_full_pitched
+}
+
+/// Classify a building's architectural material/glazing class (`MAT_*`, 0..7)
+/// for `hlod_draw.wgsl` bits 4..6.
+fn classify_mat_class(arch: &str, wall_mat: &str, glass_mat: &str, system: Option<&str>, tower: bool, group: u32) -> u8 {
+    if tower {
+        if let Some(sys) = system {
+            if sys.contains("granite") || sys.contains("limestone") || sys.contains("masonry") {
+                return MAT_GRANITE;
+            }
+            if sys.contains("precast") || sys.contains("concrete") {
+                return MAT_PRECAST;
+            }
+        }
+        if wall_mat.contains("granite") || wall_mat.contains("limestone") || wall_mat.contains("stone") {
+            return MAT_GRANITE;
+        }
+        if wall_mat.contains("concrete") || wall_mat.contains("precast") {
+            return MAT_PRECAST;
+        }
+        if wall_mat.contains("brick") {
+            return MAT_BRICK;
+        }
+        // Curtain-wall glass towers: varied realistic SF glass families (blue-silver, seafoam/emerald, bronze).
+        let r = massing_hash(group, 71);
+        return if glass_mat.contains("film") || wall_mat.contains("aluminium") || wall_mat.contains("metal") {
+            if r < 0.48 { MAT_CURTAIN_BLUE } else if r < 0.78 { MAT_CURTAIN_EMERALD } else { MAT_CURTAIN_BRONZE }
+        } else if r < 0.55 {
+            MAT_CURTAIN_BLUE
+        } else {
+            MAT_PRECAST
+        };
+    }
+    if wall_mat.contains("wood") || wall_mat.contains("clapboard") || wall_mat.contains("shingle") || arch == "victorian-row" || arch == "cottage-garage" {
+        return MAT_WOOD;
+    }
+    if wall_mat.contains("brick") || arch == "soma-warehouse" {
+        return MAT_BRICK;
+    }
+    if wall_mat.contains("limestone") || wall_mat.contains("granite") || wall_mat.contains("ashlar") {
+        return MAT_GRANITE;
+    }
+    if wall_mat.contains("concrete") || wall_mat.contains("precast") || arch == "civic-concrete" {
+        return MAT_PRECAST;
+    }
+    MAT_DEFAULT
+}
+
+/// Classify whether a building is residential/hotel (bit 7 `VF_RESIDENTIAL = 128`) vs
+/// commercial/office/civic/industrial so night shaders produce authentic multi-temperature SF lighting.
+fn classify_residential(arch: &str, tag: &str, amenity: &str, has_retail_ground: bool, base_y: f64, height: f64, tower: bool) -> bool {
+    let t = tag.trim().to_ascii_lowercase();
+    if matches!(
+        t.as_str(),
+        "apartments" | "residential" | "house" | "terrace" | "detached" | "semidetached_house" | "dormitory" | "hotel" | "bungalow"
+    ) {
+        return true;
+    }
+    if matches!(
+        t.as_str(),
+        "office" | "commercial" | "industrial" | "warehouse" | "retail" | "civic" | "public" | "hospital" | "school" | "university" | "church" | "cathedral" | "stadium" | "train_station"
+    ) {
+        return false;
+    }
+    let am = amenity.trim().to_ascii_lowercase();
+    if matches!(
+        am.as_str(),
+        "bank" | "school" | "university" | "hospital" | "theatre" | "cinema" | "library" | "courthouse" | "police" | "fire_station" | "townhall"
+    ) {
+        return false;
+    }
+    match arch {
+        "victorian-row" | "cottage-garage" | "stucco-row" | "edwardian-flats" | "bay-window-apartment" | "midcentury-stucco" => true,
+        "downtown-tower" | "civic-concrete" | "soma-warehouse" | "industrial-shed" | "retail-strip" => false,
+        _ => !tower && !has_retail_ground && height <= 26.0 && base_y > 14.0,
+    }
+}
+
+/// Resolve 3D roof/setback/penthouse massing for one building, combining:
+/// 1. Measured LiDAR (`eo_data::lidar_buildings::get`) when available;
+/// 2. Existing `eo-kit` pitched/penthouse roof geometry;
+/// 3. Whole-map architectural synthesis (stepped tower crowns, mid-rise mechanical
+///    penthouses, and realistic SF hillside/Victorian pitched roofs).
+#[allow(clippy::too_many_arguments)]
+fn resolve_massing(
+    record_id: &str,
+    group: u32,
+    ring: &[[f64; 2]],
+    base_y: f64,
+    top_y: f64,
+    arch: &str,
+    tower: bool,
+    kit_pitched: bool,
+    kit_roof_peak: f64,
+    kit_has_penthouse: bool,
+    roof_patch_share: f32,
+) -> (MassingDesc, bool /* emit_extra_in_cell */) {
+    let height = (top_y - base_y).max(2.0);
+    let area = signed_area(ring).abs();
+    let Some(obb) = fit_obb(ring, None) else {
+        return (MassingDesc::default(), false);
+    };
+    // Footprint rings are scaled horizontally by groundscale (default 1.25x); unscale before
+    // applying true real-world building area & half-width thresholds (heights are 1:1).
+    let gs = eo_data::groundscale::scale().max(1e-3);
+    let true_area = area / (gs * gs);
+    let true_hv = obb.hv / gs;
+    let h0 = massing_hash(group, 13);
+    let h1 = massing_hash(group, 29);
+    let h2 = massing_hash(group, 47);
+    let h3 = massing_hash(group, 61);
+
+    // 1. Direct USGS 3DEP LiDAR measurement (highest fidelity).
+    if let Some(lm) = eo_data::lidar_buildings::get(record_id) {
+        use eo_data::lidar_buildings::{BOX_SETBACK, RoofForm};
+        let mut desc = MassingDesc::default();
+        match lm.form {
+            RoofForm::Gable => {
+                desc.form = MASSING_GABLE;
+                desc.ridge_rise = (lm.ridge_h - lm.eave_h).clamp(1.0, 6.0);
+                desc.roof_axis = lm.axis_rad;
+                desc.pent_off[0] = (lm.ridge_offset_m as f64 / obb.hv.max(2.0)).clamp(-0.35, 0.35) as f32;
+                return (desc, !kit_pitched);
+            }
+            RoofForm::Hip => {
+                desc.form = MASSING_HIP;
+                desc.ridge_rise = (lm.ridge_h - lm.eave_h).clamp(1.0, 5.5);
+                desc.roof_axis = lm.axis_rad;
+                return (desc, !kit_pitched);
+            }
+            RoofForm::Shed => {
+                desc.form = MASSING_SHED;
+                desc.ridge_rise = (lm.ridge_h - lm.eave_h).clamp(0.9, 4.5);
+                desc.roof_axis = lm.axis_rad;
+                return (desc, !kit_pitched);
+            }
+            RoofForm::Stepped => {
+                desc.form = MASSING_STEPPED;
+                desc.ridge_rise = (lm.ridge_h - lm.eave_h).clamp(2.0, 14.0);
+                if let Some(b0) = lm.boxes().iter().find(|b| b.is_valid() && b.kind == BOX_SETBACK).or_else(|| lm.boxes().first().filter(|b| b.is_valid())) {
+                    let s = eo_data::groundscale::scale();
+                    let frac = (((b0.hx as f64 * s / obb.hu.max(1.0)) + (b0.hz as f64 * s / obb.hv.max(1.0))) * 0.5).clamp(0.35, 0.78);
+                    desc.pent_scale = frac as f32;
+                    desc.pent_off = [
+                        ((b0.dx as f64 * s) / obb.hu.max(2.0)).clamp(-0.32, 0.32) as f32,
+                        ((b0.dz as f64 * s) / obb.hv.max(2.0)).clamp(-0.32, 0.32) as f32,
+                    ];
+                } else {
+                    desc.pent_scale = 0.58;
+                }
+                if let Some(b1) = lm.boxes().get(1).filter(|b| b.is_valid()) {
+                    desc.pent_h = (b1.y1 - b1.y0).clamp(1.4, 5.5);
+                }
+                return (desc, true);
+            }
+            RoofForm::Flat => {
+                desc.form = MASSING_FLAT;
+                if let Some(b0) = lm.boxes().first().filter(|b| b.is_valid()) {
+                    let s = eo_data::groundscale::scale();
+                    let frac = (((b0.hx as f64 * s / obb.hu.max(1.0)) + (b0.hz as f64 * s / obb.hv.max(1.0))) * 0.5).clamp(0.22, 0.55);
+                    desc.pent_scale = frac as f32;
+                    desc.pent_h = (b0.y1 - b0.y0).clamp(1.4, 6.0);
+                    desc.pent_off = [
+                        ((b0.dx as f64 * s) / obb.hu.max(2.0)).clamp(-0.3, 0.3) as f32,
+                        ((b0.dz as f64 * s) / obb.hv.max(2.0)).clamp(-0.3, 0.3) as f32,
+                    ];
+                    return (desc, !kit_has_penthouse);
+                }
+                return (desc, false);
+            }
+        }
+    }
+
+    // 2. Preserve existing eo-kit pitched roof in districts (zero popping across cell -> district!).
+    if kit_pitched {
+        let rise = (kit_roof_peak - top_y).clamp(1.4, 5.5) as f32;
+        let axis = obb.eu[1].atan2(obb.eu[0]) as f32;
+        return (MassingDesc { form: MASSING_GABLE, ridge_rise: rise, roof_axis: axis, ..Default::default() }, false);
+    }
+
+    // 3. Tall skyscrapers & Nob Hill / FiDi high-rises (>= 35 m or `tower`): stepped architectural crown + mechanical yard.
+    if (tower || height >= 35.0) && true_area >= 90.0 {
+        let crown_h = if height >= 90.0 {
+            (4.2 + 4.4 * h0) as f32
+        } else if height >= 55.0 {
+            (3.2 + 3.2 * h0) as f32
+        } else {
+            (2.5 + 2.5 * h0) as f32
+        };
+        let pent_scale = (0.30 + 0.16 * h1) as f32;
+        let pent_h = (2.6 + 2.8 * h2) as f32;
+        let pent_off = [((h3 - 0.5) * 0.36) as f32, ((h1 - 0.5) * 0.32) as f32];
+        let form = if height >= 46.0 || h0 > 0.28 { MASSING_CROWN } else { MASSING_STEPPED };
+        let desc = MassingDesc { form, ridge_rise: crown_h, roof_axis: 0.0, pent_scale, pent_h, pent_off };
+        return (desc, !kit_has_penthouse || form == MASSING_CROWN);
+    }
+
+    // 4. Mid-rise commercial / civic / Nob Hill apartment blocks (16.5 m .. 35 m): stepped upper penthouse or 3D bulkhead.
+    if height >= 16.5 && true_area >= 85.0 {
+        if height >= 20.0 && true_area >= 165.0 && h0 < 0.68 {
+            let desc = MassingDesc {
+                form: MASSING_STEPPED,
+                ridge_rise: (3.2 + 2.0 * h1) as f32,
+                roof_axis: 0.0,
+                pent_scale: (0.54 + 0.18 * h2) as f32,
+                pent_h: (2.3 + 1.6 * h3) as f32,
+                pent_off: [((h1 - 0.5) * 0.24) as f32, ((h2 - 0.5) * 0.24) as f32],
+            };
+            return (desc, !kit_has_penthouse);
+        }
+        let desc = MassingDesc {
+            form: MASSING_FLAT,
+            ridge_rise: 0.0,
+            roof_axis: 0.0,
+            pent_scale: (0.26 + 0.16 * h1) as f32,
+            pent_h: (2.4 + 1.8 * h2) as f32,
+            pent_off: [((h3 - 0.5) * 0.44) as f32, ((h0 - 0.5) * 0.44) as f32],
+        };
+        return (desc, !kit_has_penthouse);
+    }
+
+    // 5. Elongated waterfront pier sheds & low-rise warehouses (Embarcadero piers, SoMa sheds):
+    // low-pitch gabled/hipped roofs or raised clerestory monitors instead of bare flat shoeboxes.
+    let aspect = obb.hu / obb.hv.max(1.0);
+    let warehouse_like = matches!(arch, "soma-warehouse" | "industrial-shed" | "retail-strip" | "");
+    if warehouse_like && height >= 4.5 && height <= 15.0 && true_area >= 220.0 && obb.fill >= 0.74 && aspect >= 1.85 {
+        let axis = obb.eu[1].atan2(obb.eu[0]) as f32;
+        if aspect >= 2.0 && height <= 14.0 && h0 < 0.76 {
+            let rise = (true_hv * (0.17 + 0.09 * h1)).clamp(1.6, 3.4) as f32;
+            let desc = MassingDesc {
+                form: if h2 < 0.45 { MASSING_HIP } else { MASSING_GABLE },
+                ridge_rise: rise,
+                roof_axis: axis,
+                ..Default::default()
+            };
+            return (desc, true);
+        }
+        let desc = MassingDesc {
+            form: MASSING_FLAT,
+            ridge_rise: 0.0,
+            roof_axis: axis,
+            pent_scale: (0.34 + 0.14 * h1) as f32,
+            pent_h: (2.0 + 1.2 * h2) as f32,
+            pent_off: [0.0, 0.0],
+        };
+        return (desc, !kit_has_penthouse);
+    }
+
+    // 6. Residential hills & SF neighborhoods (4.5 .. 21.5 m): authentic SF mix of pitched
+    // hipped/gabled terracotta/slate/shingle roofs + Parisian/Edwardian mansard roofs on
+    // Russian Hill, North Beach, Telegraph Hill, Nob Hill, Pacific Heights, Castro & Twin Peaks.
+    let hillside = base_y > 12.0;
+    let steep_hill = base_y > 38.0;
+    let res_pitched_arch = matches!(
+        arch,
+        "cottage-garage" | "victorian-row" | "stucco-row" | "edwardian-flats" | "bay-window-apartment" | "midcentury-stucco" | ""
+    );
+    let max_res_h = if hillside { 21.5 } else { 17.5 };
+    let compact_limit = if hillside { 420.0 } else if matches!(arch, "edwardian-flats" | "bay-window-apartment" | "midcentury-stucco") { 320.0 } else { 380.0 };
+    let compact_house = true_area >= 30.0 && true_area <= compact_limit && obb.fill >= 0.60 && true_hv >= 2.0 && true_hv <= 12.5;
+    if res_pitched_arch && compact_house && height >= 4.5 && height <= max_res_h {
+        let mut pitch_chance: f64 = match arch {
+            "cottage-garage" => if hillside { 0.80 } else { 0.72 },
+            "victorian-row" => if hillside { 0.78 } else { 0.70 },
+            "edwardian-flats" | "bay-window-apartment" => if hillside { 0.74 } else { 0.24 },
+            "stucco-row" => if hillside { 0.44 } else { 0.11 },
+            "midcentury-stucco" => if hillside { 0.38 } else { 0.10 },
+            _ => if hillside { 0.56 } else { 0.16 },
+        };
+        if steep_hill {
+            pitch_chance += if arch == "stucco-row" { 0.16 } else { 0.18 };
+        }
+        if roof_patch_share >= 0.18 {
+            pitch_chance += 0.14;
+        }
+        if h0 < pitch_chance.min(0.92) {
+            let axis = obb.eu[1].atan2(obb.eu[0]) as f32;
+            let mansard_candidate = hillside && height >= 9.5 && true_area >= 75.0
+                && matches!(arch, "edwardian-flats" | "bay-window-apartment" | "victorian-row" | "stucco-row" | "");
+            if mansard_candidate && (height > 16.5 || h1 < 0.34) {
+                let rise = (1.7 + 1.0 * h2) as f32;
+                let desc = MassingDesc { form: MASSING_MANSARD, ridge_rise: rise, roof_axis: axis, ..Default::default() };
+                return (desc, true);
+            }
+            if height <= 17.5 {
+                let hip = (h1 < 0.58 && aspect < 2.3) || (obb.fill < 0.78 && h1 < 0.72);
+                let slope = if hip { 0.44 + 0.22 * h2 } else { 0.56 + 0.30 * h2 };
+                let rise = if hip {
+                    (true_hv * slope).clamp(1.6, 3.8) as f32
+                } else {
+                    (true_hv * slope).clamp(1.9, 4.4) as f32
+                };
+                let desc = MassingDesc {
+                    form: if hip { MASSING_HIP } else { MASSING_GABLE },
+                    ridge_rise: rise,
+                    roof_axis: axis,
+                    ..Default::default()
+                };
+                return (desc, true);
+            }
+        }
+    }
+
+    // 7. 2-5 storey flat-roof residential/mixed-use blocks (6.8..16.5 m): real 3D rooftop stair/elevator bulkhead.
+    if height >= 6.8 && true_area >= 52.0 && h0 < 0.76 {
+        let desc = MassingDesc {
+            form: MASSING_FLAT,
+            ridge_rise: 0.0,
+            roof_axis: 0.0,
+            pent_scale: (0.21 + 0.14 * h1) as f32,
+            pent_h: (1.9 + 1.4 * h2) as f32,
+            pent_off: [((h3 - 0.5) * 0.46) as f32, ((h1 - 0.5) * 0.46) as f32],
+        };
+        return (desc, !kit_has_penthouse);
+    }
+
+    (MassingDesc::default(), false)
+}
+
+/// One 3D projecting bay-window stack along a building's exterior wall edge (256 m cells).
+/// Front face carries the wall chart's exact atlas UVs so windows, glazing, and night lights stay crisp.
+#[derive(Clone, Copy, Debug)]
+struct BayBox {
+    edge: usize,
+    u0: f64,
+    u1: f64,
+    y0: f64,
+    y1: f64,
+    proj: f64,
+}
+
 /// One building's far form before packing.
 struct Far {
     group: u32,
@@ -651,14 +1798,22 @@ struct Far {
     src: Vec<SrcTri>,
     /// Roof forms kept as geometry: triangle, face normal, linear colour.
     roof: Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>,
+    /// Real 3D projecting bay-window stacks emitted with exact atlas UVs in 256 m cells.
+    bays: Vec<BayBox>,
     wall_rgb: [f32; 3],
     roof_rgb: [f32; 3],
     textured: bool,
     /// the window rhythm (`Rhythm::floats`; zeros: none known) and whether it is a tower.
     rhythm: [f32; 5],
     tower: bool,
+    /// Residential / hotel night-lighting class (`VF_RESIDENTIAL`, bit 7).
+    residential: bool,
     /// the measured second colour patch and the parapet band.
     roofs: RoofCap,
+    /// 3D roof/setback/penthouse massing mirrored in districts.
+    massing: MassingDesc,
+    /// Architectural facade material/glazing class (`MAT_*`, 0..7).
+    mat_class: u8,
 }
 
 /// a building's window rhythm as the far shader draws it where the
@@ -692,8 +1847,9 @@ impl Rhythm {
             v.sort_by(|a, b| a.total_cmp(b));
             Some(v[v.len() / 2])
         }
+        let base_y = if plan.base_y.is_finite() { plan.base_y } else { 0.0 };
         let upper: Vec<f64> = plan.storeys.iter().filter(|s| s.index >= 1).map(|s| s.height).collect();
-        let storey = median(if upper.is_empty() { plan.storeys.iter().map(|s| s.height).collect() } else { upper })?;
+        let mut storey = median(if upper.is_empty() { plan.storeys.iter().map(|s| s.height).collect() } else { upper })?;
         let outside = || plan.edges.iter().filter(|e| !e.party);
         let bay = median(outside().flat_map(|e| e.bays.iter().map(|b| b.width)).filter(|w| *w > 0.3).collect())?;
         let multi = plan.storeys.len() > 1;
@@ -702,8 +1858,27 @@ impl Rhythm {
             .filter(|o| (!multi || o.storey >= 1) && !o.type_.contains("door") && !o.type_.contains("garage") && !o.type_.contains("entry"))
             .collect();
         let w = median(windows.iter().map(|o| o.s1 - o.s0).collect())?;
-        let h = median(windows.iter().map(|o| o.y1 - o.y0).collect())?;
-        let sill = median(windows.iter().map(|o| o.y0).collect())?;
+        let mut h = median(windows.iter().map(|o| o.y1 - o.y0).collect())?;
+        let mut sill = base_y + median(windows.iter().map(|o| o.y0).collect())?;
+        // For multi-floor downtown towers (`downtown_tower.rs`), use the exact planned
+        // `floorHeight`, `spandrelBand`, and `shaftIndex` so district `hl_window_grid` stays
+        // strictly in-phase with the baked cell atlas across all floors (zero cross-fade zebra!).
+        if let Some(arch) = plan.extra.get("archetype") {
+            if let Some(fh) = arch.get("floorHeight").and_then(|v| v.as_f64()).filter(|&x| x.is_finite() && x > 2.0) {
+                storey = fh;
+                let band = arch.get("spandrelBand").and_then(|v| v.as_f64()).filter(|&x| x.is_finite() && x > 0.05 && x < fh - 0.25);
+                if let Some(b) = band {
+                    h = (fh - b).clamp(0.15 * fh, 0.95 * fh);
+                }
+                if let Some(si) = arch.get("shaftIndex").and_then(|v| v.as_i64()).filter(|&i| i >= 0) {
+                    if let Some(shaft) = plan.storeys.get(si as usize) {
+                        // `downtown_tower.rs` places floor spandrel bands at `shaft_y0 + fh*i - 0.58*band .. + 0.42*band`.
+                        let b = band.unwrap_or(0.0);
+                        sill = base_y + shaft.y0 + 0.42 * b;
+                    }
+                }
+            }
+        }
         Self::from_medians(storey, bay, w, h, sill)
     }
 
@@ -779,15 +1954,17 @@ fn roof_patch(m: &eo_data::roof_colours::RoofMeasure, w: f32) -> Option<([f32; 3
     Some((eo_kit::roof_measured::neutral(eo_data::roof_colours::rgb8_linear(m.second)), [d[0] / len, d[1] / len], m.second_share.min(0.6)))
 }
 
-/// rung 2 roof plant kinds of which the largest two per building are kept in the far mesh.
+/// rung 2 roof plant kinds of which the largest two substantial units (>= 1.5 m²) per building
+/// are kept in the far mesh (sub-pixel mini-splits & thin rails stay in near kit rungs).
 const FAR_PLANT_KINDS: [&str; 3] = ["roof-plant", "roof-hatch", "roof-duct"];
 const FAR_PLANT_KEEP: usize = 2;
+const FAR_PLANT_MIN_AREA_M2: f32 = 1.5;
 
 /// Roof forms kept as geometry in the far mesh (rung 2 parts of these kinds).
 pub fn is_roof_form(kind: &str) -> bool {
     matches!(
         kind,
-        "roof-slope" | "roof-gable" | "gable" | "gable-infill" | "pediment" | "hip" | "pitch" | "tower" | "crown" | "crown-fin" | "roof-penthouse" | "roof-bulkhead" | "roof-monitor" | "roof-monitor-cap" | "roof-monitor-glass"
+        "roof-slope" | "roof-gable" | "gable" | "gable-infill" | "gable-rake" | "pediment" | "hip" | "pitch" | "chimney" | "cooling-tower" | "tower" | "crown" | "crown-fin" | "roof-penthouse" | "roof-bulkhead" | "roof-monitor" | "roof-monitor-cap" | "roof-monitor-glass"
     )
 }
 
@@ -823,11 +2000,34 @@ fn plain_far(ctx: &BakeContext, b: u32, group: u32) -> Far {
     let n = ring.len();
     let mut roof_rgb = mul3(wall, [0.8; 3]);
     let mut roofs = RoofCap::default();
+    let mut patch_share = 0.0f32;
     if let Some((m, w)) = roof_measure(ctx, b) {
         roof_rgb = measured_roof(roof_rgb, wall, &m, w);
         roofs.patch = roof_patch(&m, w);
+        patch_share = m.second_share;
     }
-    Far { group, building: b, ring, party: vec![false; n], bottom: base, top: base + bld.height as f64, src: vec![], roof: vec![], wall_rgb: wall, roof_rgb, textured: false, rhythm: [0.0; 5], tower: false, roofs }
+    let top = base + bld.height as f64;
+    let height = (top - base).max(2.0);
+    let tower = bld.height as f64 >= TOWER_MIN_M;
+    let residential = classify_residential("", &bld.tags.building, &bld.tags.amenity, false, base, height, tower);
+    let (massing, emit_extra) = resolve_massing(&bld.id, group, &ring, base, top, "", tower, false, top, false, patch_share);
+    let mat_class = classify_mat_class("", "", "", None, tower, group);
+    let mut roof = vec![];
+    if emit_extra {
+        if emit_massing_roof_tris(&ring, group, top, &massing, wall, roof_rgb, false, false, &mut roof) {
+            roofs.pitched = true;
+        }
+    }
+    let party = vec![false; n];
+    let front_mask = vec![false; n];
+    let trim_rgb = [0, 1, 2].map(|k| (wall[k] * 1.12).min(0.76));
+    emit_cornice_rim(&ring, &party, &front_mask, top, height, mat_class, wall, trim_rgb, roofs.pitched, &mut roof);
+    emit_water_tank(&ring, group, top, height, mat_class, &massing, &mut roof);
+    enrich_flat_roof(&mut roof_rgb, &mut roofs, &ring, group);
+    if !roofs.pitched {
+        emit_flat_roof_detail(&ring, group, base, top, &massing, &mut roof);
+    }
+    Far { group, building: b, ring, party, bottom: base, top, src: vec![], roof, bays: vec![], wall_rgb: wall, roof_rgb, textured: false, rhythm: [0.0; 5], tower, residential, roofs, massing, mat_class }
 }
 
 fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
@@ -848,6 +2048,7 @@ fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
     let parts = kp::rung_parts(&planned, 2);
     let mut clamp = eo_kit::mesh::Clamp::new(&planned.plan, &planned.frame);
     let wall = drawn.materials.get("wall").cloned().unwrap_or_else(|| "brick-running-bond".into());
+    let glass_name = drawn.materials.get("glass").cloned().unwrap_or_default();
     let fallback = *set.palette_index.get("painted-stucco").unwrap_or(&0);
     let colour_of = |name: &str| -> ([f32; 3], bool) {
         let pal = set.palette_index.get(kp::base_material_name(name)).copied().unwrap_or(fallback);
@@ -862,6 +2063,8 @@ fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
     let mut src = vec![];
     let mut roof = vec![];
     let mut wall_top = f64::MIN;
+    let mut kit_roof_peak = f64::MIN;
+    let mut kit_has_penthouse = false;
     let mut sink = eo_kit::mesh::Sink::default();
     // the measured roof colour exactly on the roof slots (the near tint
     // reaches it only through the finish's nominal colour), the largest plant kept.
@@ -869,6 +2072,7 @@ fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
     let measured_rgb = measured.map(|(m, w)| (m, w, measured_roof(colour_of(&wall).0, colour_of(&wall).0, &m, 1.0)));
     let plant_on = eo_data::roof_colours::feature_on("plant");
     let mut plant: Vec<(f32, Vec<([[f32; 3]; 3], [f32; 3], [f32; 3])>)> = vec![];
+    let mut raw_bays: Vec<(Option<usize>, Vec<[f32; 3]>)> = vec![];
     let mut pitched = false;
     for part in &parts {
         let name = drawn.materials.get(&part.slot).cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| wall.clone());
@@ -880,6 +2084,9 @@ fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
         if is_wall_kind(&part.kind) {
             wall_top = wall_top.max(part.y1);
         }
+        if part.kind == "bay" && !sink.positions.is_empty() {
+            raw_bays.push((part.edge, sink.positions.iter().map(|q| [q[0] as f32, q[1] as f32, q[2] as f32]).collect()));
+        }
         let form = is_roof_form(&part.kind);
         // a roof-slot form takes the measured colour (blended by confidence).
         if let Some((_, w, target)) = measured_rgb {
@@ -887,7 +2094,13 @@ fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
                 rgb = [0, 1, 2].map(|k| rgb[k] + (target[k] - rgb[k]) * w);
             }
         }
-        pitched |= matches!(part.kind.as_str(), "roof-slope" | "roof-gable" | "gable" | "hip" | "pitch");
+        if matches!(part.kind.as_str(), "roof-slope" | "roof-gable" | "gable" | "hip" | "pitch") {
+            pitched = true;
+            kit_roof_peak = kit_roof_peak.max(part.y1);
+        }
+        if matches!(part.kind.as_str(), "roof-penthouse" | "roof-bulkhead" | "cooling-tower" | "tower" | "crown") {
+            kit_has_penthouse = true;
+        }
         let kept_plant = plant_on && FAR_PLANT_KINDS.contains(&part.kind.as_str());
         let mut plant_tris = vec![];
         let mut plant_area = 0f32;
@@ -898,22 +2111,28 @@ fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
             });
             let n = sink.normals[t[0] as usize];
             src.push(SrcTri { p, n, rgb, glass, two_sided: false });
+            // Skip strictly downward-facing flat undersides (n.y < -0.85) of roof boxes/slabs resting on the cap.
             if form {
-                roof.push((p, n, rgb));
+                if n[1] >= -0.85 {
+                    roof.push((p, n, rgb));
+                }
             } else if kept_plant {
                 if n[1] > 0.7 {
                     let a = glam::Vec3::from(p[0]);
                     plant_area += 0.5 * (glam::Vec3::from(p[1]) - a).cross(glam::Vec3::from(p[2]) - a).length();
                 }
-                plant_tris.push((p, n, rgb));
+                if n[1] >= -0.85 {
+                    plant_tris.push((p, n, rgb));
+                }
             }
         }
-        if !plant_tris.is_empty() {
+        if !plant_tris.is_empty() && plant_area >= FAR_PLANT_MIN_AREA_M2 {
             plant.push((plant_area, plant_tris));
         }
     }
     // the largest roof plant (by plan area) stays as boxes in the far mesh.
     plant.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    let kept_plant_count = plant.len().min(FAR_PLANT_KEEP);
     for (_, tris) in plant.into_iter().take(FAR_PLANT_KEEP) {
         roof.extend(tris);
     }
@@ -937,30 +2156,202 @@ fn kit_far(ctx: &BakeContext, b: u32, group: u32) -> Option<Far> {
     let top = if wall_top > base_y + 1.0 { wall_top.min(roof_top + 0.3) } else { roof_top };
     let top = top.max(base_y + 2.0);
     let frame = &planned.frame;
-    let (ring, party): (Vec<[f64; 2]>, Vec<bool>) = match &frame.source_polygon {
-        Some(p) if p.len() >= 3 => {
-            let r = open_ring(p.iter().map(|q| [q.x, q.z]).collect());
-            let n = r.len();
-            (r, vec![false; n])
-        }
-        _ => (frame.edges.iter().map(|e| [e.start.x, e.start.z]).collect(), frame.edges.iter().map(|e| e.party).collect()),
+    // Prefer `frame.edges` — the exact regularized wall outline that eo-kit renders in Rung 0 & Rung 2 —
+    // so HLOD cells align to 0.00 m against Kit Rung 2 during cross-fade (no overlap stipple) and
+    // preserve `e.party` flags to save atlas pages & cell vertices.
+    let (ring, party, front_mask): (Vec<[f64; 2]>, Vec<bool>, Vec<bool>) = if frame.edges.len() >= 3 {
+        (
+            frame.edges.iter().map(|e| [e.start.x, e.start.z]).collect(),
+            frame.edges.iter().map(|e| e.party).collect(),
+            frame.edges.iter().map(|e| matches!(e.role, "front" | "front-secondary")).collect(),
+        )
+    } else if let Some(p) = &frame.source_polygon {
+        let r = open_ring(p.iter().map(|q| [q.x, q.z]).collect());
+        let n = r.len();
+        (r, vec![false; n], vec![false; n])
+    } else {
+        return None;
     };
     if ring.len() < 3 {
         return None;
     }
     let (wall_rgb, _) = colour_of(&wall);
+    let trim_name = drawn
+        .materials
+        .get("trim")
+        .or_else(|| drawn.materials.get("cornice"))
+        .or_else(|| drawn.materials.get("coping"))
+        .cloned()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| wall.clone());
+    let (trim_rgb, _) = colour_of(&trim_name);
     let roof_name = drawn.materials.get("roof").cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| wall.clone());
     let (mut roof_rgb, _) = colour_of(&roof_name);
     let mut roofs = RoofCap { pitched, ..Default::default() };
+    let mut patch_share = 0.0f32;
     if let Some((m, w, _)) = measured_rgb {
         roof_rgb = measured_roof(roof_rgb, wall_rgb, &m, w);
         roofs.patch = roof_patch(&m, w);
+        patch_share = m.second_share;
     }
-    // the window rhythm and the tower flag.
+    // the window rhythm, tower flag, material class, and residential night-lighting class.
     let rhythm = Rhythm::of_plan(&planned.plan).map(|r| r.floats()).unwrap_or([0.0; 5]);
     let arch = planned.classified.archetype;
-    let tower = arch == "downtown-tower" || (arch == "civic-concrete" && top - base_y >= TOWER_MIN_M);
-    Some(Far { group, building: b, ring, party, bottom, top, src, roof, wall_rgb, roof_rgb, textured: true, rhythm, tower, roofs })
+    let height = (top - base_y).max(2.0);
+    let tower = arch == "downtown-tower" || (arch == "civic-concrete" && height >= TOWER_MIN_M);
+    let residential = classify_residential(
+        arch,
+        &planned.classified.tag,
+        &planned.classified.amenity,
+        planned.classified.has_retail_ground,
+        base_y,
+        height,
+        tower,
+    );
+    let system = planned.plan.extra.get("archetype").and_then(|a| a.get("system")).and_then(|v| v.as_str());
+    let mat_class = classify_mat_class(arch, &wall, &glass_name, system, tower, group);
+    let peak = if kit_roof_peak > top { kit_roof_peak } else { top + 2.0 };
+    let (massing, emit_extra) = resolve_massing(&rec.key, group, &ring, base_y, top, arch, tower, pitched, peak, kit_has_penthouse, patch_share);
+    if emit_extra {
+        if emit_massing_roof_tris(&ring, group, top, &massing, wall_rgb, roof_rgb, pitched, kit_has_penthouse && massing.form != MASSING_CROWN, &mut roof) {
+            roofs.pitched = true;
+        }
+    }
+    // Projecting 3D cornice overhang rims on prominent street-facing flat-roofed elevations & SF redwood water tanks.
+    emit_cornice_rim(&ring, &party, &front_mask, top, height, mat_class, wall_rgb, trim_rgb, roofs.pitched, &mut roof);
+    emit_water_tank(&ring, group, top, height, mat_class, &massing, &mut roof);
+    // Extract real 3D bay-window stacks from eo-kit Rung 2 `"bay"` geometry (0.00 m parity with Kit R2!)
+    // + subtle architectural fallback bays on prominent hillside Victorian/Edwardian/apartment frontages.
+    let eframes = edge_frames(&ring);
+    let mut bays: Vec<BayBox> = vec![];
+    for (edge_hint, pts) in &raw_bays {
+        if pts.is_empty() {
+            continue;
+        }
+        let mut cx = 0.0f64;
+        let mut cz = 0.0f64;
+        for q in pts {
+            cx += q[0] as f64;
+            cz += q[2] as f64;
+        }
+        cx /= pts.len() as f64;
+        cz /= pts.len() as f64;
+        let edge_idx = edge_hint.filter(|&e| e < ring.len() && !party[e] && front_mask[e]).or_else(|| {
+            let mut best: Option<(f64, usize)> = None;
+            for (e, &(u, n, len)) in eframes.iter().enumerate() {
+                if party[e] || !front_mask[e] || len < 3.0 {
+                    continue;
+                }
+                let (rx, rz) = (cx - ring[e][0], cz - ring[e][1]);
+                let uu = rx * u[0] + rz * u[1];
+                let dd = rx * n[0] + rz * n[1];
+                if uu >= -0.5 && uu <= len + 0.5 && (-0.25..=1.8).contains(&dd) {
+                    let score = dd.abs();
+                    if best.is_none_or(|(bs, _)| score < bs) {
+                        best = Some((score, e));
+                    }
+                }
+            }
+            best.map(|(_, e)| e)
+        });
+        let Some(e) = edge_idx else { continue };
+        let (u, n, len) = eframes[e];
+        let a = ring[e];
+        let (mut u0, mut u1, mut y0, mut y1, mut dmax) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MIN);
+        for q in pts {
+            let (rx, rz) = (q[0] as f64 - a[0], q[2] as f64 - a[1]);
+            let uu = rx * u[0] + rz * u[1];
+            let dd = rx * n[0] + rz * n[1];
+            u0 = u0.min(uu);
+            u1 = u1.max(uu);
+            y0 = y0.min(q[1] as f64);
+            y1 = y1.max(q[1] as f64);
+            dmax = dmax.max(dd);
+        }
+        let u0 = u0.max(0.15);
+        let u1 = u1.min(len - 0.15);
+        let y0 = y0.max(bottom + 0.2);
+        let y1 = y1.min(top - 0.1);
+        if dmax >= 0.42 && u1 - u0 >= 1.6 && y1 - y0 >= 3.4 {
+            let cand = BayBox { edge: e, u0, u1, y0, y1, proj: dmax.clamp(0.45, 0.90) };
+            // Merge vertically stacked bays along the same horizontal window column.
+            if let Some(ex) = bays.iter_mut().find(|b| {
+                b.edge == cand.edge && {
+                    let ov = b.u1.min(cand.u1) - b.u0.max(cand.u0);
+                    let mw = (b.u1 - b.u0).min(cand.u1 - cand.u0);
+                    ov >= 0.45 * mw
+                }
+            }) {
+                ex.u0 = ex.u0.min(cand.u0);
+                ex.u1 = ex.u1.max(cand.u1);
+                ex.y0 = ex.y0.min(cand.y0);
+                ex.y1 = ex.y1.max(cand.y1);
+                ex.proj = ex.proj.max(cand.proj);
+            } else {
+                bays.push(cand);
+            }
+        }
+    }
+    if bays.is_empty()
+        && matches!(arch, "victorian-row" | "edwardian-flats" | "bay-window-apartment")
+        && height >= 9.5
+        && (base_y > 16.0 || height >= 12.5)
+    {
+        if let Some((e, &(_, _, len))) = eframes
+            .iter()
+            .enumerate()
+            .filter(|&(e, &(_, _, len))| !party[e] && front_mask[e] && len >= 7.0)
+            .max_by(|a, b| a.1.2.total_cmp(&b.1.2))
+        {
+            let by0 = (base_y + 3.2).min(top - 3.4);
+            let by1 = (top - 0.55).max(by0 + 3.0);
+            if by1 > by0 + 3.0 {
+                if len >= 14.0 {
+                    let bw = (len * 0.22).clamp(2.4, 3.2);
+                    for frac in [0.28, 0.72] {
+                        let c = len * frac;
+                        bays.push(BayBox { edge: e, u0: (c - 0.5 * bw).max(0.4), u1: (c + 0.5 * bw).min(len - 0.4), y0: by0, y1: by1, proj: 0.50 });
+                    }
+                } else {
+                    let bw = (len * 0.34).clamp(2.2, 3.0);
+                    let c = len * 0.5;
+                    bays.push(BayBox { edge: e, u0: (c - 0.5 * bw).max(0.4), u1: (c + 0.5 * bw).min(len - 0.4), y0: by0, y1: by1, proj: 0.50 });
+                }
+            }
+        }
+    }
+    let max_bays = if height >= 13.0 { 2 } else { 1 };
+    if bays.len() > max_bays {
+        bays.sort_by(|a, b| ((b.u1 - b.u0) * (b.y1 - b.y0)).total_cmp(&((a.u1 - a.u0) * (a.y1 - a.y0))));
+        bays.truncate(max_bays);
+    }
+    // Emit welded bay-hood top caps (& bottom soffits on tall cantilevers) into `roof`.
+    let bay_top_rgb = [0, 1, 2].map(|k| (trim_rgb[k] * 0.70 + wall_rgb[k] * 0.30).clamp(0.06, 0.80));
+    let bay_bot_rgb = mul3(bay_top_rgb, [0.44; 3]);
+    for bay in &bays {
+        let (u, n, _) = eframes[bay.edge];
+        let a = ring[bay.edge];
+        let pt = |s: f64, d: f64, y: f64| [(a[0] + u[0] * s + n[0] * d) as f32, y as f32, (a[1] + u[1] * s + n[1] * d) as f32];
+        let t0 = pt(bay.u0, 0.0, bay.y1);
+        let t1 = pt(bay.u1, 0.0, bay.y1);
+        let t2 = pt(bay.u1, bay.proj, bay.y1);
+        let t3 = pt(bay.u0, bay.proj, bay.y1);
+        roof.push(([t0, t1, t2], [0.0, 1.0, 0.0], bay_top_rgb));
+        roof.push(([t0, t2, t3], [0.0, 1.0, 0.0], bay_top_rgb));
+        if bay.y0 > bottom + 2.4 && bay.proj >= 0.52 {
+            let b0 = pt(bay.u0, 0.0, bay.y0);
+            let b1 = pt(bay.u1, 0.0, bay.y0);
+            let b2 = pt(bay.u1, bay.proj, bay.y0);
+            let b3 = pt(bay.u0, bay.proj, bay.y0);
+            roof.push(([b1, b0, b3], [0.0, -1.0, 0.0], bay_bot_rgb));
+            roof.push(([b1, b3, b2], [0.0, -1.0, 0.0], bay_bot_rgb));
+        }
+    }
+    enrich_flat_roof(&mut roof_rgb, &mut roofs, &ring, group);
+    if !roofs.pitched && !kit_has_penthouse && kept_plant_count == 0 {
+        emit_flat_roof_detail(&ring, group, base_y, top, &massing, &mut roof);
+    }
+    Some(Far { group, building: b, ring, party, bottom, top, src, roof, bays, wall_rgb, roof_rgb, textured: true, rhythm, tower, residential, roofs, massing, mat_class })
 }
 
 fn blender_far(ctx: &BakeContext, b: u32, group: u32, k: u32) -> Option<Far> {
@@ -1000,11 +2391,19 @@ fn blender_far(ctx: &BakeContext, b: u32, group: u32, k: u32) -> Option<Far> {
     let avg = |a: [f32; 3], w: f32| if w > 0.0 { [a[0] / w, a[1] / w, a[2] / w] } else { [0.45; 3] };
     let (wall_rgb, mut roof_rgb) = (avg(wall_acc, wall_w), avg(roof_acc, roof_w));
     let mut roofs = RoofCap { pitched: true, ..Default::default() }; // the model draws its own roof edge
+    let mut patch_share = 0.0f32;
     if let Some((m, w)) = roof_measure(ctx, b) {
         roof_rgb = measured_roof(roof_rgb, wall_rgb, &m, w); // the cap of a hand-built building
         roofs.patch = roof_patch(&m, w);
+        patch_share = m.second_share;
     }
-    Some(Far { group, building: b, ring, party: vec![false; n], bottom: base, top: base + bld.height as f64, src, roof: vec![], wall_rgb, roof_rgb, textured: true, rhythm: [0.0; 5], tower: bld.height as f64 >= TOWER_MIN_M * 2.0, roofs })
+    let top = base + bld.height as f64;
+    let height = (top - base).max(2.0);
+    let tower = bld.height as f64 >= TOWER_MIN_M * 2.0;
+    let residential = classify_residential("", &bld.tags.building, &bld.tags.amenity, false, base, height, tower);
+    let (massing, _) = resolve_massing(&bld.id, group, &ring, base, top, "", tower, false, top, true, patch_share);
+    let mat_class = classify_mat_class("", "", "", None, tower, group);
+    Some(Far { group, building: b, ring, party: vec![false; n], bottom: base, top, src, roof: vec![], bays: vec![], wall_rgb, roof_rgb, textured: true, rhythm: [0.0; 5], tower, residential, roofs, massing, mat_class })
 }
 
 /// One wall chart: a stretch of a footprint edge between two heights.
@@ -1055,11 +2454,20 @@ fn make_charts(fars: &[Far], texel: f64, party_scale: f64) -> Vec<Chart> {
         }
         let frames = edge_frames(&f.ring);
         let height = (f.top - f.bottom).max(0.1);
+        // Adaptive facade atlas budget: give tall skyline towers finer texels for crisp
+        // mullions/spandrels/mechanical bands, and tiny low sheds coarser texels.
+        let height_scale = if f.tower || height >= 30.0 {
+            0.78
+        } else if height < 5.0 {
+            1.5
+        } else {
+            1.0
+        };
         for (e, &(_, _, len)) in frames.iter().enumerate() {
             if len < 0.05 {
                 continue;
             }
-            let t = if f.party.get(e).copied().unwrap_or(false) { texel * party_scale } else { texel };
+            let t = if f.party.get(e).copied().unwrap_or(false) { texel * party_scale } else { texel * height_scale };
             let w = ((len / t).ceil() as usize).max(1);
             let h = ((height / t).ceil() as usize).max(1);
             let (nu, nv) = (w.div_ceil(inner), h.div_ceil(inner));
@@ -1085,37 +2493,69 @@ fn make_charts(fars: &[Far], texel: f64, party_scale: f64) -> Vec<Chart> {
     out
 }
 
-/// Shelf packing: tallest first. Returns the page count.
+/// Best-fit shelf packing (tallest first, reuses earlier shelves with room). Returns the page count.
 fn pack(charts: &mut [Chart]) -> usize {
+    struct Shelf {
+        page: usize,
+        y: usize,
+        h: usize,
+        x: usize,
+    }
     let mut order: Vec<usize> = (0..charts.len()).collect();
     order.sort_by(|&a, &b| (charts[b].h, charts[b].w).cmp(&(charts[a].h, charts[a].w)));
-    let (mut page, mut x, mut y, mut shelf) = (0usize, 0usize, 0usize, 0usize);
+    let mut shelves: Vec<Shelf> = vec![];
+    let mut page_y: Vec<usize> = vec![0];
     let mut used = false;
     for k in order {
         let (w, h) = (charts[k].w + 2 * PAD, charts[k].h + 2 * PAD);
-        if x + w > PAGE {
-            y += shelf;
-            x = 0;
-            shelf = 0;
+        // Prefer an existing shelf whose height matches closely and has horizontal room.
+        let mut best_shelf: Option<(usize, usize)> = None;
+        for (si, sh) in shelves.iter().enumerate() {
+            if h <= sh.h && sh.x + w <= PAGE {
+                let waste = sh.h - h;
+                if best_shelf.is_none_or(|(bw, _)| waste < bw) {
+                    best_shelf = Some((waste, si));
+                    if waste == 0 {
+                        break;
+                    }
+                }
+            }
         }
-        if y + h > PAGE {
-            page += 1;
-            x = 0;
-            y = 0;
-            shelf = 0;
+        if let Some((_, si)) = best_shelf {
+            let sh = &mut shelves[si];
+            charts[k].page = sh.page;
+            charts[k].x = sh.x;
+            charts[k].y = sh.y;
+            sh.x += w;
+            used = true;
+            continue;
         }
-        charts[k].page = page;
-        charts[k].x = x;
+        // Open a new shelf on the earliest page with enough vertical space.
+        let target_page = page_y.iter().position(|&py| py + h <= PAGE).unwrap_or_else(|| {
+            page_y.push(0);
+            page_y.len() - 1
+        });
+        let y = page_y[target_page];
+        page_y[target_page] += h;
+        charts[k].page = target_page;
+        charts[k].x = 0;
         charts[k].y = y;
+        shelves.push(Shelf { page: target_page, y, h, x: w });
         used = true;
-        x += w;
-        shelf = shelf.max(h);
     }
-    if used { page + 1 } else { 0 }
+    if used { page_y.len() } else { 0 }
 }
 
 fn recess_shade(d: f64) -> f32 {
-    if d < -0.04 { 1.0 - 0.5 * ((-d - 0.04) / 0.5).clamp(0.0, 1.0) as f32 } else { 1.0 }
+    if d < -0.04 {
+        // Deeper mullion/reveal contrast so recessed windows stay crisp through BC3 + mips.
+        1.0 - 0.56 * ((-d - 0.04) / 0.45).clamp(0.0, 1.0) as f32
+    } else if d > 0.05 {
+        // Subtle relief lift on projecting spandrel bands, cornices, and pilasters.
+        1.0 + 0.06 * ((d - 0.05) / 0.25).clamp(0.0, 1.0) as f32
+    } else {
+        1.0
+    }
 }
 
 /// Capture one chart of `far` into `page` (its interior at `(px, py)`).
@@ -1228,7 +2668,7 @@ fn capture_chart(page: &mut [u8], c: &Chart, far: &Far, frame: ([f64; 2], [f64; 
 
 /// the parapet band's width (metres) and its shade (a multiply on the roof colour).
 const PARAPET_BAND: (f64, f64) = (0.45, 0.9);
-const PARAPET_SHADE: f32 = 0.6;
+const PARAPET_SHADE: f32 = 0.48;
 /// the band lies this far above the cap (no depth fight at a kilometre).
 const PARAPET_LIFT_M: f64 = 0.06;
 
@@ -1357,11 +2797,11 @@ fn roof_cap(f: &Far, vertices: &mut Vec<HlodVertex>, indices: &mut Vec<u32>, ear
     mean
 }
 
-fn pack_normal(n: [f32; 3], page: u32) -> u32 {
+pub(crate) fn pack_normal(n: [f32; 3], page: u32) -> u32 {
     eo_assets::glb::pack_normal(glam::Vec3::from(n)) | ((page & 255) << 24)
 }
 
-fn srgb_word(c: [f32; 3], flags: u32) -> u32 {
+pub(crate) fn srgb_word(c: [f32; 3], flags: u32) -> u32 {
     linear_to_srgb_byte(c[0]) as u32 | ((linear_to_srgb_byte(c[1]) as u32) << 8) | ((linear_to_srgb_byte(c[2]) as u32) << 16) | ((flags & 255) << 24)
 }
 
@@ -1372,6 +2812,8 @@ fn uv_word(u: f64, v: f64) -> u32 {
 
 /// Bake one cell (no cache).
 pub fn bake_cell(ctx: &BakeContext, cell: u32) -> BakedCell {
+    // Ensure LiDAR building massing is lazily installed if external/lidar/ exists.
+    eo_data::lidar_buildings::install(&ctx.repo_root, ctx.cache_dir.as_deref());
     let t0 = Instant::now();
     let c = &ctx.set.cells[cell as usize];
     let mut stats = CellStats::default();
@@ -1482,7 +2924,9 @@ pub fn bake_cell(ctx: &BakeContext, cell: u32) -> BakedCell {
     for (fi, f) in fars.iter().enumerate() {
         let frames = &frames[fi];
         let tower_flag = if f.tower { VF_TOWER } else { 0 };
-        let wall_word = srgb_word(f.wall_rgb, if f.textured { VF_TEXTURED } else { 0 } | tower_flag);
+        let mat_bits = ((f.mat_class as u32) & 7) << VF_MAT_SHIFT;
+        let res_flag = if f.residential { VF_RESIDENTIAL } else { 0 };
+        let wall_word = srgb_word(f.wall_rgb, if f.textured { VF_TEXTURED } else { 0 } | tower_flag | mat_bits | res_flag);
         let at = |e: usize, s: f64, y: f64| -> [f32; 3] {
             let a = f.ring[e];
             let u = frames[e].0;
@@ -1491,7 +2935,7 @@ pub fn bake_cell(ctx: &BakeContext, cell: u32) -> BakedCell {
         if f.textured {
             for &k in &by_far[fi] {
                 let ch = &charts[k];
-                let (_, n, _) = frames[ch.edge];
+                let (u, n, _) = frames[ch.edge];
                 let nrm = pack_normal([n[0] as f32, 0.0, n[1] as f32], ch.page as u32);
                 let (x0, y0) = ((ch.x + PAD) as f64, (ch.y + PAD) as f64);
                 let (x1, y1) = (x0 + ch.w as f64, y0 + ch.h as f64);
@@ -1506,6 +2950,66 @@ pub fn bake_cell(ctx: &BakeContext, cell: u32) -> BakedCell {
                         v(at(ch.edge, ch.u0, ch.v0), uv_word(x0, y1)),
                     ],
                 );
+                // Real 3D projecting bay-window stacks mapped directly to the chart's atlas UVs
+                // (crisp windows + grazing side-return sunlight/shadow contrast, 0.00 m Kit R2 parity).
+                let du = (ch.u1 - ch.u0).max(1e-6);
+                let dv = (ch.v1 - ch.v0).max(1e-6);
+                for bay in &f.bays {
+                    if bay.edge != ch.edge {
+                        continue;
+                    }
+                    let bu0 = bay.u0.max(ch.u0);
+                    let bu1 = bay.u1.min(ch.u1);
+                    let bv0 = bay.y0.max(ch.v0);
+                    let bv1 = bay.y1.min(ch.v1);
+                    if bu1 - bu0 < 0.9 || bv1 - bv0 < 1.8 {
+                        continue;
+                    }
+                    let bx0 = x0 + (bu0 - ch.u0) / du * (x1 - x0);
+                    let bx1 = x0 + (bu1 - ch.u0) / du * (x1 - x0);
+                    let by0 = y0 + (ch.v1 - bv1) / dv * (y1 - y0);
+                    let by1 = y0 + (ch.v1 - bv0) / dv * (y1 - y0);
+                    let a = f.ring[ch.edge];
+                    let pt = |s: f64, d: f64, y: f64| [(a[0] + u[0] * s + n[0] * d) as f32, y as f32, (a[1] + u[1] * s + n[1] * d) as f32];
+                    // Front projecting face with exact baked window atlas UVs.
+                    quad(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            v(pt(bu0, bay.proj, bv1), uv_word(bx0, by0)),
+                            v(pt(bu1, bay.proj, bv1), uv_word(bx1, by0)),
+                            v(pt(bu1, bay.proj, bv0), uv_word(bx1, by1)),
+                            v(pt(bu0, bay.proj, bv0), uv_word(bx0, by1)),
+                        ],
+                    );
+                    // Left & right return faces (1-texel vertical edge strip so floor tone matches cleanly without stretching windows).
+                    let nl = pack_normal([-u[0] as f32, 0.0, -u[1] as f32], ch.page as u32);
+                    let nr = pack_normal([u[0] as f32, 0.0, u[1] as f32], ch.page as u32);
+                    let vl = |p: [f32; 3], uv: u32| HlodVertex { pos: p, normal: nl, uv, color: wall_word, group: f.group };
+                    let vr = |p: [f32; 3], uv: u32| HlodVertex { pos: p, normal: nr, uv, color: wall_word, group: f.group };
+                    let sl_u = (bx0 + 0.5).min(x1 - 0.5);
+                    let sr_u = (bx1 - 0.5).max(x0 + 0.5);
+                    quad(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            vl(pt(bu0, 0.0, bv1), uv_word(sl_u, by0)),
+                            vl(pt(bu0, bay.proj, bv1), uv_word(sl_u, by0)),
+                            vl(pt(bu0, bay.proj, bv0), uv_word(sl_u, by1)),
+                            vl(pt(bu0, 0.0, bv0), uv_word(sl_u, by1)),
+                        ],
+                    );
+                    quad(
+                        &mut vertices,
+                        &mut indices,
+                        [
+                            vr(pt(bu1, bay.proj, bv1), uv_word(sr_u, by0)),
+                            vr(pt(bu1, 0.0, bv1), uv_word(sr_u, by0)),
+                            vr(pt(bu1, 0.0, bv0), uv_word(sr_u, by1)),
+                            vr(pt(bu1, bay.proj, bv0), uv_word(sr_u, by1)),
+                        ],
+                    );
+                }
             }
         } else {
             for (e, &(_, n, len)) in frames.iter().enumerate() {
@@ -1519,15 +3023,23 @@ pub fn bake_cell(ctx: &BakeContext, cell: u32) -> BakedCell {
         }
         // The roof cap at the wall top (split by the measured second colour, edged by the parapet band).
         let cap_rgb = roof_cap(f, &mut vertices, &mut indices, &mut ear, &mut tri);
-        // Roof forms.
-        for (p, n, rgb) in &f.roof {
-            let s = vertices.len() as u32;
-            let w = srgb_word(*rgb, VF_ROOF);
-            let nrm = pack_normal(*n, 0);
-            for q in p {
-                vertices.push(HlodVertex { pos: *q, normal: nrm, uv: 0, color: w, group: f.group });
+        // Roof forms: weld shared vertices per building with `normal = 0` so `hlod_draw.wgsl`
+        // computes exact flat per-triangle face normals via `cross(dpdx, dpdy)`, slashing cell
+        // roof vertex counts ~2.5-3x (freeing >50% of the 4M GPU vertex arena for resident cells!).
+        if !f.roof.is_empty() {
+            let mut weld: HashMap<([u32; 3], u32), u32> = HashMap::with_capacity(f.roof.len());
+            for (p, _, rgb) in &f.roof {
+                let w = srgb_word(*rgb, VF_ROOF);
+                for q in p {
+                    let key = ([q[0].to_bits(), q[1].to_bits(), q[2].to_bits()], w);
+                    let idx = *weld.entry(key).or_insert_with(|| {
+                        let s = vertices.len() as u32;
+                        vertices.push(HlodVertex { pos: *q, normal: 0, uv: 0, color: w, group: f.group });
+                        s
+                    });
+                    indices.push(idx);
+                }
             }
-            indices.extend_from_slice(&[s, s + 1, s + 2]);
         }
         let a = &acc[fi];
         let texels = a.2.max(1) as f64;
@@ -1542,6 +3054,14 @@ pub fn bake_cell(ctx: &BakeContext, cell: u32) -> BakedCell {
             wall: if opaque_acc[fi].1 > 0.0 { opaque_acc[fi].0.map(|v| (v / opaque_acc[fi].1) as f32) } else { f.wall_rgb },
             rhythm: f.rhythm,
             tower: if f.tower { 1.0 } else { 0.0 },
+            massing_form: f.massing.form,
+            ridge_rise: f.massing.ridge_rise,
+            roof_axis: f.massing.roof_axis,
+            pent_scale: f.massing.pent_scale,
+            pent_h: f.massing.pent_h,
+            pent_off: f.massing.pent_off,
+            mat_class: f.mat_class as f32,
+            residential: if f.residential { 1.0 } else { 0.0 },
         });
     }
     let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
@@ -1850,7 +3370,26 @@ mod tests {
             texel_m: 0.5,
             min: [0.0, 1.0, 2.0],
             max: [2.0, 1.0, 2.0],
-            summaries: vec![BuildingSummary { group: 5, building: 11, facade: [0.1, 0.2, 0.3], glass: 0.25, roof: [0.4, 0.4, 0.4], base: 3.0, top: 12.0, wall: [0.2, 0.25, 0.3], rhythm: [3.1, 3.2, 0.4, 0.5, 0.25], tower: 1.0 }],
+            summaries: vec![BuildingSummary {
+                group: 5,
+                building: 11,
+                facade: [0.1, 0.2, 0.3],
+                glass: 0.25,
+                roof: [0.4, 0.4, 0.4],
+                base: 3.0,
+                top: 12.0,
+                wall: [0.2, 0.25, 0.3],
+                rhythm: [3.1, 3.2, 0.4, 0.5, 0.25],
+                tower: 1.0,
+                massing_form: MASSING_CROWN,
+                ridge_rise: 4.5,
+                roof_axis: 0.25,
+                pent_scale: 0.35,
+                pent_h: 3.2,
+                pent_off: [0.1, -0.05],
+                mat_class: MAT_CURTAIN_BLUE as f32,
+                residential: 1.0,
+            }],
             stats: CellStats { kit: 1, blender: 0, plain: 1, fallback: 0, charts: 4, texels: 1234, source_triangles: 99, bake_ms: 1.5 },
         }
     }
@@ -1916,12 +3455,16 @@ mod tests {
             top: 9.0,
             src: vec![],
             roof: vec![],
+            bays: vec![],
             wall_rgb: [0.6; 3],
             roof_rgb: [0.3; 3],
             textured: false,
             rhythm: [0.0; 5],
             tower: false,
+            residential: false,
             roofs: RoofCap { patch, pitched },
+            massing: MassingDesc::default(),
+            mat_class: MAT_DEFAULT,
         };
         let mut ear = earcut::Earcut::new();
         let mut tri = vec![];
@@ -2017,7 +3560,7 @@ mod tests {
             t.n = [0.0, 0.0, 1.0];
             t
         }));
-        let far = Far { group: 1, building: 0, ring, party: vec![false; 4], bottom: 0.0, top: 6.0, src, roof: vec![], wall_rgb: wall, roof_rgb: wall, textured: true, rhythm: [0.0; 5], tower: false, roofs: RoofCap::default() };
+        let far = Far { group: 1, building: 0, ring, party: vec![false; 4], bottom: 0.0, top: 6.0, src, roof: vec![], bays: vec![], wall_rgb: wall, roof_rgb: wall, textured: true, rhythm: [0.0; 5], tower: false, residential: false, roofs: RoofCap::default(), massing: MassingDesc::default(), mat_class: MAT_DEFAULT };
         let ch = Chart { far: 0, edge: 0, u0: 0.0, u1: 10.0, v0: 0.0, v1: 6.0, w: 20, h: 12, page: 0, x: 0, y: 0 };
         let mut page = vec![0u8; PAGE * PAGE * 4];
         let tris: Vec<usize> = (0..far.src.len()).filter(|&k| far.src[k].n[2] < 0.0).collect();
@@ -2058,6 +3601,40 @@ mod tests {
         assert!((t.bay_m - 5.2 / 3.0).abs() < 1e-6 && (t.window_w - 0.88).abs() < 1e-6, "{t:?}");
         assert!((t.window_h - 11.5 / 16.0).abs() < 1e-6, "the floor keeps the band's glass share");
         assert!(Rhythm::from_medians(1.0, 3.0, 1.0, 1.0, 0.0).is_none(), "no storey, no rhythm");
+        // Tower plan with explicit `floorHeight`, `spandrelBand`, `shaftIndex`, and non-zero `base_y`
+        // keeps exact world-Y floor period & phase parity between cell atlas and district `hl_window_grid`.
+        let mut plan = eo_kit::elevation::Plan::empty();
+        plan.base_y = 2.33;
+        plan.storeys = vec![
+            eo_kit::elevation::Storey { index: 0, height: 6.0, y0: 0.0, y1: 6.0, use_: "retail".into(), extra: serde_json::Value::Null },
+            eo_kit::elevation::Storey { index: 1, height: 56.42, y0: 6.0, y1: 62.42, use_: "upper".into(), extra: serde_json::Value::Null },
+        ];
+        plan.edges = vec![eo_kit::elevation::EdgeRecord {
+            index: 0,
+            role: "front",
+            party: false,
+            length: 30.0,
+            bays: vec![eo_kit::elevation::BayRecord { index: 0, s0: 0.0, s1: 4.5, width: 4.5 }],
+            openings: vec![eo_kit::elevation::OpeningRecord {
+                id: "w1".into(),
+                storey: 1,
+                bay: 0,
+                type_: "curtain".into(),
+                s0: 0.1,
+                s1: 4.4,
+                y0: 6.0,
+                y1: 62.42,
+            }],
+        }];
+        plan.extra.insert(
+            "archetype".into(),
+            serde_json::json!({ "floorHeight": 4.03, "spandrelBand": 1.05, "shaftIndex": 1 }),
+        );
+        let tp = Rhythm::of_plan(&plan).unwrap();
+        assert!((tp.storey_m - 4.03).abs() < 1e-4, "keeps exact floorHeight: {tp:?}");
+        assert!((tp.window_h - (4.03 - 1.05) / 4.03).abs() < 1e-3, "matches spandrelBand duty: {tp:?}");
+        let want_phase = ((2.33_f64 + 6.0 + 0.42 * 1.05) / 4.03).rem_euclid(1.0) as f32;
+        assert!((tp.phase - want_phase).abs() < 1e-4, "phase includes base_y + shaft_y0 + 0.42*band: got {}, want {want_phase}", tp.phase);
     }
 
     #[test]
@@ -2079,7 +3656,7 @@ mod tests {
         src.extend(quad(4.0, 6.0, 0.0, 2.0, 0.0, wall, false));
         src.extend(quad(4.0, 6.0, 4.0, 6.0, 0.0, wall, false));
         src.extend(quad(4.0, 6.0, 2.0, 4.0, 0.03, pane, true));
-        let far = Far { group: 1, building: 0, ring, party: vec![false; 4], bottom: 0.0, top: 6.0, src, roof: vec![], wall_rgb: wall, roof_rgb: wall, textured: true, rhythm: [0.0; 5], tower: false, roofs: RoofCap::default() };
+        let far = Far { group: 1, building: 0, ring, party: vec![false; 4], bottom: 0.0, top: 6.0, src, roof: vec![], bays: vec![], wall_rgb: wall, roof_rgb: wall, textured: true, rhythm: [0.0; 5], tower: false, residential: false, roofs: RoofCap::default(), massing: MassingDesc::default(), mat_class: MAT_DEFAULT };
         let ch = Chart { far: 0, edge: 0, u0: 0.0, u1: 10.0, v0: 0.0, v1: 6.0, w: 20, h: 12, page: 0, x: 0, y: 0 };
         let tris: Vec<usize> = (0..far.src.len()).collect();
         let mut page = vec![0u8; PAGE * PAGE * 4];
@@ -2102,5 +3679,62 @@ mod tests {
         }
         // A dark pane keeps its own colour.
         assert_eq!(glass_body([0.02, 0.022, 0.024]), [0.02, 0.022, 0.024]);
+    }
+
+    #[test]
+    fn massing_roof_emits_watertight_gables_hips_and_tower_crowns() {
+        let rect = vec![[0.0, 0.0], [16.0, 0.0], [16.0, 10.0], [0.0, 10.0]];
+        let obb = fit_obb(&rect, None).unwrap();
+        assert!((obb.hu - 8.0).abs() < 1e-6 && (obb.hv - 5.0).abs() < 1e-6 && (obb.fill - 1.0).abs() < 1e-6);
+        let mut tris = vec![];
+        let gable = MassingDesc { form: MASSING_GABLE, ridge_rise: 3.0, roof_axis: 0.0, ..Default::default() };
+        emit_massing_roof_tris(&rect, 7, 10.0, &gable, [0.5; 3], [0.3; 3], false, false, &mut tris);
+        assert_eq!(tris.len(), 6, "gable has 2 slope quads (4 tris) + 2 pediment ends (2 tris)");
+        assert!(tris.iter().any(|(p, _, _)| p.iter().any(|q| (q[1] - 13.0).abs() < 1e-4)), "ridge reaches top + rise");
+
+        let mut hip_tris = vec![];
+        let hip = MassingDesc { form: MASSING_HIP, ridge_rise: 2.5, roof_axis: 0.0, ..Default::default() };
+        emit_massing_roof_tris(&rect, 11, 10.0, &hip, [0.5; 3], [0.3; 3], false, false, &mut hip_tris);
+        assert_eq!(hip_tris.len(), 6, "hip roof has 6 triangles");
+
+        // L-shaped notched SF row house (`fill = 0.75`): still gets an inscribed pitched roof with zero floating corners.
+        let l_ring = vec![[0.0, 0.0], [16.0, 0.0], [16.0, 5.0], [8.0, 5.0], [8.0, 10.0], [0.0, 10.0]];
+        let l_obb = fit_obb(&l_ring, None).unwrap();
+        assert!(l_obb.fill > 0.70 && l_obb.fill < 0.78);
+        let mut l_tris = vec![];
+        emit_massing_roof_tris(&l_ring, 19, 10.0, &hip, [0.5; 3], [0.3; 3], false, false, &mut l_tris);
+        assert_eq!(l_tris.len(), 6, "notched row house fits inscribed hip roof");
+
+        let mut mansard_tris = vec![];
+        let mansard = MassingDesc { form: MASSING_MANSARD, ridge_rise: 2.2, roof_axis: 0.0, ..Default::default() };
+        emit_massing_roof_tris(&rect, 17, 14.0, &mansard, [0.5; 3], [0.3; 3], false, false, &mut mansard_tris);
+        assert_eq!(mansard_tris.len(), 10, "mansard has 4 sloped skirt quads (8 tris) + flat tar deck (2 tris)");
+        assert!(mansard_tris.iter().any(|(p, _, _)| p.iter().any(|q| (q[1] - 16.2).abs() < 1e-4)), "mansard crown reaches top + rise");
+
+        let tower_ring = vec![[0.0, 0.0], [32.0, 0.0], [32.0, 24.0], [0.0, 24.0]];
+        let mut crown_tris = vec![];
+        let crown = MassingDesc { form: MASSING_CROWN, ridge_rise: 5.0, roof_axis: 0.0, pent_scale: 0.35, pent_h: 3.5, pent_off: [0.1, 0.0] };
+        emit_massing_roof_tris(&tower_ring, 23, 100.0, &crown, [0.4; 3], [0.2; 3], false, false, &mut crown_tris);
+        assert!(crown_tris.len() >= 20, "two-tier tower crown + penthouse emits >=20 tris, got {}", crown_tris.len());
+        let peak_y = crown_tris.iter().flat_map(|(p, _, _)| p.iter().map(|q| q[1])).fold(0.0f32, f32::max);
+        assert!((peak_y - 108.5).abs() < 0.05, "crown + penthouse top = {peak_y}");
+
+        // Projecting 3D cornice overhang rims emit on prominent street-facing flat roofs.
+        let mut cornice_tris = vec![];
+        emit_cornice_rim(&rect, &[false, true, false, true], &[true, false, false, false], 12.0, 12.0, MAT_BRICK, [0.5; 3], [0.7; 3], false, &mut cornice_tris);
+        assert!(!cornice_tris.is_empty(), "cornice rim emits projecting overhang");
+        assert!(cornice_tris.iter().any(|(p, _, _)| p.iter().any(|q| q[2] < -0.35)), "cornice overhangs outward");
+
+        // Water tank emits hexagonal redwood drum + conical cap on qualifying prewar midrises.
+        let mut tank_tris = vec![];
+        let big_rect = vec![[0.0, 0.0], [28.0, 0.0], [28.0, 22.0], [0.0, 22.0]];
+        let tank_grp = (1u32..500).find(|&g| wants_water_tank(g, 24.0, 350.0, MAT_BRICK, 0)).expect("some brick midrise gets a water tank");
+        emit_water_tank(&big_rect, tank_grp, 24.0, 24.0, MAT_BRICK, &MassingDesc::default(), &mut tank_tris);
+        assert_eq!(tank_tris.len(), 30, "hexagonal water tank: 12 leg tris + 12 barrel tris + 6 cone cap tris");
+
+        // Residential vs commercial night classification.
+        assert!(classify_residential("victorian-row", "", "", false, 40.0, 11.0, false));
+        assert!(classify_residential("downtown-tower", "apartments", "", false, 10.0, 90.0, true));
+        assert!(!classify_residential("downtown-tower", "office", "", false, 5.0, 140.0, true));
     }
 }

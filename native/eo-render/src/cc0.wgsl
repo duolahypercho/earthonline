@@ -24,8 +24,8 @@
 @group(0) @binding(27) var<storage, read> cc0_decals: array<vec4<f32>>;
 
 const CC0_LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
-// Parallax occlusion: only this close (metres), at most this many steps.
-const CC0_POM_FAR: f32 = 12.0;
+// Parallax occlusion: crisp mortar/clapboard/stone relief across a full street width.
+const CC0_POM_FAR: f32 = 24.0;
 const CC0_POM_STEPS: i32 = 10;
 // The street's extra scans (worn walk, cracked asphalt, the decals) and the
 // ground's anti-tiling phase only this close (metres): past it a 2-3 m repeat
@@ -186,6 +186,81 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
     if (!cc0_on(select(CC0_RUN_WALLS, CC0_RUN_GROUND, vertex_colour))) {
         return false;
     }
+    let ob = objects[object];
+    let kind = ob.kind & 255u;
+    // Blender-building foundation skirts (`ObjectKind::Skirt = 8`, vertex-coloured concrete):
+    // give them real board-formed cast concrete texture, pour lifts, normal relief, and sloped-sidewalk contact AO.
+    if (vertex_colour && kind == 8u && abs(n.y) < 0.82) {
+        let dist_s = length(frame.cam_pos.xyz - world);
+        let vfade_s = 1.0 - smoothstep(select(180.0, 340.0, SF_AAA_DETAIL), select(280.0, 480.0, SF_AAA_DETAIL), dist_s);
+        if (vfade_s <= 0.0) {
+            return false;
+        }
+        let fr_s = fa_frame(n);
+        let lay_s = CC0_L_WOOD_TEXTURED_CONCRETE;
+        let inv_s = cc0_linv(lay_s);
+        let uv_s = vec2<f32>(dot(world, fr_s.t) * inv_s.x, -dot(world, fr_s.b) * inv_s.y);
+        let gx_s = vec2<f32>(dot(dpx, fr_s.t) * inv_s.x, -dot(dpx, fr_s.b) * inv_s.y);
+        let gy_s = vec2<f32>(dot(dpy, fr_s.t) * inv_s.x, -dot(dpy, fr_s.b) * inv_s.y);
+        let t_s = cc0_tap(uv_s, gx_s, gy_s, lay_s);
+        let lm_s = cc0_lmean(lay_s);
+        let lx_s = cc0_lmisc(lay_s);
+        let rel_s = t_s.alb.rgb / max(lm_s.rgb, vec3<f32>(1e-3));
+        var alb_s = (*s).albedo * clamp(rel_s, vec3<f32>(0.55), vec3<f32>(1.45)) * vec3<f32>(0.88, 0.87, 0.84);
+        var tn_s = t_s.n;
+        var ao_s = clamp(t_s.ao / max(lx_s.y, 0.05), 0.35, 1.0);
+        let fw_s = max(length(dpx), length(dpy));
+        let keep_s = 1.0 - smoothstep(0.015, 0.09, fw_s);
+        let wu_s = dot(world, fr_s.t);
+        let wv_s = world.y;
+        // Board-form cast-concrete pour lifts (0.55 m) & vertical panel joints (1.8 m)
+        let fpu = fract(wu_s / 1.8);
+        let fpv = fract(wv_s / 0.55);
+        let p_var = (st_hash(floor(vec2<f32>(wu_s / 1.8, wv_s / 0.55))) - 0.5) * 0.11;
+        alb_s = alb_s * (1.0 + p_var * (1.0 - smoothstep(0.12, 0.55, fw_s)));
+        if (keep_s > 0.01) {
+            let du = min(fpu, 1.0 - fpu) * 1.8;
+            let dv = min(fpv, 1.0 - fpv) * 0.55;
+            let gu = 1.0 - smoothstep(0.006, 0.020, du);
+            let gv = 1.0 - smoothstep(0.006, 0.022, dv);
+            let gr = max(gu, gv) * keep_s;
+            alb_s = alb_s * (1.0 - 0.30 * gr);
+            ao_s = ao_s * (1.0 - 0.38 * gr);
+            tn_s = tn_s + vec2<f32>(select(-1.0, 1.0, fpu < 0.5) * gu, select(-1.0, 1.0, fpv < 0.5) * gv) * (0.42 * keep_s);
+        }
+        if (SF_AAA_DETAIL) {
+            // Macro pilaster buttresses & horizontal rustication readable on tall hillside skirts in `05a`
+            let keep_ms = 1.0 - smoothstep(0.30, 1.45, fw_s);
+            if (keep_ms > 0.01) {
+                let drop_s = max(ob.max.y - world.y, 0.0);
+                let bay_su = fract(wu_s / 3.6);
+                let d_sp = min(bay_su, 1.0 - bay_su) * 3.6;
+                let in_sp = (1.0 - smoothstep(0.28, 0.36 + fw_s * 0.5, d_sp)) * keep_ms;
+                let sp_e = (smoothstep(0.24, 0.32, d_sp) * (1.0 - smoothstep(0.34, 0.52 + fw_s * 0.5, d_sp))) * keep_ms;
+                let lf_s = fract(drop_s / 2.2);
+                let rust_s = (1.0 - smoothstep(0.03, 0.11 + fw_s * 0.4, min(lf_s, 1.0 - lf_s) * 2.2)) * keep_ms;
+                alb_s = alb_s * (1.0 + 0.14 * in_sp - 0.22 * sp_e) * (1.0 - 0.26 * rust_s);
+                ao_s = ao_s * (1.0 - 0.34 * sp_e) * (1.0 - 0.36 * rust_s);
+                tn_s.x = tn_s.x + select(1.0, -1.0, bay_su < 0.5) * sp_e * 0.48;
+                tn_s.y = tn_s.y + select(-1.0, 1.0, lf_s < 0.5) * rust_s * 0.38;
+            }
+        }
+        // Exact sloped-sidewalk contact crevice AO & rising damp via ambient ground plane
+        if (amb_on()) {
+            let h_w = max(world.y - amb_plane(world.xz + fr_s.n.xz * 0.6).z, 0.0);
+            let contact_s = 1.0 - smoothstep(0.0, 0.45, h_w);
+            let tight_s = 1.0 - smoothstep(0.0, 0.14, h_w);
+            let damp_s = 1.0 - smoothstep(0.0, 0.72 + 0.25 * st_noise(vec2<f32>(wu_s * 0.6, 3.1)), h_w);
+            alb_s = alb_s * (1.0 - 0.24 * damp_s - 0.22 * tight_s);
+            ao_s = ao_s * (1.0 - 0.48 * contact_s) * (1.0 - 0.30 * tight_s);
+        }
+        (*s).albedo = mix((*s).albedo, alb_s, vfade_s);
+        (*s).rough = clamp(mix(0.86, t_s.rough / max(lx_s.x, 0.05) * 0.88, 0.75 * vfade_s), 0.62, 0.98);
+        (*s).ao = mix((*s).ao, clamp(ao_s, 0.16, 1.0), vfade_s);
+        (*s).n = cc0_frame_normal(fr_s, tn_s, 1.25 * vfade_s);
+        cc0_wall_hit = true;
+        return true;
+    }
     let e0 = cc0_mats[mi * 4u];
     if (e0.x < 0.0) {
         return false;
@@ -193,24 +268,36 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
     let e1 = cc0_mats[mi * 4u + 1u];
     let e2 = cc0_mats[mi * 4u + 2u];
     let e3 = cc0_mats[mi * 4u + 3u];
-    let ob = objects[object];
-    let kind = ob.kind & 255u;
     var paint = 0.5;
     var wear = 0.5;
     var seed = f32(ob.lod_group % 4093u) * 1.618034;
+    var kit_base_y = -1e9;
+    var kit_skirt = false;
     if (kind == 5u) {
         let d = fa_drivers(fa_ages[ob.lod_group]);
         paint = d.paint;
         wear = d.wear;
         seed = d.seed;
+        kit_base_y = d.base_y;
+        kit_skirt = !vertex_colour && abs(n.y) < 0.35 && world.y < d.base_y - 0.02;
     }
     let code = u32(e1.w + 0.5);
-    let mode = code & 15u;
+    var mode = code & 15u;
     let drive = code >> 4u;
     var layer = i32(e0.x);
     var mul = e1.rgb;
     var inv = e0.zw;
-    if (e0.y >= 0.0 && drive != 0u) {
+    var n_str = e2.w;
+    if (kit_skirt) {
+        // Sloped SF hillside foundation skirts: architectural board-formed poured concrete instead of blank dark cliff.
+        layer = CC0_L_WOOD_TEXTURED_CONCRETE;
+        let lm_sk = cc0_lmean(layer);
+        let sk_base = select(vec3<f32>(0.29, 0.28, 0.26), vec3<f32>(0.36, 0.35, 0.33), SF_AAA_DETAIL);
+        mul = sk_base / max(lm_sk.rgb, vec3<f32>(1e-3));
+        inv = cc0_linv(layer);
+        mode = CC0_MODE_NATURAL;
+        n_str = 1.35;
+    } else if (e0.y >= 0.0 && drive != 0u) {
         // The building's paint age (or wear) picks the other state, at a threshold of its own.
         let v = select(wear, paint, drive == 1u);
         let th = 0.5 + (fract(seed * 0.6180340) - 0.5) * 0.3;
@@ -300,16 +387,298 @@ fn cc0_surface(s: ptr<function, Surface>, m: Material, mi: u32, world: vec3<f32>
         let low = 1.0 - smoothstep(lx.z - 0.25, lx.z + 0.02, t.h);
         alb = alb * (1.0 - low * e3.y * (0.35 + 0.45 * wear));
     }
+    var micro_tn = t.n;
+    var micro_rough = t.rough / max(lx.x, 0.05);
+    var micro_ao = mix(1.0, t.ao / max(lx.y, 0.05), 0.85);
+    let blender_ext = kind == 4u && ob.lod_role == 1u && (!SF_HOUSE || (ob.kind & 0xfffffe00u) == 0u);
+    let bldg_ext = kind == 5u || blender_ext;
+    let bldg_base_y = select(ob.min.y, kit_base_y, kind == 5u);
+    // Architectural PBR micro-depth on upright kit AND exterior Blender walls (precast V-grooves,
+    // stone/granite sheen contrast, clapboard lap shadows, stucco joints, per-building warm/cool
+    // value diversity — filtered by pixel footprint).
+    if (!vertex_colour && bldg_ext && abs(n.y) < 0.35) {
+        let fw = max(length(dpx), length(dpy));
+        let keep_j = 1.0 - smoothstep(0.018, 0.095, fw);
+        let wall_u = dot(world, fr.t) + fract(seed * 0.413) * 1.8;
+        let wall_v = world.y;
+        // Subtle per-building hue/value diversity (breaks copy-paste blocks while preserving palettes).
+        if (SF_FACADE_PATINA && !kit_skirt) {
+            let b_val = (fract(seed * 0.7548777) - 0.5) * 0.10;
+            let b_temp = (fract(seed * 0.5698403) - 0.5) * 0.045;
+            alb = alb * (1.0 + b_val) * vec3<f32>(1.0 + b_temp, 1.0, 1.0 - b_temp);
+        }
+        if (kit_skirt) {
+            // Board-formed cast-in-place hillside concrete: horizontal pour lifts (0.55 m), vertical formwork
+            // panel joints (1.8 m), tie-rod cone dimples, water-table shadow, and exact sloped-sidewalk contact AO.
+            let pu = wall_u / 1.8;
+            let pv = max(kit_base_y - world.y, 0.0) / 0.55;
+            let cell = floor(vec2<f32>(pu, pv));
+            let fuv = vec2<f32>(fract(pu), fract(pv));
+            let panel_var = (st_hash(cell + vec2<f32>(seed * 0.17, 5.1)) - 0.5) * 0.14;
+            alb = alb * (1.0 + panel_var * (1.0 - smoothstep(0.14, 0.60, fw)));
+            if (keep_j > 0.01) {
+                let du = min(fuv.x, 1.0 - fuv.x) * 1.8;
+                let dv = min(fuv.y, 1.0 - fuv.y) * 0.55;
+                let gu = 1.0 - smoothstep(0.007, 0.022, du);
+                let gv = 1.0 - smoothstep(0.007, 0.024, dv);
+                let groove = max(gu, gv) * keep_j;
+                // Recessed formwork tie-rod cone holes (two per 1.8 m x 0.55 m lift)
+                let tie_u = min(abs(fuv.x - 0.25), abs(fuv.x - 0.75)) * 1.8;
+                let tie_v = abs(fuv.y - 0.5) * 0.55;
+                let tie = (1.0 - smoothstep(0.014, 0.030, length(vec2<f32>(tie_u, tie_v)))) * keep_j;
+                alb = alb * (1.0 - 0.34 * groove - 0.42 * tie);
+                micro_ao = micro_ao * (1.0 - 0.42 * groove) * (1.0 - 0.48 * tie);
+                micro_rough = mix(micro_rough, 1.18, max(groove, tie));
+                let su = select(-1.0, 1.0, fuv.x < 0.5) * gu * keep_j;
+                let sv = select(-1.0, 1.0, fuv.y < 0.5) * gv * keep_j;
+                micro_tn = micro_tn + vec2<f32>(su, sv) * 0.45;
+            }
+            // Water-table overhang shadow directly under the floor slab (`kit_base_y`)
+            let under_wt = 1.0 - smoothstep(0.0, select(0.28, 0.48, SF_AAA_DETAIL), max(kit_base_y - world.y, 0.0));
+            alb = alb * (1.0 - 0.24 * under_wt);
+            micro_ao = micro_ao * (1.0 - 0.44 * under_wt);
+            if (SF_AAA_DETAIL) {
+                // Macro architectural retaining-wall articulation readable at hillside vista distances (10-420 m in `05a`):
+                // 3.6 m rhythmic pilaster buttress bays, recessed coffered wall panels, 2.2 m horizontal rustication grooves,
+                // and recessed ventilation / basement garage openings on tall > 3.2 m hillside retaining walls.
+                let keep_m = 1.0 - smoothstep(0.30, 1.45, fw);
+                if (keep_m > 0.01) {
+                    let drop_y = max(kit_base_y - world.y, 0.0);
+                    let bay_u = fract(wall_u / 3.6);
+                    let bay_cell = floor(wall_u / 3.6);
+                    let d_pil = min(bay_u, 1.0 - bay_u) * 3.6;
+                    let pil_w = 0.28;
+                    let in_pil = (1.0 - smoothstep(pil_w, pil_w + 0.08 + fw * 0.5, d_pil)) * keep_m;
+                    let pil_edge = (smoothstep(pil_w - 0.04, pil_w + 0.04, d_pil) * (1.0 - smoothstep(pil_w + 0.06, pil_w + 0.24 + fw * 0.5, d_pil))) * keep_m;
+                    // Coffered panel tone variation + sunlit pilaster contrast
+                    let bay_tone = (st_hash(vec2<f32>(bay_cell, floor(seed * 73.0))) - 0.5) * 0.14 * keep_m;
+                    alb = alb * (1.0 + bay_tone + 0.14 * in_pil - 0.22 * pil_edge);
+                    micro_ao = micro_ao * (1.0 - 0.34 * pil_edge);
+                    micro_tn.x = micro_tn.x + select(1.0, -1.0, bay_u < 0.5) * pil_edge * 0.48;
+                    // Bold 2.2 m horizontal rustication / concrete pour-lift shadow bands
+                    let lift_f = fract(drop_y / 2.2);
+                    let d_lift = min(lift_f, 1.0 - lift_f) * 2.2;
+                    let rust = (1.0 - smoothstep(0.03, 0.11 + fw * 0.4, d_lift)) * keep_m;
+                    alb = alb * (1.0 - 0.26 * rust);
+                    micro_ao = micro_ao * (1.0 - 0.36 * rust);
+                    micro_tn.y = micro_tn.y + select(-1.0, 1.0, lift_f < 0.5) * rust * 0.38;
+                    // Recessed dark basement garage / vent louver bays on tall hillside skirts (`drop_y > 1.6 m`)
+                    let b_open = step(0.35, st_hash(vec2<f32>(bay_cell * 1.7 + 3.1, floor(seed * 41.0))));
+                    let in_open_u = smoothstep(0.22, 0.26, bay_u) * (1.0 - smoothstep(0.74, 0.78, bay_u));
+                    let open_v = fract((drop_y - 0.8) / 3.4);
+                    let in_open_v = step(1.4, drop_y) * smoothstep(0.18, 0.24, open_v) * (1.0 - smoothstep(0.78, 0.84, open_v));
+                    let recess = in_open_u * in_open_v * b_open * keep_m;
+                    alb = mix(alb, alb * 0.38, recess * 0.80);
+                    micro_ao = micro_ao * (1.0 - 0.52 * recess);
+                    micro_rough = mix(micro_rough, 0.96, recess);
+                }
+            }
+            // Exact sloped-sidewalk contact crevice AO & rising damp concrete plinth via ambient plane
+            var h_walk = max(world.y - ob.min.y, 0.0);
+            if (amb_on()) {
+                let pl_y = amb_plane(world.xz + fr.n.xz * 0.6).z;
+                h_walk = max(world.y - pl_y, 0.0);
+            }
+            let contact_s = 1.0 - smoothstep(0.0, 0.46, h_walk);
+            let tight_s = 1.0 - smoothstep(0.0, 0.14, h_walk);
+            let damp_h = 0.62 + 0.34 * st_noise(vec2<f32>(wall_u * 0.55, seed * 0.7));
+            let damp_s = 1.0 - smoothstep(0.0, damp_h, h_walk);
+            alb = alb * (1.0 - 0.24 * damp_s - 0.26 * tight_s);
+            micro_ao = micro_ao * (1.0 - 0.48 * contact_s) * (1.0 - 0.34 * tight_s);
+            micro_rough = micro_rough * (1.0 - 0.12 * damp_s);
+        } else if (layer == CC0_L_CONCRETE_WALL_008 || layer == CC0_L_WOOD_TEXTURED_CONCRETE) {
+            // Architectural precast panel V-grooves (1.8 m x 3.2 m modules) + subtle per-panel pour variation.
+            let pu = wall_u / 1.8;
+            let pv = wall_v / 3.2;
+            let cell = floor(vec2<f32>(pu, pv));
+            let fuv = vec2<f32>(fract(pu), fract(pv));
+            let panel_var = (st_hash(cell + vec2<f32>(seed * 0.13, 3.7)) - 0.5) * 0.09;
+            alb = alb * (1.0 + panel_var * (1.0 - smoothstep(0.15, 0.65, fw)));
+            if (keep_j > 0.01) {
+                let du = min(fuv.x, 1.0 - fuv.x) * 1.8;
+                let dv = min(fuv.y, 1.0 - fuv.y) * 3.2;
+                let gu = 1.0 - smoothstep(0.008, 0.022, du);
+                let gv = 1.0 - smoothstep(0.008, 0.022, dv);
+                let groove = max(gu, gv) * keep_j;
+                alb = alb * (1.0 - 0.28 * groove);
+                micro_ao = micro_ao * (1.0 - 0.35 * groove);
+                micro_rough = mix(micro_rough, 1.15, groove);
+                let su = select(-1.0, 1.0, fuv.x < 0.5) * gu * keep_j;
+                let sv = select(-1.0, 1.0, fuv.y < 0.5) * gv * keep_j;
+                micro_tn = micro_tn + vec2<f32>(su, sv) * 0.32;
+                if (SF_AAA_DETAIL) {
+                    // Crisp chamfered outer precast edge-bevel catching raking sun highlights
+                    let bu = (smoothstep(0.016, 0.026, du) * (1.0 - smoothstep(0.032, 0.068, du))) * keep_j;
+                    let bv = (smoothstep(0.016, 0.026, dv) * (1.0 - smoothstep(0.032, 0.068, dv))) * keep_j;
+                    let bev = max(bu, bv);
+                    micro_tn = micro_tn + vec2<f32>(select(1.0, -1.0, fuv.x < 0.5) * bu, select(1.0, -1.0, fuv.y < 0.5) * bv) * 0.28;
+                    micro_rough = micro_rough * (1.0 - 0.14 * bev);
+                }
+            }
+        } else if (layer == CC0_L_WHITE_STUCCO) {
+            // California sand-float stucco: subtle horizontal floor control-joint reveals (3.15 m) & crisp fine plaster tooth.
+            let sv_y = max(world.y - bldg_base_y, 0.0) / 3.15;
+            let fsv = fract(sv_y);
+            let bay_var = (st_noise(vec2<f32>(wall_u / 4.2, sv_y * 0.8) + seed * 1.9) - 0.5) * 0.08;
+            alb = alb * (1.0 + bay_var * (1.0 - smoothstep(0.18, 0.72, fw)));
+            if (SF_AAA_DETAIL) {
+                // Fine 4-10 cm sand-float plaster mineral tooth (smooth architectural stucco, zero large bumpy blobs).
+                let keep_g = 1.0 - smoothstep(0.008, 0.036, fw);
+                if (keep_g > 0.01) {
+                    let g0 = st_noise(vec2<f32>(wall_u, wall_v) * 24.0 + seed * 3.1);
+                    let g1 = st_noise(vec2<f32>(wall_u, wall_v) * 8.5 + seed * 7.7);
+                    let gx_s = st_noise(vec2<f32>(wall_u + 0.014, wall_v) * 24.0 + seed * 3.1) - g0;
+                    let gy_s = st_noise(vec2<f32>(wall_u, wall_v + 0.014) * 24.0 + seed * 3.1) - g0;
+                    alb = alb * (1.0 + ((g0 - 0.5) * 0.038 + (g1 - 0.5) * 0.032) * keep_g);
+                    micro_tn = micro_tn + vec2<f32>(gx_s, gy_s) * (0.24 * keep_g);
+                    micro_rough = clamp(micro_rough + (g0 - 0.5) * 0.07 * keep_g, 0.74, 1.0);
+                }
+            }
+            if (keep_j > 0.01 && world.y > bldg_base_y + 0.3) {
+                let dv = min(fsv, 1.0 - fsv) * 3.15;
+                let jv = (1.0 - smoothstep(0.006, 0.020, dv)) * keep_j;
+                alb = alb * (1.0 - 0.22 * jv);
+                micro_ao = micro_ao * (1.0 - 0.28 * jv);
+                micro_tn.y = micro_tn.y + select(-1.0, 1.0, fsv < 0.5) * jv * 0.26;
+                if (SF_AAA_DETAIL) {
+                    let bv_s = (smoothstep(0.015, 0.026, dv) * (1.0 - smoothstep(0.032, 0.064, dv))) * keep_j;
+                    micro_tn.y = micro_tn.y + select(1.0, -1.0, fsv < 0.5) * bv_s * 0.24;
+                }
+            }
+        } else if (layer == CC0_L_GRANITE_WALL || layer == CC0_L_WHITE_SANDSTONE_BLOCKS_02) {
+            // Honed vs polished granite & ashlar contrast: smoother mineral faces vs matte recessed mortar joints.
+            let joint = 1.0 - smoothstep(lx.z - 0.18, lx.z + 0.04, t.h);
+            let granite = layer == CC0_L_GRANITE_WALL;
+            var face_r = select(0.84, 0.52 + 0.24 * fract(seed * 0.317), granite);
+            if (SF_AAA_DETAIL) {
+                let plinth_zone = 1.0 - smoothstep(4.0, 7.0, max(world.y - bldg_base_y, 0.0));
+                if (granite) {
+                    // Ground-floor polished granite plinths catch crisp specular reflections vs matte joints
+                    face_r = mix(0.48 + 0.20 * fract(seed * 0.317), 0.36 + 0.14 * fract(seed * 0.317), plinth_zone);
+                } else {
+                    face_r = mix(0.80, 0.70, plinth_zone);
+                }
+                micro_tn = micro_tn * 1.12;
+            }
+            micro_rough = mix(micro_rough * face_r, 1.20, joint);
+            micro_ao = micro_ao * (1.0 - select(0.28, 0.36, SF_AAA_DETAIL) * joint * keep_j);
+            if (granite && keep_j > 0.01) {
+                // Subtle polished mica / mineral specular variation across granite blocks
+                let fleck = st_noise(vec2<f32>(wall_u, wall_v) * 18.0);
+                micro_rough = micro_rough * (0.86 + 0.26 * fleck);
+            }
+            // Low garden retaining walls (`ob.max.y - ob.min.y < 2.6 m`): weathered damp base & mortar moss patina
+            if (blender_ext && (ob.max.y - ob.min.y) < 2.6) {
+                let h_ret = max(world.y - ob.min.y, 0.0);
+                let top_cap = 1.0 - smoothstep(0.0, 0.14, max(ob.max.y - world.y, 0.0));
+                let damp_ret = 1.0 - smoothstep(0.0, 0.52, h_ret);
+                let moss_n = st_noise(vec2<f32>(wall_u * 1.7, h_ret * 2.1) + seed * 4.3);
+                let moss = smoothstep(0.55, 0.85, moss_n + joint * 0.35 + damp_ret * 0.25) * (0.35 + 0.65 * damp_ret);
+                alb = mix(alb, alb * vec3<f32>(0.55, 0.66, 0.44), moss * 0.45);
+                alb = alb * (1.0 - 0.22 * damp_ret) * (1.0 - 0.12 * top_cap);
+                micro_ao = micro_ao * (1.0 - 0.38 * damp_ret);
+            }
+        } else if (layer == CC0_L_WOODSIDING009 || layer == CC0_L_PLANKS010 || layer == CC0_L_WOODSIDING011) {
+            // Clapboard / shingle overlap micro-AO & painted satin sheen contrast (matte in lap crevice).
+            let lap = 1.0 - smoothstep(lx.z - 0.16, lx.z + 0.05, t.h);
+            var sheen = select(0.80, 0.70, paint < 0.45); // fresher paint reads crisper satin
+            if (SF_AAA_DETAIL) {
+                sheen = select(0.76, 0.66, paint < 0.48);
+                micro_tn.y = micro_tn.y * 1.12;
+            }
+            micro_rough = mix(micro_rough * sheen, 1.20, lap);
+            micro_ao = micro_ao * (1.0 - select(0.28, 0.38, SF_AAA_DETAIL) * lap * keep_j);
+        }
+    }
+    // Lived-in SF built-up flat-roof PBR articulation (`05a_hills_vista`, kit & exterior Blender roofs):
+    // rolled torch-down bitumen cap-sheet seams (1.05 m near + 3.4 m architectural panel joints mid-range),
+    // tar-mastic repair patches, gravel/ballast drift, drainage ponding soot, rubber service walkways,
+    // and bold inward parapet flashing & shadow-gutter AO — reads cleanly from 20 m to 350 m.
+    let roof_deck_cap = SF_AAA_DETAIL && n.y > 0.85 && world.y > ob.max.y - 1.8
+        && (layer == CC0_L_WHITE_STUCCO || layer == CC0_L_CONCRETE_WALL_008 || layer == CC0_L_WOOD_TEXTURED_CONCRETE);
+    if (!vertex_colour && bldg_ext && n.y > 0.65 && (layer == CC0_L_TARRED_GRAVEL || layer == CC0_L_CONCRETE_FLOOR_WORN_001 || roof_deck_cap)) {
+        let fw = max(length(dpx), length(dpy));
+        let keep_seam = 1.0 - smoothstep(0.04, 0.28, fw);
+        let keep_mid = 1.0 - smoothstep(0.35, 1.45, fw);
+        let roof_rot = select(0.0, 1.5707963, fract(seed * 0.731) > 0.5);
+        let cs = cos(roof_rot);
+        let sn = sin(roof_rot);
+        let r_uv = vec2<f32>(world.x * cs - world.z * sn, world.x * sn + world.z * cs);
+        // Per-roof membrane type: dark weathered tar-and-gravel, warm aggregate ballast, or sun-bleached cool coating
+        let r_kind = fract(seed * 0.4173);
+        let r_tint = select(
+            select(vec3<f32>(0.82, 0.81, 0.80), vec3<f32>(1.04, 0.98, 0.90), r_kind > 0.42),
+            vec3<f32>(1.18, 1.19, 1.18),
+            r_kind > 0.82,
+        );
+        alb = alb * r_tint * (0.90 + 0.20 * fract(seed * 0.893));
+        // Near rolled bitumen / cap-sheet lap seams (1.05 m strip pitch + 6.2 m cross end-laps)
+        let strip_p = fract(r_uv.x / 1.05 + fract(seed * 0.27));
+        let seam_d = min(strip_p, 1.0 - strip_p) * 1.05;
+        let lap_seam = (1.0 - smoothstep(0.014, 0.048, seam_d)) * keep_seam;
+        let cross_p = fract(r_uv.y / 6.2 + floor(r_uv.x / 1.05) * 0.37);
+        let cross_seam = (1.0 - smoothstep(0.014, 0.042, min(cross_p, 1.0 - cross_p) * 6.2)) * keep_seam;
+        let seam = max(lap_seam, cross_seam);
+        // Mid-range 3.4 m membrane panel seams & dark tar mastic repair strips (readable at 80-280 m in 05a!)
+        let mid_u = fract(r_uv.x / 3.4 + fract(seed * 0.19));
+        let mid_v = fract(r_uv.y / 5.6 + fract(seed * 0.61));
+        let mid_du = min(mid_u, 1.0 - mid_u) * 3.4;
+        let mid_dv = min(mid_v, 1.0 - mid_v) * 5.6;
+        let mid_line = max(1.0 - smoothstep(0.03, 0.14 + fw * 0.45, mid_du), 1.0 - smoothstep(0.03, 0.14 + fw * 0.45, mid_dv)) * keep_mid;
+        let panel_tone = (st_hash(floor(vec2<f32>(r_uv.x / 3.4, r_uv.y / 5.6)) + vec2<f32>(seed * 3.1, 1.7)) - 0.5) * 0.14 * keep_mid;
+        let mastic = smoothstep(0.68, 0.86, st_noise(r_uv / 4.2 + seed * 6.7)) * keep_mid;
+        let roll_tone = (st_hash(vec2<f32>(floor(r_uv.x / 1.05), floor(seed * 97.0))) - 0.5) * 0.10 * (1.0 - smoothstep(0.18, 1.1, fw));
+        alb = alb * (1.0 + roll_tone + panel_tone) * (1.0 - 0.30 * seam - 0.22 * mid_line - 0.24 * mastic);
+        micro_ao = micro_ao * (1.0 - 0.28 * seam - 0.20 * mid_line);
+        micro_rough = mix(micro_rough, 0.84, max(seam, mastic) * 0.45);
+        let seam_s = select(-1.0, 1.0, strip_p < 0.5) * lap_seam + select(-1.0, 1.0, mid_u < 0.5) * (1.0 - smoothstep(0.03, 0.14, mid_du)) * keep_mid * 0.5;
+        micro_tn.x = micro_tn.x + seam_s * 0.36;
+        // Multi-scale aggregate gravel drift & weathered drainage/ponding soot bowls (reads from 40-380 m!)
+        let macro_p = st_noise(world.xz / 4.8 + seed * 3.7);
+        let drain_p = st_noise(world.xz / 10.5 + seed * 1.3);
+        let stain = smoothstep(0.54, 0.84, macro_p * 0.58 + drain_p * 0.42);
+        let gravel_drift = smoothstep(0.50, 0.80, st_noise(world.xz / 2.7 + seed * 5.9));
+        alb = alb * (1.0 - 0.28 * stain) * (1.0 + 0.16 * gravel_drift);
+        micro_rough = micro_rough * (1.0 - 0.08 * stain + 0.08 * gravel_drift);
+        // Perimeter parapet coping flashing & shadow-gutter AO along roof bounding edges (0.95 m reach)
+        let edge_x = min(world.x - ob.min.x, ob.max.x - world.x);
+        let edge_z = min(world.z - ob.min.z, ob.max.z - world.z);
+        let d_edge = max(min(edge_x, edge_z), 0.0);
+        let flash = 1.0 - smoothstep(0.10, 0.95, d_edge);
+        let gutter = 1.0 - smoothstep(0.0, 0.45, d_edge);
+        alb = alb * (1.0 - 0.24 * flash - 0.20 * gutter);
+        micro_ao = micro_ao * (1.0 - 0.42 * gutter);
+    }
     if (vertex_colour) {
         (*s).albedo = mix((*s).albedo, alb, vfade);
         (*s).rough = clamp((*s).rough * mix(1.0, t.rough / max(lx.x, 0.05), 0.7 * vfade), 0.04, 1.0);
     } else {
         (*s).albedo = alb * m.base.rgb * vcol;
-        (*s).rough = clamp(m.params.x * mix(1.0, t.rough / max(lx.x, 0.05), 0.85), 0.04, 1.0);
-        (*s).metal = m.params.y;
+        var out_rough = clamp(m.params.x * mix(1.0, micro_rough, 0.85), 0.04, 1.0);
+        // Guard dry building flat roofs against mirror-like specular/SSR pool artifacts
+        // (both non-metal roofs and weathered metal roof decks stay above `SKY_CINE_SSR_ROUGH.y = 0.50`,
+        // excluding playable-house interior floors/counters).
+        if ((kind == 5u || (kind == 4u && (*s).env <= 0 && (!SF_HOUSE || (ob.kind & 0xfffffe00u) == 0u))) && n.y > 0.65) {
+            out_rough = max(out_rough, select(0.78, 0.62, m.params.y >= 0.25));
+        }
+        if (kit_skirt) {
+            out_rough = max(out_rough, 0.76);
+        }
+        var out_metal = m.params.y;
+        if (SF_AAA_DETAIL && bldg_ext && abs(n.y) < 0.55 && out_metal >= 0.45) {
+            // Crisp anodized aluminum/bronze/steel mullions & facade metalwork specular sheen
+            out_rough = clamp(out_rough * 0.78, 0.20, 0.68);
+            out_metal = max(out_metal, 0.80);
+        }
+        (*s).rough = out_rough;
+        (*s).metal = out_metal;
     }
-    (*s).ao = mix((*s).ao, clamp(mix(1.0, t.ao / max(lx.y, 0.05), 0.85), 0.25, 1.0), vfade);
-    (*s).n = cc0_frame_normal(fr, t.n, e2.w * vfade);
+    (*s).ao = mix((*s).ao, clamp(micro_ao, 0.16, 1.0), vfade);
+    (*s).n = cc0_frame_normal(fr, micro_tn, n_str * vfade);
+    if (SF_AAA_DETAIL && vertex_colour && (kind == 9u || kind == 10u) && n.y > 0.85 && mode != CC0_MODE_PLAZA && mode != CC0_MODE_SAND
+        && (layer == CC0_L_WOOD_TEXTURED_CONCRETE || layer == CC0_L_CONCRETE_WALL_008 || layer == CC0_L_DIRTY_CONCRETE || layer == CC0_L_CONCRETE_FLOOR_WORN_001)) {
+        cc0_promenade_scoring(s, world, n, dpx, dpy);
+    }
     cc0_wall_hit = true;
     return true;
 }
@@ -460,8 +829,91 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
         return;
     }
     let dist = length(frame.cam_pos.xyz - world);
-    let near = 1.0 - smoothstep(130.0, 190.0, dist);
+    let near = select(1.0 - smoothstep(130.0, 190.0, dist), 1.0 - smoothstep(260.0, 420.0, dist), SF_AAA_DETAIL);
     let slope = 1.0 - clamp(n.y, 0.0, 1.0);
+    // (`--aaa-buildings`) Naturalize synthetic lime/emerald park turf toward coastal California
+    // olive-sage & sun-dappled dry-gold, break up bare urban hillside yards/backlots out to 950 m,
+    // and texture steep neutral-grey urban cut-banks/slopes (`05a` & `05b` terrain blobs).
+    var aaa_tn = vec2<f32>(0.0);
+    let aaa_paved = SF_AAA_DETAIL && n.y > 0.94 && (sets.x == CC0_L_CONCRETE_FLOOR_WORN_001 || (sets.x == CC0_L_GRAVEL_FLOOR_03 && world.y < LM_SEA_LEVEL_Y + 9.0));
+    if (SF_AAA_DETAIL && !aaa_paved) {
+        let fw_g = max(length(dpx), length(dpy));
+        let mid_fade = 1.0 - smoothstep(550.0, 1050.0, dist);
+        let fine_fade = 1.0 - smoothstep(0.18, 0.95, fw_g);
+        let micro_fade = 1.0 - smoothstep(0.03, 0.24, fw_g);
+        // Domain-warped organic multi-scale noise (eliminates wavy ripples while keeping crisp hillside texture)
+        let w0 = vec2<f32>(st_noise(world.xz / 7.5 + vec2<f32>(2.3, 8.1)), st_noise(world.xz / 7.5 + vec2<f32>(11.9, 4.7))) - 0.5;
+        let p_org = world.xz + w0 * 3.4;
+        let n_m = st_noise(p_org / 13.5 + vec2<f32>(4.1, 7.3));
+        let n_s = st_noise(p_org / 3.8 + vec2<f32>(11.7, 2.9));
+        let n_f = st_noise(p_org / 1.15 + vec2<f32>(3.3, 19.1));
+        let n_hi = st_noise(world.xz * 2.6 + vec2<f32>(7.1, 13.7));
+        let n_grit = st_noise(world.xz * 7.8 + vec2<f32>(19.3, 5.4));
+        if (sets.x == CC0_L_GRASS004) {
+            // Pull overly vivid lime park/yard vertex tones into coastal SF olive-sage & sunlit dry turf,
+            // with organic garden-bed / shrubbery / mulch / soil breakup so hillside yards (`05a`) read natural.
+            let l_g = dot((*s).albedo, CC0_LUMA);
+            let olive = vec3<f32>(l_g * 0.90, l_g * 0.96, l_g * 0.62);
+            (*s).albedo = mix((*s).albedo, olive, 0.36);
+            let yard_cell = floor((world.xz + w0 * 2.2) / 9.5);
+            let yard_h = st_hash(yard_cell + vec2<f32>(6.1, 3.7));
+            let shrub = smoothstep(0.54, 0.80, n_s * 0.58 + n_f * 0.42);
+            let dry_bed = smoothstep(0.54, 0.82, n_m * 0.55 + (1.0 - n_s) * 0.45);
+            let garden_tint = mix(
+                mix(vec3<f32>(0.85, 0.90, 0.76), vec3<f32>(1.22, 1.08, 0.80), dry_bed),
+                vec3<f32>(0.56, 0.66, 0.46),
+                shrub * (0.50 + 0.35 * yard_h),
+            );
+            let parcel_var = 0.86 + 0.28 * yard_h;
+            let clump = 1.0 + ((n_s - 0.5) * 0.32 + (n_f - 0.5) * 0.24 * fine_fade + ((n_hi - 0.5) * 0.22 + (n_grit - 0.5) * 0.16) * micro_fade);
+            (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), garden_tint * parcel_var * clump, 0.86 * mid_fade);
+            (*s).ao = (*s).ao * (1.0 - 0.20 * shrub * (1.0 - n_f) * mid_fade);
+            (*s).rough = max((*s).rough, 0.93);
+            if (fine_fade > 0.01) {
+                let gx_n = st_noise((p_org + vec2<f32>(0.25, 0.0)) / 1.15 + vec2<f32>(3.3, 19.1)) - n_f;
+                let gz_n = st_noise((p_org + vec2<f32>(0.0, 0.25)) / 1.15 + vec2<f32>(3.3, 19.1)) - n_f;
+                let gx_h = st_noise((world.xz + vec2<f32>(0.08, 0.0)) * 2.6 + vec2<f32>(7.1, 13.7)) - n_hi;
+                let gz_h = st_noise((world.xz + vec2<f32>(0.0, 0.08)) * 2.6 + vec2<f32>(7.1, 13.7)) - n_hi;
+                aaa_tn = vec2<f32>(gx_n * 0.48 + gx_h * 0.72 * micro_fade, -(gz_n * 0.48 + gz_h * 0.72 * micro_fade)) * (fine_fade * mid_fade);
+            }
+        } else if (mid_fade > 0.01) {
+            // Urban hillside yards, backlots, earth & scrub: multi-scale garden/soil/shrub/patio breakup
+            let lot_cell = floor((world.xz + w0 * 2.0) / 9.5);
+            let lot_h = st_hash(lot_cell + vec2<f32>(2.7, 8.3));
+            let shrub = smoothstep(0.54, 0.80, n_s * 0.58 + n_f * 0.42);
+            let soil_patch = smoothstep(0.52, 0.80, n_m * 0.55 + (1.0 - n_s) * 0.45);
+            let yard_tint = mix(
+                mix(vec3<f32>(0.80, 0.78, 0.72), vec3<f32>(1.08, 0.98, 0.82), soil_patch),
+                vec3<f32>(0.56, 0.65, 0.46),
+                shrub * (0.48 + 0.35 * lot_h),
+            );
+            let lot_var = 0.85 + 0.30 * lot_h;
+            let micro = 1.0 + ((n_s - 0.5) * 0.32 + (n_f - 0.5) * 0.24 * fine_fade + ((n_hi - 0.5) * 0.24 + (n_grit - 0.5) * 0.18) * micro_fade);
+            (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), yard_tint * lot_var * micro, 0.86 * mid_fade);
+            (*s).ao = (*s).ao * (1.0 - 0.20 * shrub * (1.0 - n_f) * mid_fade);
+            (*s).rough = max((*s).rough, 0.92);
+            if (fine_fade > 0.01) {
+                let gx_n = st_noise((p_org + vec2<f32>(0.25, 0.0)) / 1.15 + vec2<f32>(3.3, 19.1)) - n_f;
+                let gz_n = st_noise((p_org + vec2<f32>(0.0, 0.25)) / 1.15 + vec2<f32>(3.3, 19.1)) - n_f;
+                let gx_h = st_noise((world.xz + vec2<f32>(0.08, 0.0)) * 2.6 + vec2<f32>(7.1, 13.7)) - n_hi;
+                let gz_h = st_noise((world.xz + vec2<f32>(0.0, 0.08)) * 2.6 + vec2<f32>(7.1, 13.7)) - n_hi;
+                aaa_tn = vec2<f32>(gx_n * 0.48 + gx_h * 0.72 * micro_fade, -(gz_n * 0.48 + gz_h * 0.72 * micro_fade)) * (fine_fade * mid_fade);
+            }
+        }
+        // Steep urban cut-banks & retaining slopes (`slope > 0.12`, e.g. `05b` raw grey hillside wedge):
+        // crisp gravelly soil/shale strata, fine pebble tooth, and coastal ivy/moss tufts.
+        if (slope > 0.12 && mid_fade > 0.01) {
+            let cut_w = smoothstep(0.12, 0.28, slope) * mid_fade;
+            let strata = st_noise(vec2<f32>(dot(world.xz, vec2<f32>(0.7, 0.7)) / 1.6, world.y * 3.4 + n_s * 1.2));
+            let pebble = n_hi * 0.55 + n_grit * 0.45;
+            let ivy = smoothstep(0.56, 0.82, n_s * 0.65 + pebble * 0.35);
+            let bank_col = mix(vec3<f32>(0.64, 0.61, 0.54) * (0.72 + 0.52 * strata), vec3<f32>(0.42, 0.50, 0.34), ivy * 0.50);
+            (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), bank_col * (0.76 + 0.46 * pebble), cut_w * 0.90);
+            (*s).ao = (*s).ao * (1.0 - 0.28 * cut_w * (1.0 - strata));
+            (*s).rough = max((*s).rough, 0.93);
+            aaa_tn = aaa_tn + vec2<f32>((pebble - 0.5) * 0.62, (strata - 0.5) * 0.58) * cut_w * (0.35 + 0.65 * micro_fade);
+        }
+    }
     // Macro variation at any distance: set B's hue (at set A's luminance) over
     // a slow field, 40 % of the way (dry patches in turf, bare earth in scrub),
     // its finer octave and the scans only near.
@@ -474,6 +926,13 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     if (near <= 0.0) {
         let wf = clamp((coarse + slope * 0.8 - 0.62) * 4.0 + 0.5, 0.0, 1.0) * far_fade;
         (*s).albedo = (*s).albedo * mix(vec3<f32>(1.0), shift, wf);
+        if (SF_AAA_DETAIL && dot(aaa_tn, aaa_tn) > 1e-5) {
+            let ta = normalize(vec3<f32>(1.0, 0.0, 0.0) - n * n.x);
+            let tb = normalize(vec3<f32>(0.0, 0.0, -1.0) + n * n.z);
+            let tn_c = clamp(aaa_tn, vec2<f32>(-0.55), vec2<f32>(0.55));
+            let z = sqrt(max(0.0, 1.0 - dot(tn_c, tn_c)));
+            (*s).n = normalize(ta * tn_c.x + tb * tn_c.y + n * z);
+        }
         return;
     }
     let field = coarse * 0.65 + st_noise(world.xz / 9.0 + 8.1) * 0.35;
@@ -500,7 +959,13 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     if (cc0_on(CC0_RUN_TILING)) {
         rel = rel * (0.9 + 0.2 * st_noise(world.xz / 17.0 + 1.9));
     }
-    cc0_ground_apply(s, n, rel, mix(ta.rough, tb.rough, w), mix(ta.ao, tb.ao, w), mix(ta.n, tb.n, w) * near, f32(sets.z) / 100.0 * near);
+    let out_tn = clamp(mix(ta.n, tb.n, w) * near + aaa_tn, vec2<f32>(-0.75), vec2<f32>(0.75));
+    cc0_ground_apply(s, n, rel, mix(ta.rough, tb.rough, w), mix(ta.ao, tb.ao, w), out_tn, f32(sets.z) / 100.0 * near);
+    if (aaa_paved) {
+        // Paved waterfront / urban concrete terrain (`w27146063` Embarcadero promenade in `08`):
+        // applied after `cc0_ground_apply` so architectural joint grooves & bevelled normals survive intact.
+        cc0_promenade_scoring(s, world, n, dpx, dpy);
+    }
 }
 
 // The terrain surface pass's ground (GG3_MATERIALS; terrain_detail.rs
@@ -668,7 +1133,7 @@ fn gg3_terrain(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: v
         grass = FL2_BLUFF_GRASS * (1.0 - 0.6 * codes.y);
     }
     let dist = length(frame.cam_pos.xyz - world);
-    let near = 1.0 - smoothstep(130.0, 190.0, dist);
+    let near = select(1.0 - smoothstep(130.0, 190.0, dist), 1.0 - smoothstep(240.0, 380.0, dist), SF_AAA_DETAIL);
     // the fine detail (the 1-3 m tufts field, the scans' albedo, each a lattice or a 2-3 m
     // repeat) only where it is a few pixels or more: past GG3_FINE_M it gives way to its mean,
     // or its period shows as a regular stipple (INFERRED: at 1920 px and 50-60 degrees a 2.5 m
@@ -681,7 +1146,14 @@ fn gg3_terrain(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: v
     let tufts = clamp((grass - field) * 3.0 + 0.5, 0.0, 1.0);
     if (!cc0_on(CC0_RUN_GROUND) || near <= 0.0) {
         let gc = mix(grass, tufts, near * fine);
-        (*s).albedo = mix(mix(sub, grass_col, gc * (1.0 - rock)), rock_col, rock);
+        var far_col = mix(mix(sub, grass_col, gc * (1.0 - rock)), rock_col, rock);
+        if (SF_AAA_DETAIL) {
+            let mf = 1.0 - smoothstep(500.0, 1200.0, dist);
+            let m0 = st_noise(world.xz / 18.0 + vec2<f32>(2.3, 6.1));
+            let m1 = st_noise(world.xz / 6.2 + vec2<f32>(9.4, 1.7));
+            far_col = far_col * (1.0 + ((m0 - 0.5) * 0.24 + (m1 - 0.5) * 0.16) * mf);
+        }
+        (*s).albedo = far_col;
         (*s).n = nk;
         return;
     }
@@ -695,13 +1167,33 @@ fn gg3_terrain(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: v
     }
     // the higher relief wins at the cover's edge
     let gw = clamp(mix(grass, tufts, near * fine) + (tg.h - ts.h) * 0.6 * near * fine, 0.0, 1.0) * (1.0 - rock);
-    let detail = max(fine, GG3_FINE_KEEP);
+    let detail = select(max(fine, GG3_FINE_KEEP), max(fine, 0.62), SF_AAA_DETAIL);
     var rel = mix(mix(vec3<f32>(1.0), ts.alb.rgb, detail) * sub, mix(vec3<f32>(1.0), tg.alb.rgb, detail) * grass_col, gw);
     var tn = mix(ts.n, tg.n, gw);
     if (rock > 0.0) {
         let tr = gg3_rock_tap(world, n, dpx, dpy);
         rel = mix(rel, tr.alb.rgb * rock_col, rock);
         tn = mix(tn, tr.n, rock);
+    }
+    if (SF_AAA_DETAIL) {
+        let fw_t = max(length(dpx), length(dpy));
+        let mf_t = 1.0 - smoothstep(420.0, 950.0, dist);
+        let kf_t = 1.0 - smoothstep(0.18, 1.10, fw_t);
+        let c0 = st_noise(world.xz / 13.0 + vec2<f32>(3.1, 6.7));
+        let c1 = st_noise(world.xz / 4.2 + vec2<f32>(8.7, 2.3));
+        let c2 = st_noise(world.xz / 1.5 + vec2<f32>(1.9, 14.3));
+        let shrub_t = smoothstep(0.54, 0.82, c1 * 0.62 + c2 * 0.38);
+        let soil_t = smoothstep(0.56, 0.84, c0 * 0.6 + (1.0 - c1) * 0.4);
+        let patch_tint = mix(
+            mix(vec3<f32>(0.84, 0.86, 0.78), vec3<f32>(1.18, 1.06, 0.82), soil_t),
+            vec3<f32>(0.62, 0.72, 0.50),
+            shrub_t * 0.65,
+        );
+        let breakup = 1.0 + ((c1 - 0.5) * 0.34 + (c2 - 0.5) * 0.28 * kf_t);
+        rel = rel * mix(vec3<f32>(1.0), patch_tint * breakup, 0.82 * mf_t);
+        let gxt = st_noise((world.xz + vec2<f32>(0.32, 0.0)) / 1.5 + vec2<f32>(1.9, 14.3)) - c2;
+        let gzt = st_noise((world.xz + vec2<f32>(0.0, 0.32)) / 1.5 + vec2<f32>(1.9, 14.3)) - c2;
+        tn = clamp(tn + vec2<f32>(gxt, -gzt) * (1.25 * kf_t * mf_t), vec2<f32>(-0.78), vec2<f32>(0.78));
     }
     // (cc0_ground_apply multiplies the albedo by the detail: start from one)
     if (codes.x + codes.y > 0.0) {
@@ -975,6 +1467,190 @@ fn cc0_scoring(s: ptr<function, Surface>, rel: vec3<f32>, n_geom: vec3<f32>, acr
     if (!SF_STREET_PBR) {
         (*s).n = normalize((*s).n + lean * 0.45 * fade);
     }
+}
+
+// Wide waterfront / Embarcadero promenade concrete (`08_embarcadero_street_closeup`, wide
+// footways with saturated kerb gradient `length(g) < 0.3`, non-plaza aprons `in.aux.y < 0.0`,
+// and horizontal waterfront concrete decks): anisotropic-safe 1.60 m architectural expansion-joint
+// grid, 6.40 m control-joint saw cuts, per-slab pour tone variation, joint silt/AO, bevelled
+// normals, and broomed coastal concrete aggregate mottling.
+fn cc0_promenade_scoring(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let pitch = 1.60;
+    let fx = abs(dpx.x) + abs(dpy.x);
+    let fz = abs(dpx.z) + abs(dpy.z);
+    let fw_min = min(fx, fz);
+    let fade_x = 1.0 - smoothstep(pitch * 0.22, pitch * 0.72, fx);
+    let fade_z = 1.0 - smoothstep(pitch * 0.22, pitch * 0.72, fz);
+    let fade = max(fade_x, fade_z);
+    let cell = floor(world.xz / pitch);
+    let rnd = st_hash(cell + vec2<f32>(5.3, 11.7));
+    let batch = st_hash(floor(world.xz / (pitch * 4.0)) + vec2<f32>(2.1, 8.9));
+    // Readable slab-to-slab & 6.4 m pour-bay tone variation
+    let slab_tone = 1.0 + ((rnd - 0.5) * 0.14 + (batch - 0.5) * 0.10) * (0.45 + 0.55 * fade);
+    let slab_warm = vec3<f32>(1.0 + (rnd - 0.5) * 0.030, 1.0, 1.0 - (rnd - 0.5) * 0.036);
+    (*s).albedo = (*s).albedo * slab_tone * slab_warm;
+    // Broad coastal foot-traffic, salt-air concrete weathering & exposed-aggregate mottle
+    let wear = st_noise(world.xz / 3.4 + vec2<f32>(1.9, 6.4)) * 0.55 + st_noise(world.xz / 0.95 + vec2<f32>(8.3, 2.7)) * 0.45;
+    (*s).albedo = (*s).albedo * (0.88 + 0.24 * wear);
+    (*s).rough = clamp((*s).rough + (0.5 - wear) * 0.14, 0.58, 0.98);
+    if (fade <= 0.001) {
+        return;
+    }
+    let fuv = fract(world.xz / pitch);
+    let dx_e = min(fuv.x, 1.0 - fuv.x) * pitch;
+    let dz_e = min(fuv.y, 1.0 - fuv.y) * pitch;
+    // Fine broomed / exposed-aggregate mineral grit inside each slab
+    let grit_fade = 1.0 - smoothstep(0.010, 0.055, fw_min);
+    if (grit_fade > 0.01) {
+        let g_fine = st_noise(world.xz * 22.0 + vec2<f32>(rnd * 17.0, batch * 11.0));
+        let g_med = st_noise(world.xz * 6.5 + vec2<f32>(batch * 13.0, rnd * 7.0));
+        (*s).albedo = (*s).albedo * (1.0 + ((g_fine - 0.5) * 0.13 + (g_med - 0.5) * 0.09) * grit_fade);
+    }
+    // Dirt & coastal silt held a few centimetres along expansion joints
+    let jg_x = (1.0 - smoothstep(0.0, 0.10 + fx, dx_e)) * fade_x;
+    let jg_z = (1.0 - smoothstep(0.0, 0.10 + fz, dz_e)) * fade_z;
+    (*s).albedo = (*s).albedo * (1.0 - 0.12 * max(jg_x, jg_z));
+    // Primary 1.60 m tooled scoring joints & wider 6.40 m expansion saw-cut control joints
+    let sx = fract(world.x / pitch + 0.5) - 0.5;
+    let sz = fract(world.z / pitch + 0.5) - 0.5;
+    let maj_x = step(abs(fract(world.x / (pitch * 4.0) + 0.5) - 0.5), 0.045);
+    let maj_z = step(abs(fract(world.z / (pitch * 4.0) + 0.5) - 0.5), 0.045);
+    let hwx = mix(0.012, 0.024, maj_x);
+    let hwz = mix(0.012, 0.024, maj_z);
+    let jx = 0.62 + 0.38 * st_hash(vec2<f32>(floor(world.x / pitch + 0.5), 13.7));
+    let jz = 0.62 + 0.38 * st_hash(vec2<f32>(floor(world.z / pitch + 0.5), 27.3));
+    let gx = (1.0 - smoothstep(hwx, hwx + fx * 1.15, abs(sx) * pitch)) * jx * fade_x;
+    let gz = (1.0 - smoothstep(hwz, hwz + fz * 1.15, abs(sz) * pitch)) * jz * fade_z;
+    let near_x = 1.0 - smoothstep(0.03, 0.24, fx);
+    let near_z = 1.0 - smoothstep(0.03, 0.24, fz);
+    let dist_s = 1.0 - smoothstep(35.0, 95.0, length(frame.cam_pos.xyz - world));
+    let groove = max(gx * (0.48 + 0.52 * near_x), gz * (0.48 + 0.52 * near_z));
+    let g_vis = groove * mix(0.28, 1.0, dist_s);
+    (*s).albedo = (*s).albedo * (1.0 - 0.42 * g_vis);
+    (*s).ao = (*s).ao * (1.0 - 0.48 * g_vis);
+    (*s).rough = min(1.0, (*s).rough + 0.10 * g_vis);
+    let ta = normalize(vec3<f32>(1.0, 0.0, 0.0) - n_geom * n_geom.x);
+    let tc = normalize(vec3<f32>(0.0, 0.0, 1.0) - n_geom * n_geom.z);
+    let lean = ta * (sign(sx) * gx * near_x) + tc * (sign(sz) * gz * near_z);
+    (*s).n = normalize((*s).n + lean * (0.55 * mix(0.35, 1.0, dist_s)));
+}
+
+// Urban intersection junction-pad asphalt (`SC_PAD`, e.g. Embarcadero & Market St foreground in `08`):
+// junction pads lack road-run kerb coordinates and wheel-track decals, so add footprint-filtered
+// coarse mineral aggregate, turning-traffic tyre-polish & binder patchiness, utility-cut repair
+// slabs, and meandering tar-sealed asphalt cracks.
+fn cc0_pad_detail(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let dist = length(frame.cam_pos.xyz - world);
+    let fade = 1.0 - smoothstep(75.0, 145.0, dist);
+    if (fade <= 0.001) {
+        return;
+    }
+    let fw = max(length(dpx), length(dpy));
+    let keep_agg = 1.0 - smoothstep(0.012, 0.065, fw);
+    let keep_cr = 1.0 - smoothstep(0.018, 0.12, fw);
+    // Broad turning-lane tyre-polish wear & binder-age variation (1.6 m, 5.2 m, 13 m)
+    let w_big = st_noise(world.xz / 13.0 + vec2<f32>(3.7, 9.1));
+    let w_med = st_noise(world.xz / 4.8 + vec2<f32>(11.2, 2.4));
+    let w_sm = st_noise(world.xz / 1.45 + vec2<f32>(6.3, 14.8));
+    let wear = w_big * 0.45 + w_med * 0.35 + w_sm * 0.20;
+    let tyre_band = smoothstep(0.42, 0.78, w_med * 0.65 + w_sm * 0.35);
+    (*s).albedo = (*s).albedo * mix(1.0, (0.82 + 0.36 * wear) * (1.0 - 0.14 * tyre_band), fade);
+    (*s).rough = clamp((*s).rough + ((0.5 - wear) * 0.14 - 0.10 * tyre_band) * fade, 0.52, 0.96);
+    // Coarse exposed asphalt mineral aggregate grit
+    if (keep_agg > 0.01) {
+        let g0 = st_noise(world.xz * 19.0 + vec2<f32>(4.1, 8.7));
+        let g1 = st_noise(world.xz * 7.2 + vec2<f32>(15.3, 1.9));
+        let gx_a = st_noise((world.xz + vec2<f32>(0.016, 0.0)) * 19.0 + vec2<f32>(4.1, 8.7)) - g0;
+        let gz_a = st_noise((world.xz + vec2<f32>(0.0, 0.016)) * 19.0 + vec2<f32>(4.1, 8.7)) - g0;
+        (*s).albedo = (*s).albedo * (1.0 + ((g0 - 0.5) * 0.22 + (g1 - 0.5) * 0.14) * keep_agg * fade);
+        let ta = normalize(vec3<f32>(1.0, 0.0, 0.0) - n_geom * n_geom.x);
+        let tc = normalize(vec3<f32>(0.0, 0.0, 1.0) - n_geom * n_geom.z);
+        (*s).n = normalize((*s).n + (ta * gx_a + tc * gz_a) * (0.48 * keep_agg * fade));
+    }
+    // Meandering tar-sealed thermal cracks & paving-lane cold joints (4.2 m warped cells)
+    if (keep_cr > 0.01) {
+        let warp = vec2<f32>(st_noise(world.xz / 1.8 + vec2<f32>(2.1, 7.3)), st_noise(world.xz / 1.8 + vec2<f32>(9.4, 3.8))) - 0.5;
+        let p_c = (world.xz + warp * 1.15) / 4.2;
+        let f_c = abs(fract(p_c + 0.5) - 0.5) * 4.2;
+        let c_cell = floor(p_c + 0.5);
+        let c_show_x = step(0.42, st_hash(c_cell + vec2<f32>(3.1, 17.7)));
+        let c_show_z = step(0.46, st_hash(c_cell + vec2<f32>(19.3, 5.9)));
+        let cx = (1.0 - smoothstep(0.012, 0.036 + fw * 1.1, f_c.x)) * c_show_x;
+        let cz = (1.0 - smoothstep(0.012, 0.036 + fw * 1.1, f_c.y)) * c_show_z;
+        let crack = max(cx, cz) * keep_cr * fade;
+        (*s).albedo = mix((*s).albedo, (*s).albedo * 0.34, crack);
+        (*s).rough = mix((*s).rough, 0.36, crack * 0.80);
+        (*s).ao = (*s).ao * (1.0 - 0.35 * crack);
+    }
+}
+
+// Street verge banks (`ObjectKind::StreetPaint = 7u`, `cls != SC_PAINT`): replaces raw untextured
+// flat cream-tan/grey verge triangles (`08` diagonal curb bevel under palms & `05b` sloped verge
+// wedge between hillside buildings) with weathered grey concrete/granite coping & damp soil/gravel relief.
+fn cc0_verge_bank(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let dist = length(frame.cam_pos.xyz - world);
+    let fade = 1.0 - smoothstep(140.0, 260.0, dist);
+    if (fade <= 0.001) {
+        return;
+    }
+    let fr = fa_frame(n);
+    let fw = max(length(dpx), length(dpy));
+    let keep = 1.0 - smoothstep(0.02, 0.22, fw);
+    let slope = 1.0 - clamp(n.y, 0.0, 1.0);
+    // Recalibrate bright cream-beige `pal("verge")` into weathered grey SF concrete / granite coping
+    // matching `ST_CONCRETE_BASE` luminance (~0.18-0.22 linear) instead of raw bright cream (~0.68).
+    let luma = dot((*s).albedo, CC0_LUMA);
+    let target_l = select(min(luma * 0.42, 0.21), min(luma * 0.35, 0.16), slope > 0.16);
+    let neutral_grey = vec3<f32>(1.01, 0.99, 0.94) * max(target_l, 0.08);
+    var alb = mix((*s).albedo, neutral_grey, 0.88 * fade);
+    var tn = vec2<f32>(0.0);
+    var ao = (*s).ao;
+    var rough = max((*s).rough, 0.90);
+    let wu = dot(world, fr.t);
+    let wv = -dot(world, fr.b);
+    if (cc0_on(CC0_RUN_STREET) || cc0_on(CC0_RUN_WALLS)) {
+        let lay = select(CC0_L_CONCRETE_FLOOR_WORN_001, CC0_L_GRAVEL_FLOOR_03, slope > 0.20);
+        let inv = cc0_linv(lay);
+        let uv = vec2<f32>(wu * inv.x, wv * inv.y);
+        let gx = vec2<f32>(dot(dpx, fr.t) * inv.x, -dot(dpx, fr.b) * inv.y);
+        let gy = vec2<f32>(dot(dpy, fr.t) * inv.x, -dot(dpy, fr.b) * inv.y);
+        let t = cc0_tap(uv, gx, gy, lay);
+        let lm = cc0_lmean(lay);
+        let lx = cc0_lmisc(lay);
+        let rel = clamp(t.alb.rgb / max(lm.rgb, vec3<f32>(1e-3)), vec3<f32>(0.42), vec3<f32>(1.55));
+        alb = alb * mix(vec3<f32>(1.0), rel, 0.92 * fade);
+        ao = ao * mix(1.0, clamp(t.ao / max(lx.y, 0.05), 0.30, 1.0), 0.82 * fade);
+        rough = clamp(mix(rough, t.rough / max(lx.x, 0.05) * 0.92, 0.65 * fade), 0.76, 0.98);
+        tn = t.n * (1.15 * fade);
+    }
+    // Multi-scale weathered stone/concrete/soil mottling & cast-curb expansion joints (1.50 m)
+    let m0 = st_noise(world.xz / 1.8 + vec2<f32>(4.3, 9.1));
+    let m1 = st_noise(world.xz * 4.2 + vec2<f32>(world.y * 3.2, 1.7));
+    let m2 = st_noise(world.xz * 12.0 + vec2<f32>(world.y * 7.5, 6.3));
+    let bank_var = 0.74 + 0.50 * (m0 * 0.45 + m1 * 0.35 + m2 * 0.20);
+    alb = alb * mix(1.0, bank_var, fade);
+    if (slope > 0.10) {
+        // Steep hillside / curb verge: weathered soil-grit strata, damp crevice shade & subtle moss
+        let strata = st_noise(vec2<f32>(wu * 1.1, world.y * 3.8 + m0 * 0.9));
+        let moss = smoothstep(0.58, 0.84, m0 * 0.60 + m1 * 0.40) * smoothstep(0.14, 0.36, slope);
+        alb = mix(alb, alb * vec3<f32>(0.64, 0.72, 0.52), moss * 0.48 * fade);
+        alb = alb * (0.80 + 0.36 * strata);
+        tn = tn + vec2<f32>((m1 - 0.5) * 0.55 + (m2 - 0.5) * 0.35, (strata - 0.5) * 0.55) * (fade * (0.35 + 0.65 * keep));
+        ao = ao * (1.0 - 0.30 * (1.0 - strata) * fade);
+    }
+    if (keep > 0.01) {
+        // Cast-concrete curb / retaining expansion joints every 1.50 m
+        let su = fract(wu / 1.50 + 0.5) - 0.5;
+        let du = abs(su) * 1.50;
+        let joint = (1.0 - smoothstep(0.008, 0.024 + fw, du)) * keep * fade;
+        alb = alb * (1.0 - 0.34 * joint);
+        ao = ao * (1.0 - 0.42 * joint);
+        tn.x = tn.x + sign(su) * joint * 0.44;
+    }
+    (*s).albedo = alb;
+    (*s).rough = rough;
+    (*s).ao = clamp(ao, 0.18, 1.0);
+    (*s).n = cc0_frame_normal(fr, tn, 1.15);
 }
 
 fn cc0_reset_post() {

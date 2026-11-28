@@ -140,7 +140,10 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
     return s * min(inverseSqrt(keep), t.z);
 }
 fn pr_afloat_on(i: PrInstance) -> bool {
-    return (pr.mode.z & PR_F_AFLOAT) != 0u && (i.pad & PR_AFLOAT_BIT) != 0u;
+    // Vegetation stores a signed terrain gradient in this same word. Its
+    // sign bit must never roll a rock or shrub as though it were a hull.
+    return i.model >= PR_BOAT_START && i.model < PR_BOAT_END
+        && (pr.mode.z & PR_F_AFLOAT) != 0u && (i.pad & PR_AFLOAT_BIT) != 0u;
 }
 
 // A moored boat's pose on the sea (x roll about its bow axis, local +Z; y pitch

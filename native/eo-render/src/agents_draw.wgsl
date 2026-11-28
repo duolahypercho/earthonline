@@ -393,7 +393,29 @@ fn ag_surface(in: AgOut, bore: bool) -> AgSurf {
         ag_weather(&s, in.local, a, wx_fw(dpx, dpy)); // weathering (`--grime`): a vehicle's body, wheels and trim (`--car-materials`: ag_car_grime)
     }
     if (lamp != 0u) {
-        m.emissive = vec4<f32>(m.emissive.rgb * ag_lamp(a.flags, m.flags, in.local.x), 0.0);
+        var em = m.emissive.rgb * ag_lamp(a.flags, m.flags, in.local.x);
+        if (SF_AAA_BRDF) {
+            let night_l = max(1.0 - smoothstep(-0.04, 0.08, look.sun.y), ag_lamp_night());
+            if (night_l > 0.02) {
+                let em_l = lk_luma(em);
+                if (em_l > 1e-4) {
+                    if ((lamp & (AG_M_HEAD | AG_M_DRL)) != 0u) {
+                        // Crisp 5500K cool-white LED headlamps contrasting against warm streetlamps.
+                        let led_w = vec3<f32>(0.90, 0.97, 1.18);
+                        let led_n = led_w / lk_luma(led_w);
+                        em = mix(em, led_n * (em_l * 1.32), night_l * 0.88);
+                    } else if ((lamp & (AG_M_TAIL | AG_M_BRAKE)) != 0u) {
+                        // Deep-crimson ruby LED taillights, held below sensor-crosstalk whitening.
+                        let led_r = vec3<f32>(1.0, 0.015, 0.008);
+                        let target_r = led_r * (em_l / max(lk_luma(led_r), 1e-4)) * 1.38;
+                        let r_cap = 8.5 / max(look.key.w, 0.15);
+                        let r_scale = min(1.0, r_cap / max(lk_luma(target_r), 1e-4));
+                        em = mix(em, target_r * r_scale, night_l * 0.92);
+                    }
+                }
+            }
+        }
+        m.emissive = vec4<f32>(em, 0.0);
     }
     s.rough = clamp(s.rough, 0.03, 1.0);
     return AgSurf(s, m, v, n);
@@ -753,6 +775,42 @@ fn ag_sun_pre(in: AgOut) {
     lk_sun_pre = lk_shadow(in.world, n);
 }
 
+// (`SF_AAA_BRDF`) Seamless hemi-octahedral UV matching sky_clouds.wgsl / look_light.wgsl.
+fn ag_aaa_hemi_oct(d: vec3<f32>) -> vec2<f32> {
+    let du = normalize(vec3<f32>(d.x, max(d.y, 0.004), d.z));
+    let p = du.xz / max(abs(du.x) + abs(du.y) + abs(du.z), 1e-5);
+    return vec2<f32>(p.x + p.y, p.x - p.y) * 0.5 + 0.5;
+}
+
+// (`SF_AAA_BRDF`) Lean polynomial night midnight-indigo sky + storefront reflection tint
+// (zero trig/exp/ambient-volume inlining so `agent-opaque` stays well under Metal's IR cap).
+fn ag_aaa_night_refl(r: vec3<f32>, world: vec3<f32>, night_w: f32) -> vec3<f32> {
+    let inv_ex = 1.0 / max(look.key.w, 0.22);
+    let indigo = vec3<f32>(0.010, 0.024, 0.072) * (0.45 + 0.55 * smoothstep(-0.04, 0.55, r.y));
+    let hz = max(1.0 - r.y * r.y * 9.0, 0.0) * clamp(skyu.night.x, 0.0, 1.0);
+    let sw = fract(r.x * 1.3 + r.z * 0.9 + (world.x + world.z) * 0.012);
+    let warm_w = 1.0 - abs(sw * 2.0 - 1.0);
+    let urban = (vec3<f32>(0.115, 0.066, 0.024) * (0.35 + 0.65 * warm_w)
+        + vec3<f32>(0.046, 0.078, 0.122) * (1.0 - 0.65 * warm_w)) * (hz * 0.65);
+    return (indigo + urban) * (night_w * inv_ex);
+}
+
+// (`SF_AAA_BRDF`) Lean volumetric cloud + sky-dome environment for automotive windshields
+// (avoids re-inlining full Preetham sky / SH9 / ambient-volume inside `agent-opaque`).
+fn ag_aaa_glass_env(r: vec3<f32>, rough: f32) -> vec3<f32> {
+    let up = normalize(vec3<f32>(r.x, max(r.y, 0.008), r.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    var sky = lk_js_dome(up);
+    if (SF_AAA_CLOUD_REFL && sky_vol_clouds_on(skyu.cirrus) && sky_on(skyu.flags.x, SKY_CLOUDS) && skyu.cloud0.z > 0.0) {
+        let mip = clamp((rough - 0.03) * 6.0, 0.0, 3.0);
+        let cr = textureSampleLevel(lk_cloud_refl, lk_ao_samp, ag_aaa_hemi_oct(up), mip);
+        let comp = sky * (1.0 - clamp(cr.a, 0.0, 1.0)) + max(cr.rgb, vec3<f32>(0.0));
+        sky = comp * min(1.0, (lk_luma(sky) * 7.5 + 1e-4) / max(lk_luma(comp), 1e-6));
+    }
+    let env_i = sky_w2_env(mix(look.ambient.w * look.env_class.y, 1.0, lk_phys()));
+    let below = look.hemi_ground.xyz * (0.28 / LK_PI);
+    return mix(below, sky, smoothstep(-0.04, 0.04, r.y)) * env_i;
+}
+
 fn ag_shade(in: AgOut) -> vec4<f32> {
     if (LK_SUN_PRE) {
         ag_sun_pre(in); // (`--soft-shadows`) the penumbra first, where little else is live (look_light.wgsl `lk_sun_pre`)
@@ -762,6 +820,10 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     }
     let cd = ag_car_derivs(in); // (`--car-materials`) in uniform control flow; nothing without it
     var g = ag_surface(in, false);
+    // (`SF_AAA_BRDF`) derivatives in uniform control flow for specular AA on curved vehicle panels.
+    let aaa_dn_x = dpdx(g.n);
+    let aaa_dn_y = dpdy(g.n);
+    let aaa_dn = dot(aaa_dn_x, aaa_dn_x) + dot(aaa_dn_y, aaa_dn_y);
     // (SF_PLAYER_CONTACT false: no patch is drawn, and the test compiled out; look.rs `ShaderFeatures`)
     if (SF_PLAYER_CONTACT && (g.m.flags & AG_M_CONTACT) != 0u) {
         return ag_contact(in, ag_agents[in.agent]);
@@ -770,10 +832,24 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
         // in a landmark deck's room, the room's sky (landmarks_deck.wgsl).
         g.s.ao = g.s.ao * deck_room_vis(in.world);
     }
+    let ag_role = (g.m.flags >> AG_ROLE_SHIFT) & 15u;
+    let ag_is_car = ag_pipe_cars() && ag_models[ag_agents[in.agent].model].model_class != AG_PERSON;
+    // Note: `M_ROLE_SHIFT` is only populated when `--car-materials` is enabled, whereas
+    // `vehicles.rs` sets `F_GLASS` unconditionally on `VehicleGlass` and `VehicleGlassTint` alone.
+    let ag_is_window = ag_is_car && (g.m.flags & F_GLASS) != 0u && (ag_role == 0u || ag_role == AG_ROLE_GLASS || ag_role == AG_ROLE_GLASS_TINT);
+    let ag_is_lamp = (g.m.flags & (AG_M_TAIL | AG_M_BRAKE | AG_M_INDICATOR | AG_M_HEAD | AG_M_DRL | AG_M_REVERSE)) != 0u;
     if (SF_CINEMATIC && ag_pipe_cars() && (g.m.flags & AG_M_PAINT) != 0u && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
         let grime = clamp((g.s.rough - materials[in.material].params.x) / 0.4, 0.0, 1.0);
         sky_coat = 1.0;
         sky_coat_rough = mix(AG_CINE_COAT_ROUGH, AG_CINE_COAT_GRIME_ROUGH, grime);
+        if (SF_AAA_BRDF) {
+            // Tokuyoshi-Kaplanyan specular AA + grazing broadening on vehicle paint clearcoat
+            // so curved fenders/panels never throw sub-pixel night streetlight fireflies.
+            let graz = pow(1.0 - max(dot(g.n, g.v), 0.0), 3.0);
+            let cr_base = max(sky_coat_rough, mix(0.085, 0.16, graz));
+            sky_coat_rough = sqrt(min(cr_base * cr_base + min(0.5 * aaa_dn, 0.18), 1.0));
+            g.s.rough = sqrt(min(g.s.rough * g.s.rough + min(0.5 * aaa_dn, 0.18), 1.0));
+        }
     }
     // (`--car-materials`) the cars' own materials and lamps: the surface and
     // its coat set before the one look_light, the glass's reflection after.
@@ -781,6 +857,17 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     let car_on = ag_car_on();
     if (car_on) {
         car = ag_car_prepare(&g, in, cd);
+    } else if (SF_AAA_BRDF && ag_is_window) {
+        // Replace frosted matte-grey GLB windshield albedo (`VehicleGlass` [0.55, 0.58, 0.58])
+        // with glossy tinted automotive glass reflecting live sky, clouds, and street lamps.
+        let is_tint = (ag_role == AG_ROLE_GLASS_TINT) || (materials[in.material].base.r < 0.10);
+        g.s.albedo = vec3<f32>(0.0);
+        g.s.metal = 0.0;
+        g.s.rough = sqrt(min(0.042 * 0.042 + min(0.5 * aaa_dn, 0.10), 1.0));
+        g.m.flags = g.m.flags | F_THIN_GLASS;
+        g.m.thin_absorption = select(0.68, 0.84, is_tint);
+        sky_coat = 1.0;
+        sky_coat_rough = g.s.rough;
     }
     // (`--people-shading`) a person's skin, cloth and hair; compiled out without it.
     let is_person = ag_pipe_people() && (g.m.flags & AG_M_ATLAS) != 0u && ag_models[ag_agents[in.agent].model].model_class == AG_PERSON; // (`AG_PIPE`)
@@ -788,9 +875,57 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     if (person && pp_class(g.s.rough) == PP_SKIN) {
         lk_vis_wrap = PP_SKIN_WRAP_REACH; // the key's visibility past the terminator, for the band's tail
     }
+    let coat_atten_aaa = select(1.0, 1.0 - sky_coat * (0.04 + 0.96 * pow(1.0 - max(dot(g.n, g.v), 1e-4), 5.0)), SKY_CINE_FULL && sky_coat > 0.0);
     var c = look_light(g.s, g.m, g.v, in.world, g.n, 0u);
     if (car_on) {
         c = ag_car_finish(c, car, in.world, g, in.local, cd.px); // (a person comes back as it went: `ag_car_prepare` leaves them out)
+    }
+    if (SF_AAA_BRDF && ag_is_car) {
+        let night_w = max(1.0 - smoothstep(-0.04, 0.08, look.sun.y), clamp(look.rooms_env.x, 0.0, 1.0));
+        let nv_v = max(dot(g.n, g.v), 1e-3);
+        let fv_v = 0.05 + 0.95 * pow(1.0 - nv_v, 4.5);
+        let refl_v = reflect(-g.v, g.n);
+        let nr_v = select(vec3<f32>(0.0), ag_aaa_night_refl(refl_v, in.world, night_w), night_w > 0.01);
+        if (ag_is_window) {
+            var live_env = ag_aaa_glass_env(refl_v, g.s.rough);
+            if (night_w > 0.01) {
+                live_env = max(live_env, nr_v * 0.65) + nr_v * 0.55;
+            }
+            let lamp_cap = 3.5 / max(look.key.w, 0.15);
+            let l_glint = sky_coat_lights * min(1.0, lamp_cap / max(lk_luma(sky_coat_lights), 1e-5));
+            let fog_w = lk_fog_out;
+            let ff_g = look.fog_color.xyz * fog_w;
+            if (!car_on) {
+                let base_spec = max(c.rgb - ff_g, vec3<f32>(0.0));
+                let tint_body = vec3<f32>(0.008, 0.015, 0.014) * max(lk_luma(live_env), 0.015);
+                let refl_col = mix(base_spec, live_env * fv_v * g.s.ao, 0.88) + tint_body * (1.0 - fv_v) + l_glint * (1.0 - fog_w);
+                let a_g = clamp(max(c.a, 0.35), 0.35, 0.98);
+                c = vec4<f32>(refl_col / a_g + ff_g, a_g);
+            } else if (SF_AAA_CLOUD_REFL) {
+                let day_g = smoothstep(0.02, 0.16, look.sun.y);
+                let a_g = max(c.a, 0.05);
+                let live_add = (live_env * fv_v * g.s.ao) * (1.0 - fog_w) / a_g;
+                c = vec4<f32>(mix(c.rgb, max(live_add + ff_g, c.rgb * 0.45), 0.55 * day_g), c.a);
+            }
+        } else if (!ag_is_lamp) {
+            // Suppress stochastic `surfaces_ao` bounce fireflies at night (white cargo van in `06b`).
+            if (frame.copy_step.z < 0.5 && night_w > 0.01) {
+                let ao4_v = ao_fetch(in.world);
+                let b_cap = mix(2.5, 0.035 / max(look.key.w, 0.15), night_w);
+                let excess_b = max(ao4_v.rgb - min(ao4_v.rgb, vec3<f32>(b_cap)), vec3<f32>(0.0));
+                let diff_v = g.s.albedo * (1.0 - g.s.metal);
+                c = vec4<f32>(max(c.rgb - excess_b * diff_v * coat_atten_aaa * (1.0 - lk_fog_out), vec3<f32>(0.0)), c.a);
+            }
+            if (night_w > 0.01 && (g.m.flags & AG_M_PAINT) != 0u) {
+                let gloss_p = 1.0 - clamp(max(sky_coat_rough, 0.06) * 2.4, 0.0, 0.85);
+                c = vec4<f32>(c.rgb + nr_v * (fv_v * gloss_p * g.s.ao * 0.95 * (1.0 - lk_fog_out)), c.a);
+            }
+            let spec_cap = mix(18.0, 5.5, night_w) / max(look.key.w, 0.15);
+            let cl = lk_luma(c.rgb);
+            if (cl > spec_cap) {
+                c = vec4<f32>(c.rgb * (spec_cap * (1.0 + 0.35 * log(cl / spec_cap)) / max(cl, 1e-5)), c.a);
+            }
+        }
     }
     if (person) {
         c = vec4<f32>(c.rgb + pp_person(g), c.a);
@@ -1418,7 +1553,7 @@ fn ag_car_prepare(g: ptr<function, AgSurf>, in: AgOut, d: AgCarD) -> AgCar {
                 let front = local.z > md.center.z;
                 // (`--car-lamps`: a front bowl glows with the headlamps alone, not the running lamps' strip)
                 let i = ag_lamp(a.flags, select(AG_M_TAIL, select(AG_M_HEAD | AG_M_DRL, AG_M_HEAD, ag_car_lamps_on()), front), local.x);
-                let col = select(AG_CAR_LED_RED, vec3<f32>(1.0, 0.97, 0.92), front);
+                let col = select(AG_CAR_LED_RED, select(vec3<f32>(1.0, 0.97, 0.92), vec3<f32>(0.90, 0.97, 1.16), SF_AAA_BRDF), front);
                 let ring = 0.6 + 0.4 * sin(length(local.xy - vec2<f32>(sign(local.x) * abs(piv.x) * 0.75, piv.y + 0.28)) / AG_CAR_LED_PITCH * 3.14159);
                 (*g).m.emissive = vec4<f32>(col * i * 0.3 * mix(1.0, ring, 1.0 - smoothstep(0.004, 0.012, d.px)), 0.0);
             }
@@ -1569,7 +1704,7 @@ fn ag_car_badge(g: ptr<function, AgSurf>, uv: vec2<f32>, d: AgCarD, nb: vec3<f32
 // lamp's behind.
 fn ag_car_lens(tinted: bool, red: bool, local: vec3<f32>, md: AgModel, a: AgAgent) -> vec3<f32> {
     var lf = AG_M_REVERSE;
-    var col = vec3<f32>(1.0, 0.97, 0.92);
+    var col = select(vec3<f32>(1.0, 0.97, 0.92), vec3<f32>(0.90, 0.97, 1.16), SF_AAA_BRDF);
     var hold = 1.0;
     if (tinted) {
         lf = select(AG_M_INDICATOR, AG_M_TAIL, red);

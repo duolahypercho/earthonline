@@ -398,7 +398,7 @@ pub fn draw_wgsl() -> String {
             )
             .replace("    return vec4<f32>(-1.0); // @fr-roof-read\n", "    return in.fr_d;\n");
     }
-    s
+    crate::look::sf_select(&s)
 }
 
 /// The pages are BC3 (set by `HlodGpu::new` from the device's features; the

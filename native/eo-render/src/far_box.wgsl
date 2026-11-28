@@ -214,6 +214,41 @@ fn fb_night(object: u32, cell: vec2<i32>, cov: f32, office: bool, a: f32) -> vec
     var occ = clamp(look.rooms_env.y * (0.35 + 1.3 * hb), 0.0, 0.95);
     var lit = step(fb_h(object, cell, 8u), occ);
     if (office) {
+// sf:AAA_BUILDINGS+
+        if (SF_AAA_DETAIL) {
+            // Irregular multi-scale tenant clusters + varied 2700K-5200K office temperatures (no full-width zebra bars).
+            let p_floor = clamp(0.14 + look.rooms_work.x / 0.7 * 1.45 * hb * hb + 0.10 * hb, 0.08, 0.52);
+            let fl = step(fb_h(object, vec2<i32>(0, cell.y), 1u), p_floor);
+            let run_w = i32(3.0 + floor(fb_h(object, vec2<i32>(2, cell.y), 2u) * 5.0));
+            let run_id = i32(floor(f32(cell.x) / f32(run_w) + fb_h(object, vec2<i32>(3, cell.y), 3u) * 4.0));
+            let r_lit = fl * step(fb_h(object, vec2<i32>(run_id, cell.y), 4u), mix(0.36, 0.65, hb))
+                + (1.0 - fl) * step(fb_h(object, vec2<i32>(run_id, cell.y), 4u), 0.06);
+            let wl = step(fb_h(object, cell, 5u), 0.84);
+            let v_win = r_lit * wl + (1.0 - r_lit) * step(fb_h(object, cell, 5u), 0.025);
+            let v_run = r_lit * 0.84 + (1.0 - r_lit) * 0.025;
+            let v_fl = p_floor * 0.42 + 0.03;
+            let a_run = smoothstep(0.45, 1.15, a * 0.55);
+            let k = mix(mix(v_win, v_run, a), v_fl, a_run);
+            let th = fb_h(object, vec2<i32>(run_id, cell.y), 9u);
+            let bld_t = fb_h(object, vec2<i32>(0, 0), 71u);
+            var col = vec3<f32>(0.97, 0.98, 1.02);
+            if (bld_t < 0.45) {
+                if (th < 0.35) { col = vec3<f32>(0.54, 0.84, 1.30); }
+                else if (th < 0.62) { col = vec3<f32>(0.76, 0.94, 1.18); }
+                else if (th < 0.80) { col = vec3<f32>(0.97, 0.98, 1.02); }
+                else if (th < 0.94) { col = vec3<f32>(1.16, 0.74, 0.34); }
+                else { col = vec3<f32>(0.38, 0.94, 1.14); }
+            } else {
+                if (th < 0.28) { col = vec3<f32>(0.74, 0.92, 1.20); }
+                else if (th < 0.54) { col = vec3<f32>(0.97, 0.98, 1.02); }
+                else if (th < 0.80) { col = vec3<f32>(1.16, 0.74, 0.34); }
+                else { col = vec3<f32>(1.30, 0.56, 0.16); }
+            }
+            let mean_col = select(vec3<f32>(1.00, 0.84, 0.66), vec3<f32>(0.78, 0.92, 1.12), bld_t < 0.45);
+            let level = mix(0.32 + 0.78 * fb_h(object, vec2<i32>(run_id, cell.y), 10u), 0.62, a_run) * 0.72;
+            return mix(col, mean_col, a_run) * (cov * k * level * skyu.bloom_w2.z * 25.0 / LK_PI * dusk);
+        }
+// sf:end
         // whole floors lit by the office share, a few late windows on a dark floor.
         let p_floor = clamp(look.rooms_work.x / 0.7 * 2.6 * hb * hb, 0.0, 0.92);
         let fl = step(fb_h(object, vec2<i32>(0, cell.y), 1u), p_floor);
@@ -222,8 +257,18 @@ fn fb_night(object: u32, cell: vec2<i32>, cov: f32, office: bool, a: f32) -> vec
         occ = p_floor * 0.88 + (1.0 - p_floor) * 0.03;
     }
     let cool = step(1.0 - look.rooms_env.w, fb_h(object, cell, 9u));
-    let col = select(vec3<f32>(1.0, 0.62, 0.34), vec3<f32>(0.86, 0.93, 1.0), cool > 0.5);
-    let mean_col = mix(vec3<f32>(1.0, 0.62, 0.34), vec3<f32>(0.86, 0.93, 1.0), look.rooms_env.w);
+    var col = select(vec3<f32>(1.0, 0.62, 0.34), vec3<f32>(0.86, 0.93, 1.0), cool > 0.5);
+    var mean_col = mix(vec3<f32>(1.0, 0.62, 0.34), vec3<f32>(0.86, 0.93, 1.0), look.rooms_env.w);
+// sf:AAA_BUILDINGS+
+    if (SF_AAA_DETAIL) {
+        let rh = fb_h(object, cell, 9u);
+        if (rh < 0.42) { col = vec3<f32>(1.28, 0.56, 0.16); }
+        else if (rh < 0.68) { col = vec3<f32>(1.12, 0.76, 0.40); }
+        else if (rh < 0.82) { col = vec3<f32>(0.98, 0.94, 0.88); }
+        else { col = vec3<f32>(0.54, 0.82, 1.28); }
+        mean_col = vec3<f32>(1.08, 0.72, 0.44);
+    }
+// sf:end
     let k = mix(lit, occ, a);
     let level = mix(0.6 + 0.8 * fb_h(object, cell, 10u), 1.0, a);
     return mix(col, mean_col, a) * (cov * k * level * skyu.bloom_w2.z * 25.0 / LK_PI * dusk);
@@ -245,6 +290,12 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
     let extra = max(in.normal.xy, vec2<f32>(0.0));
     if (n.y > 0.7) {
         fb_roof(s, ob, in.object, in.world, dpx, dpy, cls, extra);
+// sf:AAA_BUILDINGS+
+        (*s).rough = max((*s).rough, 0.80);
+        aaa_bldg_top_y = ob.max.y;
+        aaa_bldg_on = SF_AAA_SKYLINE_FIELD;
+        aaa_glass_cov = 0.0;
+// sf:end
         return vec3<f32>(0.0);
     }
     if (abs(n.y) > 0.3) {
@@ -300,11 +351,25 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
         if (tower && top_band > 1.5) {
             let louvre = fb_pulse((y - wall_top) / 0.25, 0.5, fy / 0.25);
             (*s).albedo = mix(wall, wall * FB_CROWN_SHADE, 0.35 + 0.4 * louvre);
+// sf:AAA_BUILDINGS+
+            if (SF_AAA_DETAIL) {
+                (*s).rough = mix(0.62, 0.44, louvre);
+                (*s).metal = 0.28 * louvre;
+            }
+// sf:end
         } else {
             let fascia = fb_span(y, wall_top + 0.15, wall_top + top_band, fy);
             (*s).albedo = mix(wall, mix(trim, wall, 0.4), fascia);
+            (*s).rough = wall_rough;
         }
-        (*s).rough = wall_rough;
+// sf:AAA_BUILDINGS+
+        aaa_bldg_on = true;
+        aaa_glass_cov = 0.0;
+        aaa_bldg_top_y = ob.max.y;
+// sf:end
+        if (!(tower && top_band > 1.5)) {
+            (*s).rough = wall_rough;
+        }
         return vec3<f32>(0.0);
     }
     let bay_x = u; // bays from the wall's corner
@@ -482,7 +547,110 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
     (*s).n = nrm;
     // The street's canyon: the lowest storeys see less sky.
     (*s).ao = (*s).ao * mix(0.78, 1.0, smoothstep(0.0, 12.0, y));
-    var emit = fb_glass_sky(glass_n, v, f0, cov);
-    emit = emit + fb_night(in.object, cell, cov, office && cls != FB_ROW_BAYS, a);
+    var emit = fb_night(in.object, cell, cov, office && cls != FB_ROW_BAYS, a);
+// sf:AAA_BUILDINGS-
+    emit = emit + fb_glass_sky(glass_n, v, f0, cov);
+// sf:end
+// sf:AAA_BUILDINGS+
+    var aaa_cov = cov;
+    var aaa_dark_cov = dark_cov;
+    var aaa_wall_c = wall_c;
+    var aaa_dark_c = dark;
+    var aaa_body = body;
+    var aaa_f0 = f0;
+    var aaa_metal = 0.0;
+    if (SF_AAA_DETAIL && !blind) {
+        // Macro-frequency distant tower detail (surviving box-filtering out to 4 km):
+        // (1) Louvered double-height mechanical/refuge floors every 14-19 storeys on tall towers.
+        var mech = 0.0;
+        if (wall_top > 42.0 && (cls == FB_CURTAIN || cls == FB_RIBBON || cls == FB_MASONRY)) {
+            let m_per = mix(52.0, 72.0, fb_h(in.object, vec2<i32>(7, 13), 61u));
+            let m_h = mix(5.0, 7.2, fb_h(in.object, vec2<i32>(8, 14), 62u));
+            let m_mid = fb_pulse((y - ground) / m_per + 0.5, m_h / m_per, fy / m_per)
+                * smoothstep(22.0, 38.0, y) * smoothstep(wall_top - 3.0, wall_top - 10.0, y);
+            let m_top = fb_span(y, wall_top - m_h * 0.9, wall_top, fy) * step(55.0, wall_top);
+            mech = clamp(max(m_mid, m_top), 0.0, 1.0);
+            if (mech > 0.001) {
+                let drop = aaa_cov * (0.88 * mech);
+                aaa_cov = aaa_cov - drop;
+                aaa_dark_cov = clamp(aaa_dark_cov + drop, 0.0, 1.0);
+                let lv_stripe = fb_pulse(y / 0.65, 0.45, fy / 0.65);
+                aaa_dark_c = mix(aaa_dark_c, wall * (0.28 + 0.14 * lv_stripe), mech);
+                aaa_metal = 0.30 * mech;
+            }
+        }
+        // (2) Podium stone tone break & base plinth grounding + parapet rain-wash drip staining.
+        if (wall_top > 24.0) {
+            let podium = 1.0 - smoothstep(10.0, 16.0, y);
+            aaa_wall_c = aaa_wall_c * mix(vec3<f32>(1.0), vec3<f32>(0.88, 0.87, 0.85), podium * 0.65);
+        }
+        let base_soot = mix(0.82, 1.0, smoothstep(0.0, 5.0, y));
+        let top_drip_n = 0.55 + 0.45 * fb_h(in.object, vec2<i32>(i32(floor(bay_x * 0.25)), 91), 63u);
+        let top_drip = 1.0 - 0.14 * top_drip_n * smoothstep(wall_top - 9.0, wall_top, y);
+        let broad_w = 0.93 + 0.14 * fb_h(in.object, vec2<i32>(i32(floor(bay_x * 0.18)), i32(floor(y / 28.0))), 64u);
+        aaa_wall_c = aaa_wall_c * (base_soot * top_drip * broad_w);
+        // (3) Coherent multi-storey tenant suite blind/luminance stratification (survives at 3 km!).
+        let suite_h = mix(9.5, 14.5, fb_h(in.object, vec2<i32>(3, 5), 65u));
+        let suite_i = i32(floor(y / suite_h));
+        let suite_v = fb_h(in.object, vec2<i32>(suite_i, 19), 66u);
+        aaa_body = aaa_body * mix(0.55, 1.55, suite_v);
+        // Subtle panel-to-panel reflectance/hue shift (distance-faded cleanly).
+        let pan_j = (fb_h(in.object, cell, 67u) - 0.5) * (1.0 - a);
+        aaa_f0 = aaa_f0 * (1.0 + 0.20 * pan_j);
+        // Subtle late-afternoon / golden-hour interior office glow on shadowed facades before dusk lamps take over.
+        if (office && aaa_cov > 0.01 && frame.copy_step.z < 0.5 && skyu.atmo.y > 0.0 && skyu.atmo.y < 0.42 && look.rooms_env.x < 0.45) {
+            let late_day = smoothstep(0.42, 0.08, skyu.atmo.y) * (1.0 - smoothstep(0.05, 0.42, look.rooms_env.x));
+            let shaded = 1.0 - smoothstep(-0.05, 0.35, dot(n, look.key_dir.xyz));
+            let suite_on = smoothstep(0.42, 0.78, suite_v) * (0.45 + 0.55 * fb_h(in.object, vec2<i32>(i32(floor(bay_x * 0.15)), suite_i), 68u));
+            let tint_o = mix(vec3<f32>(1.0, 0.80, 0.56), vec3<f32>(0.88, 0.94, 1.0), step(0.55, fb_h(in.object, vec2<i32>(suite_i, 41), 69u)));
+            emit = emit + tint_o * (aaa_cov * suite_on * late_day * shaded * 0.042);
+        }
+    }
+    if (SF_AAA_BRDF) {
+        let op_w = max(wall_share + frame_cov + aaa_dark_cov, 1e-4);
+        (*s).albedo = (aaa_wall_c * wall_share + trim * frame_cov + aaa_dark_c * aaa_dark_cov) / op_w;
+        (*s).albedo = (*s).albedo * mix(1.0, occ, 0.6);
+        var op_rough = wall_rough;
+        if (cls == FB_CURTAIN || aaa_metal > 0.0) {
+            op_rough = mix(wall_rough, select(FB_SPANDREL_ROUGH, 0.46, aaa_metal > 0.0), clamp(aaa_dark_cov / op_w, 0.0, 1.0));
+        }
+        let is_curt = cls == FB_CURTAIN || glass_kind == FB_COATED;
+        if (is_curt) {
+            op_rough = min(op_rough, 0.24);
+            aaa_metal = max(aaa_metal, 0.72);
+            aaa_f0 = clamp(max(aaa_f0 * 1.75, vec3<f32>(0.26, 0.30, 0.34)), vec3<f32>(0.14), vec3<f32>(0.44));
+        } else if (wall_top > 12.0) {
+            let plinth_fb = 1.0 - smoothstep(4.0, 9.0, y);
+            op_rough = mix(op_rough, 0.34, plinth_fb * 0.65);
+        }
+        (*s).rough = op_rough;
+        (*s).metal = aaa_metal;
+        if (SF_AAA_DETAIL && a < 0.95) {
+            let cornice_u = smoothstep(2.0, 0.35, wall_top - y) * step(10.0, wall_top) * (1.0 - a);
+            let sill_fb = (1.0 - smoothstep(0.0, 0.10, abs(fract((y - ground) / storey) - sill))) * (1.0 - aaa_cov) * (1.0 - a);
+            (*s).n = normalize((*s).n + vec3<f32>(0.0, 0.30 * sill_fb - 0.32 * cornice_u, 0.0));
+            (*s).ao = clamp((*s).ao * (1.0 - 0.22 * cornice_u), 0.18, 1.0);
+        }
+        let wp_fb = vec2<f32>(bay_x * 0.24 + f32(in.object & 255u) * 0.63, y * 0.095);
+        let pj_fb = (vec2<f32>(fb_h(in.object, cell, 72u), fb_h(in.object, cell, 73u)) - 0.5) * 0.044 * (1.0 - a);
+        let jx_fb = (st_noise(wp_fb) - 0.5) * 0.022 + pj_fb.x;
+        let jy_fb = (st_noise(wp_fb + vec2<f32>(9.7, 5.3)) - 0.5) * 0.018 + pj_fb.y + select(0.014, 0.044, is_curt);
+        let t_fb = normalize(vec2<f32>(-n.z, n.x) + vec2<f32>(1e-5, 0.0));
+        let gn_fb = normalize(glass_n + vec3<f32>(t_fb.x * jx_fb, jy_fb, t_fb.y * jx_fb));
+        let batch_fb = (st_noise(wp_fb * 1.35 + vec2<f32>(4.1, 7.9)) - 0.5) * 0.16;
+        aaa_bldg_on = true;
+        aaa_glass_cov = aaa_cov;
+        aaa_glass_rough = mix(0.018, 0.044, a);
+        aaa_glass_f0 = clamp(aaa_f0 * (1.0 + batch_fb), vec3<f32>(0.09), vec3<f32>(0.46));
+        aaa_glass_n = gn_fb;
+        aaa_glass_room = aaa_body * mix(1.0, occ, 0.45) * select(0.75, 0.28, is_curt);
+        aaa_bldg_top_y = ob.max.y;
+    } else {
+        aaa_bldg_on = true;
+        aaa_glass_cov = 0.0;
+        aaa_bldg_top_y = ob.max.y;
+        emit = emit + fb_glass_sky(glass_n, v, aaa_f0, aaa_cov);
+    }
+// sf:end
     return emit;
 }

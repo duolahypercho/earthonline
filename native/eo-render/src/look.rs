@@ -373,7 +373,23 @@ pub struct LookOptions {
     /// `--wet-foliage`, `--lawn-albedo`): 0 (the default) is the frame as before,
     /// and each bit's shader code is compiled out while it is off (`sf_select`).
     pub nature: u32,
+    /// AAA photoreal building & skyline shaders (`AAA_*` bits; eo-app `--aaa-buildings`
+    /// / `--no-aaa-buildings` and per-feature `--no-skyline-*` / `--no-building-clouds`):
+    /// 0 (the default in `medium`) compiles out completely; enabled in `high`/`hyper` and `--play`.
+    pub aaa_buildings: u32,
 }
+
+/// `--aaa-buildings` sub-feature bits (`LookOptions::aaa_buildings`, `ShaderFeatures::aaa_buildings`):
+/// dual-lobe facade BRDF, live mip-mapped volumetric cloud/bay reflection dome,
+/// directional bay/ground bounce + grazing rim separation, skyline aerial perspective contrast,
+/// and macro-frequency distant tower detail.
+pub const AAA_BRDF: u32 = 1;
+pub const AAA_CLOUD_REFL: u32 = 2;
+pub const AAA_BOUNCE: u32 = 4;
+pub const AAA_AERIAL: u32 = 8;
+pub const AAA_DETAIL: u32 = 16;
+pub const AAA_SKYLINE_FIELD: u32 = 32;
+pub const AAA_ALL: u32 = AAA_BRDF | AAA_CLOUD_REFL | AAA_BOUNCE | AAA_AERIAL | AAA_DETAIL | AAA_SKYLINE_FIELD;
 
 /// `--foliage-light`: leaves and palm fronds pass light through (props_draw.wgsl
 /// `pr_foliage`, hlod_trees.wgsl `ft_foliage`).
@@ -506,6 +522,7 @@ impl Default for LookOptions {
             car_wet: 0,
             car_finish: 0,
             nature: 0,
+            aaa_buildings: 0,
         } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
@@ -749,6 +766,12 @@ pub const B_WINDOW_OPTICS: u32 = 21;
 /// Group 1 binding of the street lamps' pools on the ground (`--far-street-light`,
 /// sky.rs `bake_lamp_map`; look_light.wgsl `lk_lamp_map`).
 pub const B_LAMP_MAP: u32 = 22;
+/// Group 1 binding of the hemispherical volumetric cloud reflection dome (128^2 RGBA16F,
+/// 5 mips; clouds.rs `refl_view`, look_light.wgsl `lk_cloud_refl`).
+pub const B_CLOUD_REFL: u32 = 23;
+/// Group 1 binding of the citywide 2.5D skyline heightfield + horizon sky-vis / bent-normal
+/// map (2048^2 RGBA16F, 5 mips; skyline_field.rs, look_light.wgsl `lx_skyline_field`).
+pub const B_SKYLINE_FIELD: u32 = 24;
 
 /// What group 1 bindings 12-19 hold: a feature's real resources, or the
 /// 1 x 1 stand-ins made once with the look (`LookGpu::lighting_stand_ins`).
@@ -766,6 +789,7 @@ pub struct LightingBindings {
     pub light_shadow_atlas: wgpu::TextureView,
     pub light_shadow_table: wgpu::Buffer,
     pub shop_fronts: wgpu::Buffer,
+    pub skyline_field: wgpu::TextureView,
 }
 
 impl LightingBindings {
@@ -799,8 +823,9 @@ impl LightingBindings {
             probe_table,
             light_shadow_atlas: tex("light-shadow-stand-in", d2, 1, SHADOW_FORMAT, wgpu::TextureViewDimension::D2Array),
             light_shadow_table: table("light-shadow-table-stand-in"),
+            skyline_field: tex("skyline-field-stand-in", d2, 1, f16, wgpu::TextureViewDimension::D2),
         };
-        (b, 2 * 2 + 8 + 8 + 6 * 8 + 2 * 64)
+        (b, 2 * 2 + 8 + 8 + 8 + 6 * 8 + 2 * 64)
     }
 
     fn entries(&self) -> [wgpu::BindGroupEntry<'_>; 8] {
@@ -1226,6 +1251,10 @@ pub struct ShaderFeatures {
     pub volumetric_clouds: bool,
     /// Physical rain & wind surface FX (`--weather-fx`; `SF_WEATHER_FX`, `// sf:WEATHER_FX`).
     pub weather_fx: bool,
+    /// AAA photoreal building & skyline shaders (`AAA_*` bits; `SF_AAA_*`, `// sf:AAA_BUILDINGS`).
+    /// Compile-time gated (like `street_pbr`/`nature`): `ALL` and `NONE` leave it 0 so default `medium`
+    /// and `tests/shader_features` bit-parity tests stay unchanged.
+    pub aaa_buildings: u32,
 }
 
 impl ShaderFeatures {
@@ -1245,6 +1274,7 @@ impl ShaderFeatures {
         night_photometry: true, lamp_bounce: true, urban_sky: true, office_floors: true, room_depth: true, lamp_units: true, luminaires: true, rear_lamps: true, signal_spill: true, lit_rooms: true, wire_light: true, // the night track
         nature: 0, // the nature track
         volumetric_clouds: true, weather_fx: true,
+        aaa_buildings: 0,
     };
     /// No opt-in feature compiled in (the default frame's pipelines: the
     /// features on by default, `phys_sky`, `ap_lut`, `far_facade`, `volumetric_clouds` and `weather_fx`, stay in).
@@ -1260,6 +1290,7 @@ impl ShaderFeatures {
         night_photometry: false, lamp_bounce: false, urban_sky: false, office_floors: false, room_depth: false, lamp_units: false, luminaires: false, rear_lamps: false, signal_spill: false, lit_rooms: false, wire_light: false, // the night track
         nature: 0, // the nature track
         volumetric_clouds: true, weather_fx: true,
+        aaa_buildings: 0,
     };
 
     /// The features the look's options ask for, with the world's (`structures`,
@@ -1327,6 +1358,7 @@ impl ShaderFeatures {
             nature: o.nature & NATURE_ALL,
             volumetric_clouds: o.sky.volumetric_clouds,
             weather_fx: o.sky.weather_fx,
+            aaa_buildings: o.aaa_buildings & AAA_ALL,
         }
     }
 
@@ -1428,6 +1460,8 @@ impl ShaderFeatures {
         l.nature &= self.nature;
         l.sky.volumetric_clouds &= self.volumetric_clouds;
         l.sky.weather_fx &= self.weather_fx;
+        l.aaa_buildings &= self.aaa_buildings;
+        l.sky.aaa_aerial &= (self.aaa_buildings & AAA_AERIAL) != 0;
         l
     }
 
@@ -1504,6 +1538,14 @@ impl ShaderFeatures {
                 ("SF_WIRE_LIGHT", self.wire_light),
                 ("SF_VOL_CLOUDS", self.volumetric_clouds),
                 ("SF_WEATHER_FX", self.weather_fx),
+                ("SF_AAA_BUILDINGS", self.aaa_buildings != 0),
+                ("SF_AAA_BRDF", self.aaa_buildings & AAA_BRDF != 0),
+                ("SF_AAA_CLOUD_REFL", self.aaa_buildings & AAA_CLOUD_REFL != 0),
+                ("SF_AAA_BOUNCE", self.aaa_buildings & AAA_BOUNCE != 0),
+                ("SF_AAA_AERIAL", self.aaa_buildings & AAA_AERIAL != 0),
+                ("SF_AAA_DETAIL", self.aaa_buildings & AAA_DETAIL != 0),
+                ("SF_PALM", self.nature & NATURE_PALM != 0),
+                ("SF_AAA_SKYLINE_FIELD", self.aaa_buildings & AAA_SKYLINE_FIELD != 0),
             ]
             .iter()
             .map(|(name, on)| format!("const {name}: bool = {on};\n"))
@@ -1578,10 +1620,10 @@ fn night_gain(on: bool, f: &LookFrame) -> f32 {
 /// at the edge of what Apple's compiler takes (the props' cut-out) compiles as
 /// before, and with a bit in it holds its code alone, not the code it replaces.
 pub fn sf_select(src: &str) -> String {
-    sf_select_with(src, true)
+    sf_select_with(src, true, true)
 }
 
-fn sf_select_with(src: &str, weather_fx_floor: bool) -> String {
+fn sf_select_with(src: &str, weather_fx_floor: bool, aaa_buildings: bool) -> String {
     let f = shader_features();
     let on = |name: &str| match name {
         "FOLIAGE" => f.nature & NATURE_FOLIAGE != 0,
@@ -1602,6 +1644,9 @@ fn sf_select_with(src: &str, weather_fx_floor: bool) -> String {
         "VOL_CLOUDS" => f.volumetric_clouds,
         "WEATHER_FX" => f.weather_fx,
         "WEATHER_FX_FLOOR" => f.weather_fx && weather_fx_floor,
+        "AAA_BUILDINGS" => f.aaa_buildings != 0 && aaa_buildings,
+        "AAA_AERIAL" => (f.aaa_buildings & AAA_AERIAL) != 0,
+        "AAA_DETAIL" => (f.aaa_buildings & AAA_DETAIL) != 0,
         _ => false,
     };
     // `A|B`: either bit in (code two features share); `A&B`: both (code that joins them);
@@ -1708,6 +1753,15 @@ pub const CITY_LANDMARK: u32 = 3;
 /// The city shader's class line (draw.wgsl `CITY_CLASS`): every class's surface.
 const CITY_CLASS_ALL_WGSL: &str = "const CITY_CLASS: u32 = 0u; // (look.rs city_shader_source_class)\n";
 
+/// Fold a list of compile-time `const SF_*: bool = true;` flags to `false` inside a
+/// specialized pipeline variant whose objects can never reach those branches.
+fn fold_const_false(mut s: String, flags: &[&str]) -> String {
+    for name in flags {
+        s = s.replacen(&format!("const {name}: bool = true;"), &format!("const {name}: bool = false;"), 1);
+    }
+    s
+}
+
 /// The city shader for one opaque class of the split city pass (lib.rs
 /// `CityClasses`; draw.wgsl `CITY_GENERAL` 1, `CITY_STREET` 2,
 /// `CITY_LANDMARK` 3): the other classes' surfaces compiled out. Each class's
@@ -1715,7 +1769,93 @@ const CITY_CLASS_ALL_WGSL: &str = "const CITY_CLASS: u32 = 0u; // (look.rs city_
 pub fn city_shader_source_class(class: u32) -> String {
     let src = city_shader_source();
     debug_assert_eq!(src.matches(CITY_CLASS_ALL_WGSL).count(), 1);
-    src.replacen(CITY_CLASS_ALL_WGSL, &format!("const CITY_CLASS: u32 = {class}u; // (look.rs city_shader_source_class)\n"), 1)
+    let s = src.replacen(CITY_CLASS_ALL_WGSL, &format!("const CITY_CLASS: u32 = {class}u; // (look.rs city_shader_source_class)\n"), 1);
+    match class {
+        CITY_STREET => fold_const_false(
+            s,
+            &[
+                // Streets, sidewalks and kerbs return after `street_surface` (draw.wgsl);
+                // none of the kit, landmark, house, structure or skyline-building paths run.
+                "SF_FACADE_GLASS",
+                "SF_FACADE_WEATHER",
+                "SF_CANYON_GLASS",
+                "SF_FACADE_PATINA",
+                "SF_WINDOW_DEPTH",
+                "SF_SHOP_LIGHT",
+                "SF_FACADE_CLUTTER",
+                "SF_STREET_LIFE",
+                "SF_ROOM_DEPTH",
+                "SF_FAR_FACADE",
+                "SF_HOUSE",
+                "SF_STRUCTURES",
+                "SF_LANDMARK_ACCESS",
+                "SF_AAA_CLOUD_REFL",
+                "SF_AAA_BOUNCE",
+                "SF_AAA_DETAIL",
+                "SF_AAA_SKYLINE_FIELD",
+            ],
+        ),
+        CITY_LANDMARK => fold_const_false(
+            s,
+            &[
+                // `cull.wgsl::city_class` sends only `lm_kind != 0` non-kit objects here;
+                // kit facades, street surfaces, far boxes, houses and structures never run.
+                "SF_FACADE_GLASS",
+                "SF_FACADE_WEATHER",
+                "SF_CANYON_GLASS",
+                "SF_FACADE_PATINA",
+                "SF_WINDOW_DEPTH",
+                "SF_SHOP_LIGHT",
+                "SF_FACADE_CLUTTER",
+                "SF_STREET_LIFE",
+                "SF_ROOM_DEPTH",
+                "SF_FAR_FACADE",
+                "SF_HOUSE",
+                "SF_STRUCTURES",
+                "SF_STREET_PBR",
+                "SF_STREET_WEAR",
+                "SF_STREET_GLARE",
+                "SF_STREET_AGGREGATE",
+                "SF_PLAZA_SETTS",
+                "SF_WALK_RELIEF",
+            ],
+        ),
+        CITY_GENERAL => fold_const_false(
+            s,
+            &[
+                // `CITY_GENERAL` never runs `street_surface` (only `sp_paint_*` behind `SF_STREET_PBR`).
+                "SF_STREET_WEAR",
+                "SF_STREET_GLARE",
+                "SF_STREET_AGGREGATE",
+                "SF_PLAZA_SETTS",
+                "SF_WALK_RELIEF",
+            ],
+        ),
+        _ => s,
+    }
+}
+
+/// The city shader specialized for the transparent (`F_BLEND`) glass pass (`water_and_glass`):
+/// transparent objects never draw opaque street surfaces, far boxes, viaduct concrete, or
+/// opaque composite wall bounce/skyline-field paths, so folding those dead branches lowers
+/// fragment register pressure with bit-identical glass output.
+pub fn city_shader_source_blend() -> String {
+    fold_const_false(
+        city_shader_source(),
+        &[
+            "SF_STREET_PBR",
+            "SF_STREET_WEAR",
+            "SF_STREET_GLARE",
+            "SF_STREET_AGGREGATE",
+            "SF_PLAZA_SETTS",
+            "SF_WALK_RELIEF",
+            "SF_FAR_FACADE",
+            "SF_STRUCTURES",
+            "SF_AAA_BOUNCE",
+            "SF_AAA_DETAIL",
+            "SF_AAA_SKYLINE_FIELD",
+        ],
+    )
 }
 
 /// The city shader with `ambient` of the ambient volume and `shadow` of the sun's shadow lookup compiled in.
@@ -1736,13 +1876,281 @@ pub fn city_shader_source_variant(ambient: crate::ambient::ShaderLevels, shadow:
 /// the city overview's early draw took about 1 ms more by day, when no light
 /// runs; with it in the props' alone, nothing measurable).
 pub fn props_city_source(src: String) -> String {
-    src.replace("const SKY_LEAF_ON: bool = false;", "const SKY_LEAF_ON: bool = true;")
+    let s = src.replace("const SKY_LEAF_ON: bool = false;", "const SKY_LEAF_ON: bool = true;");
+    fold_const_false(
+        s,
+        &[
+            // Props use `ShadowLevels::Near` (`LK_SHADOW_FAR = false`, `LK_SHADOW_SOFT = false`)
+            // and never draw cars, players, weathered city masonry, tunnels, landmark decks,
+            // or building glass BRDF; folding those dead constants gives Apple's Metal compiler
+            // ample IR headroom on `prop-opaque` and `prop-cutout`.
+            "SF_OCCLUDER_LIGHT",
+            "SF_HOUSE",
+            "SF_STREET_PBR",
+            "SF_STREET_WEAR",
+            "SF_STREET_GLARE",
+            "SF_STREET_AGGREGATE",
+            "SF_PLAZA_SETTS",
+            "SF_WALK_RELIEF",
+            "SF_FACADE_GLASS",
+            "SF_FACADE_WEATHER",
+            "SF_CANYON_GLASS",
+            "SF_FACADE_PATINA",
+            "SF_WINDOW_DEPTH",
+            "SF_FAR_RELIEF",
+            "SF_FAR_FACADE",
+            "SF_OFFICE_FLOORS",
+            "SF_ROOM_DEPTH",
+            "SF_LIT_ROOMS",
+            "SF_SHOP_LIGHT",
+            "SF_FACADE_CLUTTER",
+            "SF_STREET_LIFE",
+            "SF_STRUCTURES",
+            "SF_SEABED",
+            "SF_COVE_SEDIMENT",
+            "SF_AAA_BOUNCE",
+            "SF_AAA_SKYLINE_FIELD",
+            "SF_CAR_MATERIALS",
+            "SF_CAR_REFLECTIONS",
+            "SF_CAR_WET",
+            "SF_CAR_FINISH",
+            "SF_PLAYER_CONTACT",
+            "SF_GRIME",
+            "SF_TUNNELS",
+            "SF_LANDMARK_ACCESS",
+            "SF_AAA_BRDF",
+            "SF_AAA_CLOUD_REFL",
+            "SF_SOFT_SHADOWS",
+            "SF_WET_SURFACES",
+            "SF_SCREEN_REFLECT",
+            "SF_WET_RELIEF",
+            "SF_LAMP_STREAKS",
+        ],
+    )
+}
+
+/// Minimal group-0 header and stubs for the street-props shader module (`props_city_base_source`):
+/// supplies the exact structs, group-0 bindings (`props.rs::draw_bgl`), noise/sRGB/CC0-tap helpers,
+/// and no-op stubs for city-only branches (`SF_HOUSE`, `SF_STREET_PBR`, `FA_PROBE_SHADER`,
+/// `SF_CANYON_GLASS`, landmarks) so Apple's Metal compiler (`MTLCompilerService`) does not parse
+/// ~16,500 lines of unreachable `draw`/`facade_age`/`rooms`/`landmarks_surface`/`street_pbr`/
+/// `weathering`/`street_life`/`cc0` WGSL when building `prop-opaque` and `prop-cutout`.
+const PROPS_CITY_HEADER_WGSL: &str = r#"
+struct Frame {
+    view_proj: mat4x4<f32>,
+    cam_pos: vec4<f32>,
+    sun_dir: vec4<f32>,
+    sun_color: vec4<f32>,
+    ambient_sky: vec4<f32>,
+    probe_info: vec4<f32>,
+    copy_step: vec4<f32>,
+};
+
+struct Object {
+    min: vec3<f32>,
+    index_count: u32,
+    max: vec3<f32>,
+    first_index: u32,
+    base_vertex: i32,
+    kind: u32,
+    copy: u32,
+    material: u32,
+    lod_group: u32,
+    lod_role: u32,
+    far_first_index: u32,
+    far_index_count: u32,
+};
+
+struct Material {
+    base: vec4<f32>,
+    emissive: vec4<f32>,
+    params: vec4<f32>,
+    layer: i32,
+    flags: u32,
+    rough_flatten: f32,
+    thin_absorption: f32,
+};
+
+struct Surface {
+    albedo: vec3<f32>,
+    rough: f32,
+    metal: f32,
+    ao: f32,
+    n: vec3<f32>,
+    alpha: f32,
+    env: i32,
+};
+
+const F_GLASS: u32 = 8u;
+const F_THIN_GLASS: u32 = 16u;
+const TABLE_LIGHT_BIT: u32 = 67108864u;
+const FITTED_ROOM_BIT: u32 = 536870912u;
+const PI: f32 = 3.14159265;
+const CC0_LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
+
+@group(0) @binding(0) var<uniform> frame: Frame;
+@group(0) @binding(1) var<storage, read> objects: array<Object>;
+@group(0) @binding(2) var<storage, read> materials: array<Material>;
+@group(0) @binding(3) var kit_albedo: texture_2d_array<f32>;
+@group(0) @binding(4) var kit_normal: texture_2d_array<f32>;
+@group(0) @binding(5) var kit_orm: texture_2d_array<f32>;
+@group(0) @binding(6) var kit_sampler: sampler;
+@group(0) @binding(17) var cc0_albedo: texture_2d_array<f32>;
+@group(0) @binding(18) var cc0_normal: texture_2d_array<f32>;
+@group(0) @binding(19) var cc0_rhm: texture_2d_array<f32>;
+@group(0) @binding(20) var cc0_samp: sampler;
+@group(0) @binding(22) var<storage, read> cc0_layers: array<vec4<f32>>;
+
+fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
+    return select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
+}
+
+fn st_hash(p: vec2<f32>) -> f32 {
+    let q = fract(p * vec2<f32>(0.1031, 0.1030));
+    let r = q + dot(q, q.yx + 33.33);
+    return fract((r.x + r.y) * r.x);
+}
+
+fn st_noise(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = st_hash(i);
+    let b = st_hash(i + vec2<f32>(1.0, 0.0));
+    let c = st_hash(i + vec2<f32>(0.0, 1.0));
+    let d = st_hash(i + vec2<f32>(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+fn cc0_run() -> u32 {
+    return u32(frame.copy_step.w);
+}
+
+fn cc0_on(bit: u32) -> bool {
+    let r = cc0_run();
+    return (r & CC0_RUN_ON) != 0u && (r & bit) != 0u;
+}
+
+struct Cc0Tap {
+    alb: vec4<f32>,
+    n: vec2<f32>,
+    rough: f32,
+    ao: f32,
+    h: f32,
+    metal: f32,
+};
+
+fn cc0_tap(uv: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>, layer: i32) -> Cc0Tap {
+    var t: Cc0Tap;
+    t.alb = textureSampleGrad(cc0_albedo, cc0_samp, uv, layer, gx, gy);
+    t.n = textureSampleGrad(cc0_normal, cc0_samp, uv, layer, gx, gy).xy * 2.0 - 1.0;
+    let r = textureSampleGrad(cc0_rhm, cc0_samp, uv, layer, gx, gy);
+    t.rough = r.x;
+    t.ao = r.y;
+    t.h = r.z;
+    t.metal = r.w;
+    return t;
+}
+
+fn cc0_lmean(l: i32) -> vec4<f32> {
+    return cc0_layers[u32(l) * 3u];
+}
+
+fn cc0_lmisc(l: i32) -> vec4<f32> {
+    return cc0_layers[u32(l) * 3u + 1u];
+}
+
+fn cc0_linv(l: i32) -> vec2<f32> {
+    return cc0_layers[u32(l) * 3u + 2u].xy;
+}
+
+fn fa_run() -> u32 {
+    return u32(frame.copy_step.y);
+}
+
+fn fa_probe_on() -> bool {
+    return false;
+}
+
+fn fa_probe_lod(r: f32) -> f32 {
+    return 0.0;
+}
+
+fn fa_probe_sample(d: vec3<f32>, lod: f32) -> vec3<f32> {
+    return vec3<f32>(0.0);
+}
+
+fn fa_glazing(dir: vec3<f32>, world: vec3<f32>, rough: f32) -> vec3<f32> {
+    return vec3<f32>(0.0);
+}
+
+fn fa_probe_irradiance(n: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(0.0);
+}
+
+var<private> fr_sun_vis: f32 = 1.0;
+var<private> cg_sky: vec4<f32>;
+fn cg_apply(probe: vec3<f32>) -> vec3<f32> {
+    return probe;
+}
+
+var<private> lm_key_vis: f32 = 1.0;
+var<private> lm_rim_vis: f32 = 1.0;
+fn lm_kind(flags: u32) -> u32 {
+    return 0u;
+}
+
+fn lm_fog_depth(m: Material, vd: f32) -> f32 {
+    return vd;
+}
+
+var<private> sp_sun_vis: f32 = 1.0;
+var<private> sp_pond: f32 = 0.0;
+var<private> fitted_coat_light: vec3<f32>;
+var<private> fitted_pendant_horizontal: vec3<f32>;
+fn porch_lit(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
+    return base;
+}
+
+fn pendant_gloss(direct: vec3<f32>, world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec3<f32> {
+    return vec3<f32>(0.0);
+}
+"#;
+
+/// Lean base city shader for the street-props module (`props.rs::prop_draw_source`):
+/// identical shading to `props_city_source(city_shader_source_variant_probes(Plane, Near, false))`,
+/// without the ~16,500 lines of unreachable city/facade/room/landmark/street/house WGSL.
+pub fn props_city_base_source() -> String {
+    let raw = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}{}\n{}\n{}\n{}{}",
+        PROPS_CITY_HEADER_WGSL,
+        street_constants_wgsl(),
+        look_common_source(),
+        crate::rt_composite::splice_look_light(include_str!("look_light.wgsl"), false),
+        include_str!("surfaces_ao_use.wgsl"),
+        include_str!("sky_light_core.wgsl"),
+        crate::sky_reflect::sky_light_source(false),
+        LOOK_EXT_WGSL,
+        crate::far_shadow::WGSL,
+        shadow_wgsl(ShadowLevels::Near),
+        crate::ambient::wgsl(crate::ambient::ShaderLevels::Plane),
+        // Street props omit single-probe / screen-reflection / wet-surface shading (`FA_PROBE_SHADER = false`,
+        // `SF_SCREEN_REFLECT = false`, `SF_WET_SURFACES = false`); compiling `PG_SHADER = true` into the
+        // large `props_draw.wgsl` fragment shader crashes Apple's `AGXMetalG17X` compiler (`XPC_ERROR_CONNECTION_INTERRUPTED`)
+        // on `prop-opaque` even with all other features disabled (`tests/props`, `--probe-grid`).
+        crate::probe_grid::wgsl(false),
+        crate::light_shadow::use_wgsl(shader_features().light_shadows()),
+        crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()),
+    );
+    props_city_source(sf_select_with(&raw, false, false))
 }
 
 pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels, single_probe: bool) -> String {
     // The far layer (`ShadowLevels::Far`: hlod-draw, hlod-trees, hlod-lights) lies past
     // street-level puddle/rain-ring range and stands at Apple's shader compiler's limit.
-    let mut s = sf_select_with(&city_shader_parts(ambient, shadow, single_probe), single_probe && shadow != ShadowLevels::Far); // the natural-detail and weather-fx blocks (`// sf:`) of the features compiled in (props, agents and far layer never puddle)
+    // `single_probe` is true for city & far-layer building shaders and false for props/agents,
+    // keeping `AAA_BUILDINGS` compiled out of `prop-cutout` and `agents`.
+    let mut s = sf_select_with(&city_shader_parts(ambient, shadow, single_probe), single_probe && shadow != ShadowLevels::Far, single_probe); // the natural-detail, weather-fx and building blocks (`// sf:`) of the features compiled in
     if ambient == crate::ambient::ShaderLevels::Plane {
         // (`--occluder-light`) the plane-only pipelines (the far layer, the props) keep the
         // stand-in for the blocked sky: on Apple's GPU `hlod-draw` failed to build with the
@@ -1751,6 +2159,42 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         // shape tried, the agents' stand-in set first included), though it built with the
         // round's: XPC_ERROR_CONNECTION_INTERRUPTED.
         s = s.replacen("const SF_OCCLUDER_LIGHT: bool = true;", "const SF_OCCLUDER_LIGHT: bool = false;", 1);
+    }
+    if !single_probe {
+        // `single_probe == false` serves `agents` (vehicles/people) and `props` (trees/furniture/signs):
+        // neither ever draws buildings, kit rooms, playable houses, streets, structures, seabed, or
+        // far-layer masonry. Folding those dead city-only flags out of `look_light` and shared modules
+        // gives `agent-opaque` and `prop-cutout` substantial headroom inside Apple's Metal compiler.
+        s = fold_const_false(
+            s,
+            &[
+                "SF_HOUSE",
+                "SF_STREET_PBR",
+                "SF_STREET_WEAR",
+                "SF_STREET_GLARE",
+                "SF_STREET_AGGREGATE",
+                "SF_PLAZA_SETTS",
+                "SF_WALK_RELIEF",
+                "SF_FACADE_GLASS",
+                "SF_FACADE_WEATHER",
+                "SF_CANYON_GLASS",
+                "SF_FACADE_PATINA",
+                "SF_WINDOW_DEPTH",
+                "SF_FAR_RELIEF",
+                "SF_FAR_FACADE",
+                "SF_OFFICE_FLOORS",
+                "SF_ROOM_DEPTH",
+                "SF_LIT_ROOMS",
+                "SF_SHOP_LIGHT",
+                "SF_FACADE_CLUTTER",
+                "SF_STREET_LIFE",
+                "SF_STRUCTURES",
+                "SF_SEABED",
+                "SF_COVE_SEDIMENT",
+                "SF_AAA_BOUNCE",
+                "SF_AAA_SKYLINE_FIELD",
+            ],
+        );
     }
     if shadow == ShadowLevels::Far {
         // The far layer (`hlod-draw`, `hlod-trees`, `hlod-lights`) never draws near city streets,
@@ -1804,10 +2248,11 @@ fn city_shader_parts(ambient: crate::ambient::ShaderLevels, shadow: ShadowLevels
         include_str!("facade_age.wgsl"),             // facade
         crate::facade::facade_constants_wgsl()        // facade
     ) + "\n" + &crate::rooms::wgsl_constants() + include_str!("rooms.wgsl")
-        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + &crate::sky_reflect::sky_light_source(shadow == ShadowLevels::Near || (single_probe && shadow == ShadowLevels::Full)) // sky (the reflect track's switches' code out of the agents' and far-layer variants, sky_reflect.rs)
+        + "\n" + include_str!("sky_light_core.wgsl") + "\n" + &crate::sky_reflect::sky_light_source(single_probe && shadow == ShadowLevels::Full) // sky (the reflect track's switches' code out of the props', agents' and far-layer variants, sky_reflect.rs: none has LK_SHADOW_FAR)
         + "\n" + LOOK_EXT_WGSL // group 1 bindings 12-18
         + "\n" + crate::far_shadow::WGSL + &shadow_wgsl(shadow) // the far sun shadow map's lookup and the variant's shadow parts (lighting)
         + "\n" + &crate::ambient::wgsl(ambient) // the ambient volume's sampling (lighting)
+        + "\n// sf:AAA_BUILDINGS+\n" + crate::skyline_field::WGSL + "\n// sf:end\n" // citywide 2.5D skyline field (compiled out in medium / props / agents)
         + "\n" + &crate::probe_grid::wgsl(shadow != ShadowLevels::Far) // the probe grid's lookups; the far layer lies past its reach (lighting)
         + "\n" + &crate::light_shadow::use_wgsl(shadow != ShadowLevels::Far && shader_features().light_shadows()) // lamp and headlight shadows; the far layer lies past the lights' clusters, and without the option the test is compiled out (lighting, stage P1)
         + &crate::landmarks::city_wgsl() // landmarks
@@ -2182,6 +2627,10 @@ impl LookGpu {
                 entry(B_WINDOW_OPTICS, fs, sbuf(true)),
                 // the street lamps' pools on the ground (look_light.wgsl `lk_lamp_map`)
                 entry(B_LAMP_MAP, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                // the hemispherical volumetric cloud reflection dome (look_light.wgsl `lk_cloud_refl`)
+                entry(B_CLOUD_REFL, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                // the citywide 2.5D skyline heightfield + horizon sky-vis / bent-normal map (skyline_field.rs `lx_skyline_field`)
+                entry(B_SKYLINE_FIELD, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             ],
         });
         let (lighting_stand_ins, stand_in_bytes) = LightingBindings::stand_ins(device);
@@ -2189,6 +2638,7 @@ impl LookGpu {
             label: Some("ao-linear"),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
         let ao_dummy = (ao_texture(device, AO_FORMAT, (1, 1)), ao_texture(device, AO_Z_FORMAT, (1, 1)));
@@ -2554,6 +3004,8 @@ impl LookGpu {
                 wgpu::BindGroupEntry { binding: B_ATMO_VIEW, resource: wgpu::BindingResource::TextureView(sky.atmo_tables().0) },
                 wgpu::BindGroupEntry { binding: B_WINDOW_OPTICS, resource: optics.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: B_LAMP_MAP, resource: wgpu::BindingResource::TextureView(&sky.lamp_map_view) },
+                wgpu::BindGroupEntry { binding: B_CLOUD_REFL, resource: wgpu::BindingResource::TextureView(sky.cloud_refl_view()) },
+                wgpu::BindGroupEntry { binding: B_SKYLINE_FIELD, resource: wgpu::BindingResource::TextureView(&lighting.skyline_field) },
             ],
         })
     }
@@ -2669,6 +3121,13 @@ impl LookGpu {
         self.edit_lighting(|b, s| b.shop_fronts = table.unwrap_or(&s.shop_fronts).clone());
     }
 
+    /// (`--skyline-field`) Binding 24: the citywide 2.5D skyline heightfield + horizon sky-vis /
+    /// bent-normal texture, and its uniform row in `Look.lx[15]` (`LX_SPARE`). None binds the stand-in.
+    pub fn set_skyline_field(&self, view: Option<&wgpu::TextureView>, params: [f32; 4]) {
+        self.edit_lighting(|b, s| b.skyline_field = view.unwrap_or(&s.skyline_field).clone());
+        self.set_lighting_params(LX_SPARE, &[if view.is_some() { params } else { [0.0; 4] }]);
+    }
+
     /// Set rows of `Look.lx` from `first` on (rows 1-15, and row 0's y z w,
     /// see `LX_*`); the next `update` writes them. Row 0 x is always the feature mask.
     pub fn set_lighting_params(&self, first: usize, rows: &[[f32; 4]]) {
@@ -2683,6 +3142,9 @@ impl LookGpu {
     pub fn lighting_params(&self) -> [[f32; 4]; LX_LEN] {
         let mut lx = *self.lx.lock().unwrap();
         lx[LX_FLAGS][0] = self.options.lighting.flags_word();
+        if (self.options.aaa_buildings & AAA_SKYLINE_FIELD) == 0 {
+            lx[LX_SPARE] = [0.0; 4];
+        }
         lx
     }
 
@@ -2823,7 +3285,8 @@ impl LookGpu {
     }
 
     /// Re-allocate the shadow map at another size (quality setting).
-    pub fn set_options(&mut self, device: &wgpu::Device, options: LookOptions) {
+    pub fn set_options(&mut self, device: &wgpu::Device, mut options: LookOptions) {
+        options.sky.aaa_aerial = (options.aaa_buildings & AAA_AERIAL) != 0;
         if options.shadow_map != self.options.shadow_map {
             let (layers, array, bytes) = shadow_texture(device, options.shadow_map.max(256));
             let old = self.options.shadow_map as u64 * self.options.shadow_map as u64 * 2 * CASCADES as u64;
@@ -3046,7 +3509,27 @@ impl LookGpu {
     pub fn frame(&self) -> LookFrame {
         let f = self.frame_built();
         if self.options.dome_env {
-            return self.with_dome_env(f); // (`--dome-env`)
+            // When physical daylight (`--phys-sky`) owns `env_sh`, never overwrite its calibrated
+            // Rayleigh+Mie+ground-bounce SH with the legacy cloudless Preetham cobalt dome (which
+            // turned upward shadowed roofs electric blue under `--play`). During twilight/overcast
+            // transitions, blend `dome_env` onto the non-physical rig share only.
+            let phys_w = if self.sky.options().phys_sky {
+                self.state.lock().unwrap().daylight.as_ref().map_or(0.0, |(_, d)| d.weight.clamp(0.0, 1.0))
+            } else {
+                0.0
+            };
+            if phys_w >= 0.999 {
+                return f;
+            }
+            let mut dome = self.with_dome_env(f);
+            if phys_w > 0.0 {
+                for k in 0..9 {
+                    for c in 0..3 {
+                        dome.env_sh[k][c] = dome.env_sh[k][c] * (1.0 - phys_w) + f.env_sh[k][c] * phys_w;
+                    }
+                }
+            }
+            return dome;
         }
         f
     }

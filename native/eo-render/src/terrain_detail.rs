@@ -41,6 +41,9 @@
 //!
 //! **Materials** (`--no-terrain-materials`): see `Materials`.
 
+#[path = "marin_ground.rs"]
+pub(crate) mod marin_ground;
+
 use crate::scene::Vertex;
 use eo_data::geo::GeoFrame;
 use eo_farshore::survey::{Root, dem1m::Dem1m, naip::Naip};
@@ -139,6 +142,16 @@ pub fn patch_keys(l: &Lattice) -> Vec<(i64, i64)> {
             for px in pxa..pxb {
                 if px >= 0 && pz >= 0 && (px + 1) * PATCH_CELLS < l.width && (pz + 1) * PATCH_CELLS < l.height {
                     set.insert((px, pz));
+                }
+            }
+        }
+    }
+    if eo_landmarks::golden_gate::surveyed_surfaces() {
+        let (cols, rows) = marin_ground::landing_keys(l);
+        for z in rows {
+            for x in cols.clone() {
+                if x >= 0 && z >= 0 && (x + 1) * PATCH_CELLS < l.width && (z + 1) * PATCH_CELLS < l.height {
+                    set.insert((x, z));
                 }
             }
         }
@@ -381,6 +394,14 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
         return None;
     }
     let l = inp.lattice;
+    // The terminal apron conforms to the original survey grid across all
+    // six lanes. Hold its seat through the DEM mask's normal fade, including
+    // on the landward side where the two carriageway surveys end staggered.
+    let apron = eo_landmarks::golden_gate::surveyed_surfaces().then(|| {
+        let gate = eo_landmarks::golden_gate::data(eo_landmarks::LandmarksJs::get());
+        let end = gate.way_ends["north"];
+        (end, gate.dimensions["widthM"].as_f64().expect("Golden Gate deck width"))
+    });
     // the photo eyes' patches (from the survey), and (`--no-city-relief`) every cooked block
     // over open ground
     let mut keys = if dem.is_some() { patch_keys(&l) } else { vec![] };
@@ -515,6 +536,7 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
             for i in 0..n {
                 let p = [mx0 + (i as f64 + 0.5) * step, mz0 + (j as f64 + 0.5) * step];
                 let mut m = tris.iter().any(|t| point_in_tri(p, t)) || rings.iter().any(|r| point_in_ring(p, r));
+                m |= apron.is_some_and(|(end, width)| (p[0] - end[0]).abs() < width && (p[1] - end[1]).abs() < width);
                 // round a photo eye (`EYE_CLEAR_M`)
                 m = m || REGIONS.iter().any(|(_, e)| (p[0] - e[0]).hypot(p[1] - e[1]) < EYE_CLEAR_M);
                 // the mapped lawns and parks: every ground-cover tone that is not open ground

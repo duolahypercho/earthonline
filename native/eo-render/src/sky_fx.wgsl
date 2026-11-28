@@ -111,7 +111,14 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
         let hs = select(h, h + l.size, k3);
         let reach = h * 2.4;
         let c = fx_corner(vi);
-        let p = vec3<f32>(head.x + c.x * reach, l.pos.y - hs + 0.25, head.z + c.y * reach);
+        let pool_y = l.pos.y - hs + 0.25;
+        // A downward-facing horizontal road pool decal cannot be seen from below its plane:
+        // culling pools above the eye eliminates overhanging 48 m-wide Bay Bridge deck discs
+        // floating in mid-air on both sides of the tower pier (`06a_night_skyline`).
+        if (SF_AAA_AERIAL && pool_y > skyu.eye.y + 0.5) {
+            return out;
+        }
+        let p = vec3<f32>(head.x + c.x * reach, pool_y, head.z + c.y * reach);
         out.clip = fx_clip(p);
         out.uv = c * reach;
         out.color = vec4<f32>(l.color * l.intensity, hs);
@@ -413,6 +420,7 @@ fn glitter_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) 
 
 @fragment
 fn glitter_fs(in: FxOut) -> @location(0) vec4<f32> {
+    let fp_g = max(length(dpdx(in.uv)), length(dpdy(in.uv)));
     let s = vec3<f32>(in.uv.x, SKY_SEA_Y, in.uv.y);
     var lum = fx_glitter(s, in.extra.xyz, in.color.rgb);
     // the column is broken by the waves into dashes across the line
@@ -426,8 +434,27 @@ fn glitter_fs(in: FxOut) -> @location(0) vec4<f32> {
     let along = dot(rel, dir);
     let across = abs(dot(rel, vec2<f32>(-dir.y, dir.x)));
     let w = FX_GLITTER_K * sqrt(0.5 * FX_GLITTER_MSS) * max(skyu.eye.y - SKY_SEA_Y, lp.y - SKY_SEA_Y) + 0.5;
-    let wob = sin(across * 0.9 + along * 0.13) * 1.3 + sin(across * 2.3 - along * 0.07) * 0.6;
-    let dash = mix(0.3, 1.7, smoothstep(-0.2, 0.6, sin(along * (2.6 + 0.8 * sin(along * 0.05 + across * 0.4)) + wob + skyu.wet.w * 1.7)));
+    var dash: f32;
+    if (SF_AAA_AERIAL) {
+        // Nyquist-faded domain-warped world-space wave phases (no `abs(across)` bilateral mirror,
+        // no `along * sin(...)` phase chirp, and bounded 1.4 m low-freq warp + 3rd angled crest
+        // to eliminate straight diamond-grid regularity on night Bay glitter).
+        let k_hi = 1.0 - smoothstep(0.45, 1.8, fp_g);
+        let k_lo = 1.0 - smoothstep(1.8, 6.5, fp_g);
+        let wp = in.uv + vec2<f32>(
+            sin(in.uv.y * 0.13 + in.uv.x * 0.07),
+            cos(in.uv.x * 0.11 - in.uv.y * 0.09),
+        ) * 1.4;
+        let w_rip = (0.34 * sin(dot(wp, vec2<f32>(1.15, 0.42)) + skyu.wet.w * 1.4)
+            + 0.27 * sin(dot(wp, vec2<f32>(-0.78, 1.05)) - skyu.wet.w * 1.1)
+            + 0.22 * sin(dot(wp, vec2<f32>(0.37, -1.21)) + skyu.wet.w * 0.92)) * k_hi
+            + (0.22 * sin(dot(wp, vec2<f32>(0.24, -0.31)) + skyu.wet.w * 0.65)
+            + 0.16 * sin(dot(wp, vec2<f32>(-0.29, -0.17)) - skyu.wet.w * 0.48)) * k_lo;
+        dash = clamp(1.0 + 0.58 * w_rip, 0.35, 1.65);
+    } else {
+        let wob = sin(across * 0.9 + along * 0.13) * 1.3 + sin(across * 2.3 - along * 0.07) * 0.6;
+        dash = mix(0.3, 1.7, smoothstep(-0.2, 0.6, sin(along * (2.6 + 0.8 * sin(along * 0.05 + across * 0.4)) + wob + skyu.wet.w * 1.7)));
+    }
     lum = lum * dash * (1.0 - smoothstep(0.35, 1.0, across / w));
     // The range fog on the way to the eye, as the water draws its own.
     let vd = dot(s - skyu.eye.xyz, skyu.cam_fwd.xyz) * sky_path_density(s.y - skyu.eye.y);

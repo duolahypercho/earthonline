@@ -28,7 +28,11 @@ const GARAGE_ROW_BAY_M: f64 = 3.0;
 const WALL_FINISHES: [&str; 4] = ["painted-stucco", "float-finish-stucco", "scanned-painted-plaster", "painted-stucco"];
 
 fn window_wall() -> J {
-    json!({ "spandrelHeight": 1.05, "headClear": 0.45, "mullionSpacing": 3.2, "frameWidth": 0.2, "frameDepth": 0.11 })
+    if crate::typology::detail_enabled() {
+        json!({ "spandrelHeight": 0.84, "headClear": 0.34, "mullionSpacing": 1.85, "frameWidth": 0.11, "frameDepth": 0.16 })
+    } else {
+        json!({ "spandrelHeight": 1.05, "headClear": 0.45, "mullionSpacing": 3.2, "frameWidth": 0.2, "frameDepth": 0.11 })
+    }
 }
 
 /// `storeyStack(height)`: storey heights (the parapet is the constant).
@@ -157,12 +161,13 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     let front_entry_bay = if flip { bay_count - 1 - gb.entry_bay } else { gb.entry_bay };
     let front_garage_bay = if gb.garage_bay < 0 { -1 } else if flip { bay_count - 1 - gb.garage_bay } else { gb.garage_bay };
 
+    let min_sec_edge = if crate::typology::detail_enabled() { 5.5 } else { MIN_GLAZED_EDGE_M };
     let mut by_edge = Map::new();
     for edge in &frame.edges {
         if edge.role != "front-secondary" {
             continue;
         }
-        let entry = if edge.length >= MIN_GLAZED_EDGE_M {
+        let entry = if edge.length >= min_sec_edge {
             let mut e = window_wall_elevation(if ground_default == "storefront" { "storefront" } else { "punched" });
             set(&mut e, "bays", json!({ "count": 1f64.max(js_round(edge.length / BAY_MODULE_M)) }));
             set(&mut e, "endPier", json!(0));
@@ -290,6 +295,95 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             PartArgs::profile("garage-head", "trim", garage.s0 + 0.05, garage.s1 - 0.05, trim_profile_d("flat", 0.07, 0.14, lintel))
                 .edge(front.index),
         );
+    }
+
+    if crate::typology::detail_enabled() {
+        let base_y = if plan.base_y.is_finite() { plan.base_y } else { 0.0 };
+        let wall_top = plan.envelope.wall_top + base_y;
+        let is_retail = meta.truthy("retail");
+        // Midcentury cantilevered roofline slab eyebrow, horizontal storey/window shadow ledges, and vertical bay divider fins
+        for edge in frame.edges.iter() {
+            if edge.party || !(edge.role == "front" || edge.role == "front-secondary") || edge.length < 3.0 {
+                continue;
+            }
+            let allow = (edge.allowance - 0.02).max(0.08);
+            let eave_p = 0.50f64.min(allow);
+            let ext0 = if edge.convex_start { eave_p } else { 0.0 };
+            let ext1 = if edge.convex_end { eave_p } else { 0.0 };
+            plan.add_profile(
+                &edge.basis,
+                PartArgs::profile("cornice", "trim", -ext0, edge.length + ext1, trim_profile_d("stepped", eave_p, 0.28, wall_top - 0.24))
+                    .edge(edge.index)
+                    .shadow(true)
+                    .receive(true)
+                    .meta(json!({ "archetype": kind, "part": "midcentury-eave" })),
+            );
+            // Horizontal slab shadow ledges between upper storeys (skip storey 1 on retail fronts so
+            // ground-floor storefront fascia sign boards & awnings stay 100% unobstructed in clutter.rs!)
+            let ledge_p = 0.14f64.min(allow);
+            let storey_info: Vec<(usize, f64, f64)> = plan.storeys.iter().enumerate().skip(1).map(|(i, st)| (i, st.y0 + base_y, st.y1 + base_y)).collect();
+            for (si, sy0, sy1) in storey_info {
+                let skip_fascia = is_retail && si == 1;
+                if !skip_fascia && sy0 < wall_top - 0.6 {
+                    plan.add_box(
+                        &edge.basis,
+                        PartArgs::new("string-course", "trim", -ledge_p * if edge.convex_start { 1.0 } else { 0.0 }, edge.length + ledge_p * if edge.convex_end { 1.0 } else { 0.0 }, sy0 - 0.08, sy0 + 0.07, -0.01, ledge_p)
+                            .edge(edge.index)
+                            .shadow(true)
+                            .receive(true)
+                            .meta(json!({ "archetype": kind, "part": "slab-ledge" })),
+                    );
+                }
+                // Projecting midcentury window sill & upper drip eyebrow hood on residential blocks (`09` right-mid)
+                if !is_retail && sy1 - sy0 >= 2.2 && sy1 < wall_top + 0.05 {
+                    let sill_y = sy0 + 0.78;
+                    let head_y = sy1 - 0.32;
+                    if head_y > sill_y + 0.6 {
+                        plan.add_box(
+                            &edge.basis,
+                            PartArgs::new("sill", "trim", 0.06, (edge.length - 0.06).max(0.1), sill_y - 0.08, sill_y + 0.02, -0.01, ledge_p)
+                                .edge(edge.index)
+                                .shadow(true)
+                                .receive(true)
+                                .meta(json!({ "archetype": kind, "part": "ribbon-sill" })),
+                        );
+                        plan.add_box(
+                            &edge.basis,
+                            PartArgs::new("window-head", "trim", 0.06, (edge.length - 0.06).max(0.1), head_y, head_y + 0.09, -0.01, (ledge_p * 1.15).min(allow))
+                                .edge(edge.index)
+                                .shadow(true)
+                                .receive(true)
+                                .meta(json!({ "archetype": kind, "part": "ribbon-head" })),
+                        );
+                    }
+                }
+            }
+            // Crisp vertical bay-divider fin pilasters on upper street edges (above retail fascia band)
+            let fin_s_opt: Option<Vec<f64>> = plan.edges.iter().find(|r| r.index == edge.index).map(|er| {
+                let mut v: Vec<f64> = er.bays.iter().skip(1).map(|b| b.s0).collect();
+                if edge.length >= 4.5 {
+                    v.push(0.10);
+                    v.push(edge.length - 0.10);
+                }
+                v
+            });
+            if let Some(fin_s) = fin_s_opt {
+                let fin_p = 0.11f64.min(allow);
+                let y0_fin = plan.storeys.get(1).map(|s| s.y0 + base_y + if is_retail { 0.45 } else { 0.0 }).unwrap_or(ground.y0 + base_y);
+                if wall_top - 0.28 > y0_fin + 1.0 {
+                    for s in fin_s {
+                        plan.add_box(
+                            &edge.basis,
+                            PartArgs::new("pilaster", "trim", s - 0.075, s + 0.075, y0_fin, wall_top - 0.24, -0.01, fin_p)
+                                .edge(edge.index)
+                                .shadow(true)
+                                .receive(true)
+                                .meta(json!({ "archetype": kind, "part": "bay-fin" })),
+                        );
+                    }
+                }
+            }
+        }
     }
 
     let [ox, oz] = front.basis.origin;

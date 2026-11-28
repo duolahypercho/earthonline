@@ -38,6 +38,15 @@ const DENTIL_PITCH_M: f64 = 0.34;
 /// Statement, Victorian-era residential styles; Mullen, "Victorian
 /// Houses", San Francisco Architectural Heritage).
 fn gable_share(variant: &str) -> f64 {
+    if crate::typology::detail_enabled() {
+        return match variant {
+            "queen-anne" => 0.88,
+            "stick" => 0.52,
+            "undated" => 0.56,
+            "italianate" => 0.22,
+            _ => 0.25,
+        };
+    }
     match variant {
         "queen-anne" => 0.85,
         "stick" => 0.35,
@@ -153,10 +162,11 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     // the front's true width (the plan is drawn at the ground scale, heights are not): one house's
     // front gable spans one lot, at most about 36 ft (GABLE_MAX_FRONT_M); a wider front is a row of them, not one.
     let width = front_length / eo_data::groundscale::resolve().unwrap_or(1.0);
+    let max_gable_front = if crate::typology::detail_enabled() { 14.0 } else { GABLE_MAX_FRONT_M };
     let gable = crate::typology::enabled()
         && storey_count >= 2
         && front_length >= 4.5
-        && width <= GABLE_MAX_FRONT_M
+        && width <= max_gable_front
         && !retail
         && (STEINER_ROW.contains(&key) || g_roll < gable_share(&c.variant));
     let gable_meta = if gable {
@@ -197,20 +207,22 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
         if !retail {
             set(&mut entrance, "canopy", json!({ "projection": 1.22, "thickness": 0.16, "overhang": 0.34, "rods": false, "slot": "trim" }));
         }
+        let cornice_h = if crate::typology::detail_enabled() { 0.62 } else { CORNICE_M };
+        let cornice_p = if crate::typology::detail_enabled() { 0.56 } else { 0.3 };
         let mut e = json!({
             "bayWidth": 3.3,
             "window": "punched",
             "endPier": END_PIER_M,
             "pierMin": 0.55,
             "align": "start",
-            "reveal": 0.22,
+            "reveal": if crate::typology::detail_enabled() { 0.27 } else { 0.22 },
             "windowSpec": { "sillHeight": 0.82, "headClear": 0.44, "widthRatio": 0.52, "frameWidth": 0.075, "frameDepth": 0.09, "mullions": 1, "transoms": 0 },
             "entranceSpec": entrance,
             "storefrontSpec": { "pier": if retail { 0.18 } else { 0.7 }, "stallRiser": 0.42, "headClear": 0.55, "mullionSpacing": 1.3, "transom": 0.42 },
             "sill": { "height": 0.11, "projection": 0.075, "overhang": 0.11, "profile": "sloped" },
             "surround": { "width": 0.16, "projection": 0.055, "slot": "trim" },
             "stringCourses": sill_courses.clone(),
-            "cornice": { "height": CORNICE_M, "projection": 0.3, "profile": "ogee", "slot": "trim" },
+            "cornice": { "height": cornice_h, "projection": cornice_p, "profile": "ogee", "slot": "trim" },
             "cornerReturns": { "width": 0.32, "projection": 0.06, "slot": "trim" },
             "downpipes": false,
             "sillSlot": "trim",
@@ -272,7 +284,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "entryIndex": entry_index,
             "bayStartStorey": bay_start,
             "dentils": dentils,
-            "corniceHeight": CORNICE_M,
+            "corniceHeight": if crate::typology::detail_enabled() { 0.62 } else { CORNICE_M },
             "stoopRise": floor_level,
             "retail": retail,
             "wall": wall,
@@ -313,6 +325,25 @@ fn bay_plan_polygon(basis: &Basis, shape: &str, s0: f64, s1: f64, p: f64) -> Vec
         return vec![at(s0, 0.0), at(s0 + cant, p), at(s1 - cant, p), at(s1, 0.0)];
     }
     vec![at(s0, 0.0), at(s0, p), at(s1, p), at(s1, 0.0)]
+}
+
+fn vic_face_basis(basis: &Basis, a: [f64; 2], b: [f64; 2]) -> (f64, Basis) {
+    let [ox, oz] = basis.origin;
+    let [ux, uz] = basis.u;
+    let [nx, nz] = basis.n;
+    let ds = b[0] - a[0];
+    let dw = b[1] - a[1];
+    let length = ds.hypot(dw).max(1e-6);
+    let ts = ds / length;
+    let tw = dw / length;
+    (
+        length,
+        Basis {
+            origin: [ox + ux * a[0] + nx * a[1], oz + uz * a[0] + nz * a[1]],
+            u: [ux * ts + nx * tw, uz * ts + nz * tw],
+            n: [ux * -tw + nx * ts, uz * -tw + nz * ts],
+        },
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -423,7 +454,44 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                 continue;
             }
             bay_front_sash(plan, &basis, front.index, gs0, gs1, wy0, wy1, p, &kind);
-            if bay_shape == "square" {
+            if crate::typology::detail_enabled() {
+                // Molded sill & projecting hood cornice on bay front window
+                plan.add_box(
+                    &basis,
+                    PartArgs::new("sill", "trim", gs0 - 0.07, gs1 + 0.07, wy0 - 0.09, wy0 + 0.01, p - 0.01, p + 0.10)
+                        .edge(front.index)
+                        .meta(json!({ "archetype": kind })),
+                );
+                plan.add_profile(
+                    &basis,
+                    PartArgs::profile("window-head", "trim", gs0 - 0.10, gs1 + 0.10, trim_profile_d("cove", 0.11, 0.15, wy1 + 0.03))
+                        .edge(front.index)
+                        .meta(json!({ "archetype": kind, "face": "bay-front" })),
+                );
+            }
+            if bay_shape == "canted" && crate::typology::detail_enabled() {
+                // Angled double-hung cheek sashes & glass on both splayed sides of canted Victorian bays
+                let cant = 0.62f64.min((s1 - s0) * 0.24);
+                for (a, b) in [([s0, 0.0], [s0 + cant, p]), ([s1 - cant, p], [s1, 0.0])] {
+                    let (clen, cbasis) = vic_face_basis(&basis, a, b);
+                    let cm = (clen * 0.14).min(0.11);
+                    if clen - 2.0 * cm >= 0.34 {
+                        bay_front_sash(plan, &cbasis, front.index, cm, clen - cm, wy0, wy1, 0.0, &kind);
+                        plan.add_box(
+                            &cbasis,
+                            PartArgs::new("sill", "trim", cm - 0.04, clen - cm + 0.04, wy0 - 0.08, wy0 + 0.01, -0.01, 0.09)
+                                .edge(front.index)
+                                .meta(json!({ "archetype": kind, "face": "cheek" })),
+                        );
+                        plan.add_box(
+                            &cbasis,
+                            PartArgs::new("window-head", "trim", cm - 0.05, clen - cm + 0.05, wy1 + 0.02, wy1 + 0.13, -0.01, 0.08)
+                                .edge(front.index)
+                                .meta(json!({ "archetype": kind, "face": "cheek" })),
+                        );
+                    }
+                }
+            } else if bay_shape == "square" {
                 for (c0, c1) in [(s0 - 0.014, s0 - 0.004), (s1 + 0.004, s1 + 0.014)] {
                     plan.add_box(
                         &basis,
@@ -467,10 +535,48 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             }
             stair.push([-0.05, base_y + rise]);
             plan.add_profile(&basis, PartArgs::profile("stoop", "base", ss0, ss1, stair).edge(front.index).meta(json!({ "archetype": kind })));
+            if crate::typology::detail_enabled() {
+                // Overhanging cast-stone step treads on Victorian stoop stairs
+                for i in 0..steps as usize {
+                    let fi = i as f64;
+                    let ty = base_y + (fi + 1.0) * riser;
+                    let w1 = run - fi * step_going + 0.025;
+                    let w0 = (run - (fi + 1.0) * step_going).max(-0.04);
+                    plan.add_box(
+                        &basis,
+                        PartArgs::new("stoop-tread", "trim", ss0 + 0.12, ss1 - 0.12, ty - 0.035, ty + 0.008, w0, w1)
+                            .edge(front.index)
+                            .meta(json!({ "archetype": kind, "part": "stoop-tread" })),
+                    );
+                }
+            }
             let rail_top = base_y + rise + 0.92;
             let cheek = vec![[-0.05, base_y], [run, base_y], [run, base_y + 0.9], [run * 0.18, rail_top], [-0.05, rail_top]];
             for cs in [ss0, ss1 - 0.14] {
                 plan.add_profile(&basis, PartArgs::profile("stoop-cheek", "trim", cs, cs + 0.14, cheek.clone()).edge(front.index).meta(json!({ "archetype": kind })));
+                if crate::typology::detail_enabled() {
+                    // Molded newel post & cap at foot of stoop cheek + wrought-iron handrail bar above cheek
+                    plan.add_box(
+                        &basis,
+                        PartArgs::new("stoop-cheek", "trim", cs - 0.03, cs + 0.17, base_y + 0.86, base_y + 1.04, run - 0.18, run + 0.02)
+                            .edge(front.index)
+                            .meta(json!({ "archetype": kind, "part": "newel-cap" })),
+                    );
+                    let hr = vec![
+                        [run - 0.06, base_y + 1.02],
+                        [run * 0.14, rail_top + 0.12],
+                        [-0.04, rail_top + 0.12],
+                        [-0.04, rail_top + 0.165],
+                        [run * 0.14, rail_top + 0.165],
+                        [run - 0.06, base_y + 1.065],
+                    ];
+                    plan.add_profile(
+                        &basis,
+                        PartArgs::profile("stoop-rail", "metal", cs + 0.045, cs + 0.095, hr)
+                            .edge(front.index)
+                            .meta(json!({ "archetype": kind, "part": "stoop-rail" })),
+                    );
+                }
             }
             let hood_top = entry_y0 + 2.38 + 0.42 + 0.15;
             for ps in [ss0 + 0.05, ss1 - 0.17] {
@@ -494,7 +600,8 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             continue;
         }
         let eb = edge.basis;
-        let bracket_depth = 0.26;
+        let detail_on = crate::typology::detail_enabled();
+        let bracket_depth = if detail_on { 0.48f64.min((edge.allowance - 0.02).max(0.26)) } else { 0.26 };
         let bracket_count = 2f64.max(js_round(edge.length / BRACKET_PITCH_M));
         let bracket_pitch = edge.length / bracket_count;
         for i in 0..=bracket_count as usize {
@@ -503,12 +610,14 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                 &eb,
                 PartArgs::new("cornice-bracket", "trim", s - 0.085, s + 0.085, cornice_bottom - 0.46, cornice_bottom + 0.02, -0.01, bracket_depth)
                     .edge(edge.index)
+                    .shadow(true)
                     .meta(json!({ "archetype": kind })),
             );
             plan.add_box(
                 &eb,
                 PartArgs::new("cornice-bracket", "trim", s - 0.12, s + 0.12, cornice_bottom - 0.58, cornice_bottom - 0.44, -0.01, bracket_depth * 0.62)
                     .edge(edge.index)
+                    .shadow(detail_on)
                     .meta(json!({ "archetype": kind })),
             );
         }
@@ -519,7 +628,7 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                 let s = (i as f64 + 0.5) * pitch;
                 plan.add_box(
                     &eb,
-                    PartArgs::new("dentil", "trim", s - 0.085, s + 0.085, cornice_bottom - 0.74, cornice_bottom - 0.6, -0.01, 0.13)
+                    PartArgs::new("dentil", "trim", s - 0.085, s + 0.085, cornice_bottom - 0.74, cornice_bottom - 0.6, -0.01, if detail_on { 0.18f64.min((edge.allowance - 0.02).max(0.13)) } else { 0.13 })
                         .edge(edge.index)
                         .shadow(false)
                         .meta(json!({ "archetype": kind })),
@@ -532,11 +641,13 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             .filter(|op| op.type_ == "punched" && !(edge.index == front.index && oriel_indices.contains(&op.bay)))
             .map(|op| (op.s0, op.s1, op.y1))
             .collect();
+        let head_proj = if detail_on { 0.24f64.min((edge.allowance - 0.02).max(0.19)) } else { 0.19 };
         for (s0, s1, y1) in ops {
             plan.add_profile(
                 &eb,
-                PartArgs::profile("window-head", "trim", s0 - 0.24, s1 + 0.24, trim_profile_d("cove", 0.19, 0.21, y1 + 0.16))
+                PartArgs::profile("window-head", "trim", s0 - 0.24, s1 + 0.24, trim_profile_d("cove", head_proj, if detail_on { 0.24 } else { 0.21 }, y1 + 0.16))
                     .edge(edge.index)
+                    .shadow(true)
                     .meta(json!({ "archetype": kind })),
             );
         }
@@ -582,8 +693,57 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                 ..Default::default()
             },
         );
-        // its trim: a frieze board along the foot and the attic window.
+        // its trim: a frieze board along the foot, raking bargeboards, attic window, and brick chimney.
         plan.add_box(&basis, PartArgs::new("gable-frieze", "trim", 0.0, l, y0, y0 + 0.24, 0.1, 0.2).edge(front.index).meta(json!({ "archetype": kind, "roof": true })));
+        if crate::typology::detail_enabled() {
+            // Projecting raking bargeboards framing the Queen Anne front gable slopes
+            let b_thk = 0.20;
+            plan.add_plate(
+                &basis,
+                PartArgs {
+                    kind: "gable-rake".into(),
+                    slot: "trim".into(),
+                    edge: Some(front.index),
+                    profile: vec![
+                        [-eave, y0 - 0.12],
+                        [l / 2.0, y0 + rise + 0.18],
+                        [l + eave, y0 - 0.12],
+                        [l + eave - b_thk, y0 - 0.12],
+                        [l / 2.0, y0 + rise + 0.18 - b_thk * 1.25],
+                        [-eave + b_thk, y0 - 0.12],
+                    ],
+                    w0: 0.06,
+                    w1: 0.22,
+                    cast_shadow: Some(true),
+                    receive_shadow: Some(true),
+                    meta: Some(json!({ "archetype": kind, "part": "bargeboard", "roof": true })),
+                    ..Default::default()
+                },
+            );
+            // Rooftop masonry chimney with cap behind the gable ridge
+            let ch_w = -depth * 0.36;
+            let ch_s = l * 0.72;
+            let cw = basis.origin[0] + basis.u[0] * ch_s + basis.n[0] * ch_w;
+            let cz = basis.origin[1] + basis.u[1] * ch_s + basis.n[1] * ch_w;
+            if frame.signed_distance(cw, cz) < -0.6 {
+                let ch_top = (y0 + rise + 0.55).min(y0 + rise + 0.45);
+                plan.add_box(
+                    &basis,
+                    PartArgs::new("chimney", "base", ch_s - 0.32, ch_s + 0.32, y0, ch_top, ch_w - 0.28, ch_w + 0.28)
+                        .edge(front.index)
+                        .shadow(true)
+                        .receive(true)
+                        .meta(json!({ "archetype": kind, "part": "chimney", "roof": true })),
+                );
+                plan.add_box(
+                    &basis,
+                    PartArgs::new("chimney", "coping", ch_s - 0.38, ch_s + 0.38, ch_top - 0.04, ch_top + 0.08, ch_w - 0.34, ch_w + 0.34)
+                        .edge(front.index)
+                        .shadow(true)
+                        .meta(json!({ "archetype": kind, "part": "chimney-cap", "roof": true })),
+                );
+            }
+        }
         let ww = 0.9f64.min(l * 0.18);
         let wy0 = y0 + 0.55;
         let wy1 = (y0 + rise * 0.62).min(wy0 + 1.5);

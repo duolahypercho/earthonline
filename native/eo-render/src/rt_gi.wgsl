@@ -124,8 +124,15 @@ fn rt_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         l = rt_hit_light(h, o, d, rt.params.z, 2.0 * rt.fwd.w);
         open = 0.0;
     }
-    // one cosine-distributed sample: the irradiance estimate is pi x its radiance.
-    textureStore(rt_out_a, hp, vec4<f32>(l * LK_PI, open));
+    // one cosine-distributed sample: the irradiance estimate is pi x its radiance,
+    // soft-clamped relative to exposure to eliminate single-ray bounce fireflies.
+    var irr = l * LK_PI;
+    let gi_cap = 14.0 / max(look.key.w, 0.1);
+    let gi_lum = lk_luma(irr);
+    if (gi_lum > gi_cap) {
+        irr = irr * (gi_cap / max(gi_lum, 1e-5));
+    }
+    textureStore(rt_out_a, hp, vec4<f32>(irr, open));
     textureStore(rt_out_b, hp, vec4<f32>(n, vd));
 }
 
@@ -181,6 +188,27 @@ fn rt_temporal(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (wsum > 0.05) {
                 hist = hist / wsum;
                 mom = mom / wsum;
+                // 3x3 variance-guided neighborhood clamp to prevent disocclusion ghosting & firefly trails.
+                var m1 = vec4<f32>(0.0);
+                var m2 = vec4<f32>(0.0);
+                var cnt = 0.0;
+                for (var dy = -1; dy <= 1; dy++) {
+                    for (var dx = -1; dx <= 1; dx++) {
+                        let nq = clamp(hp + vec2<i32>(dx, dy), vec2<i32>(0), dims - 1);
+                        let ng = textureLoad(rt_in_b, nq, 0);
+                        if (ng.w >= 0.0 && abs(ng.w - g.w) < 0.06 * g.w + 0.25 && dot(ng.xyz, g.xyz) > 0.75) {
+                            let s = textureLoad(rt_in_a, nq, 0);
+                            m1 = m1 + s;
+                            m2 = m2 + s * s;
+                            cnt = cnt + 1.0;
+                        }
+                    }
+                }
+                if (cnt >= 3.0) {
+                    let mean = m1 / cnt;
+                    let sigma = sqrt(max(m2 / cnt - mean * mean, vec4<f32>(0.0)));
+                    hist = clamp(hist, max(mean - sigma * 2.75, vec4<f32>(0.0)), mean + sigma * 2.75);
+                }
             } else {
                 hist = vec4<f32>(0.0);
                 mom = vec4<f32>(0.0);

@@ -125,26 +125,29 @@ const fn cu(a: &'static str, b: Option<&'static str>, mode: u32, drive: u32, nor
 /// composition shingle, the scanned plaster atlas) keep their kit maps.
 pub fn kit_class(name: &str) -> Option<ClassUse> {
     Some(match name {
-        "painted-clapboard" | "wood-siding" => cu("WoodSiding009", Some("Planks010"), MODE_PAINTED, DRIVE_PAINT, 1.0, 0.0, 0.5, 0.9),
-        "cedar-shingle" => cu("WoodSiding011", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.0, 0.5, 0.9),
-        "painted-shingle" => cu("WoodSiding011", None, MODE_PAINTED, DRIVE_NONE, 1.0, 0.0, 0.4, 0.7),
+        "painted-clapboard" | "wood-siding" => cu("WoodSiding009", Some("Planks010"), MODE_PAINTED, DRIVE_PAINT, 1.25, 0.011, 0.55, 0.98),
+        "cedar-shingle" => cu("WoodSiding011", None, MODE_NATURAL, DRIVE_NONE, 1.18, 0.011, 0.55, 0.95),
+        "painted-shingle" => cu("WoodSiding011", None, MODE_PAINTED, DRIVE_NONE, 1.15, 0.009, 0.48, 0.85),
+        "composition-shingle" => cu("WoodSiding011", None, MODE_PAINTED, DRIVE_NONE, 1.08, 0.009, 0.35, 0.88),
         // (The worn plaster scan's peeled patches read as camouflage under the paint: one stucco set.)
-        "painted-stucco" | "float-finish-stucco" => cu("white_stucco", None, MODE_PAINTED, DRIVE_NONE, 0.8, 0.0, 0.25, 0.8),
-        "painted-block" => cu("concrete_block_wall", None, MODE_PAINTED, DRIVE_NONE, 0.9, 0.0, 0.4, 0.7),
-        "brick-running-bond" => cu("red_bricks_04", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.012, 0.5, 1.0),
-        "brick-common-bond" => cu("brick_wall_006", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.012, 0.5, 1.0),
-        "brick-buff" => cu("yellow_bricks", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.012, 0.5, 1.0),
-        // Cast stone is moulded and dressed smooth (the sandstone ashlar scan read as rubble on plinths): smooth concrete.
-        "cast-stone" => cu("concrete_wall_008", None, MODE_NATURAL, DRIVE_NONE, 0.7, 0.0, 0.3, 0.7),
-        "limestone-ashlar" => cu("white_sandstone_blocks_02", None, MODE_NATURAL, DRIVE_NONE, 0.9, 0.010, 0.4, 0.8),
-        "cast-stone-trim" => cu("concrete_wall_008", None, MODE_NATURAL, DRIVE_NONE, 0.6, 0.0, 0.2, 0.6),
-        "concrete-precast" => cu("concrete_wall_008", None, MODE_NATURAL, DRIVE_NONE, 0.9, 0.0, 0.35, 0.9),
-        "corrugated-metal" => cu("corrugated_iron_02", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.0, 0.2, 0.8),
-        "standing-seam-metal" => cu("box_profile_metal_sheet", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.0, 0.2, 0.7),
-        "glazed-tile" => cu("rectangular_facade_tiles", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.004, 0.3, 0.8),
-        "sectional-garage-door" => cu("painted_metal_shutter", None, MODE_PAINTED, DRIVE_NONE, 1.0, 0.0, 0.3, 0.8),
-        "asphalt-roof" => cu("tarred_gravel", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.0, 0.2, 1.0),
-        "clay-barrel-tile" => cu("clay_roof_tiles_02", None, MODE_NATURAL, DRIVE_NONE, 1.0, 0.02, 0.3, 0.9),
+        "painted-stucco" | "float-finish-stucco" | "scanned-painted-plaster" => cu("white_stucco", None, MODE_PAINTED, DRIVE_NONE, 1.15, 0.005, 0.36, 1.00),
+        "painted-block" => cu("concrete_block_wall", None, MODE_PAINTED, DRIVE_NONE, 1.05, 0.007, 0.45, 0.80),
+        "brick-running-bond" => cu("red_bricks_04", None, MODE_NATURAL, DRIVE_NONE, 1.15, 0.014, 0.55, 1.0),
+        "brick-common-bond" => cu("brick_wall_006", None, MODE_NATURAL, DRIVE_NONE, 1.15, 0.014, 0.55, 1.0),
+        "brick-buff" => cu("yellow_bricks", None, MODE_NATURAL, DRIVE_NONE, 1.15, 0.014, 0.50, 1.0),
+        // Cast stone is moulded and dressed smooth: smooth concrete with subtle architectural panel micro-relief.
+        "cast-stone" => cu("concrete_wall_008", None, MODE_NATURAL, DRIVE_NONE, 0.85, 0.004, 0.35, 0.80),
+        "limestone-ashlar" => cu("white_sandstone_blocks_02", Some("granite_wall"), MODE_NATURAL, DRIVE_WEAR, 1.05, 0.012, 0.45, 0.88),
+        "cast-stone-trim" => cu("concrete_wall_008", None, MODE_NATURAL, DRIVE_NONE, 0.70, 0.002, 0.24, 0.68),
+        "concrete-precast" => cu("concrete_wall_008", Some("wood_textured_concrete"), MODE_NATURAL, DRIVE_WEAR, 1.05, 0.006, 0.42, 0.95),
+        "corrugated-metal" => cu("corrugated_iron_02", None, MODE_NATURAL, DRIVE_NONE, 1.15, 0.014, 0.25, 0.90),
+        "standing-seam-metal" => cu("box_profile_metal_sheet", None, MODE_NATURAL, DRIVE_NONE, 1.15, 0.012, 0.25, 0.82),
+        "glazed-tile" => cu("rectangular_facade_tiles", None, MODE_NATURAL, DRIVE_NONE, 1.10, 0.006, 0.32, 0.88),
+        "terracotta" => cu("rectangular_facade_tiles", None, MODE_NATURAL, DRIVE_NONE, 1.05, 0.008, 0.35, 0.88),
+        "sectional-garage-door" => cu("painted_metal_shutter", None, MODE_PAINTED, DRIVE_NONE, 1.10, 0.008, 0.35, 0.88),
+        "asphalt-roof" => cu("tarred_gravel", None, MODE_NATURAL, DRIVE_NONE, 1.05, 0.0, 0.25, 1.0),
+        "membrane-roof" => cu("concrete_floor_worn_001", None, MODE_NATURAL, DRIVE_NONE, 0.65, 0.0, 0.25, 0.70),
+        "clay-barrel-tile" => cu("clay_roof_tiles_02", None, MODE_NATURAL, DRIVE_NONE, 1.10, 0.022, 0.35, 0.95),
         _ => return None,
     })
 }
@@ -159,8 +162,8 @@ pub fn structure_class(key: &str) -> Option<ClassUse> {
     if key.ends_with(":planting") {
         return Some(cu("park_dirt", None, MODE_DETAIL, DRIVE_NONE, 1.0, 0.0, 0.0, 0.9));
     }
-    // The quay wall's face, the promenade seawalls, the waterfront's concrete (wall cap, fascias) and the pier decks.
-    if key == "seawall" || key.contains("seawall") || key == "structure:waterfront:concrete" {
+    // The quay wall's face, the promenade seawalls, the waterfront's concrete (wall cap, fascias), quay fills and pier decks.
+    if key == "seawall" || key.contains("seawall") || key == "structure:waterfront:concrete" || key.contains("quay-fill") || key.contains("promenade") || key.contains("apron") {
         return Some(cu("wood_textured_concrete", None, MODE_DETAIL, DRIVE_NONE, 0.8, 0.0, 0.3, 0.8));
     }
     // the shore's rock (eo-landmarks rocks.rs): the armour's quarried stone and the boulders, the scan's detail round the vertex tone

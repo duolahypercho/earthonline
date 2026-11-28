@@ -164,17 +164,33 @@ struct PrFrame {
     copy_step: [f32; 4],
 }
 
+// Street props use the lean props base shader (ambient plane, near cascades, no unused city/house/room/landmark modules).
+fn prop_draw_source() -> String {
+    format!("{}\n{}\n{}", crate::look::props_city_base_source(), pr_types_src(),
+        signal_light_select(&crate::look::sf_select(include_str!("props_draw.wgsl"))))
+}
+
+#[test]
+fn prop_shader_validates_each_combination_using_tree_wind_weight() {
+    use crate::look::{ShaderFeatures, AAA_DETAIL, NATURE_CROWN, NATURE_LEAF_SHADE};
+    for nature in [0, NATURE_CROWN, NATURE_LEAF_SHADE, NATURE_CROWN | NATURE_LEAF_SHADE] {
+        for aaa_buildings in [0, AAA_DETAIL] {
+            let features = ShaderFeatures { nature, aaa_buildings, ..ShaderFeatures::NONE };
+            let source = crate::look::with_shader_features(features, prop_draw_source);
+            wgpu::naga::front::wgsl::parse_str(&source).unwrap_or_else(|e| {
+                panic!("nature={nature} detail={aaa_buildings}: {}", e.emit_to_string(&source))
+            });
+        }
+    }
+}
+
 /// props_types.wgsl with the vegetation's range and thinning ahead of it
 /// (`props_lib2::vegetation_models::thin_wgsl`): every shader that composes
 /// props_types.wgsl takes it from here (light_shadow.rs's props variant too).
-/// The props draw shader's source: the ambient volume's plane only, no single-probe lookups, and
-/// (`--signal-light`) the signal-light blocks or the old ones (`signal_light_select`).
-fn prop_draw_source() -> String {
-    format!("{}\n{}\n{}", crate::look::props_city_source(crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false)), pr_types_src(), signal_light_select(&crate::look::sf_select(include_str!("props_draw.wgsl"))))
-}
-
 pub(crate) fn pr_types_src() -> String {
-    format!("{}\n{}\n{}", crate::props_lib2::vegetation_models::thin_wgsl(), signal_light_wgsl(), include_str!("props_types.wgsl"))
+    let boats = crate::props_lib2::BOAT_BASE..crate::props_lib2::SIGN_MODEL_BASE;
+    format!("{}\n{}\nconst PR_BOAT_START: u32 = {}u;\nconst PR_BOAT_END: u32 = {}u;\n{}",
+        crate::props_lib2::vegetation_models::thin_wgsl(), signal_light_wgsl(), boats.start, boats.end, include_str!("props_types.wgsl"))
 }
 
 // ---- (`--signal-light`, eo-app `--no-signal-light`) the signal lenses as lights ----
@@ -1705,7 +1721,7 @@ mod signal_light_tests {
     #[test]
     fn signal_chromaticities_lie_in_their_ite_boxes() {
         let _switches = switch_lock();
-        let table = eo_data::standards::CaStandards::load(&eo_data::DataPaths::discover().expect("repo data")).expect("the standards table");
+        let table = eo_data::standards::CaStandards::bundled().expect("the standards table");
         for (k, key) in ["red", "yellow", "green"].into_iter().enumerate() {
             let planes = table.metric_list(eo_sky::lights::SIGNAL_CHROMATICITY_ID, key).expect("the box");
             assert!(!planes.is_empty() && planes.len() % 3 == 0, "{key}: {planes:?}");

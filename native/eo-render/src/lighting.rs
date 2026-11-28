@@ -368,7 +368,7 @@ mod tests {
                 for (label, src) in group1_shaders() {
                     parse(&format!("{name}: {label}"), &src);
                 }
-                let props = format!("{}\n{}\n{}", look::props_city_source(look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false)), crate::props::pr_types_src(), look::sf_select(include_str!("props_draw.wgsl")));
+                let props = format!("{}\n{}\n{}", look::props_city_base_source(), crate::props::pr_types_src(), look::sf_select(include_str!("props_draw.wgsl")));
                 parse(&format!("{name}: props"), &props);
                 // the natural-detail blocks (`// sf:`): without the bits the props' shader holds
                 // the old back-light and none of the new code; with foliage, the new code alone.

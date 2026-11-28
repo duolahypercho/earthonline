@@ -122,13 +122,19 @@ fn rc_fs(@builtin(position) frag: vec4<f32>) -> RcOut {
     var dbg = vec3<f32>(0.0);
     var any_term = false;
     if (rc_view.misc.x > 0.5) {
-        let fade = (1.0 - lk_smooth(rc_view.gi.z, rc_view.gi.w, vd)) * rc_view.gi.y;
+        // At night (`look.sun.y < 0`) the static RT BVH carries no streetlamps/shop lights,
+        // so ease RTGI blend down toward the rig's night ambient fill while keeping full daytime bounce.
+        let day_gi = mix(0.28, 1.0, lk_smooth(-0.04, 0.08, look.sun.y));
+        let fade = (1.0 - lk_smooth(rc_view.gi.z, rc_view.gi.w, vd)) * rc_view.gi.y * day_gi;
         let s = rc_upsample(rc_gi, rc_gi_z, p, vd);
         if (fade > 0.0 && s.w > 0.0) {
             let ga = textureLoad(rc_gb_a, p, 0);
             let gb = textureLoad(rc_gb_b, p, 0);
             let n = normalize(gn.xyz * 2.0 - 1.0);
-            let e = s.v.rgb + look.ambient.xyz + rc_sh(n) * ga.a * s.v.a;
+            // Keep a realistic residual indirect canyon floor so deeply occluded alleys never
+            // collapse to pure black, while preserving crisp traced bounce color & occlusion.
+            let sky_vis = clamp(s.v.a, 0.0, 1.0);
+            let e = s.v.rgb + look.ambient.xyz + rc_sh(n) * ga.a * mix(0.08, 1.0, sky_vis);
             let ao = rc_multi_bounce(mix(gb.a, 1.0, 1.0 - rc_view.gi.x));
             let traced = gb.rgb * e * ao;
             add = add + fade * (traced - ga.rgb);

@@ -22,7 +22,7 @@ pub const DISTRICT_CELLS: i32 = 8;
 /// Footprint simplification tolerance, metres (a pixel at 1.4 km is 1.3 m).
 pub const SIMPLIFY_M: f64 = 1.5;
 pub const MAGIC: &[u8; 4] = b"EOHD";
-pub const VERSION: u32 = 2; // 2: the window rhythm in the normal word, the opaque wall colour, the tower flag
+pub const VERSION: u32 = 8; // 2: rhythm+wall+tower; 3: 3D roofs+crowns+mat_class; 4: 6-vert pitched roofs; 5: cull sub-pixel sheds; 6: mansards + tighter cap/budget culling; 7: hillside-prioritized pitched culling; 8: VF_RESIDENTIAL night bit + SF rooftop water tanks + sculpted hillside/midrise balance
 /// District colour flag (the vertex colour's alpha byte).
 pub const VF_DISTRICT: u32 = 4;
 
@@ -272,18 +272,215 @@ fn rgb565(c: [f32; 3]) -> u32 {
 
 /// One district's mesh from its buildings' summaries.
 /// a district building's vertex words: the colour (the opaque wall with
-/// `glass_body`, else the facade mean; the district and tower flags), the uv
-/// word (roof rgb565, window share, storey phase) and the normal word (the rhythm).
+/// `glass_body`, else the facade mean; the district, tower and material class flags),
+/// the uv word (roof rgb565, window share, storey phase) and the normal word (the rhythm).
 pub fn vertex_words(s: &BuildingSummary, glass_body: bool) -> (u32, u32, u32) {
     let wall = if glass_body { s.wall } else { s.facade };
     let tower = if s.tower > 0.5 { hlod_bake::VF_TOWER } else { 0 };
+    let mat = ((s.mat_class.round() as u32) & 7) << hlod_bake::VF_MAT_SHIFT;
+    let res = if s.residential > 0.5 { hlod_bake::VF_RESIDENTIAL } else { 0 };
     let colour = hlod_bake::linear_to_srgb_byte(wall[0]) as u32
         | ((hlod_bake::linear_to_srgb_byte(wall[1]) as u32) << 8)
         | ((hlod_bake::linear_to_srgb_byte(wall[2]) as u32) << 16)
-        | ((VF_DISTRICT | tower) << 24);
+        | ((VF_DISTRICT | tower | mat | res) << 24);
     let phase = ((s.rhythm[4].rem_euclid(1.0) * 255.0).round() as u32).min(255);
     let uv = rgb565(s.roof) | (((s.glass.clamp(0.0, 1.0) * 255.0).round() as u32) << 16) | (phase << 24);
     (colour, uv, pack_rhythm(s.rhythm))
+}
+
+fn ring_signed_area(r: &[[f64; 2]]) -> f64 {
+    let mut a = 0.0;
+    for i in 0..r.len() {
+        let (p, q) = (r[i], r[(i + 1) % r.len()]);
+        a += p[0] * q[1] - q[0] * p[1];
+    }
+    a * 0.5
+}
+
+/// Emit a 3D oriented box (4 side quads + top cap) into a district mesh.
+/// `uv_base` is used on base-ring vertices (provoking vertex for side walls),
+/// while top-ring vertices keep `uv_top` (`rgb565` with upper 16 bits zeroed when
+/// `roof_frames` is on so `fr_roof` never reads stale parapet height).
+#[allow(clippy::too_many_arguments)]
+fn push_district_box(
+    vertices: &mut Vec<HlodVertex>,
+    indices: &mut Vec<u32>,
+    mut quad: [[f64; 2]; 4],
+    y0: f32,
+    y1: f32,
+    colour: u32,
+    uv_wall: u32,
+    rhythm: u32,
+    roof_frames: bool,
+    group: u32,
+) {
+    if !(y1 > y0 + 0.2) {
+        return;
+    }
+    if ring_signed_area(&quad) < 0.0 {
+        quad.reverse();
+    }
+    let base = vertices.len() as u32;
+    let uv_top = if roof_frames { uv_wall & 0xffff } else { uv_wall };
+    let nrm_top = if roof_frames { 0 } else { rhythm };
+    for p in &quad {
+        vertices.push(HlodVertex { pos: [p[0] as f32, y0, p[1] as f32], normal: rhythm, uv: uv_wall, color: colour, group });
+    }
+    for p in &quad {
+        vertices.push(HlodVertex { pos: [p[0] as f32, y1, p[1] as f32], normal: nrm_top, uv: uv_top, color: colour, group });
+    }
+    for i in 0..4u32 {
+        let j = (i + 1) % 4;
+        let (b0, b1, t0, t1) = (base + i, base + j, base + 4 + i, base + 4 + j);
+        indices.extend_from_slice(&[b0, b1, t1, b0, t1, t0]);
+    }
+    indices.extend_from_slice(&[base + 4, base + 5, base + 6, base + 4, base + 6, base + 7]);
+}
+
+/// Emit a 6-vertex shared pitched roof (gable, hip, or shed) into a district mesh.
+/// Uses `VF_ROOF` (`VF_DISTRICT = 0`, `normal = 0` so `hlod_draw.wgsl` computes exact flat
+/// per-triangle slope normals via `cross(dpdx, dpdy)`): **6 vertices** per roof for gable,
+/// hip, and shed alike (3x leaner than unshared triangles so all 63 districts stay <= 60%
+/// of the 4M GPU vertex budget and leave > 1.5M vertices free for resident cells!).
+#[allow(clippy::too_many_arguments)]
+fn push_district_pitched(
+    vertices: &mut Vec<HlodVertex>,
+    indices: &mut Vec<u32>,
+    quad: [[f64; 2]; 4],
+    form: i32,
+    eave_y: f32,
+    rise: f32,
+    ridge_off: f32,
+    roof_rgb: [f32; 3],
+    group: u32,
+) {
+    let [c0, c1, c2, c3] = quad;
+    let p3 = |p: [f64; 2], y: f32| [p[0] as f32, y, p[1] as f32];
+    let slope_rgb = hlod_bake::pitched_roof_color(roof_rgb, group, form);
+    let roof_col = hlod_bake::srgb_word(slope_rgb, hlod_bake::VF_ROOF);
+
+    let m0 = [0.5 * (c3[0] + c0[0]), 0.5 * (c3[1] + c0[1])];
+    let m1 = [0.5 * (c1[0] + c2[0]), 0.5 * (c1[1] + c2[1])];
+    let u_vec = [m1[0] - m0[0], m1[1] - m0[1]];
+    let u_len = u_vec[0].hypot(u_vec[1]).max(1e-4);
+    let v_vec = [c3[0] - c0[0], c3[1] - c0[1]];
+    let v_len = v_vec[0].hypot(v_vec[1]).max(1e-4);
+    let yr = eave_y + rise;
+
+    match form {
+        1 => {
+            // Gable roof: 6 shared VF_ROOF vertices, 6 triangles (2 sloped quads + 2 shaded gable ends).
+            let shift = (ridge_off as f64).clamp(-0.35, 0.35) * 0.5;
+            let r0 = [m0[0] + v_vec[0] * shift, m0[1] + v_vec[1] * shift];
+            let r1 = [m1[0] + v_vec[0] * shift, m1[1] + v_vec[1] * shift];
+            let s = vertices.len() as u32;
+            for pos in [p3(c0, eave_y), p3(c1, eave_y), p3(c2, eave_y), p3(c3, eave_y), p3(r0, yr), p3(r1, yr)] {
+                vertices.push(HlodVertex { pos, normal: 0, uv: 0, color: roof_col, group });
+            }
+            indices.extend_from_slice(&[
+                s, s + 1, s + 5, s, s + 5, s + 4,
+                s + 2, s + 3, s + 4, s + 2, s + 4, s + 5,
+                s + 3, s, s + 4,
+                s + 1, s + 2, s + 5,
+            ]);
+        }
+        2 => {
+            // 4-sided Hip roof: 6 shared VF_ROOF vertices, 6 triangles.
+            let t_inset = (0.42 * v_len / u_len).clamp(0.08, 0.49);
+            let r0 = [m0[0] + u_vec[0] * t_inset, m0[1] + u_vec[1] * t_inset];
+            let r1 = [m1[0] - u_vec[0] * t_inset, m1[1] - u_vec[1] * t_inset];
+            let s = vertices.len() as u32;
+            for pos in [p3(c0, eave_y), p3(c1, eave_y), p3(c2, eave_y), p3(c3, eave_y), p3(r0, yr), p3(r1, yr)] {
+                vertices.push(HlodVertex { pos, normal: 0, uv: 0, color: roof_col, group });
+            }
+            indices.extend_from_slice(&[
+                s, s + 1, s + 5, s, s + 5, s + 4,
+                s + 2, s + 3, s + 4, s + 2, s + 4, s + 5,
+                s + 3, s, s + 4,
+                s + 1, s + 2, s + 5,
+            ]);
+        }
+        3 => {
+            // Mono-pitch shed roof: 6 shared VF_ROOF vertices, 6 triangles.
+            let s = vertices.len() as u32;
+            for pos in [p3(c0, eave_y), p3(c1, eave_y), p3(c2, eave_y), p3(c3, eave_y), p3(c0, yr), p3(c3, yr)] {
+                vertices.push(HlodVertex { pos, normal: 0, uv: 0, color: roof_col, group });
+            }
+            indices.extend_from_slice(&[
+                s + 4, s + 1, s + 2, s + 4, s + 2, s + 5,
+                s + 3, s, s + 4, s + 3, s + 4, s + 5,
+                s, s + 1, s + 4,
+                s + 2, s + 3, s + 5,
+            ]);
+        }
+        6 => {
+            // Classic SF Mansard roof: 8 shared VF_ROOF vertices, 10 triangles (4 steep skirts + flat crown deck).
+            let iu = (0.26 * v_len / u_len).clamp(0.10, 0.28);
+            let iv = 0.26;
+            let lerp2 = |a: [f64; 2], b: [f64; 2], t: f64| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            let bilerp = |fu: f64, fv: f64| lerp2(lerp2(c0, c1, fu), lerp2(c3, c2, fu), fv);
+            let t0 = bilerp(iu, iv);
+            let t1 = bilerp(1.0 - iu, iv);
+            let t2 = bilerp(1.0 - iu, 1.0 - iv);
+            let t3 = bilerp(iu, 1.0 - iv);
+            let s = vertices.len() as u32;
+            for pos in [
+                p3(c0, eave_y), p3(c1, eave_y), p3(c2, eave_y), p3(c3, eave_y),
+                p3(t0, yr), p3(t1, yr), p3(t2, yr), p3(t3, yr),
+            ] {
+                vertices.push(HlodVertex { pos, normal: 0, uv: 0, color: roof_col, group });
+            }
+            indices.extend_from_slice(&[
+                s, s + 1, s + 5, s, s + 5, s + 4,
+                s + 1, s + 2, s + 6, s + 1, s + 6, s + 5,
+                s + 2, s + 3, s + 7, s + 2, s + 7, s + 6,
+                s + 3, s, s + 4, s + 3, s + 4, s + 7,
+                s + 4, s + 5, s + 6, s + 4, s + 6, s + 7,
+            ]);
+        }
+        _ => {}
+    }
+}
+
+/// Emit a compact 13-shared-vertex / 18-tri hexagonal SF redwood rooftop water tank with conical cap
+/// into a district mesh (`VF_ROOF`, `normal = 0`, matching `hlod_bake::emit_water_tank` silhouettes).
+fn push_district_water_tank(
+    vertices: &mut Vec<HlodVertex>,
+    indices: &mut Vec<u32>,
+    quad: [[f64; 2]; 4],
+    roof_y: f32,
+    group: u32,
+) {
+    let cx = 0.25 * (quad[0][0] + quad[1][0] + quad[2][0] + quad[3][0]);
+    let cz = 0.25 * (quad[0][1] + quad[1][1] + quad[2][1] + quad[3][1]);
+    let s0 = (quad[1][0] - quad[0][0]).hypot(quad[1][1] - quad[0][1]);
+    let s1 = (quad[2][0] - quad[1][0]).hypot(quad[2][1] - quad[1][1]);
+    let h1 = hlod_bake::massing_hash(group, 179);
+    let h2 = hlod_bake::massing_hash(group, 181);
+    let r = (1.50 + 0.65 * h1).min(0.45 * s0.min(s1)).max(1.05);
+    let y0 = roof_y + 0.65;
+    let y1 = y0 + (2.85 + 0.90 * h2) as f32;
+    let ya = y1 + 0.85;
+    let col = hlod_bake::srgb_word([0.225, 0.120, 0.074], hlod_bake::VF_ROOF);
+    let base = vertices.len() as u32;
+    const SIDES: u32 = 6;
+    for k in 0..SIDES {
+        let ang = k as f64 * std::f64::consts::TAU / SIDES as f64;
+        let (sa, ca) = ang.sin_cos();
+        vertices.push(HlodVertex { pos: [(cx + ca * r) as f32, y0, (cz + sa * r) as f32], normal: 0, uv: 0, color: col, group });
+    }
+    for k in 0..SIDES {
+        let ang = k as f64 * std::f64::consts::TAU / SIDES as f64;
+        let (sa, ca) = ang.sin_cos();
+        vertices.push(HlodVertex { pos: [(cx + ca * r) as f32, y1, (cz + sa * r) as f32], normal: 0, uv: 0, color: col, group });
+    }
+    vertices.push(HlodVertex { pos: [cx as f32, ya, cz as f32], normal: 0, uv: 0, color: col, group });
+    let apex = base + 2 * SIDES;
+    for k in 0..SIDES {
+        let j = (k + 1) % SIDES;
+        let (b0, b1, t0, t1) = (base + k, base + j, base + SIDES + k, base + SIDES + j);
+        indices.extend_from_slice(&[b0, b1, t1, b0, t1, t0, t0, t1, apex]);
+    }
 }
 
 /// with `glass_body` (the bake's) the walls carry the opaque wall colour,
@@ -293,9 +490,9 @@ pub fn build_district(city: &eo_data::City, entry: u32, key: (i32, i32), summari
     build_district_with(city, entry, key, summaries, glass_body, false)
 }
 
-/// `build_district`, and with `roof_frames` (`--far-relief`) each roof ring
-/// carrying its roof frame (`roof_frame_words`) in place of the wall words the
-/// walls never read there.
+/// `build_district`, and with `roof_frames` (`--far-relief`) each flat roof ring
+/// carrying its roof frame (`roof_frame_words`), plus 3D roof forms (gable/hip/shed),
+/// multi-tier tower setbacks/crowns, and rooftop penthouses/mechanical bulkheads.
 pub fn build_district_with(city: &eo_data::City, entry: u32, key: (i32, i32), summaries: &[BuildingSummary], glass_body: bool, roof_frames: bool) -> DistrictMesh {
     let mut vertices = vec![];
     let mut indices = vec![];
@@ -312,11 +509,39 @@ pub fn build_district_with(city: &eo_data::City, entry: u32, key: (i32, i32), su
         let n = r.len() as u32;
         let base = vertices.len() as u32;
         let (colour, uv, rhythm) = vertex_words(s, glass_body);
+        let form = s.massing_form.round() as i32;
+        let forced_axis = (s.roof_axis.is_finite() && s.roof_axis.abs() > 1e-5).then_some(s.roof_axis as f64);
+        let obb = hlod_bake::fit_obb(&r, if matches!(form, 1 | 3) { forced_axis } else { None });
+        // At district distance (> 1.15 km, ~1.2-2.5 m/px), keep rich hillside (`base > 12 m`)
+        // pitched & mansard silhouettes while tightening outer-flatland roofs so all 63 districts
+        // stay <= 62.5% of the 4M GPU vertex arena / <= 74.5% of indices (`hlod_skip <= 50`).
+        let hillside = s.base > 12.0;
+        let min_obb_area = match (hillside, form == 6) {
+            (true, true) => 140.0,
+            (true, false) => 125.0,
+            (false, true) => 215.0,
+            (false, false) => 230.0,
+        };
+        let min_rise = if hillside { 1.65 } else { 1.95 };
+        let pitched_quad = if matches!(form, 1..=3 | 6) && s.ridge_rise >= min_rise {
+            obb.as_ref().filter(|o| 4.0 * o.hu * o.hv >= min_obb_area).and_then(|o| hlod_bake::pitched_roof_quad(&r, o))
+        } else {
+            None
+        };
+        let pitched = pitched_quad.is_some();
+        let full_pitched = pitched && obb.is_some_and(|o| o.fill >= 0.78);
+
         for p in &r {
             vertices.push(HlodVertex { pos: [p[0] as f32, s.base, p[1] as f32], normal: rhythm, uv, color: colour, group: s.group });
         }
-        // (`--far-relief`) the roof ring's words: its roof frame (no parapet: zero heading and height).
-        let frame = if roof_frames { Some(roof_frame_words(&r, s.group, s.tower > 0.5).unwrap_or((0, vec![0; r.len()]))) } else { None };
+        // (`--far-relief`) flat roof rings carry their parapet roof frames; full pitched roofs carry none.
+        let frame = if roof_frames && !full_pitched {
+            Some(roof_frame_words(&r, s.group, s.tower > 0.5).unwrap_or((0, vec![0; r.len()])))
+        } else if roof_frames {
+            Some((0, vec![0; r.len()]))
+        } else {
+            None
+        };
         for (k, p) in r.iter().enumerate() {
             let (normal, uv_top) = match &frame {
                 Some((upper, words)) => (words[k], (uv & 0xffff) | (upper << 16)),
@@ -329,9 +554,107 @@ pub fn build_district_with(city: &eo_data::City, entry: u32, key: (i32, i32), su
             let (b0, b1, t0, t1) = (base + i, base + j, base + n + i, base + n + j);
             indices.extend_from_slice(&[b0, b1, t1, b0, t1, t0]);
         }
-        tri.clear();
-        ear.earcut(r.iter().copied(), &[] as &[u32], &mut tri);
-        indices.extend(tri.iter().map(|t| base + n + t));
+        // Omit the flat interior cap whenever a pitched/mansard roof covers the full footprint (`fill >= 0.78`).
+        let keep_flat_cap = !pitched || obb.is_some_and(|o| o.fill < 0.78);
+        if keep_flat_cap {
+            tri.clear();
+            ear.earcut(r.iter().copied(), &[] as &[u32], &mut tri);
+            indices.extend(tri.iter().map(|t| base + n + t));
+        }
+
+        // Emit 3D roof silhouette, multi-tier tower setbacks/crowns, and mid/high-rise rooftop penthouses.
+        // Sub-pixel (< 16 m) residential flat-roof stair hatches stay in 256 m cells (470-1150 m)
+        // so all 63 resident districts stay safely under ~59% of the 4M GPU vertex budget, leaving
+        // >1.6M vertices free for resident neighbourhood cells.
+        if let Some(o) = obb {
+            let height = s.top - s.base;
+            let mat_bits = ((s.mat_class.round() as u32) & 7) << hlod_bake::VF_MAT_SHIFT;
+            let wall_rgb = if glass_body { s.wall } else { s.facade };
+            let mech_wall = [wall_rgb[0] * 0.88, wall_rgb[1] * 0.86, wall_rgb[2] * 0.83];
+            let mech_cap = [0.092, 0.096, 0.102];
+            let mech_col = hlod_bake::srgb_word(mech_wall, VF_DISTRICT | mat_bits);
+            let mech_uv = rgb565(mech_cap); // glass = 0, phase = 0, hp = 0
+            let hvac_col = hlod_bake::srgb_word([0.50, 0.53, 0.56], VF_DISTRICT | mat_bits);
+            let hvac_uv = rgb565([0.40, 0.43, 0.46]);
+            if let Some(pq) = pitched_quad {
+                let eave_y = s.top + if keep_flat_cap { 0.05 } else { 0.0 };
+                push_district_pitched(
+                    &mut vertices,
+                    &mut indices,
+                    pq,
+                    form,
+                    eave_y,
+                    s.ridge_rise,
+                    s.pent_off[0],
+                    s.roof,
+                    s.group,
+                );
+            } else if form == 4 && s.ridge_rise >= 1.5 {
+                // Multi-tier stepped setback (glazed upper shaft + optional rooftop mechanical bulkhead).
+                let tier_scale = s.pent_scale.clamp(0.42, 0.80) as f64;
+                let tier_top = s.top + s.ridge_rise;
+                if let Some(q1) = hlod_bake::fit_interior_box(&r, &o, tier_scale, s.pent_off[0] as f64, s.pent_off[1] as f64, 1.5) {
+                    push_district_box(&mut vertices, &mut indices, q1, s.top - 0.1, tier_top, colour, uv, rhythm, roof_frames, s.group);
+                    if s.pent_h > 0.8 {
+                        let o1 = hlod_bake::fit_obb(&q1, None).unwrap_or(o);
+                        if let Some(q2) = hlod_bake::fit_interior_box(&q1, &o1, 0.44, 0.0, 0.0, 1.0) {
+                            push_district_box(&mut vertices, &mut indices, q2, tier_top - 0.1, tier_top + s.pent_h, mech_col, mech_uv, 0, roof_frames, s.group);
+                        }
+                    }
+                }
+            } else if form == 5 && s.ridge_rise >= 1.5 {
+                // Tall tower stepped architectural crown + mechanical penthouse yard.
+                let crown_top = s.top + s.ridge_rise;
+                let crown_scale = (0.66 + 0.12 * s.pent_off[0].abs() as f64).clamp(0.62, 0.78);
+                let glazed_crown = hlod_bake::massing_hash(s.group, 97) < 0.55;
+                let (c_col, c_uv, c_rhy) = if glazed_crown {
+                    (colour, uv, rhythm)
+                } else {
+                    let crown_wall = [wall_rgb[0] * 0.86, wall_rgb[1] * 0.88, wall_rgb[2] * 0.90];
+                    (hlod_bake::srgb_word(crown_wall, VF_DISTRICT | mat_bits), mech_uv, 0)
+                };
+                if let Some(q1) = hlod_bake::fit_interior_box(&r, &o, crown_scale, 0.0, 0.0, 2.5) {
+                    push_district_box(&mut vertices, &mut indices, q1, s.top - 0.15, crown_top, c_col, c_uv, c_rhy, roof_frames, s.group);
+                    let o1 = hlod_bake::fit_obb(&q1, None).unwrap_or(o);
+                    if s.pent_h > 0.8 && s.pent_scale > 0.15 {
+                        let pscale = (s.pent_scale as f64 / crown_scale).clamp(0.28, 0.68);
+                        if let Some(q2) = hlod_bake::fit_interior_box(&q1, &o1, pscale, s.pent_off[0] as f64, s.pent_off[1] as f64, 1.5) {
+                            push_district_box(&mut vertices, &mut indices, q2, crown_top - 0.1, crown_top + s.pent_h, mech_col, mech_uv, 0, roof_frames, s.group);
+                        }
+                    }
+                    // Secondary mechanical chiller / cooling enclosure on wide towers.
+                    if 4.0 * o.hu * o.hv >= 550.0 {
+                        if let Some(q3) = hlod_bake::fit_interior_box(&q1, &o1, 0.24, -s.pent_off[0] as f64 - 0.18, -s.pent_off[1] as f64, 1.2) {
+                            push_district_box(&mut vertices, &mut indices, q3, crown_top - 0.1, crown_top + (s.pent_h * 0.62).max(1.6), hvac_col, hvac_uv, 0, roof_frames, s.group);
+                        }
+                    }
+                }
+            } else if height >= 16.0 && s.pent_h >= 2.0 && s.pent_scale > 0.15 {
+                // Real 3D rooftop stair/elevator bulkhead on mid/high-rises (+ secondary HVAC enclosure on wide commercial roofs).
+                if let Some(q) = hlod_bake::fit_interior_box(&r, &o, s.pent_scale as f64, s.pent_off[0] as f64, s.pent_off[1] as f64, 1.1) {
+                    push_district_box(&mut vertices, &mut indices, q, s.top - 0.1, s.top + s.pent_h, mech_col, mech_uv, 0, roof_frames, s.group);
+                }
+                if 4.0 * o.hu * o.hv >= 500.0 && s.pent_h >= 2.2 {
+                    let s2 = (s.pent_scale as f64 * 0.68).clamp(0.16, 0.30);
+                    let h2 = (s.pent_h * 0.62).max(1.5);
+                    if let Some(q2) = hlod_bake::fit_interior_box(&r, &o, s2, -s.pent_off[0] as f64 - 0.18, -s.pent_off[1] as f64, 1.0) {
+                        push_district_box(&mut vertices, &mut indices, q2, s.top - 0.1, s.top + h2, hvac_col, hvac_uv, 0, roof_frames, s.group);
+                    }
+                }
+            }
+            // Iconic SF hexagonal redwood rooftop water tanks on prominent prewar/midrise district roofs.
+            let gs = eo_data::groundscale::scale().max(1e-3);
+            let true_area = ring_signed_area(&r).abs() / (gs * gs);
+            if !pitched && height >= 18.0 && true_area >= 220.0 && hlod_bake::wants_water_tank(s.group, height as f64, true_area, s.mat_class.round() as u8, form) {
+                let h1 = hlod_bake::massing_hash(s.group, 179);
+                let h2 = hlod_bake::massing_hash(s.group, 181);
+                let off_u = if s.pent_h > 0.8 || form == 4 { -s.pent_off[0] as f64 - 0.18 } else { (h1 - 0.5) * 0.42 };
+                let off_v = if s.pent_h > 0.8 || form == 4 { -s.pent_off[1] as f64 + 0.14 } else { (h2 - 0.5) * 0.42 };
+                if let Some(qt) = hlod_bake::fit_interior_box(&r, &o, 0.22, off_u, off_v, 1.8) {
+                    push_district_water_tank(&mut vertices, &mut indices, qt, s.top, s.group);
+                }
+            }
+        }
         buildings += 1;
     }
     let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
@@ -571,10 +894,29 @@ mod tests {
 
     #[test]
     fn a_district_wall_carries_the_opaque_wall_rhythm_and_tower_flag() {
-        let s = BuildingSummary { group: 3, building: 0, facade: [0.3, 0.3, 0.3], glass: 0.4, roof: [0.1; 3], base: 0.0, top: 40.0, wall: [0.5, 0.4, 0.3], rhythm: [3.0, 3.6, 0.5, 0.6, 0.25], tower: 1.0 };
+        let s = BuildingSummary {
+            group: 3,
+            building: 0,
+            facade: [0.3, 0.3, 0.3],
+            glass: 0.4,
+            roof: [0.1; 3],
+            base: 0.0,
+            top: 40.0,
+            wall: [0.5, 0.4, 0.3],
+            rhythm: [3.0, 3.6, 0.5, 0.6, 0.25],
+            tower: 1.0,
+            mat_class: hlod_bake::MAT_CURTAIN_EMERALD as f32,
+            ..Default::default()
+        };
         let (color, uv, normal) = vertex_words(&s, true);
         assert_eq!(color & 255, hlod_bake::linear_to_srgb_byte(0.5) as u32, "the opaque wall, not the mean");
         assert_eq!((color >> 24) & (VF_DISTRICT | hlod_bake::VF_TOWER), VF_DISTRICT | hlod_bake::VF_TOWER);
+        assert_eq!(((color >> 24) >> hlod_bake::VF_MAT_SHIFT) & 7, hlod_bake::MAT_CURTAIN_EMERALD as u32, "material class encoded in bits 4..6");
+        assert_eq!((color >> 24) & hlod_bake::VF_RESIDENTIAL, 0, "commercial tower clears VF_RESIDENTIAL bit 7");
+        let mut s_res = s;
+        s_res.residential = 1.0;
+        let (res_col, _, _) = vertex_words(&s_res, true);
+        assert_eq!((res_col >> 24) & hlod_bake::VF_RESIDENTIAL, hlod_bake::VF_RESIDENTIAL, "residential tower sets VF_RESIDENTIAL bit 7");
         assert_eq!(normal, pack_rhythm(s.rhythm));
         assert_eq!((uv >> 16) & 255, 102, "the window share");
         assert_eq!(uv >> 24, 64, "the phase");
@@ -620,5 +962,32 @@ mod tests {
         bad[60] ^= 1;
         assert!(DistrictMesh::decode(&bad, 9).is_err());
         assert!(DistrictMesh::decode(&b[..b.len() - 3], 9).is_err());
+    }
+
+    #[test]
+    fn district_emits_pitched_roofs_stepped_crowns_and_penthouses_with_safe_flags() {
+        let rect = vec![[0.0, 0.0], [16.0, 0.0], [16.0, 10.0], [0.0, 10.0]];
+        let obb = hlod_bake::fit_obb(&rect, None).unwrap();
+        let quad = hlod_bake::pitched_roof_quad(&rect, &obb).unwrap();
+        // Gable, Hip, and Shed all share 6 VF_ROOF vertices (18 indices) with normal=0 so
+        // hlod_draw.wgsl computes exact per-triangle slope normals while keeping 63 districts <= 60% budget.
+        for form in [1i32, 2, 3] {
+            let (mut v, mut ix) = (vec![], vec![]);
+            push_district_pitched(&mut v, &mut ix, quad, form, 10.0, 3.0, 0.0, [0.3; 3], 7 + form as u32);
+            assert_eq!(v.len(), 6, "form {form} uses exactly 6 shared vertices");
+            assert_eq!(ix.len(), 18, "form {form} emits 6 triangles");
+            assert!(v.iter().all(|q| ((q.color >> 24) & hlod_bake::VF_ROOF) != 0 && ((q.color >> 24) & VF_DISTRICT) == 0 && q.normal == 0));
+        }
+        let (mut mv, mut mix) = (vec![], vec![]);
+        push_district_pitched(&mut mv, &mut mix, quad, 6, 14.0, 2.2, 0.0, [0.3; 3], 17);
+        assert_eq!(mv.len(), 8, "mansard uses 8 shared VF_ROOF vertices");
+        assert_eq!(mix.len(), 30, "mansard emits 10 triangles");
+        assert!(mv.iter().all(|q| ((q.color >> 24) & hlod_bake::VF_ROOF) != 0 && ((q.color >> 24) & VF_DISTRICT) == 0 && q.normal == 0));
+        // Box top vertices under roof_frames have zero upper uv bits so fr_roof stays inert.
+        let (mut bv, mut bi) = (vec![], vec![]);
+        let q = [[2.0, 2.0], [10.0, 2.0], [10.0, 8.0], [2.0, 8.0]];
+        push_district_box(&mut bv, &mut bi, q, 40.0, 44.0, hlod_bake::srgb_word([0.5; 3], VF_DISTRICT), 0x1234_5678, 0x0102_0304, true, 9);
+        assert_eq!(bi.len(), 30, "box has 10 triangles");
+        assert!(bv[4..8].iter().all(|v| (v.uv >> 16) == 0 && v.normal == 0), "top ring carries zero parapet frame");
     }
 }

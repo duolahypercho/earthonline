@@ -127,7 +127,7 @@ fn shader_source_with_cove(cove_detail: bool, bits: crate::water::ShaderBits) ->
         crate::look::look_common_source(),
         include_str!("sky_light_core.wgsl"),
         crate::look::LOOK_EXT_WGSL, // group 1 bindings 12-18
-        include_str!("water.wgsl"),
+        crate::look::sf_select(include_str!("water.wgsl")),
         include_str!("water_surf.wgsl"),
         include_str!("surf.wgsl")
     ) + "\n" + crate::far_shadow::WGSL // the far sun shadow map's lookup (water.wgsl `w_shadow`, lighting)

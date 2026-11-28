@@ -229,11 +229,19 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     let family_key = system.as_ref().map(|t| t.family).unwrap_or(port_family);
     let mut fam = family(family_key);
     if let Some(t) = &system {
+        let detail = crate::typology::detail_enabled();
+        let extra_reveal = if !detail {
+            0.0
+        } else if t.family == "curtain-wall" {
+            0.06
+        } else {
+            0.09
+        };
         fam = Family {
             wall: t.wall,
             spandrel: t.spandrel,
             glass: t.glass,
-            reveal: t.reveal,
+            reveal: (t.reveal + extra_reveal).min(0.42),
             spandrel_band: t.spandrel_band,
             pier_width: t.pier_width,
             pier_projection: t.pier_projection,
@@ -354,7 +362,11 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "roof": "asphalt-roof",
         },
         "elevations": { "default": "blind", "byEdge": by_edge },
-        "roof": { "slab": 0.35, "deck": { "units": 2, "ducts": 1, "antennas": 1, "inset": 1.2 } },
+        "roof": if crate::typology::detail_enabled() {
+            json!({ "slab": 0.35, "plantAllowance": 4.2, "deck": { "units": 2, "ducts": 1, "antennas": 1, "inset": 1.2 } })
+        } else {
+            json!({ "slab": 0.35, "deck": { "units": 2, "ducts": 1, "antennas": 1, "inset": 1.2 } })
+        },
         "archetype": {
             "kind": "downtown-tower",
             "version": DOWNTOWN_TOWER_VERSION,
@@ -440,6 +452,13 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
     let floor_height = meta.num("floorHeight");
     let crown = meta.num("crown");
     let facade_edges: Vec<usize> = meta.arr("facadeEdges").map(|a| a.iter().filter_map(|v| v.as_u64()).map(|v| v as usize).collect()).unwrap_or_default();
+    let detail_on = crate::typology::detail_enabled();
+    let system_name = meta.s("system").unwrap_or("");
+    let family_name = meta.s("family").unwrap_or("");
+    let is_curtain = family_name == "curtain-wall" || matches!(system_name, "curtain-flush" | "curtain-mullion");
+    let is_stone_fin = matches!(system_name, "precast-fin" | "precast-punched" | "masonry-pier" | "granite-bay") || family_name == "prewar-masonry";
+    let wants_sunshades = detail_on && matches!(system_name, "curtain-mullion" | "ribbon-band" | "precast-fin" | "precast-punched");
+    let mech_floor = if detail_on && floors >= 12.0 { Some((floors * 0.56).round()) } else { None };
 
     for &index in &facade_edges {
         let Some(edge) = frame.edges.get(index) else { continue };
@@ -463,6 +482,42 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                         .receive(true)
                         .meta(json!({ "archetype": kind, "part": "floor-band", "floor": i })),
                 );
+                // Expressed horizontal sunshade / brise-soleil eyebrow above vision glass
+                if wants_sunshades && y0 > ribbon_bottom + 0.4 {
+                    let shade_w = (band_w + if is_curtain { 0.24 } else { 0.16 }).min(allow);
+                    if shade_w > band_w + 0.04 {
+                        plan.add_box(
+                            &basis,
+                            PartArgs::new("sunshade", "frame", 0.08, (edge.length - 0.08).max(0.1), y0 - 0.06, y0 + 0.02, band_w - 0.02, shade_w)
+                                .edge(index)
+                                .shadow(true)
+                                .receive(true)
+                                .meta(json!({ "archetype": kind, "part": "sunshade", "floor": i })),
+                        );
+                    }
+                }
+            }
+            // Recessed mid-shaft louvered mechanical / refuge floor breaking uniform window grids
+            if mech_floor == Some(i) {
+                let my0 = line + band * 0.42;
+                let my1 = (line + floor_height - band * 0.58).min(ribbon_top);
+                if my1 - my0 > 1.2 {
+                    let blades = 4;
+                    let step = (my1 - my0) / blades as f64;
+                    let lw = (band_w * 0.72).max(0.05).min(allow);
+                    for b in 0..blades {
+                        let by0 = my0 + step * (b as f64 + 0.18);
+                        let by1 = by0 + step * 0.52;
+                        plan.add_box(
+                            &basis,
+                            PartArgs::new("mech-louver", "metal", 0.04, (edge.length - 0.04).max(0.1), by0, by1, -0.08, lw)
+                                .edge(index)
+                                .shadow(true)
+                                .receive(true)
+                                .meta(json!({ "archetype": kind, "part": "mech-louver", "floor": i })),
+                        );
+                    }
+                }
             }
             i += 1.0;
         }
@@ -480,15 +535,48 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                 k += 1.0;
             }
             positions.push(span);
-            for s in positions {
+            let fin_proj = if detail_on && is_curtain {
+                (pier_w + if system_name == "curtain-mullion" { 0.18 } else { 0.10 }).min(allow)
+            } else {
+                pier_w
+            };
+            for (pi, &s) in positions.iter().enumerate() {
+                let is_corner = pi == 0 || pi + 1 == positions.len();
+                let pw_use = if detail_on && is_corner { (pier_w + 0.08).min(allow) } else { pier_w };
                 plan.add_box(
                     &basis,
-                    PartArgs::new("pier", "trim", s, s + width, shaft_y0, pier_top, -0.03, pier_w)
+                    PartArgs::new("pier", "trim", s, s + width, shaft_y0, pier_top, -0.03, pw_use)
                         .edge(index)
                         .shadow(true)
                         .receive(true)
                         .meta(json!({ "archetype": kind, "part": "pier" })),
                 );
+                if detail_on && is_stone_fin && width >= 0.28 && pw_use >= 0.09 {
+                    // Stepped chamfered pier returns catching crisp raking shadows
+                    let bw = (pw_use * 0.48).max(0.045);
+                    let shoulder = (width * 0.22).clamp(0.05, 0.12);
+                    let bs0 = (s - shoulder).max(0.0);
+                    let bs1 = (s + width + shoulder).min(edge.length);
+                    plan.add_box(
+                        &basis,
+                        PartArgs::new("pier-bevel", "trim", bs0, bs1, shaft_y0, pier_top, -0.03, bw)
+                            .edge(index)
+                            .shadow(false)
+                            .receive(true)
+                            .meta(json!({ "archetype": kind, "part": "pier-bevel" })),
+                    );
+                } else if detail_on && is_curtain && fin_proj > pier_w + 0.03 && (pi % 2 == 0 || is_corner) {
+                    // Expressed anodized aluminum vertical solar fin blade on curtain-wall towers
+                    let mid = s + width * 0.5;
+                    plan.add_box(
+                        &basis,
+                        PartArgs::new("fin", "frame", mid - 0.03, mid + 0.03, shaft_y0, pier_top, pier_w - 0.01, fin_proj)
+                            .edge(index)
+                            .shadow(true)
+                            .receive(true)
+                            .meta(json!({ "archetype": kind, "part": "fin" })),
+                    );
+                }
             }
         }
 
@@ -507,6 +595,88 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                     .receive(true)
                     .meta(json!({ "archetype": kind, "part": "crown-fin" })),
             );
+        }
+        // Sculpted overhanging crown eyebrow cornice along the top of tower shafts (kills flat boxy rooflines)
+        if detail_on && edge.length >= 4.0 && crown_top > wall_top + 0.8 {
+            let cw = 0.44f64.min(allow);
+            let ext0 = if edge.convex_start { cw } else { 0.0 };
+            let ext1 = if edge.convex_end { cw } else { 0.0 };
+            plan.add_profile(
+                &basis,
+                PartArgs::profile("cornice", "trim", -ext0, edge.length + ext1, trim_profile_d("stepped", cw, 0.38, crown_top - 0.34))
+                    .edge(index)
+                    .shadow(true)
+                    .receive(true)
+                    .meta(json!({ "archetype": kind, "part": "crown-eyebrow" })),
+            );
+        }
+    }
+
+    // Articulated double-height lobby entry portal framing (recessed columns + sculpted lintel + cantilevered glass-and-steel marquee)
+    if detail_on {
+        let entry_idx = meta.num("entryEdge");
+        if entry_idx >= 0.0 {
+            let ei = entry_idx as usize;
+            if let (Some(edge), Some(lobby)) = (frame.edges.get(ei), plan.storeys.first()) {
+                let special = meta.get_nn("groundPlan").get_nn(&ei.to_string()).get_nn("specialBay").and_then(|v| v.as_f64()).unwrap_or(-1.0);
+                let bay = plan
+                    .edges
+                    .iter()
+                    .find(|e| e.index == ei)
+                    .and_then(|r| if special >= 0.0 { r.bays.get(special as usize) } else { None })
+                    .cloned();
+                if let Some(bay) = bay {
+                    let allow = 0.08f64.max(edge.allowance - 0.05);
+                    let ly0 = lobby.y0 + base_y;
+                    let ly1 = (lobby.y1 + base_y).min(roof_top - 0.4);
+                    let col_w = 0.48f64.min(bay.width * 0.12);
+                    let col_p = 0.24f64.min(allow);
+                    let lintel_p = 0.34f64.min(allow);
+                    let ps0 = (bay.s0 - 0.06).max(0.0);
+                    let ps1 = (bay.s1 + 0.06).min(edge.length);
+                    if ly1 - ly0 > 3.2 && ps1 - ps0 > 2.4 {
+                        for (c0, c1) in [(ps0, ps0 + col_w), (ps1 - col_w, ps1)] {
+                            plan.add_box(
+                                &edge.basis,
+                                PartArgs::new("column", "base", c0, c1, ly0, ly1 - 0.28, -0.03, col_p)
+                                    .edge(ei)
+                                    .shadow(true)
+                                    .receive(true)
+                                    .meta(json!({ "archetype": kind, "part": "lobby-portal-column" })),
+                            );
+                        }
+                        plan.add_box(
+                            &edge.basis,
+                            PartArgs::new("entablature", "base", (ps0 - 0.12).max(0.0), (ps1 + 0.12).min(edge.length), ly1 - 0.36, ly1 + 0.06, -0.03, lintel_p)
+                                .edge(ei)
+                                .shadow(true)
+                                .receive(true)
+                                .meta(json!({ "archetype": kind, "part": "lobby-portal-lintel" })),
+                        );
+                        // Cantilevered steel-and-glass lobby marquee on prewar towers (modern towers already get entranceSpec.canopy)
+                        if meta.truthy("arcade") {
+                            let my = (ly0 + 3.45).min(ly1 - 0.55);
+                            let mp = 1.45f64.min(crate::frame::FITTING_PROJECTION_ALLOWANCE);
+                            if my > ly0 + 2.65 && mp >= 0.7 {
+                                let ms0 = (ps0 + 0.08).max(0.1);
+                                let ms1 = (ps1 - 0.08).min(edge.length - 0.1);
+                                if ms1 - ms0 > 2.0 {
+                                    // Perimeter bronze/steel fascia frame + tie-rods (avoids solid opaque slab)
+                                    plan.add_box(&edge.basis, PartArgs::new("canopy", "canopy", ms0, ms1, my, my + 0.22, mp - 0.14, mp).edge(ei).shadow(true).meta(json!({ "archetype": kind, "part": "lobby-marquee" })));
+                                    plan.add_box(&edge.basis, PartArgs::new("canopy", "canopy", ms0, ms0 + 0.14, my, my + 0.22, -0.02, mp).edge(ei).shadow(true).meta(json!({ "archetype": kind, "part": "lobby-marquee" })));
+                                    plan.add_box(&edge.basis, PartArgs::new("canopy", "canopy", ms1 - 0.14, ms1, my, my + 0.22, -0.02, mp).edge(ei).shadow(true).meta(json!({ "archetype": kind, "part": "lobby-marquee" })));
+                                    plan.add_box(&edge.basis, PartArgs::new("canopy", "canopy", ms0 + 0.12, ms1 - 0.12, my + 0.04, my + 0.14, -0.02, mp - 0.12).edge(ei).shadow(true).meta(json!({ "archetype": kind, "part": "lobby-marquee-deck" })));
+                                    for rs in [ms0 + 0.22, ms1 - 0.22] {
+                                        let rise = 0.85f64.min((ly1 - my - 0.35).max(0.35));
+                                        plan.add_box(&edge.basis, PartArgs::new("canopy-rod", "metal", rs - 0.025, rs + 0.025, my + 0.20, my + 0.20 + rise, mp - 0.12, mp - 0.07).edge(ei).meta(json!({ "archetype": kind, "part": "lobby-marquee-rod" })));
+                                        plan.add_box(&edge.basis, PartArgs::new("canopy-rod", "metal", rs - 0.025, rs + 0.025, my + 0.18 + rise, my + 0.23 + rise, -0.02, mp - 0.07).edge(ei).meta(json!({ "archetype": kind, "part": "lobby-marquee-rod" })));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -536,22 +706,216 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
         }
     }
 
-    // The roof penthouse.
+    // The roof penthouse & detailed rooftop mechanical yard (cooling towers, chillers,
+    // ducts, elevator machine room cap/louvers, parapet railings, BMU track).
+    let mut pent_rect: Option<[f64; 4]> = None;
     if meta.truthy("penthouse") {
         let rise = 4.2f64.min(2.2f64.max(crown * 0.9));
         let (cx, cz) = (frame.centroid.x, frame.centroid.z);
         let points: Vec<P2> = frame.polygon.iter().map(|p| P2::new(cx + (p.x - cx) * 0.52, cz + (p.z - cz) * 0.52)).collect();
+        let py1 = (wall_top + crown + rise).min(roof_top + if detail_on { 3.4 } else { 2.6 });
+        if detail_on {
+            let (mut x0, mut x1, mut z0, mut z1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+            for p in &points {
+                let q = frame.to_plan(p.x, p.z);
+                x0 = x0.min(q.x);
+                x1 = x1.max(q.x);
+                z0 = z0.min(q.z);
+                z1 = z1.max(q.z);
+            }
+            if x0.is_finite() {
+                pent_rect = Some([x0, x1, z0, z1]);
+            }
+        }
         plan.add_prism(PartArgs {
             kind: "roof-penthouse".into(),
             slot: "plant".into(),
-            points,
+            points: points.clone(),
             y0: wall_top,
-            y1: (wall_top + crown + rise).min(roof_top + 2.6),
+            y1: py1,
             cast_shadow: Some(true),
             receive_shadow: Some(true),
             meta: Some(json!({ "archetype": kind, "part": "penthouse", "roof": true })),
             ..Default::default()
         });
+        if detail_on {
+            // Penthouse coping cap + elevator machine room overrun step
+            let cap_pts: Vec<P2> = frame.polygon.iter().map(|p| P2::new(cx + (p.x - cx) * 0.54, cz + (p.z - cz) * 0.54)).collect();
+            plan.add_prism(PartArgs {
+                kind: "roof-curb".into(),
+                slot: "coping".into(),
+                points: cap_pts,
+                y0: py1 - 0.04,
+                y1: (py1 + 0.16).min(roof_top + 3.8),
+                cast_shadow: Some(true),
+                receive_shadow: Some(true),
+                meta: Some(json!({ "archetype": kind, "part": "penthouse-cap", "roof": true })),
+                ..Default::default()
+            });
+            if frame.area >= 420.0 {
+                let ov_pts: Vec<P2> = frame.polygon.iter().map(|p| P2::new(cx + (p.x - cx) * 0.24, cz + (p.z - cz) * 0.24)).collect();
+                let oy1 = (py1 + 1.35).min(roof_top + 3.9);
+                if oy1 > py1 + 0.4 {
+                    plan.add_prism(PartArgs {
+                        kind: "roof-penthouse".into(),
+                        slot: "metal".into(),
+                        points: ov_pts,
+                        y0: py1 - 0.02,
+                        y1: oy1,
+                        cast_shadow: Some(true),
+                        receive_shadow: Some(true),
+                        meta: Some(json!({ "archetype": kind, "part": "elevator-overrun", "roof": true })),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+    if detail_on && frame.area >= 180.0 {
+        let deck_y = wall_top;
+        let roof_ceil = roof_top + 3.8;
+        let fb = frame.basis;
+        let b = &frame.plan_bounds;
+        let mut rrng = Rng::new(&format!("{}|tower-roof-yard", plan.seed));
+        let mut placed: Vec<[f64; 4]> = pent_rect.into_iter().collect();
+        let rect_ok = |x0: f64, x1: f64, z0: f64, z1: f64, placed: &[[f64; 4]]| -> bool {
+            for (px, pz) in [(x0, z0), (x1, z0), (x1, z1), (x0, z1), ((x0 + x1) * 0.5, (z0 + z1) * 0.5)] {
+                let w = frame.to_world(px, pz);
+                if !(frame.signed_distance(w.x, w.z) < -1.35) {
+                    return false;
+                }
+            }
+            !placed.iter().any(|r| x0 < r[1] + 0.65 && x1 > r[0] - 0.65 && z0 < r[3] + 0.65 && z1 > r[2] - 0.65)
+        };
+        let find_slot = |rrng: &mut Rng, sx: f64, sz: f64, placed: &[[f64; 4]]| -> Option<[f64; 4]> {
+            for _ in 0..20 {
+                let (ax, az) = if rrng.next() < 0.5 { (sx, sz) } else { (sz, sx) };
+                let span_x = ((b.max_x - b.min_x) - ax - 2.8).max(0.0);
+                let span_z = ((b.max_z - b.min_z) - az - 2.8).max(0.0);
+                let x0 = b.min_x + 1.4 + rrng.next() * span_x;
+                let z0 = b.min_z + 1.4 + rrng.next() * span_z;
+                let (x1, z1) = (x0 + ax, z0 + az);
+                if rect_ok(x0, x1, z0, z1, placed) {
+                    return Some([x0, x1, z0, z1]);
+                }
+            }
+            None
+        };
+        // 1-3 louvered cooling towers with fan shroud collars
+        let ct_count = if frame.area >= 900.0 { 3 } else if frame.area >= 420.0 { 2 } else { 1 };
+        for _ in 0..ct_count {
+            let sx = 2.6 + rrng.next() * 1.4;
+            let sz = 1.9 + rrng.next() * 0.9;
+            let h = (2.3 + rrng.next() * 0.9).min(roof_ceil - deck_y - 0.55);
+            if h > 1.0 {
+                if let Some(r) = find_slot(&mut rrng, sx, sz, &placed) {
+                    let y1 = deck_y + h;
+                    plan.add_box(
+                        &fb,
+                        PartArgs::new("cooling-tower", "plant", r[0], r[1], deck_y - 0.02, y1, r[2], r[3])
+                            .shadow(true)
+                            .receive(true)
+                            .meta(json!({ "archetype": kind, "part": "cooling-tower", "roof": true })),
+                    );
+                    // Cooling tower intake louver collar + fan stack shroud
+                    let cx = (r[0] + r[1]) * 0.5;
+                    let cz = (r[2] + r[3]) * 0.5;
+                    let fr = sx.min(sz) * 0.34;
+                    plan.add_box(
+                        &fb,
+                        PartArgs::new("roof-curb", "metal", cx - fr, cx + fr, y1 - 0.02, (y1 + 0.48).min(roof_ceil), cz - fr, cz + fr)
+                            .shadow(true)
+                            .receive(true)
+                            .meta(json!({ "archetype": kind, "part": "cooling-fan-stack", "roof": true })),
+                    );
+                    plan.add_box(
+                        &fb,
+                        PartArgs::new("mech-louver", "frame", r[0] - 0.05, r[1] + 0.05, deck_y + 0.25, deck_y + h * 0.55, r[2] - 0.05, r[3] + 0.05)
+                            .shadow(false)
+                            .receive(true)
+                            .meta(json!({ "archetype": kind, "part": "cooling-louver", "roof": true })),
+                    );
+                    placed.push(r);
+                }
+            }
+        }
+        // Chiller skids & galvanized duct runs
+        let ch_count = if frame.area >= 600.0 { 2 } else { 1 };
+        for _ in 0..ch_count {
+            let sx = 1.8 + rrng.next() * 1.4;
+            let sz = 1.2 + rrng.next() * 0.7;
+            let h = (1.1 + rrng.next() * 0.6).min(roof_ceil - deck_y - 0.2);
+            if h > 0.5 {
+                if let Some(r) = find_slot(&mut rrng, sx, sz, &placed) {
+                    plan.add_box(
+                        &fb,
+                        PartArgs::new("roof-plant", "metal", r[0], r[1], deck_y - 0.02, deck_y + h, r[2], r[3])
+                            .shadow(true)
+                            .receive(true)
+                            .meta(json!({ "archetype": kind, "part": "chiller-skid", "roof": true })),
+                    );
+                    placed.push(r);
+                }
+            }
+        }
+        if let Some(d) = find_slot(&mut rrng, 4.2, 0.72, &placed) {
+            plan.add_box(
+                &fb,
+                PartArgs::new("roof-duct", "roller", d[0], d[1], deck_y + 0.15, (deck_y + 0.72).min(roof_ceil), d[2], d[3])
+                    .shadow(true)
+                    .receive(true)
+                    .meta(json!({ "archetype": kind, "part": "duct-run", "roof": true })),
+            );
+            placed.push(d);
+        }
+        // Perimeter parapet safety railing & BMU maintenance track on tall towers
+        let rail_y = (roof_top + 0.88).min(roof_ceil);
+        for edge in &frame.edges {
+            if edge.length < 5.5 {
+                continue;
+            }
+            let mid_w = frame.to_world(
+                frame.to_plan(edge.basis.origin[0] + edge.basis.u[0] * edge.length * 0.5 - edge.basis.n[0] * 0.35, edge.basis.origin[1] + edge.basis.u[1] * edge.length * 0.5 - edge.basis.n[1] * 0.35).x,
+                frame.to_plan(edge.basis.origin[0] + edge.basis.u[0] * edge.length * 0.5 - edge.basis.n[0] * 0.35, edge.basis.origin[1] + edge.basis.u[1] * edge.length * 0.5 - edge.basis.n[1] * 0.35).z,
+            );
+            if frame.signed_distance(mid_w.x, mid_w.z) < -0.2 {
+                plan.add_box(
+                    &edge.basis,
+                    PartArgs::new("parapet-rail", "metal", 0.5, edge.length - 0.5, rail_y - 0.05, rail_y, -0.34, -0.28)
+                        .edge(edge.index)
+                        .shadow(false)
+                        .receive(false)
+                        .meta(json!({ "archetype": kind, "part": "parapet-rail", "roof": true })),
+                );
+            }
+        }
+        if floors >= 10.0 {
+            if let Some(long_e) = frame.edges.iter().filter(|e| e.length >= 10.0).max_by(|a, b| a.length.partial_cmp(&b.length).unwrap_or(std::cmp::Ordering::Equal)) {
+                let s0 = 2.0;
+                let s1 = long_e.length - 2.0;
+                let mid = (s0 + s1) * 0.5;
+                let check = [
+                    long_e.basis.origin[0] + long_e.basis.u[0] * mid - long_e.basis.n[0] * 1.4,
+                    long_e.basis.origin[1] + long_e.basis.u[1] * mid - long_e.basis.n[1] * 1.4,
+                ];
+                if frame.signed_distance(check[0], check[1]) < -0.9 {
+                    plan.add_box(
+                        &long_e.basis,
+                        PartArgs::new("bmu-track", "metal", s0, s1, deck_y, deck_y + 0.14, -1.55, -1.45)
+                            .edge(long_e.index)
+                            .shadow(false)
+                            .meta(json!({ "archetype": kind, "part": "bmu-rail", "roof": true })),
+                    );
+                    plan.add_box(
+                        &long_e.basis,
+                        PartArgs::new("roof-plant", "metal", mid - 0.75, mid + 0.75, deck_y + 0.12, (deck_y + 1.25).min(roof_ceil), -1.85, -1.05)
+                            .edge(long_e.index)
+                            .shadow(true)
+                            .meta(json!({ "archetype": kind, "part": "bmu-cradle", "roof": true })),
+                    );
+                }
+            }
+        }
     }
 
     // Cross-system hand-off: the garage apron.

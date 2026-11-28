@@ -847,7 +847,7 @@ impl WaterGpu {
         let ppr_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water_ppr.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{common}\n{}", include_str!("water_ppr.wgsl")).into()) });
         let ppr_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water-ppr"), bind_group_layouts: &[Some(&ppr_bgl)], immediate_size: 0 });
         let ppr_pipe = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("ppr_project"), layout: Some(&ppr_layout), module: &ppr_module, entry_point: Some("ppr_project"), compilation_options: Default::default(), cache: None });
-        let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
+        let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, crate::look::sf_select(include_str!("water.wgsl")), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
             // + the dive exposure's switch, the display transforms (look.rs `DISPLAY_SHADER`, the camera look at group 0 bindings 16, 17)
             draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\nconst UW_DIVE_DETAIL: bool = {};\nconst UW_COASTAL_HABITAT: bool = {};\nconst UW_DIVE_DAYLIGHT: bool = {};\n", look.options.dive_exposure, look.options.dive_detail, look.options.coastal_habitat, look.options.dive_daylight) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + if look.options.reef_canopy_light { include_str!("ocean_life/canopy.wgsl") } else { "\nfn reef_transmission(p:vec3f, sun:vec3f) -> vec2f { return vec2f(1.); }\n" } + include_str!("underwater.wgsl")
@@ -1663,6 +1663,32 @@ impl WaterGpu {
                 rbs[i].stage.store(1, Ordering::Release);
                 rbs[i].frame = frame;
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::look::{self, ShaderFeatures};
+
+    #[test]
+    fn water_draw_shader_validates_with_and_without_aaa_buildings() {
+        use wgpu::naga;
+        let common = common_source(false, ShaderBits { features: u32::MAX, parts: eo_water::switches::ALL, debug: 0.0, optics: false });
+        for (label, features, expect_aaa) in [
+            ("default_medium", ShaderFeatures::NONE, false),
+            ("aaa_high", ShaderFeatures { aaa_buildings: u32::MAX, ..ShaderFeatures::ALL }, true),
+        ] {
+            let src = look::with_shader_features(features, || {
+                format!("{common}\n{}\n{}\n{}\n{}\n{}", look::look_common_source(), include_str!("sky_light_core.wgsl"), look::LOOK_EXT_WGSL, look::sf_select(include_str!("water.wgsl")), include_str!("water_surf.wgsl"))
+                    + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true)
+            });
+            assert_eq!(src.contains("fn w_rip2"), expect_aaa, "{label}: AAA water block presence mismatch");
+            let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{label}: {}", e.emit_to_string(&src)));
+            naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+                .validate(&module)
+                .unwrap_or_else(|e| panic!("{label}: {}", e.emit_to_string(&src)));
         }
     }
 }

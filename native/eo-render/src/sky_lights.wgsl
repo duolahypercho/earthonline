@@ -242,10 +242,36 @@ fn lt_cine_key(c: vec3<f32>) -> bool {
 
 /// A street luminaire under the look, its head `h` m over the street:
 /// `tint` 4 its street's (else that tint), `round` no axis (a globe).
+fn lt_aaa_street_color(head: vec3<f32>, lum: f32, warm_fixture: bool) -> vec3<f32> {
+    // Authentic San Francisco night streetlamp color temperature contrast (`06b_night_street`):
+    // crisp 5000K-5600K modern SFPUC cool white-blue LED cobras contrasting against 4100K clean
+    // white commercial LEDs and rich 2350K-2600K warm golden historic/legacy lamps.
+    if (warm_fixture) {
+        let g = vec3<f32>(1.30, 0.72, 0.24);
+        return g * (lum / dot(g, vec3<f32>(0.2126, 0.7152, 0.0722)));
+    }
+    let pole_cell = vec2<i32>(floor(head.xz / 24.0));
+    let h = fract(sin(dot(vec2<f32>(pole_cell), vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    var c = vec3<f32>(0.78, 0.94, 1.24); // ~5100K crisp cool white-blue SF downtown LED (~56%)
+    if (h > 0.56 && h <= 0.82) {
+        c = vec3<f32>(0.96, 0.99, 1.05); // ~4100K clean neutral white LED (~26%)
+    } else if (h > 0.82) {
+        c = vec3<f32>(1.28, 0.72, 0.26); // ~2500K warm golden-amber accent / legacy (~18%)
+    }
+    return c * (lum / dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)));
+}
+
 fn lt_cine_lamp(l: ptr<function, SkyLight>, head: vec3<f32>, h: f32, tint: u32, round: bool) {
     let st = lt_cine_street(head);
     let t = select(tint, u32(st.x), tint > 3u);
-    (*l).color = LT_CINE_TINTS[t] * dot((*l).color, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let lum = dot((*l).color, vec3<f32>(0.2126, 0.7152, 0.0722));
+    if (LT_AAA_NIGHT_LAMPS) {
+        // Keep historic ornate round globes warm 2350K amber while modern downtown cobra & banner
+        // poles (e.g. California St `06b_night_street`) emit SFPUC's multi-temp cool/neutral/warm LEDs.
+        (*l).color = lt_aaa_street_color(head, lum, round);
+    } else {
+        (*l).color = LT_CINE_TINTS[t] * lum;
+    }
     let ax = select(vec2<f32>(0.0), st.zw * LT_CINE_AXIS_TILT, st.y > 0.5 && !round);
     (*l).dir = normalize(vec3<f32>(ax.x, -1.0, ax.y));
     (*l).range = h * LT_CINE_RANGE_MH;
@@ -438,11 +464,36 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.intensity <= 0.0 || select(lt.props.x, lt.props.w, tunnel) <= 0.0) {
         return;
     }
+    if (p.pad0 == 2u) {
+        // Bay Bridge Skyway. Each measured housing throws light forward and
+        // across its own carriageway. Its head is also the emitter position.
+        var l: SkyLight;
+        l.pos = p.pos;
+        l.range = p.range;
+        l.color = p.colour;
+        l.intensity = lt.props.z * p.intensity;
+        let yaw = bitcast<f32>(p.pad1);
+        let slope = bitcast<f32>(p.pad2);
+        let horizontal = sqrt(max(0.0, 1.0 - slope * slope));
+        l.dir = vec3<f32>(sin(yaw) * horizontal, slope, cos(yaw) * horizontal);
+        l.cos_outer = cos(p.angle);
+        l.cos_inner = cos(p.angle * (1.0 - p.penumbra));
+        l.kind = 3u;
+        l.size = 0.0;
+        l.pad = 0.0;
+        // Only the lens side of the shielded head is visible to the driver.
+        if (dot(l.dir, skyu.eye.xyz - p.pos) > 0.0) {
+            lt_emit(l, p.pos, true, false);
+        } else if (lt_visible(l.pos, l.range)) {
+            lt_push(l);
+        }
+        return;
+    }
     // (`--lamp-units`) a district light is a unit (its seed from its post's foot, eo-app props `pad1`;
     // its fixture's glass takes the same, props_draw.wgsl) and (`--luminaires`) a lantern of a
     // twin post carries its share of the post's light (`pad2`, f32 bits; 0: the whole).
     let units = lt_units_on() && !tunnel && p.kind != LT_LANDMARK;
-    let uf = lu_factor(p.pad1, skyu.night.x, units) * select(1.0, bitcast<f32>(p.pad2), LUM_ON && p.pad2 != 0u);
+    let uf = lu_factor(p.pad1, skyu.night.x, units) * select(1.0, bitcast<f32>(p.pad2), (LUM_ON || tunnel) && p.pad2 != 0u);
     if (uf <= 0.0) {
         return;
     }

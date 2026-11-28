@@ -54,7 +54,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
 /// Bump when the palettes or the rule change (names the kit tile cache folder).
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 4;
 
 /// The wall finishes a paint is drawn on (pipeline.rs `PAINTED_WALL_FINISHES`).
 pub const PAINTED_FINISHES: [&str; 6] = ["wood-siding", "painted-stucco", "float-finish-stucco", "scanned-painted-plaster", "painted-clapboard", "painted-shingle"];
@@ -250,20 +250,20 @@ const STUCCO: [Entry; 17] = [
     ([186, 189, 190], 2.0, Tone::Pale),   // light grey
     ([196, 204, 211], 1.8, Tone::Pastel), // blue grey
     ([204, 218, 229], 1.4, Tone::Pastel), // pale blue
-    ([201, 222, 208], 1.0, Tone::Pastel), // mint
-    ([200, 206, 182], 0.9, Tone::Pastel), // sage
+    ([198, 209, 201], 1.0, Tone::Pastel), // muted coastal sage
+    ([199, 204, 190], 0.9, Tone::Pastel), // natural sage
     ([237, 227, 186], 1.1, Tone::Pastel), // pale yellow
     ([235, 207, 188], 0.8, Tone::Pastel), // peach
     ([233, 208, 211], 0.7, Tone::Pastel), // pink
     ([222, 210, 190], 1.1, Tone::Earth),  // stone beige
     ([199, 182, 156], 0.5, Tone::Earth),  // tan
     ([160, 178, 196], 0.9, Tone::Deep),   // dusty blue
-    ([150, 166, 146], 0.7, Tone::Deep),   // green grey
+    ([158, 168, 158], 0.7, Tone::Deep),   // muted eucalyptus slate
     ([196, 146, 118], 0.5, Tone::Deep),   // terracotta
-    ([138, 140, 142], 0.6, Tone::Deep),   // mid grey
+    ([142, 144, 147], 0.6, Tone::Deep),   // mid grey
 ];
 
-/// Mixed-use and apartment fronts: whites, greys, creams, a few colours.
+/// Mixed-use and apartment fronts: whites, greys, creams, and muted SF colours.
 const APARTMENT: [Entry; 12] = [
     ([234, 234, 231], 4.0, Tone::Pale),
     ([232, 227, 214], 2.5, Tone::Pale),
@@ -271,12 +271,12 @@ const APARTMENT: [Entry; 12] = [
     ([176, 179, 180], 1.5, Tone::Pale),
     ([194, 201, 207], 1.4, Tone::Pastel),
     ([233, 222, 184], 1.0, Tone::Pastel),
-    ([206, 214, 196], 0.7, Tone::Pastel),
+    ([204, 209, 199], 0.7, Tone::Pastel),
     ([226, 210, 192], 1.2, Tone::Earth),
     ([204, 188, 162], 0.9, Tone::Earth),
     ([156, 170, 182], 0.8, Tone::Deep),
     ([178, 128, 104], 0.45, Tone::Deep),
-    ([132, 136, 132], 0.6, Tone::Deep),
+    ([140, 144, 141], 0.6, Tone::Deep),
 ];
 
 /// Shopfront and civic painted walls.
@@ -383,7 +383,7 @@ pub fn apply(c: &Classified, materials: &BTreeMap<String, String>, own_tints: bo
     }
     if PAINTED_FINISHES.contains(&wall_base.as_str()) {
         let own = finish_colour(&wall_base).unwrap_or(lin(PRIMER_SRGB));
-        let t = match palette {
+        let mut t = match palette {
             Some(p) if !chinatown || accent_on_trim => on_primer(pick(p, district, c.seed)),
             None if period_primer() => {
                 // The period paint as the colour it names, its value moved as a palette draw's.
@@ -397,6 +397,22 @@ pub fn apply(c: &Classified, materials: &BTreeMap<String, String>, own_tints: bo
                 on_primer([0, 1, 2].map(|k| paint[k] * n[k]))
             }
         };
+        if crate::typology::detail_enabled() {
+            // Keep dark painted SF houses (charcoal, navy, deep slate) above 0.085 linear albedo so
+            // shaded side/north elevations retain crisp siding & architectural detail instead of crushing pitch black.
+            let p = lin(PRIMER_SRGB);
+            let drawn = [0, 1, 2].map(|k| hex_linear(t)[k] * p[k]);
+            let y = luma(drawn);
+            if y < 0.085 {
+                let lifted = if y > 1e-4 {
+                    let k = 0.085 / y;
+                    drawn.map(|v| (v * k).min(1.0))
+                } else {
+                    [0.085, 0.085, 0.088]
+                };
+                t = on_primer(lifted);
+            }
+        }
         out.insert(wall_base.clone(), capped_tint(t));
     }
     // Every other painted finish the building draws: its own paint (or none)

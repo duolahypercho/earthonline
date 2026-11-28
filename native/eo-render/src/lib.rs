@@ -70,6 +70,7 @@ pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
 pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
 pub mod aerial_ground; // the open ground's colour from the aerial survey (`--no-aerial-ground`, Docs/HILLS-PLAN.md H2)
 pub mod sky; // sky
+pub mod skyline_field; // citywide 2.5D skyline heightfield + horizon sky-vis / bent normal / distant sun shadows
 mod sky_reflect; // (`--screen-reflect`) the histories' mip chain (the reflect track)
 pub mod smooth_time; // the drawn hour following the clock (`--smooth-time`)
 pub mod street;
@@ -699,6 +700,8 @@ pub struct Renderer {
     pub signs: sign_letters::SignLettersGpu,
     /// the open ground's colour from the aerial survey (`--no-aerial-ground`; a 1 x 1 stand-in without it).
     pub aerial: aerial_ground::AerialGround,
+    /// the 24-room interior parallax texture array (group 0 binding 30, rooms.rs).
+    pub rooms: rooms::RoomsGpu,
     /// runtime switches (facade::RUN_*), read by draw.wgsl from the frame uniform.
     pub facade_flags: std::sync::atomic::AtomicU32,
     pub bytes: GpuBytes,
@@ -753,6 +756,8 @@ pub struct Renderer {
     /// on) and their own timestamp set (`set_lighting_timestamps`).
     pub far_shadow: far_shadow::FarShadowGpu,
     pub ambient: ambient::AmbientGpu,
+    /// citywide 2.5D skyline heightfield + horizon sky-vis / bent normal (group 1 binding 24).
+    pub skyline_field: std::sync::OnceLock<skyline_field::SkylineFieldGpu>,
     /// the probe grid (`--probe-grid`), attached once (`attach_probe_grid`).
     pub probe_grid: probe_grid::ProbeGridGpu,
     pub light_shadow: light_shadow::LightShadowGpu,
@@ -843,6 +848,7 @@ fn make_draw_bg(
     cc0: &cc0::Cc0Gpu, // cc0
     signs: &wgpu::TextureView, // the shop signs' lettering (stage S1)
     aerial: &wgpu::TextureView, // the open ground's colour from the aerial survey (`--no-aerial-ground`)
+    rooms: &wgpu::TextureView, // 24-room interior parallax texture array (rooms.rs)
 ) -> wgpu::BindGroup {
     let (av, nv, mv) = (array_view(kit[0]), array_view(kit[1]), array_view(kit[2]));
     let cb = cc0.bind(); // cc0
@@ -886,6 +892,8 @@ fn make_draw_bg(
             wgpu::BindGroupEntry { binding: 28, resource: wgpu::BindingResource::TextureView(signs) },
             // the open ground's colour from the aerial survey (`--no-aerial-ground`; aerial_ground.rs).
             wgpu::BindGroupEntry { binding: 29, resource: wgpu::BindingResource::TextureView(aerial) },
+            // 24-room interior parallax texture array (rooms.rs; stand-in with `--no-room-atlas`).
+            wgpu::BindGroupEntry { binding: 30, resource: wgpu::BindingResource::TextureView(rooms) },
         ],
     })
 }
@@ -1234,6 +1242,8 @@ impl Renderer {
                     ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
                     count: None,
                 },
+                // 24-room interior parallax texture array (rooms.rs; rooms.wgsl `rm_atlas`).
+                tex_entry(30),
             ],
         });
         // the JS street scans' sampler (`configureSurfaceTexture`: repeat, trilinear, anisotropy 8).
@@ -1336,7 +1346,11 @@ impl Renderer {
         };
         let make = |label: &str, blend: bool, rt: bool| make_with(&draw_module, label, blend, rt);
         let opaque_pipeline = make("draw-opaque", false, false);
-        let blend_pipeline = make("draw-blend", true, false);
+        let blend_module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("draw-blend"),
+            source: wgpu::ShaderSource::Wgsl(look::city_shader_source_blend().into()),
+        });
+        let blend_pipeline = make_with(&blend_module, "draw-blend", true, false);
         // (`CityClasses`) one opaque pipeline a class, each with the others' surfaces compiled out.
         let class_pipelines = classes.then(|| {
             [(look::CITY_GENERAL, "draw-opaque-general"), (look::CITY_STREET, "draw-opaque-street"), (look::CITY_LANDMARK, "draw-opaque-landmark")].map(|(class, label)| {
@@ -1374,8 +1388,10 @@ impl Renderer {
         // the shop signs' words (stage S1): drawn with `--facade-clutter` (waits for the worker), else a stand-in.
         let sign_gpu = sign_letters::SignLettersGpu::new(d, &ctx.queue);
         let aerial_gpu = aerial_ground::AerialGround::new(d, &ctx.queue); // (`--no-aerial-ground`)
-        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view));
-        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view));
+        // 24-room interior parallax texture array (rooms.rs; stand-in when `--no-room-atlas`).
+        let rooms_gpu = rooms::RoomsGpu::new(d, &ctx.queue);
+        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view));
+        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view, &aerial_gpu.view, &rooms_gpu.view));
 
         let bytes = GpuBytes {
             vertex: vb_bytes,
@@ -1384,7 +1400,7 @@ impl Renderer {
             draws: draw_bytes + (COUNTER_WORDS * 4) as u64 + occlusion_gpu.vis_buf.size(), // + per-object flags
             materials: std::mem::size_of_val(init.materials) as u64,
             groups: std::mem::size_of_val(groups.as_slice()) as u64 + hlod_map_buf.size() + hlod_state_buf.size() + hlod_flags_buf.size(), // + the far layer's per-group words
-            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes + aerial_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; the signs' words (0 without them)
+            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes + aerial_gpu.bytes + rooms_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; signs, aerial ground & room atlas
         };
         // (`--rt-gi`) the traced scene with its static cells, and the pass.
         let rt_scene = rt_live.then(|| {
@@ -1468,6 +1484,7 @@ impl Renderer {
             facade: facade_gpu,
             signs: sign_gpu,
             aerial: aerial_gpu,
+            rooms: rooms_gpu,
             facade_flags: std::sync::atomic::AtomicU32::new(facade::RUN_AGE | facade::RUN_DETAIL | facade::RUN_ATLAS2 | facade::RUN_PROBE | facade::RUN_ROOMS | facade::RUN_AGENT_HZB | facade::RUN_PROBE_DEFER), // + rooms, agent pyramid test, probe deferral
             bytes,
             multiplier: n,
@@ -1499,6 +1516,7 @@ impl Renderer {
             hlod_trees: std::sync::OnceLock::new(),  // hlod
             far_shadow: far_shadow::FarShadowGpu::new(d, far_shadow::scene_heights(&objects)), // lighting
             ambient: ambient::AmbientGpu::new(d),
+            skyline_field: std::sync::OnceLock::new(),
             probe_grid: probe_grid::ProbeGridGpu::new(d), // lighting
             light_shadow: light_shadow::LightShadowGpu::new(d),
             lit_fog: lit_fog::LitFogGpu::new(d),
@@ -1699,7 +1717,7 @@ impl Renderer {
         b
     }
 
-    /// build the far layer's GPU side (once; later calls are ignored).
+    /// the far layer's GPU side (once; later calls are ignored).
     /// Draws from the compacted lists (multi-draw-indirect-count, or its
     /// emulation), else from fixed-size lists (`far_fallback`); with neither the
     /// far layer stays off and the boxes draw as before. Returns the bytes allocated.
@@ -1725,6 +1743,23 @@ impl Renderer {
         let b = h.total_bytes();
         let _ = self.hlod.set(h);
         b
+    }
+
+    /// Upload and bind the citywide 2.5D skyline heightfield + horizon sky-visibility /
+    /// bent-normal map (group 1 binding 24, `look.lx[15]`). Returns GPU bytes allocated.
+    pub fn attach_skyline_field(&self, ctx: &GpuContext, baked: &skyline_field::BakedSkylineField) -> u64 {
+        if self.skyline_field.get().is_some() {
+            return 0;
+        }
+        let gpu = skyline_field::SkylineFieldGpu::upload(&ctx.device, &ctx.queue, baked);
+        let bytes = gpu.bytes;
+        let params = gpu.params;
+        if self.skyline_field.set(gpu).is_ok() {
+            if let Some(g) = self.skyline_field.get() {
+                self.look.set_skyline_field(Some(&g.view), params);
+            }
+        }
+        bytes
     }
 
     /// each LOD group's far cell (`hlod_bake::NO_CELL`: none), written once.
@@ -2086,11 +2121,16 @@ impl Renderer {
     /// both sets (every mip) and rebind group 0. Returns the bytes allocated.
     pub fn upload_street_maps(&self, ctx: &GpuContext, maps: &eo_assets::street_maps::StreetMaps) -> u64 {
         let layers = maps.albedo.len() as u32;
-        let (a, ab) = texture_array(ctx, "street-albedo", wgpu::TextureFormat::Rgba8UnormSrgb, maps.res, layers);
+        let terrain = (layers == 2).then(|| scene::terrain_detail::marin_ground::atlas_mips(maps.res)).flatten();
+        let colour_layers = layers + u32::from(terrain.is_some());
+        let (a, ab) = texture_array(ctx, "street-albedo", wgpu::TextureFormat::Rgba8UnormSrgb, maps.res, colour_layers);
         let (n, nb) = texture_array(ctx, "street-nra", wgpu::TextureFormat::Rgba8Unorm, maps.res, layers);
         for l in 0..layers as usize {
             write_array_layer(&ctx.queue, &a, l as u32, &maps.albedo[l]);
             write_array_layer(&ctx.queue, &n, l as u32, &maps.nra[l]);
+        }
+        if let Some(mips) = terrain {
+            write_array_layer(&ctx.queue, &a, layers, mips);
         }
         *self.street_textures.lock().unwrap() = [a, n];
         self.rebuild_draw_bgs(&ctx.device);
@@ -2114,8 +2154,8 @@ impl Renderer {
         hitch::mark(hitch::Mark::BindGroupCreated, 4);
         let st = self.street_textures.lock().unwrap();
         let kit = [&self.kit_textures[0], &self.kit_textures[1], &self.kit_textures[2]];
-        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view));
-        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view));
+        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view));
+        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view, &self.aerial.view, &self.rooms.view));
         *self.draw_bg.lock().unwrap() = bg;
         *self.probe_draw_bg.lock().unwrap() = pbg;
     }
@@ -2370,7 +2410,7 @@ impl Renderer {
             p.set_cc0_run(self.cc0.run_bits()); // the tree basins' soil scan
             p.update(queue, cam, &self.look, occlusion && self.compact); // props
         }
-        self.groundcover.update(queue, cam, &self.look, occlusion && self.compact);
+        self.groundcover.update(queue, cam, &self.look, occlusion && self.compact, self.structures.get().map(|s| s.world()));
         if let Some(w) = self.water.get() {
             // the grid, the clock, the gate, the uniforms (the probe as the mirror's fallback).
             let probe = (frame.probe_info[3] > 0.5).then(|| glam::Vec3::new(frame.probe_info[0], frame.probe_info[1], frame.probe_info[2]));
