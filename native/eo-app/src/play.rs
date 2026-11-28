@@ -8,7 +8,7 @@
 //! click the window to capture the mouse (mouse look), Esc releases it, Esc
 //! again quits. On foot: W/A/S/D move (camera relative), Shift run (held
 //! straight ahead it opens into a sprint), C or Ctrl crouch, Space jump,
-//! F enter the car within 2.5 m. Driving: W throttle, S brake then reverse,
+//! F enter the car within 2.5 m. Driving: W throttle, S service brake, R select Drive/Reverse at a stop,
 //! A/D steer, Space handbrake, C look behind, F get out. V puts a new car
 //! 6 m ahead of you (a play-mode helper, not a JS binding). The title bar
 //! shows fps, mode, speed and the player step time.
@@ -22,7 +22,7 @@
 //! ordinary `--width/--height/--msaa/--cache/--no-cache/--no-kit/--no-models/--out`.
 
 use crate::models::{ModelRuntime, make_renderer};
-use crate::{Args, World, load_world};
+use crate::{Args, World};
 use anyhow::{Result, anyhow};
 use eo_player::input::{ActionMap, RawInput};
 use eo_player::routes::{self, DrivePilot, WalkPilot};
@@ -40,7 +40,24 @@ use std::time::Instant;
 const PLAYER_MEDIAN_BUDGET_MS: f64 = 0.5;
 const PLAYER_HITCH_BUDGET_MS: f64 = 2.0;
 
+mod trace;
+#[cfg(test)]
+mod bridge_road_tests;
+#[cfg(test)]
+mod promenade_tests;
+#[cfg(test)]
+mod interior_floor_tests;
+
+use eo_player::vehicle::{VehicleConfig, VehicleModel};
+
 struct PlayOpts {
+    vehicle: VehicleConfig,
+    contact_physics: bool,
+    pedestrian_physics: bool,
+    physics_location: Option<std::path::PathBuf>,
+    gate_drive: bool,
+    record_physics: bool,
+    replay_physics: Option<std::path::PathBuf>,
     dive: Option<String>,
     beaver_spawn: bool,
     interior_eye: bool,
@@ -230,7 +247,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
     let mut a = base_args();
     let mut g = PlayGlobals::default();
     let mut test_character = crate::test_characters::Options::default();
-    let mut o = PlayOpts { dive: None, beaver_spawn: false, interior_eye: true, car_door_animation: false, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let mut o = PlayOpts { vehicle: VehicleConfig { model: VehicleModel::Sedan, ..Default::default() }, contact_physics: true, pedestrian_physics: false, physics_location: None, gate_drive: false, record_physics: false, replay_physics: None, dive: None, beaver_spawn: false, interior_eye: true, car_door_animation: false, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
     let interactive_play = raw.iter().any(|s| s == "--play") && !raw.iter().any(|s| s == "--bench");
     let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
     if interactive_play {
@@ -249,6 +266,17 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
         match s.as_str() {
             "--play" => {}
+            "--vehicle" => o.vehicle.model = VehicleModel::parse(&val()?)?,
+            "--cargo-kg" => o.vehicle.cargo_kg = val()?.parse()?,
+            "--occupants-kg" => o.vehicle.occupants_kg = val()?.parse()?,
+            "--drive-golden-gate" => o.gate_drive = true,
+            "--physics-location" => o.physics_location = Some(val()?.into()),
+            "--pedestrian-physics" => o.pedestrian_physics = true,
+            "--no-pedestrian-physics" => o.pedestrian_physics = false,
+            "--contact-physics" => o.contact_physics = true,
+            "--no-contact-physics" => o.contact_physics = false,
+            "--record-physics" => o.record_physics = true,
+            "--replay-physics" => o.replay_physics = Some(val()?.into()),
             "--car-door-animation" => o.car_door_animation = true,
             "--no-car-door-animation" => o.car_door_animation = false,
             "--house-eye-camera" => o.interior_eye = true,
@@ -321,6 +349,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
             "--capture" => a.capture = true,
+            "--check-max" => a.perf.check_max = true,
             "--frames" => o.frames = Some(val()?.parse()?),
             "--segments" => o.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             "--no-render" => o.render = false,
@@ -385,6 +414,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-kit" => a.kit = false,
             "--no-models" => a.models = false,
             "--no-streets" => a.streets = false,
+            "--no-pavement-repairs" => {} // main selects the geometry before loading the world
             "--no-agents" => a.agents = false, // agents
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             "--no-photo-mode" | "--no-dof" => {} // read by photo.rs
@@ -403,6 +433,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
                 val()?;
             }
             "--low-camera" | "--default-camera" => {}
+            s if crate::ROAD_REVIEW_SWITCHES.contains(&s) => {}
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
@@ -539,9 +570,10 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--no-people-idles" => g.people_idles = Some(false),
             "--facade-glass" | "--no-facade-glass" | "--far-facades" | "--no-far-facades" | "--facade-weather" | "--no-facade-weather"
             | "--canyon-glass" | "--no-canyon-glass" | "--far-relief" | "--no-far-relief" | "--facade-patina" | "--no-facade-patina"
-            | "--window-depth" | "--no-window-depth"
+            | "--window-depth" | "--no-window-depth" | "--room-atlas" | "--no-room-atlas"
             | "--street-pbr" | "--no-street-pbr" | "--street-wear" | "--no-street-wear" | "--street-glare" | "--no-street-glare"
             | "--street-aggregate" | "--no-street-aggregate" | "--plaza-setts" | "--no-plaza-setts" | "--walk-relief" | "--no-walk-relief" => {}
+            "--traffic-street-plan" | "--no-traffic-street-plan" | "--no-traffic-passing" | "--no-traffic-model-footprints" => {}
             flag if test_character.parse(flag, &mut val)? => {}
             other => anyhow::bail!("--play: unknown argument {other} (see native/eo-app/src/play.rs)"),
         }
@@ -599,7 +631,7 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
         // 3. Street PBR & Facades tracks
         g.play_street_defaults = true;
         g.play_facade_defaults = true;
-        // 4. Light track (sky chromaticity, multi-bounce AO, canyon/soffit bounce, wall sun bounce, physical sun penumbra)
+        // 4. Light track (sky chromaticity, multi-bounce AO, canyon/soffit bounce, wall sun bounce, denoised screen GI/AO, physical sun penumbra)
         a.look.dome_env = want("--dome-env", "--no-dome-env");
         a.look.ao_albedo = want("--ao-albedo", "--no-ao-albedo");
         a.look.occluder_light = a.look.lighting.ambient_volume > 0 && want("--occluder-light", "--no-occluder-light");
@@ -704,7 +736,18 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
         });
         anyhow::ensure!(has_clips && o.render, "--car-door-animation needs a demo avatar with both car clips and live rendering");
     }
+    anyhow::ensure!(o.bench || (!o.record_physics && o.replay_physics.is_none()), "physics route recording and replay require --play --bench");
+    anyhow::ensure!(o.physics_location.is_none() || (!o.bench && o.dive.is_none()), "--physics-location selects the interactive starting location");
+    if o.record_physics {
+        anyhow::ensure!(o.segments.as_ref().is_none_or(|ss| ss.iter().all(|s| matches!(s.as_str(), "walk_player" | "drive_player"))),
+            "--record-physics supports walk_player and drive_player");
+    }
+    o.vehicle.validated()?;
     Ok((a, o, g))
+}
+
+fn load_world(args: &Args) -> Result<World> {
+    crate::load_world_with_footways(args, true)
 }
 
 /// The collision world over the loaded city: every footprint as its JS prism
@@ -718,9 +761,24 @@ fn collision_world(
 ) -> Result<(CollisionWorld, Option<crate::house::Door>)> {
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
     let mut buildings = BuildingSet::from_city(&world.city, lift);
-    if access {
-        // the landmarks' decks and lifts (eo-landmarks access.rs), as a server's world has them.
-        buildings = buildings.with_decks(eo_net::game::landmark_decks(&world.elevation));
+    buildings.open_tunnel_approaches(world.structures.as_deref());
+    let mut decks = if access {
+        eo_net::game::landmark_decks(&world.elevation)
+    } else if world.landmarks.is_some() {
+        pworld::Decks { parts: vec![eo_net::game::base_bridge_walk(&world.elevation)], ..Default::default() }
+    } else {
+        pworld::Decks::default()
+    };
+    if world.landmarks.is_some() && !world.structures.as_ref().is_some_and(|s| s.has_landmark_roads()) {
+        decks.parts.extend(eo_net::game::bridge_roads(&world.paths, &world.elevation)?);
+    }
+    decks.parts.extend(world.promenades.iter().map(pworld::DeckPart::from));
+    if !world.footway_decks.is_empty() {
+        decks.parts.push(pworld::DeckPart {
+            name: "landmark paving".into(),
+            walk: world.footway_decks.iter().map(|tri| tri.map(|p| p.map(f64::from))).collect(),
+            ..Default::default()
+        });
     }
     let ground: Arc<dyn GroundProvider> = match &world.street {
         Some(s) => Arc::new(StreetGround::new(s.world.clone(), world.structures.clone())),
@@ -729,13 +787,14 @@ fn collision_world(
     if let Some(house) = &world.house {
         let index = world.city.buildings.iter().position(|b| crate::house::owns(&b.id)).unwrap();
         for ids in buildings.by_tile.values_mut() { ids.retain(|&id| id as usize != index); }
-        let ground = Arc::new(crate::house::HouseGround { base: ground, house: house.clone() });
-        let mut collision = CollisionWorld::new(crate::ocean_habitat::swim_ground(world, ground), Arc::new(buildings), threads);
-        let door =
-            crate::house::Door::new(house, &world.scene, world.house_vertex_base, &mut collision)?;
-        return Ok((collision, Some(door)));
+        decks.parts.push(house.collision.clone());
     }
-    Ok((CollisionWorld::new(crate::ocean_habitat::swim_ground(world, ground), Arc::new(buildings), threads), None))
+    let ground = crate::ocean_habitat::swim_ground(world, ground);
+    let mut collision = CollisionWorld::new(ground, Arc::new(buildings.with_decks(decks)), threads);
+    let door = world.house.as_ref().map(|house| {
+        crate::house::Door::new(house, &world.scene, world.house_vertex_base, &mut collision)
+    }).transpose()?;
+    Ok((collision, door))
 }
 
 /// Inside the furnished house the lens follows the character's head and posture.
@@ -902,16 +961,28 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
     let mut visual = crate::agents::PlayerVisual::default();
     let mut reports = vec![];
     let mut verdicts = vec![];
-    for name in ["walk_player", "drive_player", "car_access"] {
+    let replay = opts.replay_physics.as_deref().map(trace::Trace::load).transpose()?;
+    let layout = trace::Layout::of(&world, args);
+    if let Some(want) = replay.as_ref().and_then(|r| r.layout) {
+        anyhow::ensure!(layout.matches_recording(want), "physics trace world differs: expected {want:?}, loaded {layout:?}");
+    }
+    if let (Some(r), Some(segments)) = (&replay, &opts.segments) {
+        anyhow::ensure!(segments.len() == 1 && segments[0] == r.route, "--segments must match the recorded route {}", r.route);
+    }
+    for name in ["walk_player", "drive_player", "car_access", "pedestrian_crossing"] {
+        if replay.as_ref().is_some_and(|r| r.route != name) { continue; }
         let access_path = name == "car_access";
+        let crossing = name == "pedestrian_crossing";
+        let mut recording = (opts.record_physics && !access_path).then(|| trace::Trace::new(name, replay.as_ref().map_or(opts.vehicle, |r| r.vehicle), layout));
         if let Some(only) = &opts.segments {
             if !only.iter().any(|s| s == name) {
                 continue;
             }
-        } else if access_path {
+        } else if access_path || crossing {
             continue;
         }
-        let driving = name == "drive_player";
+        let driving = name == "drive_player" || crossing;
+        if crossing { anyhow::ensure!(opts.render && args.agents, "pedestrian_crossing needs rendered agents"); }
         if access_path {
             anyhow::ensure!(opts.render && args.test_character.is_some(), "car_access needs a rendered demo avatar");
         }
@@ -922,16 +993,18 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         // Start far enough before the steepest stretch that the path crosses
         // several blocks on the level and then climbs it.
         let lead = if driving { 500.0 } else { 450.0 };
-        let frames = opts.frames.unwrap_or(if access_path { ACCESS_FRAMES } else if driving { 3600 } else { 7200 });
+        let frames = replay.as_ref().map(|r| r.frames.len()).or(opts.frames).unwrap_or(if crossing { 180 } else if access_path { ACCESS_FRAMES } else if driving { 3600 } else { 7200 });
         let path = from_arc(&path, (steep_s - lead).max(0.0));
         let (mut cw, _door) = collision_world(&world, opts.collision_threads, args.landmark_access)?;
+        cw.lockstep = recording.is_some() || replay.is_some();
         let mut start = DVec3::new(path[0][0], world.elevation.ground(path[0][0], path[0][1]), path[0][1]);
         let t_spawn = Instant::now();
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
         let spawn_load_ms = t_spawn.elapsed().as_secs_f64() * 1e3;
-        start.y = cw.surface_y(start.x, start.z);
+        start.y = cw.arrival_y(start.x, start.z);
         let yaw0 = (path[1][0] - path[0][0]).atan2(path[1][1] - path[0][1]);
         let mut player = Player::new(start, yaw0);
+        player.spawn_config = replay.as_ref().map_or(opts.vehicle, |r| r.vehicle);
         if access_path {
             let car = player.spawn_vehicle(&mut cw, start.x, start.z, yaw0);
             let q = glam::DQuat::from_rotation_y(yaw0);
@@ -945,7 +1018,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         if driving {
             player.spawn_vehicle(&mut cw, path[0][0], path[0][1], yaw0);
             let side = start + DVec3::new(yaw0.cos() * 3.0, 0.0, -yaw0.sin() * 3.0);
-            player.character.teleport_feet(DVec3::new(side.x, cw.surface_y(side.x, side.z), side.z));
+            player.character.teleport_feet(DVec3::new(side.x, cw.surface_beside(start, side.x, side.z), side.z));
             for _ in 0..60 {
                 player.fixed_step(&mut cw, &StepInput::default());
             }
@@ -958,7 +1031,14 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut drive_pilot = DrivePilot::new(path.clone(), 50.0 / 3.6);
         let dt = eo_player::tuning::FIXED_STEP_S;
         // Settle the renderer at the start.
-        let first = if access_path {
+        let road_heading = glam::DQuat::from_rotation_y(yaw0);
+        let crossing_at = start + road_heading * DVec3::new(0.65, 0., 6.);
+        let first = if crossing {
+            let impact = DVec3::new(crossing_at.x, cw.surface_y(crossing_at.x, crossing_at.z) + 0.8, crossing_at.z);
+            let eye = impact + road_heading * DVec3::new(8.5, 2.0, 1.4);
+            let forward = (impact + road_heading * DVec3::Z * 4.2 - eye).normalize();
+            Camera { far: args.far, fov_y_deg: 62., ..Camera::new(eye.as_vec3(), forward.x.atan2(-forward.z) as f32, forward.y.asin() as f32, aspect) }
+        } else if access_path {
             let at = player.vehicles[0].datum(&cw) + DVec3::Y * 0.8;
             let eye = at + glam::DQuat::from_rotation_y(yaw0) * DVec3::new(4.5, 1.05, 1.8);
             let forward = (at - eye).normalize();
@@ -984,6 +1064,17 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             if let Some(rt) = agents_rt.as_mut() {
                 rt.restart_sim(&world, [first.eye.x as f64, first.eye.z as f64, 0.0], args.agent_density); // around this path's start
                 rt.wait_ready(ctx, renderer, [first.eye.x as f64, first.eye.z as f64, 0.0], 300.0);
+                if crossing {
+                    // A stationary pedestrian in the travel lane of a coasting sedan.
+                    // Feed the route target once, so both runs start with the same actor.
+                    use eo_sim::output::{AgentBuffer, AgentInstance, FLAG_CROSSING, KIND_WALKER_BASE};
+                    let person = AgentInstance { id: 41, kind: KIND_WALKER_BASE, flags: FLAG_CROSSING,
+                        heading: (yaw0 - std::f64::consts::FRAC_PI_2) as f32, ..Default::default() };
+                    let region = AgentBuffer { origin: [crossing_at.x, crossing_at.z], walkers: vec![person], ..Default::default() };
+                    rt.hold_bench_frame(&eo_sim::world::Frame { regions: vec![region], ..Default::default() })?;
+                    let v = (road_heading * DVec3::Z * 8.0).as_vec3();
+                    cw.physics.bodies[player.vehicles[0].body].set_linvel(v.to_array().into(), true);
+                }
                 if access_path {
                     // Keep the fixed-camera comparison clear of passing traffic.
                     let datum = player.vehicles[0].datum(&cw).as_vec3().to_array();
@@ -1005,9 +1096,14 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut pump_ms = Vec::with_capacity(frames);
         let mut frame_cpu_ms = Vec::with_capacity(frames);
         let mut track: Vec<DVec3> = vec![];
+        let mut crossing_stop = None;
+        let mut brake_hold_drift = 0.0_f64;
         let mut under_ground = 0usize;
+        let mut first_floor_breach = None;
         let mut min_gap = f64::MAX;
         let mut four_wheels = 0usize;
+        let mut weather_second = None;
+        let mut peak_walker_bodies = 0;
         let mut step_ms = Vec::with_capacity(frames);
         let mut camera_ms = Vec::with_capacity(frames);
         let mut subs: Vec<wgpu::SubmissionIndex> = vec![];
@@ -1015,8 +1111,11 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut car_access = crate::car_access::CarAccess::default();
         let mut max_door = [0.0f32; 2];
         let mut got_in = false;
+        let mut traffic = Default::default();
+        let mut people = Default::default();
+        let live_contacts = !access_path && recording.is_none() && replay.is_none();
         let capture_dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
-        if access_path && args.capture {
+        if args.capture {
             std::fs::create_dir_all(&capture_dir)?;
         }
         for i in 0..frames {
@@ -1031,16 +1130,31 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             let pf0 = eo_render::hitch::process_page_faults(); // hitch
             let c0 = eo_render::hitch::thread_cycles(); // hitch
             let t0 = Instant::now();
-            let input = if access_path {
+            let prior = player.position(&cw);
+            if cw.lockstep { cw.ensure_step_tiles(prior); }
+            let expected = replay.as_ref().map(|r| &r.frames[i]);
+            let input = if let Some(f) = expected {
+                player.yaw = f.yaw;
+                f.input
+            } else if crossing {
+                StepInput { brake: f64::from(i >= 45), ..Default::default() }
+            } else if access_path {
                 StepInput { vehicle_toggle: i == ACCESS_ENTER || i == ACCESS_EXIT, handbrake: true, ..Default::default() }
             } else if driving {
                 drive_pilot.input(&player, &cw)
             } else {
                 walk_pilot.input(&mut player, &cw)
             };
-            if args.look.sky.weather_fx {
-                let wx = eo_render::sky::weather_of(&args.look.sky, args.look.sky.world_time_s + i as f64 * dt);
-                player.set_weather(eo_player::WeatherPhysics { wetness: wx.wetness, puddle_fill: wx.puddle_fill, rain_mm_h: wx.rain_mm_h, wind: wx.wind, gust: wx.gust });
+            let second = (args.look.sky.world_time_s + i as f64 * dt).floor();
+            if args.look.sky.weather_fx && weather_second != Some(second) {
+                let wx = eo_render::sky::weather_of(&args.look.sky, second);
+                player.set_weather(eo_net::weather::physical_conditions(&wx));
+                weather_second = Some(second);
+            }
+            if let Some(f) = expected { player.set_weather(f.weather); }
+            let input_yaw = player.yaw;
+            if live_contacts && let Some(rt) = agents_rt.as_mut() {
+                rt.sync_local_bodies(&mut traffic, &mut people, &player, &mut cw, opts.contact_physics, opts.pedestrian_physics, props_rt.as_ref());
             }
             if access_path && opts.car_door_animation {
                 let lib = agents_rt.as_ref().and_then(|rt| rt.lib.as_deref());
@@ -1048,6 +1162,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             } else {
                 player.advance(&mut cw, &input, dt);
             }
+            peak_walker_bodies = peak_walker_bodies.max(cw.walking_bodies.len());
             if access_path {
                 got_in |= matches!(player.mode, Mode::Driving(_));
             }
@@ -1064,12 +1179,37 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             pump_ms.push((tc - tp).as_secs_f64() * 1e3);
             step_ms.push((tp - t0).as_secs_f64() * 1e3);
             camera_ms.push((t1 - tc).as_secs_f64() * 1e3);
-            let gap = pos.y - cw.floor_y(pos.x, pos.z);
+            if crossing && input.brake > 0.0 {
+                let car = &player.vehicles[0];
+                anyhow::ensure!(car.controls.throttle == 0.0, "pedestrian_crossing: service brake commanded drive torque at frame {i}");
+                if car.forward_speed(&cw).abs() < 0.12 {
+                    crossing_stop.get_or_insert(pos);
+                }
+                if let Some(stopped) = crossing_stop {
+                    brake_hold_drift = brake_hold_drift.max(pos.distance(stopped));
+                }
+            }
+            if recording.is_some() || expected.is_some() {
+                let contact = trace::Contact::sample(&player, &cw, prior);
+                if let Some(f) = expected {
+                    anyhow::ensure!(contact == f.contact, "{name} physics diverged on step {i}: expected {:?}, observed {contact:?}", f.contact);
+                }
+                if let Some(r) = &mut recording {
+                    r.frames.push(trace::Frame { input, yaw: input_yaw, weather: player.weather, contact });
+                }
+            }
+            let gap = pos.y - cw.surface_below(pos.x, pos.z, prior.y.max(pos.y) + 0.25);
             min_gap = min_gap.min(gap);
             // A walker's feet may not sink; a car's datum (body centre minus half
             // its height) rides its springs, so its test is its wheels.
             match player.mode {
-                Mode::OnFoot if gap < -0.05 => under_ground += 1,
+                Mode::OnFoot if gap < -0.05 => {
+                    under_ground += 1;
+                    if first_floor_breach.is_none() {
+                        let options = trace::LocationWorld::of(args, world.street.as_deref());
+                        first_floor_breach = Some(trace::Location::capture(&player,&cw,&world.city,options,eo_render::sky::SkyOptions { world_time_s: args.look.sky.world_time_s + i as f64 * dt, ..args.look.sky },&capture_dir)?.0);
+                    }
+                }
                 Mode::Driving(k) if player.vehicles[k].wheels_in_contact() == 4 => four_wheels += 1,
                 _ => {}
             }
@@ -1077,7 +1217,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
                 track.push(pos);
             }
             if let Some((ctx, renderer, color, tv, targets, models)) = &mut gpu_state {
-                let cam = if access_path { first.clone() } else { to_camera(&view, aspect, args.far) };
+                let cam = if access_path || crossing { first.clone() } else { to_camera(&view, aspect, args.far) };
                 models.set_camera(cam.eye);
                 models.pump(ctx, renderer, &world, cam.eye)?;
                 if let (Some(p), Some(rt)) = (props_rt.as_mut(), agents_rt.as_mut()) {
@@ -1089,14 +1229,17 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
                     }
                 }
                 if let Some(rt) = agents_rt.as_mut() {
-                    // agents
+                    if live_contacts {
+                        rt.publish_physical_poses(&cw);
+                        rt.set_traffic_obstacle(&player,&cw);
+                    }
                     let transfer = rt.lib.as_ref().and_then(|lib| lib.test_player.as_ref())
                         .and_then(|body| car_access.frame(&player, &cw, body));
                     if let Some(frame) = &transfer {
                         let stage = usize::from(i >= ACCESS_EXIT);
                         max_door[stage] = max_door[stage].max(frame.door);
                     }
-                    rt.set_player_with_car_access(&mut visual, &player, &cw, access_path || view.body_visible, dt, transfer.as_ref());
+                    rt.set_player_with_car_access(&mut visual, &player, &cw, access_path || crossing || view.body_visible, dt, transfer.as_ref());
                     rt.pump(ctx, renderer, [pos.x, pos.z, player.yaw], dt);
                 }
                 renderer.update(&ctx.queue, &cam);
@@ -1107,8 +1250,9 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
                 };
                 renderer.encode(&mut enc, attach, resolve, &targets.depth, None);
                 subs.push(eo_render::pace::submit(&ctx.queue, [enc.finish()])); // counted
-                if access_path && args.capture && matches!(i, 0 | 67 | 225 | 299 | 440) {
-                    let path = capture_dir.join(format!("car-access-{i:03}.png"));
+                if args.capture && ((access_path && matches!(i, 0 | 67 | 225 | 299 | 440)) || (crossing && matches!(i, 0 | 37 | 66 | 150)) || (!access_path && !crossing && matches!(i, 0 | 180))) {
+                    let stem = if access_path { "car-access" } else { name };
+                    let path = capture_dir.join(format!("{stem}-{i:03}.png"));
                     crate::bench::capture(ctx, renderer, color, attach, resolve, &targets.depth, &cam, &path)?;
                     println!("wrote {}", path.display());
                 }
@@ -1120,6 +1264,14 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         }
         if let Some((ctx, ..)) = &gpu_state {
             ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("{e}"))?;
+        }
+        if crossing && frames >= 150 {
+            anyhow::ensure!(crossing_stop.is_some() && brake_hold_drift < 0.10,
+                "pedestrian_crossing: car did not hold after braking, stopped {crossing_stop:?}, drift {brake_hold_drift:.3} m");
+        }
+        if crossing && frames >= 90 {
+            anyhow::ensure!((cw.walking_bodies.vehicle_impacts > 0) == (opts.contact_physics && opts.pedestrian_physics),
+                "pedestrian_crossing: unexpected contact count {}", cw.walking_bodies.vehicle_impacts);
         }
         if access_path && frames >= ACCESS_FRAMES {
             anyhow::ensure!(got_in && player.mode == Mode::OnFoot && !car_access.is_active(),
@@ -1198,7 +1350,8 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             camera_ms.get(worst).copied().unwrap_or(f64::NAN),
             eo_render::hitch::thread_priority(),
         );
-        verdicts.push((name, pass_med && pass_max));
+        verdicts.push((name, pass_med && pass_max && under_ground == 0));
+        if let Some(trace) = recording { trace.save(&capture_dir)?; }
         reports.push(json!({
             "name": name,
             "frames": player_ms.len(),
@@ -1221,7 +1374,11 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             "max_verdict": v(pass_max),
             "min_ground_gap_m": min_gap,
             "frames_feet_under_ground": under_ground,
+            "first_floor_breach": first_floor_breach,
             "frames_four_wheels_down": four_wheels,
+            "peak_physical_walkers": peak_walker_bodies,
+            "walker_vehicle_impacts": cw.walking_bodies.vehicle_impacts,
+            "brake_hold_drift_m": crossing_stop.map(|_| brake_hold_drift),
             // hitch
             "player_step_on_cpu_ms": summary(&on_cpu),
             "player_step_off_cpu_ms": summary(&off_cpu),
@@ -1236,8 +1393,11 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
     println!("\nwrote {}", out.display());
     let failed: Vec<&str> = verdicts.iter().filter(|v| !v.1).map(|v| v.0).collect();
     if !failed.is_empty() {
-        println!("player budget FAIL: {failed:?}");
+        println!("player route checks failed for {failed:?}");
+        anyhow::ensure!(!args.perf.check_max, "player route checks failed for {failed:?}");
     }
+    anyhow::ensure!(reports.iter().all(|r| r["frames_feet_under_ground"].as_u64() == Some(0)),
+        "character penetrated the route floor, see {}", out.display());
     Ok(())
 }
 
@@ -1270,6 +1430,8 @@ mod window {
     }
 
     struct App {
+        contact_physics: bool,
+        pedestrian_physics: bool,
         interior_eye: bool,
         car_door_animation: bool,
         car_access: crate::car_access::CarAccess,
@@ -1279,6 +1441,8 @@ mod window {
         /// photo mode (P), None with `--no-photo-mode`.
         photo: Option<crate::photo::PhotoMode>,
         cw: CollisionWorld,
+        traffic_bodies: eo_player::traffic::TrafficBodies,
+        people_bodies: eo_player::people_contact::PeopleBodies,
         door: Option<crate::house::Door>,
         player: Player,
         map: ActionMap,
@@ -1287,6 +1451,7 @@ mod window {
         vehicle_toggle_requested: bool,
         looking: bool,
         last: Instant,
+        location_notice: Option<(Instant, String)>,
         fps_frames: u32,
         fps_t: Instant,
         player_ms_max: f64,
@@ -1295,6 +1460,10 @@ mod window {
     }
 
     pub fn run(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
+        let saved = opts.physics_location.as_deref().map(trace::Location::load).transpose()?;
+        let mut resolved = args.clone();
+        if let Some(loc) = &saved { loc.apply_world(&mut resolved)?; }
+        let args = &resolved;
         let world = load_world(args)?;
         let (mut cw, door) = collision_world(&world, opts.collision_threads, args.landmark_access)?;
         let s = crate::bench::spawn(); // the spawn on the scaled plan
@@ -1304,23 +1473,45 @@ mod window {
             feet = h.entry_position();
             yaw = h.entry_yaw();
         }
+        if opts.gate_drive {
+            anyhow::ensure!(args.landmarks && opts.dive.is_none() && saved.is_none(), "--drive-golden-gate requires landmarks and selects its own starting location");
+            let js = eo_landmarks::LandmarksJs::get();
+            let gate = eo_landmarks::golden_gate::data(js);
+            let site = eo_landmarks::golden_gate::Site::new(&gate);
+            let plan = eo_landmarks::golden_gate::plan(js, &site, &|x,z| world.elevation.ground(x,z));
+            // Start on the middle northbound lane at the south approach arch.
+            let lane = eo_landmarks::data::num(&gate.dimensions, "roadwayM") / 4.0;
+            let [x,z] = site.deck_point(plan.arch_north_c, lane);
+            let ahead = site.deck_point(plan.arch_north_c + 1., lane);
+            feet = DVec3::new(x, plan.deck_top(plan.arch_north_c) + 0.5, z);
+            yaw = (ahead[0] - x).atan2(ahead[1] - z);
+        }
         if let Some(name) = &opts.dive {
             let start = crate::ocean_habitat::start(world.marine_floor.as_ref().expect("play validated the dive"), name)?;
             feet = start.0;
             yaw = start.1;
             eprintln!("Playable dive {name} at {feet:.2}, facing {yaw:.2} radians");
         }
-        cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
-        if opts.dive.is_none() { feet.y = cw.surface_y(feet.x, feet.z); }
-        let mut player = Player::new(feet, yaw);
-        if opts.dive.as_deref() == Some("kelp") {
-            player.pitch = -12_f64.to_radians();
-        }
-        if opts.dive.is_none() {
-            player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
-        }
+        let player = if let Some(location) = &saved {
+            location.restore(&mut cw)?
+        } else {
+            cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
+            if opts.dive.is_none() && !opts.gate_drive { feet.y = cw.arrival_y(feet.x, feet.z); }
+            let mut player = Player::new(feet, yaw);
+            player.spawn_config = opts.vehicle;
+            if opts.dive.as_deref() == Some("kelp") { player.pitch = -12_f64.to_radians(); }
+            if opts.gate_drive {
+                let car = player.spawn_vehicle_below(&mut cw, feet, yaw);
+                player.enter_vehicle(car);
+            } else if opts.dive.is_none() {
+                player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
+            }
+            player
+        };
         let event_loop = EventLoop::new()?;
         let mut app = App {
+            contact_physics: opts.contact_physics,
+            pedestrian_physics: opts.pedestrian_physics,
             interior_eye: args.house_finishes && args.house_furniture && opts.interior_eye,
             car_door_animation: opts.car_door_animation,
             car_access: Default::default(),
@@ -1329,6 +1520,8 @@ mod window {
             gfx: None,
             photo: crate::photo::enabled().then(|| crate::photo::PhotoMode::new(false, args.time_of_day)),
             cw,
+            traffic_bodies: Default::default(),
+            people_bodies: Default::default(),
             door,
             player,
             map: ActionMap::default(),
@@ -1337,6 +1530,7 @@ mod window {
             vehicle_toggle_requested: false,
             looking: false,
             last: Instant::now(),
+            location_notice: None,
             fps_frames: 0,
             fps_t: Instant::now(),
             player_ms_max: 0.0,
@@ -1425,8 +1619,11 @@ mod window {
                 }
                 input.vehicle_toggle |= std::mem::take(&mut self.vehicle_toggle_requested);
                 if self.gfx.as_ref().map_or(self.args.look.sky.weather_fx, |g| g.renderer.look.sky.options().weather_fx) {
-                    let wx = self.gfx.as_ref().map(|g| g.renderer.look.sky.weather()).unwrap_or_else(|| eo_render::sky::weather_of(&self.args.look.sky, self.args.look.sky.world_time_s));
-                    self.player.set_weather(eo_player::WeatherPhysics { wetness: wx.wetness, puddle_fill: wx.puddle_fill, rain_mm_h: wx.rain_mm_h, wind: wx.wind, gust: wx.gust });
+                    let wx = self.gfx.as_ref().map(|g| g.renderer.look.sky.weather())
+                        .unwrap_or_else(|| eo_render::sky::weather_of(&self.args.look.sky, self.args.look.sky.world_time_s.floor()));
+                    self.player.set_weather(eo_net::weather::physical_conditions(&wx));
+                } else {
+                    self.player.set_weather(Default::default());
                 }
                 // the moored boats near the player: bodies on the drawn sea (eo-player `harbour`), its clock the water's.
                 if let Some(g) = self.gfx.as_ref() {
@@ -1447,12 +1644,18 @@ mod window {
                 }
                 let feet = self.player.position(&self.cw);
                 self.cw.stream_harbour(feet);
+                if let Some(g) = &mut self.gfx {
+                    g.agents.sync_local_bodies(&mut self.traffic_bodies, &mut self.people_bodies, &self.player, &mut self.cw, self.contact_physics, self.pedestrian_physics, Some(&g.props));
+                }
                 if self.car_door_animation {
                     let library = self.gfx.as_ref().and_then(|g| g.agents.lib.as_deref());
                     self.car_access.advance(&mut self.player, &mut self.cw, library, input, dt);
                 } else {
                     self.player.advance(&mut self.cw, &input, dt);
                 }
+            }
+            if let Some(g) = &mut self.gfx {
+                g.agents.publish_physical_poses(&self.cw);
             }
             let pos = self.player.position(&self.cw);
             self.cw.pump(pos);
@@ -1494,7 +1697,9 @@ mod window {
             let transfer = g.agents.lib.as_ref().and_then(|lib| lib.test_player.as_ref())
                 .and_then(|body| self.car_access.frame(&self.player, &self.cw, body));
             g.agents.set_player_with_car_access(&mut g.visual, &self.player, &self.cw, view.body_visible, wdt, transfer.as_ref()); // agents
-            g.agents.pump(&g.ctx, &g.renderer, [pos.x, pos.z, self.player.yaw], wdt);
+            g.agents.set_traffic_obstacle(&self.player, &self.cw);
+            let direction = cam.forward();
+            g.agents.pump(&g.ctx, &g.renderer, [pos.x, pos.z, f64::from(direction.x.atan2(direction.z))], wdt);
             g.audio.frame(crate::audio::FrameIn::player(&view, dt, &self.player, &self.cw, &mut g.agents, &g.renderer, &self.world.elevation)); // audio
             g.renderer.update(&g.ctx.queue, &cam);
             let mut enc = g.ctx.device.create_command_encoder(&Default::default());
@@ -1535,7 +1740,10 @@ mod window {
             if el >= 1.0 {
                 let (mut mode, speed) = match self.player.mode {
                     Mode::OnFoot => ("on foot", self.player.ground_speed),
-                    Mode::Driving(i) => ("driving", self.player.vehicles[i].forward_speed(&self.cw).abs()),
+                    Mode::Driving(i) => {
+                        let car = &self.player.vehicles[i];
+                        (if car.reverse_selected() { "driving (R)" } else { "driving (D)" }, car.forward_speed(&self.cw).abs())
+                    }
                 };
                 if self.car_access.is_active() {
                     mode = if self.player.mode == Mode::OnFoot { "entering car" } else { "exiting car" };
@@ -1552,8 +1760,9 @@ mod window {
                 let hh = hour.floor() as u32;
                 let mm = ((hour - hour.floor()) * 60.0).floor() as u32;
                 let wx_label = weather_label(g.renderer.look.sky.options().weather);
+                let saved = self.location_notice.as_ref().filter(|(at,_)| at.elapsed().as_secs() < 12).map_or("", |(_,s)| s.as_str());
                 g.window.set_title(&format!(
-                    "{prompt}Earth Online - {hh:02}:{mm:02} {wx_label} - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, E: lift, P: photo, [/]: time, \\: live SF time, K: weather, Esc: mouse{door_hint}{bed_hint}",
+                    "{saved}{prompt}Earth Online - {hh:02}:{mm:02} {wx_label} - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, E: lift, P: photo, F8: location, [/]: time, \\: live SF time, K: weather, Esc: mouse{door_hint}{bed_hint}",
                     self.fps_frames as f64 / el,
                     speed,
                     self.player_ms_sum / self.fps_frames.max(1) as f64,
@@ -1581,6 +1790,7 @@ mod window {
                 let cam = to_camera(&view, aspect as f32, self.args.far);
                 ph.game_hour = g.renderer.look.time_of_day();
                 ph.enter(&cam, crate::photo::anchor_of(self.player.position(&self.cw)));
+                self.raw.direction_pressed = false;
                 self.raw.held.clear();
                 self.interact_requested = false;
                 self.vehicle_toggle_requested = false;
@@ -1673,6 +1883,7 @@ mod window {
                     }
                 }
                 WindowEvent::Focused(false) => {
+                    self.raw.direction_pressed = false;
                     self.raw.held = HashSet::new();
                     self.interact_requested = false;
                     self.vehicle_toggle_requested = false;
@@ -1705,6 +1916,24 @@ mod window {
                                     return;
                                 }
                                 if photo_on && self.photo.as_mut().is_some_and(|p| p.key(code)) {
+                                    return;
+                                }
+                                if code == KeyCode::F8 && !event.repeat && !photo_on {
+                                    let dir = self.args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+                                    let sky = self.gfx.as_ref().map_or(self.args.look.sky, |g| {
+                                        let live = &g.renderer.look.sky;
+                                        eo_render::sky::SkyOptions { world_time_s: live.world_time(), ..live.options() }
+                                    });
+                                    let options = trace::LocationWorld::of(&self.args, self.world.street.as_deref());
+                                    let notice = match trace::Location::capture(&self.player, &self.cw, &self.world.city, options, sky, &dir) {
+                                        Ok((_, street)) => format!("Location saved near {} - ", street.as_deref().unwrap_or("unnamed road")),
+                                        Err(error) => {
+                                            eprintln!("could not save physics location: {error:#}");
+                                            "Could not save physics location - ".to_owned()
+                                        }
+                                    };
+                                    if let Some(g) = &self.gfx { g.window.set_title(&format!("{notice}Earth Online")); }
+                                    self.location_notice = Some((Instant::now(), notice));
                                     return;
                                 }
                                 // A quick tap may start and finish between redraws.
@@ -1757,6 +1986,10 @@ mod window {
                                         return;
                                     }
                                 }
+                                if code == KeyCode::KeyR {
+                                    if photo_on { return; }
+                                    self.raw.direction_pressed |= !event.repeat;
+                                }
                                 self.raw.held.insert(name);
                             }
                             ElementState::Released => {
@@ -1806,13 +2039,206 @@ mod house_tests {
     /// kernel spinlock-timeout panic (2026-11-21, panic-full reports naming
     /// this test binary, four reboots). A poisoned lock (a failed test) still
     /// lets the next test run.
-    fn world_lock() -> std::sync::MutexGuard<'static, ()> {
+    pub(super) fn world_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[test]
+    fn the_drawn_golden_gate_east_sidewalk_catches_the_player_with_each_railing() {
+        let _guard = world_lock();
+        let (mut args, _) = parse(&["--no-landmark-access".into()]).unwrap();
+        args.models = false;
+        args.agents = false;
+        args.kit = false;
+        let world = load_world(&args).unwrap();
+        let deck = eo_landmarks::access::golden_gate_sidewalk(eo_landmarks::LandmarksJs::get(),
+            &|x, z| world.elevation.sample(x, z));
+        // Physical landings in the southern, middle and northern sections.
+        let mut surfaces = Vec::new();
+        for part in [0.25, 0.5, 0.75] {
+            let t = deck.walk[(part * deck.walk.len() as f64) as usize];
+            surfaces.push(t.into_iter().map(DVec3::from_array).sum::<DVec3>() / 3.);
+        }
+        for access in [false, true] {
+            let (mut cw, _) = collision_world(&world, 1, access).unwrap();
+            cw.load_blocking(surfaces[0], 32.);
+            let mut max_error = 0.0_f64;
+            for triangle in &deck.walk {
+                let feet = triangle.iter().copied().map(DVec3::from_array).sum::<DVec3>() / 3.;
+                let hit = cw.raycast(feet + DVec3::Y * 0.05, DVec3::NEG_Y, 0.10,
+                    pworld::layer::STREET, None).unwrap_or_else(|| panic!("missing bridge plate at {feet:?}, access {access}"));
+                max_error = max_error.max((hit.point.y - feet.y).abs());
+            }
+            eprintln!("bridge physical floor: {} plate triangles, maximum error {max_error:.6} m, access {access}", deck.walk.len());
+            assert!(max_error < 0.02);
+            for &feet in &surfaces {
+                cw.load_blocking(feet, 32.);
+                let hit = cw.raycast(feet + DVec3::Y * 0.25, DVec3::NEG_Y, 0.5,
+                    pworld::layer::STREET, None).unwrap_or_else(|| panic!("drawn bridge walk missing at {feet:?}, access {access}"));
+                assert!((hit.point.y - feet.y).abs() < 0.02);
+                let mut player = Player::new(feet + DVec3::Y * 0.6, 0.);
+                for _ in 0..120 { player.fixed_step(&mut cw, &StepInput::default()); }
+                let settled = player.character.feet();
+                eprintln!("bridge floor {feet:.3?}, physical feet {settled:.3?}, access {access}");
+                assert!(player.character.grounded && (settled.y - feet.y).abs() < 0.05);
+            }
+        }
+    }
+
+    #[test]
+    fn municipal_pier_supports_the_player_at_the_drawn_deck_height() {
+        let _guard = world_lock();
+        let (mut args, _) = parse(&["--no-crowd".into(), "--no-landmark-access".into()]).unwrap();
+        args.models = false;
+        args.agents = false;
+        args.kit = false;
+        let world = load_world(&args).unwrap();
+        // The tip used to identify Municipal Pier in eo-landmarks::waterfront.
+        let [tip, z] = eo_data::groundscale::plan([-431.5, -3610.0]);
+        let x = tip - 6.0;
+        let paving = eo_agents::feed::Decks::new(world.footway_decks.as_ref().clone());
+        let y = paving.top(x, z).expect("drawn Municipal Pier deck");
+        let start = DVec3::new(x, y + 0.6, z);
+        let (mut cw, _) = collision_world(&world, 1, false).unwrap();
+        cw.load_blocking(start, 32.0);
+        assert!(cw.floor_y(x, z) < y - 0.1, "probe must distinguish the pier from the ground");
+        let mut p = Player::new(start, 0.0);
+        for _ in 0..120 { p.fixed_step(&mut cw, &StepInput::default()); }
+        assert!(p.character.grounded && (p.character.feet().y - y).abs() < 0.03,
+            "walker at {:?}, drawn deck at {y}", p.character.feet());
     }
     #[test]
     fn beaver_street_to_bed_and_top_floor() {
         check_beaver_walk(false, false, false, false, false);
+    }
+
+    #[test]
+    fn rendered_floorboards_have_support_on_every_storey_of_the_beaver_house() {
+        let _guard = world_lock();
+        let (mut args, _) = parse(&["--house-fitted-dining".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let house = world.house.as_ref().unwrap();
+        let (mut collision, _) = collision_world(&world, 1, false).unwrap();
+        collision.load_blocking(house.entry_position(), 32.0);
+        let base = house.point(0., 0., 0.).y;
+        let storey_height = house.point(0., 10. / 3., 0.).y - base;
+        let mut samples = [0; 3];
+        let mut largest_gap = 0.0_f64;
+        for board in world.scene.objects.iter().filter(|o| o.kind & eo_render::scene::FLOOR_SCAN_BIT != 0) {
+            let first = board.first_index as usize;
+            for tri in world.scene.indices[first..first + board.index_count as usize].chunks_exact(3) {
+                let vertices = [0, 1, 2].map(|i| world.scene.vertices[(i64::from(board.base_vertex) + i64::from(tri[i])) as usize]);
+                if vertices.iter().any(|v| eo_assets::glb::unpack_normal(v.normal).y < 0.99) {
+                    continue;
+                }
+                let points = vertices.map(|v| Vec3::from(v.pos).as_dvec3());
+                let centre = (points[0] + points[1] + points[2]) / 3.0;
+                let level = ((centre.y - base) / storey_height).round() as usize;
+                for p in std::iter::once(centre).chain(points.map(|corner| corner.lerp(centre, 0.05))) {
+                    let hit = collision.raycast(p + DVec3::Y * 0.025, DVec3::NEG_Y, 0.05, pworld::layer::STREET, None)
+                        .unwrap_or_else(|| panic!("missing floor under drawn board on storey {level} at {p:?}"));
+                    largest_gap = largest_gap.max((p.y - hit.point.y).abs());
+                    samples[level] += 1;
+                }
+            }
+        }
+        assert!(samples.iter().all(|&count| count > 0), "missing drawn floor on a storey: {samples:?}");
+        assert!(largest_gap <= 0.025, "support differs from a drawn board by {largest_gap:.4} m");
+        // Drop over the actual opening and beside it. The staircase supports the
+        // first capsule below the landing and the top floor supports the second.
+        for (x, on_landing) in [(5.95, false), (4.15, true)] {
+            let level = house.point(x, 20. / 3., 6.8);
+            let start = level + DVec3::Y * 0.08;
+            let hit = collision.raycast(start, DVec3::NEG_Y, storey_height, pworld::layer::STREET, None)
+                .expect("missing upper floor or stair flight");
+            if on_landing {
+                assert!((hit.point.y - level.y).abs() < 0.03, "missing upper landing");
+            } else {
+                assert!(hit.point.y < level.y - 0.4, "a collider seals the stair opening");
+            }
+            let mut walker = eo_player::character::Character::new(start);
+            for _ in 0..100 {
+                walker.step(&collision, 0., 0., true);
+            }
+            let feet = walker.feet();
+            let below = collision.raycast(feet + DVec3::Y * 0.16, DVec3::NEG_Y, 0.32, pworld::layer::STREET, None)
+                .unwrap_or_else(|| {
+                    let support = collision.raycast(feet + DVec3::Y * 0.16, DVec3::NEG_Y, 1., pworld::layer::STREET, None);
+                    panic!("feet lost the landing or stair tread after falling at {feet:?}, grounded {}, closest height {:?}",
+                        walker.grounded, support.map(|hit| hit.point.y));
+                });
+            assert!(walker.grounded && (feet.y - below.point.y).abs() < 0.12, "unsupported feet at {feet:?}");
+            assert_eq!(feet.y > level.y - 0.15, on_landing, "wrong floor at {feet:?}");
+            for _ in 0..300 {
+                walker.step(&collision, 0., 0., true);
+                assert!(walker.feet().distance(feet) < 0.025, "resting stance drifted from {feet:?} to {:?}", walker.feet());
+            }
+            eprintln!("21 Beaver Street at local x {x}, drop {:.3} m, standing clearance {:.3} m",
+                start.y - feet.y, feet.y - below.point.y);
+        }
+        eprintln!("Beaver Street drawn board probes by storey {samples:?}, maximum height difference {largest_gap:.4} m");
+    }
+
+    #[test]
+    fn the_drawn_presidio_tunnel_approach_ground_supports_a_body() {
+        let _guard = world_lock();
+        let (mut args, _) = parse(&["--structures".into(), "--tunnels".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let roads = world.structures.as_ref().unwrap();
+        let bore = roads.chains().iter().find(|c| c.pieces.iter().any(|p| p.way == "167952618")).unwrap();
+        let citywide = std::env::var("EO_AUDIT_ALL_TUNNEL_GROUND").as_deref() == Ok("1");
+        let open = roads.terrain_cuts().iter().filter(|c| !c.canopy && (citywide || c.chain == bore.id));
+        let (mut collision, _) = collision_world(&world, 1, false).unwrap();
+        let mut samples = 0usize;
+        let mut misses = 0usize;
+        let mut worst = 0.0_f64;
+        for cut in open {
+            let centre = DVec3::new((cut.min[0] + cut.max[0]) * 0.5, cut.floor, (cut.min[1] + cut.max[1]) * 0.5);
+            let diagonal = (cut.max[0] - cut.min[0]).hypot(cut.max[1] - cut.min[1]);
+            collision.load_blocking(centre, diagonal * 0.5 + 4.0);
+            let terrain = world.scene.objects.iter().filter(|o| {
+                o.kind & 255 == eo_render::scene::ObjectKind::Terrain as u32
+                    && f64::from(o.max[0]) >= cut.min[0] && f64::from(o.min[0]) <= cut.max[0]
+                    && f64::from(o.max[2]) >= cut.min[1] && f64::from(o.min[2]) <= cut.max[1]
+            });
+            for obj in terrain {
+                let first = obj.first_index as usize;
+                for tri in world.scene.indices[first..first + obj.index_count as usize].chunks_exact(3) {
+                    let [a, b, c] = [0, 1, 2].map(|i| {
+                        let index = (i64::from(obj.base_vertex) + i64::from(tri[i])) as usize;
+                        Vec3::from(world.scene.vertices[index].pos).as_dvec3()
+                    });
+                    let p = (a + b + c) / 3.0;
+                    if !cut.contains(p.x, p.z) {
+                        continue;
+                    }
+                    if let Some(hit) = collision.raycast(p + DVec3::Y * 0.025, DVec3::NEG_Y, 0.05, pworld::layer::WORLD, None) {
+                        worst = worst.max((hit.point.y - p.y).abs());
+                    } else {
+                        misses += 1;
+                        if misses <= 8 {
+                            let near = collision.raycast(p + DVec3::Y * 2.0, DVec3::NEG_Y, 4.0, pworld::layer::WORLD, None);
+                            eprintln!("drawn terrain miss at {p:?}, analytic {:.4}, nearby physical height {:?}, cut {:.3}, canopies {}",
+                                collision.floor_y(p.x, p.z), near.map(|h| h.point.y), cut.floor,
+                                roads.terrain_cuts().iter().filter(|c| c.canopy && c.contains(p.x, p.z)).count());
+                            eprintln!("triangle {:?}, projected area {:.8} m²", [a, b, c], (b - a).cross(c - a).y * 0.5);
+                        }
+                    }
+                    samples += 1;
+                }
+            }
+        }
+        assert_eq!(misses, 0, "{misses}/{samples} drawn terrain centres lack support");
+        assert!(samples > 10, "expected drawn triangles in the open cuts, found {samples}");
+        let area = if citywide { "Citywide" } else { "Presidio" };
+        println!("{area} drawn terrain: {samples} supported triangle centres, maximum {worst:.4} m height error");
     }
 
     #[test]
@@ -2695,6 +3121,8 @@ mod house_tests {
         walk(5.95, 9.8);
         let street = walk(5.95, -3.3);
         assert!((street.y - start.y).abs() < 0.3);
+        assert!((cw.surface_below(loft.x, loft.z, loft.y + 0.2) - loft.y).abs() < 0.05,
+            "level queries must find the same upstairs floor the walker stood on");
         // The open knob is on the inside. A resident can close the door,
         // it then blocks the opening, and either side can operate it again.
         let resident = house.point(5.24, 0., 1.42);
@@ -2766,6 +3194,15 @@ mod play_defaults_tests {
         assert_eq!(g.people_capsules, Some(true));
         assert_eq!(g.car_panels, Some(true));
         assert_eq!(g.car_density, Some(true));
+    }
+
+    #[test]
+    fn bridge_inspection_switches_work_in_play_and_capture() {
+        for flag in crate::ROAD_REVIEW_SWITCHES {
+            let (_, play, _) = parse_full(&raw(&["--play", "--drive-golden-gate", flag])).unwrap();
+            assert!(play.gate_drive);
+            crate::parse_args_from(&raw(&[flag])).unwrap();
+        }
     }
 
     #[test]

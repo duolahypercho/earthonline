@@ -2,7 +2,7 @@
 
 use crate::models::{ModelRuntime, make_renderer};
 use crate::{Args, World, load_world};
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use eo_render::camera::Camera;
 use eo_render::{COUNTER_WORDS, GpuContext, GpuOptions, QUERIES_PER_FRAME, Renderer, Targets, hitch, read_mapped, wgpu};
 use glam::Vec3;
@@ -727,7 +727,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 for (n, c, w) in &list {
                     println!("  pose {n}: eye ({:.1}, {:.2}, {:.1}) yaw {:.3} pitch {:.3}: {w}", c.eye.x, c.eye.y, c.eye.z, c.yaw, c.pitch);
                 }
-                list.into_iter().map(|(name, camera, _)| crate::props::CapturePose { name, camera, player: None }).collect()
+                list.into_iter().map(|(name, camera, _)| crate::props::CapturePose { name, camera, player: None, vehicles: None }).collect()
             }
         };
         let label = args.label.as_deref().unwrap_or("props2");
@@ -740,7 +740,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         // otherwise holds at 0) and the props' (the trees' sway), so a list of one pose repeated
         // shows them move; else all stand still.
         let props_step = std::env::var("EO_CAPTURE_PROPS_CLOCK_STEP").ok().and_then(|v| v.parse::<f64>().ok());
-        for (k, crate::props::CapturePose { name, camera: cam, player }) in poses.into_iter().enumerate() {
+        let mut previous_staged = false;
+        for (k, crate::props::CapturePose { name, camera: cam, player, vehicles }) in poses.into_iter().enumerate() {
             if hold_sky {
                 renderer.look.sky.set_clock(args.look.sky.world_time_s, 0.0);
             }
@@ -751,7 +752,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                     w.set_time(args.look.sky.world_time_s + k as f64 * step);
                 }
             }
-            let refresh_player = player.is_some() || !agents.extras.is_empty();
+            let refresh_player = player.is_some() || !agents.extras.is_empty() || previous_staged;
             agents.extras.clear();
             agents.clear_test_pose();
             if let Some(p) = player {
@@ -770,6 +771,22 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
             if refresh_player {
                 agents.pump(&ctx, &renderer, crate::agents::AgentRuntime::focus_of(cam.eye, cam.forward()), 0.0);
+            }
+            previous_staged = vehicles.is_some();
+            if let Some(vehicles) = vehicles {
+                let lib = agents.lib.as_ref().context("vehicle capture needs the agent library")?;
+                let catalogue = eo_agents::catalog::AgentsJs::load()?;
+                for car in vehicles {
+                    let rotation = (glam::Quat::from_rotation_y(car.yaw) * glam::Quat::from_rotation_x(-car.pitch))
+                        .to_array().map(f64::from);
+                    let paint = &catalogue.pick_paint(crate::agents::SEED_INT, car.id, &car.model).hex;
+                    let body = eo_agents::feed::player_car(lib, &car.model, car.datum, rotation, 0.0, 0.0, car.speed, car.braking, paint)
+                        .with_context(|| format!("vehicle capture model {} is unavailable", car.model))?;
+                    agents.extras.push(body);
+                }
+                agents.mark_bores();
+                let gpu = renderer.agents.get().context("vehicle capture needs the agent renderer")?;
+                gpu.upload(&ctx.queue, &agents.extras);
             }
             let p = dir.join(format!("capture-{label}-{name}.png"));
             capture(&ctx, &renderer, &color, attach, resolve, &targets.depth, &cam, &p)?;

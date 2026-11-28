@@ -20,6 +20,84 @@ fn game() -> &'static Arc<GameWorld> {
 
 const STEPS: usize = 2400;
 
+#[test]
+fn base_bridge_and_pier_floors_catch_server_and_predicted_players() {
+    let paths = eo_data::DataPaths::discover().unwrap();
+    let g = GameWorld::load_access(&paths, false, None, false).unwrap();
+    let deck = eo_net::game::base_bridge_walk(&g.elevation);
+    let mid = deck.walk[deck.walk.len()/2].into_iter().map(DVec3::from_array).sum::<DVec3>()/3.;
+    let [tip, z] = eo_data::groundscale::plan([-431.5, -3610.0]);
+    let pier = DVec3::new(tip - 6., 35., z);
+    let mut reference = game().collision_world(1);
+    reference.load_blocking(pier, 32.);
+    let top = reference.raycast(pier, DVec3::NEG_Y, 60., eo_player::world::layer::STREET, None).unwrap().point;
+    assert!(top.y > reference.floor_y(top.x, top.z) + 0.1);
+    let tiles = SharedTiles::start(g.ground.clone(), g.buildings.clone(), 2);
+    for (place, floor) in [("Golden Gate east sidewalk", mid), ("Municipal Pier", top)] {
+        let start = floor + DVec3::Y * 0.6;
+        let mut server_cw = CollisionWorld::fed(g.ground.clone(), g.buildings.clone(), tiles.clone());
+        let mut predicted_cw = g.collision_world(1);
+        let mut server = eo_player::Player::new(start, 0.);
+        let mut predicted = eo_player::Player::new(start, 0.);
+        for cw in [&mut server_cw, &mut predicted_cw] {
+            cw.load_blocking(start, eo_player::world::LOAD_RADIUS_M);
+        }
+        for tick in 0..120 {
+            step_player(&mut server, &mut server_cw, &NetInput::default());
+            step_player(&mut predicted, &mut predicted_cw, &NetInput::default());
+            assert_eq!(server.state(&server_cw), predicted.state(&predicted_cw), "{place}, tick {tick}");
+        }
+        let feet = server.character.feet();
+        eprintln!("{place}: drawn floor {floor:.3?}, network feet {feet:.3?}");
+        assert!(server.character.grounded && (feet.y-floor.y).abs() < 0.05, "{place} lost the floor");
+    }
+}
+
+#[test]
+fn bridge_traffic_lanes_carry_the_same_loaded_van_on_server_and_client() {
+    use eo_player::vehicle::{VehicleConfig, VehicleModel};
+    use eo_player::{Player, StepInput};
+    let paths = eo_data::DataPaths::discover().unwrap();
+    for structured in [false, true] {
+        let options = structured.then_some(eo_structures::StructureOptions { tunnels: false });
+        let g = GameWorld::load_access(&paths, true, options, false).unwrap();
+        let tiles = SharedTiles::start(g.ground.clone(), g.buildings.clone(), 2);
+        for deck in eo_net::game::bridge_roads(&paths, &g.elevation).unwrap() {
+            let mid = (deck.walk.len() / 4) * 2;
+            let [p, q, r] = deck.walk[mid].map(DVec3::from_array);
+            let end = DVec3::from_array(deck.walk[mid+1][2]).lerp(r, 0.75);
+            let start = p.lerp(q, 0.75);
+            let heading = end-start;
+            let yaw = heading.x.atan2(heading.z);
+            let mut server_cw = CollisionWorld::fed(g.ground.clone(), g.buildings.clone(), tiles.clone());
+            server_cw.load_blocking(start, eo_player::world::LOAD_RADIUS_M);
+            let mut server = Player::new(start, yaw);
+            server.spawn_config = VehicleConfig { model: VehicleModel::DeliveryVan, cargo_kg: 600, occupants_kg: 80 };
+            let i = server.spawn_vehicle_below(&mut server_cw, start + DVec3::Y*0.3, yaw);
+            server.enter_vehicle(i);
+            let mut bytes = Vec::new();
+            write_player_state(&server.state(&server_cw), &mut bytes);
+            let mut client_cw = g.collision_world(2);
+            let mut client = rebuild_player(&mut client_cw, &read_player_state(&bytes).unwrap(),
+                &[[start.x as f32, start.z as f32, yaw as f32]]);
+            for tick in 0..1200 {
+                let step = if tick < 120 { StepInput { handbrake: true, ..Default::default() } }
+                    else { StepInput { throttle: 0.65, ..Default::default() } };
+                let input = NetInput::quantize(&step, yaw);
+                step_player(&mut server, &mut server_cw, &input);
+                step_player(&mut client, &mut client_cw, &input);
+                assert_eq!(server.state(&server_cw), client.state(&client_cw), "{} tick {tick}", deck.name);
+                if tick >= 120 {
+                    assert_eq!(server.vehicles[i].wheels_in_contact(),4,"{} tick {tick}",deck.name);
+                }
+            }
+            let travelled = client.position(&client_cw).distance(start);
+            println!("network {}, structures={structured}: 1200 identical ticks, {travelled:.2} m",deck.name);
+            assert!(travelled > 100. && (client.position(&client_cw).y - start.y).abs() < 10.);
+        }
+    }
+}
+
 /// Every landmark lift through the server's step: a client stands at the
 /// bottom stop, taps interact, rides up, walks the deck, comes back to the
 /// stop and rides down; the server runs the same quantised inputs in its fed
@@ -202,8 +280,14 @@ impl GroundProvider for SlowCook {
         self.0.surface_tile(key)
     }
     // (the wrapped ground's levels and cuts: the same world, only slower)
+    fn arrival_road_y(&self, x: f64, z: f64, near_y: f64) -> Option<f64> {
+        self.0.arrival_road_y(x, z, near_y)
+    }
     fn multi_level(&self) -> bool {
         self.0.multi_level()
+    }
+    fn terrain_cuts_in(&self, min: [f64; 2], max: [f64; 2]) -> Vec<&eo_structures::TerrainCut> {
+        self.0.terrain_cuts_in(min, max)
     }
     fn terrain_cut(&self, x: f64, z: f64) -> Option<f64> {
         self.0.terrain_cut(x, z)
@@ -258,4 +342,256 @@ fn a_slow_tile_cook_does_not_change_a_single_step() {
         println!("slow cook: rewound to step {k} in a fresh world, replayed {} inputs: {d:.5} m from the uninterrupted run", STEPS - k);
         assert!(d < 0.10, "slow cook: the fresh-world replay from step {k} ends {d:.4} m away");
     }
+}
+
+#[test]
+fn a_loaded_van_rebuilds_and_drives_identically_on_both_peers() {
+    use eo_player::vehicle::{VehicleConfig, VehicleModel};
+    let game = game();
+    let (_, spawn) = script_route(game);
+    let mut server_world = game.collision_world(1);
+    let config = VehicleConfig { model: VehicleModel::DeliveryVan, cargo_kg: 420, occupants_kg: 82 };
+    let (mut server, cars) = eo_net::game::spawn_configured_player(&mut server_world, spawn[0], spawn[1], spawn[2], true, config);
+    assert!(matches!(server.mode, Mode::Driving(_)));
+    let mut bytes = Vec::new();
+    write_player_state(&server.state(&server_world), &mut bytes);
+    let mut client_world = game.collision_world(2);
+    let mut client = rebuild_player(&mut client_world, &read_player_state(&bytes).unwrap(), &cars);
+    assert_eq!(client.vehicles[0].spec.config, config);
+    let start = server.position(&server_world);
+    for tick in 0..240 {
+        let step = eo_player::StepInput { throttle: 0.6, steer: if tick > 180 { 0.12 } else { 0.0 }, ..Default::default() };
+        let input = NetInput::quantize(&step, spawn[2]);
+        step_player(&mut server, &mut server_world, &input);
+        step_player(&mut client, &mut client_world, &input);
+        assert_eq!(client.state(&client_world), server.state(&server_world), "diverged on step {tick}");
+    }
+    assert!(server.position(&server_world).distance(start) > 3.0);
+    let arrival = eo_net::game::arrival_state(&server, &mut server_world, spawn[0] + 20.0, spawn[1], spawn[2]);
+    assert_eq!(arrival.vehicles[0].config, config);
+}
+
+#[test]
+fn dedicated_players_stand_on_the_municipal_pier_and_marina_dock_surfaces() {
+    let game = game();
+    let part = game.buildings.decks.parts.iter().find(|p| p.name == "harbour piers and docks").unwrap();
+    let [tip,z] = eo_data::groundscale::plan([-431.5,-3610.0]);
+    let x = tip - 6.0;
+    let mut cw = game.collision_world(1);
+    cw.load_blocking(DVec3::new(x,0.0,z),64.0);
+    let y = cw.surface_below(x,z,12.0);
+    assert!(y > cw.floor_y(x,z)+0.1);
+    // The final triangles are the actual guide-pile dock's walking strip.
+    let tri = part.walk.last().unwrap();
+    let dock = (DVec3::from_array(tri[0])+DVec3::from_array(tri[1])+DVec3::from_array(tri[2]))/3.0;
+    for at in [DVec3::new(x,y,z),dock] {
+        cw.load_blocking(at,64.0);
+        let mut p = eo_player::Player::new(at + DVec3::Y * 0.35,0.0);
+        for _ in 0..120 { eo_net::game::step_player(&mut p,&mut cw,&NetInput::default()); }
+        assert!(p.character.grounded && (p.position(&cw).y-at.y).abs() < 0.04,"{at:?} -> {:?}",p.position(&cw));
+    }
+}
+
+#[test]
+fn ocean_beach_landing_panel_seams_and_checkpoint_match_the_authoritative_world() {
+    let g = game();
+    let tiles = SharedTiles::start(g.ground.clone(), g.buildings.clone(), 2);
+    let mut server_world =
+        CollisionWorld::fed(g.ground.clone(), g.buildings.clone(), tiles.clone());
+    let mut client_world = g.collision_world(1);
+    // The middle of the promenade at its sixth mapped flight. A play-mode
+    // regression independently measures the corresponding rendered panels.
+    let [x, z] = eo_data::groundscale::plan([-8061.9855, 1143.8]);
+    let yaw = 0.09829;
+    let near = DVec3::new(x, g.ground.ground_y(x, z) + 2.0, z);
+    server_world.load_blocking(near, 32.0);
+    let start_y = server_world.surface_below(x, z, near.y);
+    assert!(start_y - server_world.floor_y(x, z) > 0.25);
+    let feet = DVec3::new(x, start_y + 0.65, z);
+    let mut server = eo_player::Player::new(feet, yaw);
+    let mut bytes = Vec::new();
+    write_player_state(&server.state(&server_world), &mut bytes);
+    let mut client = rebuild_player(&mut client_world, &read_player_state(&bytes).unwrap(), &[]);
+    let mut max_drop = 0.0_f64;
+    for tick in 0..600 {
+        let input = eo_player::StepInput {
+            move_y: if tick >= 120 { 1.0 } else { 0.0 },
+            jump: tick == 327,
+            ..Default::default()
+        };
+        let command = NetInput::quantize(&input, yaw);
+        step_player(&mut server, &mut server_world, &command);
+        step_player(&mut client, &mut client_world, &command);
+        let pos = server.character.feet();
+        let floor = server_world.surface_below(pos.x, pos.z, pos.y + 0.25);
+        max_drop = max_drop.max(floor - pos.y);
+        assert_eq!(
+            client.state(&client_world),
+            server.state(&server_world),
+            "Ocean Beach tick {tick}"
+        );
+        if tick == 299 {
+            bytes.clear();
+            write_player_state(&server.state(&server_world), &mut bytes);
+            client_world = g.collision_world(1);
+            client = rebuild_player(&mut client_world, &read_player_state(&bytes).unwrap(), &[]);
+        }
+    }
+    let end = server.character.feet();
+    println!(
+        "Ocean Beach: 600 authoritative ticks, restore at 300, walked {:.2} m, maximum floor penetration {max_drop:.4} m",
+        (end.x - x).hypot(end.z - z)
+    );
+    assert!(server.character.grounded && (end.x - x).hypot(end.z - z) > 10.0 && max_drop < 0.035);
+    // Cloning a pristine collider retains its immutable, potentially large
+    // trimesh and spatial index. A new player must not re-cook this map.
+    let seaside = g
+        .buildings
+        .decks
+        .parts
+        .iter()
+        .find(|p| p.name == "Ocean Beach Esplanade")
+        .unwrap();
+    let shape = |cw: &CollisionWorld| {
+        cw.physics
+            .colliders
+            .iter()
+            .find_map(|(_, collider)| {
+                collider
+                    .shape()
+                    .as_trimesh()
+                    .filter(|m| m.indices().len() == seaside.walk.len())
+                    .map(|_| collider.shared_shape().clone())
+            })
+            .unwrap()
+    };
+    assert!(Arc::ptr_eq(
+        &shape(&client_world).0,
+        &shape(&server_world).0
+    ));
+}
+
+#[test]
+fn loading_collision_between_inputs_preserves_a_storm_driven_free_flight_and_landing() {
+    use eo_net::game::{spawn_configured_player, step_player_in_weather};
+    use eo_net::weather::{RoadWeather, WeatherEpoch};
+    use eo_player::vehicle::{VehicleConfig, VehicleModel};
+    let g = game();
+    let tiles = SharedTiles::start(g.ground.clone(), g.buildings.clone(), 2);
+    let mut server_world = CollisionWorld::fed(g.ground.clone(), g.buildings.clone(), tiles);
+    let [x, z] = eo_data::groundscale::plan([84.6480, -2459.4888]); // Filbert Street
+    let yaw = 0.988_f64.atan2(-0.156);
+    let (mut server, cars) = spawn_configured_player(
+        &mut server_world,
+        x,
+        z,
+        yaw,
+        false,
+        VehicleConfig {
+            model: VehicleModel::Sedan,
+            ..Default::default()
+        },
+    );
+    let body = server.vehicles[0].body;
+    let mut elevated = server_world.physics.bodies[body].translation();
+    elevated.y += 4.0;
+    server_world.physics.bodies[body].set_translation(elevated, true);
+    server_world.physics.bodies[body].set_linvel([5.0, 2.0, 0.0].into(), true);
+    let mut wire = Vec::new();
+    write_player_state(&server.state(&server_world), &mut wire);
+    let mut client_world = g.collision_world(1);
+    let mut client = rebuild_player(&mut client_world, &read_player_state(&wire).unwrap(), &cars);
+    let storm = WeatherEpoch::new(
+        eo_net::presence::weather_code("storm").unwrap(),
+        123,
+        45_000,
+        0,
+    );
+    let mut server_weather = RoadWeather::new(storm);
+    let mut client_weather = RoadWeather::new(storm);
+    let input = NetInput::quantize(&Default::default(), yaw);
+    let mut free = 0;
+    for seq in 1..=180 {
+        step_player_in_weather(
+            &mut server,
+            &mut server_world,
+            &input,
+            seq,
+            &mut server_weather,
+        );
+        step_player_in_weather(
+            &mut client,
+            &mut client_world,
+            &input,
+            seq,
+            &mut client_weather,
+        );
+        if seq == 20 {
+            assert_eq!(server.vehicles[0].wheels_in_contact(), 0);
+            let at = server.vehicles[0].datum(&server_world);
+            server_world.load_blocking(at + DVec3::Z * 256.0, 32.0);
+        }
+        if server.vehicles[0].wheels_in_contact() == 0 {
+            free += 1;
+        }
+        assert_eq!(
+            server.state(&server_world),
+            client.state(&client_world),
+            "Filbert Street storm tick {seq}"
+        );
+    }
+    assert_eq!(server.mode, Mode::OnFoot);
+    assert!(free >= 45 && server.vehicles[0].wheels_in_contact() == 4);
+    println!(
+        "Unoccupied sedan on Filbert Street in a storm: {free} unsupported ticks, 180 matching authoritative states, four wheels down after landing"
+    );
+}
+
+/// Fast travel lands beside a low covered parking space. The neighbouring
+/// roof must neither claim the parked car nor lift the driver when exiting.
+#[test]
+fn a_covered_parking_space_keeps_arrival_exit_and_jump_on_the_same_floor() {
+    use eo_player::{Player, StepInput, world::{BuildingSet, DeckPart, Decks, LOAD_RADIUS_M}};
+    struct Flat;
+    impl GroundProvider for Flat { fn ground_y(&self, _: f64, _: f64) -> f64 { 0. } }
+    let ground: Arc<dyn GroundProvider> = Arc::new(Flat);
+    let roof = [[-8., 1.98, -5.], [-8., 1.98, 5.], [0., 1.98, 5.], [0., 1.98, -5.]];
+    let buildings = Arc::new(BuildingSet::empty().with_decks(Decks {
+        parts: vec![DeckPart { name: "covered parking".into(), walk: vec![
+            [roof[0], roof[1], roof[2]], [roof[0], roof[2], roof[3]],
+        ], ..Default::default() }], ..Default::default()
+    }));
+    let tiles = SharedTiles::start(ground.clone(), buildings.clone(), 2);
+    let mut server_world = CollisionWorld::fed(ground.clone(), buildings.clone(), tiles);
+    server_world.load_blocking(DVec3::ZERO, LOAD_RADIUS_M);
+    let mut server = Player::new(DVec3::X, 0.);
+    server.spawn_vehicle(&mut server_world, 3., 0., 0.);
+    let arrival = eo_net::game::arrival_state(&server, &mut server_world, 1., 0., 0.);
+    server.set_state(&mut server_world, &arrival);
+    assert!(server.vehicles[0].datum(&server_world).y.abs() < 0.01, "arrival parked on the roof");
+    let mut bytes = vec![];
+    write_player_state(&arrival, &mut bytes);
+    let mut client_world = CollisionWorld::new(ground, buildings, 1);
+    let mut client = rebuild_player(&mut client_world, &read_player_state(&bytes).unwrap(), &[[-3., 0., 0.]]);
+    // Walk from outside under the roof, enter the car, exit, then jump.
+    let mut hit_ceiling = false;
+    for tick in 0..160 {
+        let cmd = StepInput { move_x: if tick < 40 { 1. } else { 0. },
+            vehicle_toggle: matches!(tick, 75 | 85), jump: tick == 100, ..Default::default() };
+        let input = NetInput::quantize(&cmd, 0.);
+        step_player(&mut server, &mut server_world, &input);
+        step_player(&mut client, &mut client_world, &input);
+        assert_eq!(server.state(&server_world), client.state(&client_world), "covered parking tick {tick}");
+        if tick == 75 { assert_eq!(server.mode, Mode::Driving(0), "failed to enter from {:?}", server.character.feet()); }
+        if tick == 85 {
+            assert_eq!(server.mode, Mode::OnFoot);
+            assert!(server.character.feet().y.abs() < 0.03 && server.character.feet().x < 0., "exit missed the covered space");
+        }
+        if tick > 100 {
+            let head = server.character.position.y + server.character.half_extent_y();
+            assert!(head <= 1.981, "head through roof at {head}");
+            hit_ceiling |= (1.95..=1.981).contains(&head) && server.character.vertical_velocity.abs() < 0.001;
+        }
+    }
+    assert!(hit_ceiling && server.character.grounded, "jump must strike the roof and land");
 }

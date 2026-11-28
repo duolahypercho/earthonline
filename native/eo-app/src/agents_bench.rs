@@ -667,7 +667,9 @@ fn player_captures(g: &Gpu, world: &mut World, args: &Args, models: &mut ModelRu
     use std::sync::Arc;
     let aspect = g.color.width() as f32 / g.color.height() as f32;
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
-    let buildings = Arc::new(BuildingSet::from_city(&world.city, lift));
+    let mut buildings = BuildingSet::from_city(&world.city, lift);
+    buildings.open_tunnel_approaches(world.structures.as_deref());
+    let buildings = Arc::new(buildings);
     let ground: Arc<dyn GroundProvider> = match &world.street {
         Some(s) => Arc::new(StreetGround::new(s.world.clone(), world.structures.clone())),
         None => Arc::new(ElevationGround(Arc::new(world.elevation.clone()))),

@@ -140,18 +140,62 @@ fn materials_of(doc: &gltf::Document) -> Vec<CookedMaterial> {
     doc.materials()
         .map(|m| {
             let pbr = m.pbr_metallic_roughness();
+            let mut name = m.name().unwrap_or_default().to_string();
+            let mut base_color = pbr.base_color_factor();
+            let mut roughness = pbr.roughness_factor();
+            let mut metallic = pbr.metallic_factor();
+            let mut alpha_mode = match m.alpha_mode() {
+                gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
+                gltf::material::AlphaMode::Mask => AlphaMode::Mask,
+                gltf::material::AlphaMode::Blend => AlphaMode::Blend,
+            };
+            // Exterior Blender buildings carry an unshadowed `int-plaster` hollow shell
+            // behind window openings (some facades omit `glass-clear`, leaving punched holes
+            // open onto raw `int-plaster`, e.g. `sf-building-262689159` +X wall, while its
+            // `glazing` node uses opaque dark `painted-white@26221f`/`@1c1e22`). Verified
+            // absent from all playable `beaver-terrace` GLBs. Re-map to `glass-shell` so
+            // missing-glass punched openings receive glossy Fresnel reflections + 3D parallax
+            // `rm_atlas` interiors, while glazed facades still draw `glass-clear` in front.
+            if ((name == "int-plaster" || name.starts_with("int-plaster@")) && roughness >= 0.85)
+                || name == "painted-white@26221f"
+                || name == "painted-white@1c1e22"
+            {
+                name = "glass-shell".to_string();
+                base_color = [0.22, 0.26, 0.30, 1.0];
+                roughness = 0.08;
+                metallic = 0.02;
+                alpha_mode = AlphaMode::Opaque;
+            }
+            // `sf-building-262716139`'s 4 ground-floor Beaux-Arts arched storefront bays
+            // (`painted-white@d8cca8`, unique to this GLB across all 345 models) were
+            // exported as opaque beige quads behind iron mullions (`painted-steel@141516`).
+            // Re-map to `glass-storefront` so the 4 arched bays read as glazed retail/lobby
+            // windows with 3D `rm_atlas` interiors and sky/street reflections.
+            if name == "painted-white@d8cca8" {
+                name = "glass-storefront".to_string();
+                base_color = [0.60, 0.65, 0.68, 0.86];
+                roughness = 0.05;
+                metallic = 0.0;
+                alpha_mode = AlphaMode::Blend;
+            }
+            // Three exterior Blender GLB plinth retaining walls (`sf-building-262689168`,
+            // `1469656012`, `262716134`) inherited garden-hedge green on their rigid 1.4 m
+            // sidewalk retaining walls (`painted-stucco@4a6a3c` / `@48683c`), reading as
+            // smooth green boxes. Re-skin to weathered hillside ashlar stone masonry.
+            if name == "painted-stucco@4a6a3c" || name == "painted-stucco@48683c" {
+                name = "limestone-ashlar@8a8478".to_string();
+                base_color = [0.25, 0.235, 0.205, 1.0];
+                roughness = 0.90;
+                metallic = 0.0;
+            }
             CookedMaterial {
-                name: m.name().unwrap_or_default().to_string(),
-                base_color: pbr.base_color_factor(),
-                metallic: pbr.metallic_factor(),
-                roughness: pbr.roughness_factor(),
+                name,
+                base_color,
+                metallic,
+                roughness,
                 emissive: m.emissive_factor(),
                 emissive_strength: m.emissive_strength().unwrap_or(1.0),
-                alpha_mode: match m.alpha_mode() {
-                    gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
-                    gltf::material::AlphaMode::Mask => AlphaMode::Mask,
-                    gltf::material::AlphaMode::Blend => AlphaMode::Blend,
-                },
+                alpha_mode,
                 alpha_cutoff: m.alpha_cutoff().unwrap_or(0.5),
                 double_sided: m.double_sided(),
             }

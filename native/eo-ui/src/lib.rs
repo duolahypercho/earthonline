@@ -220,6 +220,7 @@ impl Default for Loading {
 /// What the city data gives the map (loaded by the host from `eo-data`).
 pub struct MapInputs<'a> {
     pub city: &'a eo_data::City,
+    pub tunnels: bool,
     pub land: Option<&'a eo_data::LandCover>,
     /// The title backdrop's centre (the spawn), city metres.
     pub backdrop_centre: [f32; 2],
@@ -375,7 +376,7 @@ impl Ui {
         let settings = settings_path.as_deref().map(Settings::load).unwrap_or_default();
         let mut gpu = UiGpu::new(device, queue);
         let map = map.map(|m| {
-            let mesh = MapMesh::build(m.city);
+            let mesh = MapMesh::build_with_tunnels(m.city, m.tunnels);
             let mesh_ms = mesh.build_ms;
             let mg = MapGpu::new(device, queue, &mesh, m.land);
             let hud = mg.target(device, Style::Hud, HUD_MAP_SIZE, HUD_MAP_SIZE, false);

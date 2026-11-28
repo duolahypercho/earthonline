@@ -168,7 +168,7 @@ const fn d(id: &'static str, size: [f32; 2]) -> SetDef {
 /// Texture array layer order of the material sets (eo-render names them CC0_L_*).
 /// The kit's clapboard board is 0.15 m and its shingle course 0.14 m
 /// (kit-material-specs.json `painted-clapboard` / `cedar-shingle`).
-pub const MATERIAL_SETS: [SetDef; 33] = [
+pub const MATERIAL_SETS: [SetDef; 34] = [
     m("white_stucco"),
     mp("WoodSiding009", 0.15, 0.62),
     mp("Planks010", 0.15, 0.75),
@@ -203,6 +203,8 @@ pub const MATERIAL_SETS: [SetDef; 33] = [
     m("damp_beach_sand"),
     // ambientCG gives no size; a lawn scan of about 1.6 m (blade length against the frame).
     SetDef { id: "Grass004", kind: SetKind::Material, scale: Scale::Metres([1.6, 1.6]), rough_default: 0.9 },
+    // Poly Haven granite block wall (fetched & verified in cc0-manifest.json; granite towers, plinths, shore armour).
+    m("granite_wall"),
 ];
 
 /// Decal layers: the size one decal (or one repeat of a tiling mask) covers on

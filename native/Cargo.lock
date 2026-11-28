@@ -775,6 +775,7 @@ dependencies = [
  "eo-data",
  "eo-landmarks",
  "eo-player",
+ "eo-sky",
  "eo-structures",
  "glam 0.34.3",
  "serde",

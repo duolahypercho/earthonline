@@ -155,7 +155,7 @@ impl<'a> Deck<'a> {
         // golden_gate.rs tower_walkways: the leg stage at the roadway, the zone half length.
         let water = js.sea_level_y;
         let stage = g.leg_stages.iter().find(|s| plan.y_tower - water >= s[0] && plan.y_tower - water < s[1]).copied().unwrap_or(g.leg_stages[2]);
-        let zone = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
+        let zone = golden_gate::tower_zone_half(&g);
         let leg_outer = site.half_plane + stage[2] / 2.0;
         let tower_walk = [zone, stage[3] / 2.0, leg_outer, leg_outer + num(d, "sidewalkM")];
         Deck { plan, lanes, half_width: num(d, "widthM") / 2.0, curb, curb_m: num(d, "curbM"), tower_walk }
@@ -394,17 +394,28 @@ fn link(ways: &mut [WaySpec], chains: &[Chain]) {
 }
 
 /// The east walk's two directions, each keeping to its right.
-fn walk_ways(d: &Deck) -> Vec<WaySpec> {
+pub(super) fn walk_ways(d: &Deck) -> Vec<WaySpec> {
     let (c0, c1) = (d.plan.c_south, d.plan.c_north);
     let n = ((c1 - c0) / 4.0).ceil().max(2.0) as usize;
+    let mut stations: Vec<_> = (0..=n).map(|k| c0 + (c1 - c0) * k as f64 / n as f64).collect();
+    let [zone, leg, ..] = d.tower_walk;
+    for tower in [0., d.plan.l] {
+        for offset in [zone, leg + LEG_DETOUR_LEAD_M, leg] {
+            // Each line segment must turn on the walkway plate. Interpolating
+            // directly between regular stations cuts across the outside corner.
+            stations.extend([tower - offset, tower + offset]);
+        }
+    }
+    stations.retain(|c| (c0..=c1).contains(c));
+    stations.sort_by(f64::total_cmp);
+    stations.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
     let flow = walker_flow();
     [(true, 1.0), (false, -1.0)]
         .into_iter()
         .map(|(north, side)| {
             let keep = side * WALK_KEEP_RIGHT_M;
-            let mut pts: Vec<[f64; 3]> = (0..=n)
-                .map(|k| {
-                    let c = c0 + (c1 - c0) * k as f64 / n as f64;
+            let mut pts: Vec<[f64; 3]> = stations.iter()
+                .map(|&c| {
                     let [x, z] = d.plan.site.deck_point(c, d.walk_s(c) + keep);
                     [x, d.plan.deck_top(c) + d.curb_m, z]
                 })
@@ -464,6 +475,108 @@ mod tests {
         (Site::new(&golden_gate::data(js)), eo_landmarks::suspension::DeckStandards::load(&ca).expect("deck standards").k_width)
     }
 
+    #[test]
+    fn corridor_crowds_keep_their_footing_on_the_golden_gate_east_walk() {
+        use eo_agents::{GpuModel, CLASS_PERSON, feed::{BODY_RADIUS_M, Feeder, Ground}, library::Library};
+        use eo_sim::{output::{AgentBuffer, AgentInstance, CorridorInstance, KIND_WALKER_BASE}, world::Frame};
+        use std::sync::Arc;
+
+        let paths = eo_data::DataPaths::discover().unwrap();
+        let elevation = Arc::new(eo_data::ElevationGrid::load(&paths).unwrap());
+        let sample = |x: f64, z: f64| elevation.sample(x, z);
+        let js = LandmarksJs::get();
+        let ground = eo_landmarks::set::ground_of(js, "golden-gate-bridge", &sample);
+        let (site, k_width) = deck_for_tests();
+        let deck = Deck::new(js, &site, &|x, z| ground.at(x, z), k_width);
+        let access = eo_landmarks::access::AccessSet::build(&sample);
+        let paving = super::super::bridge_walk(Some(&access), &elevation);
+        let base = super::super::bridge_walk(None, &elevation);
+        let mut probes = 0;
+        let mut misses = Vec::new();
+        let mut max_gap = 0.0_f64;
+        // Check both walking lines and the interpolated route between stations.
+        for way in walk_ways(&deck) {
+            for pair in way.points.windows(2) {
+                for quarter in 0..=4 {
+                    let [x, y, z] = std::array::from_fn(|k| pair[0][k] + (pair[1][k] - pair[0][k]) * f64::from(quarter) / 4.);
+                    probes += 1;
+                    let support = paving.top(x, z);
+                    assert_eq!(base.top(x, z), support, "base bridge walk at {x}, {z}");
+                    if let Some(h) = support {
+                        max_gap = max_gap.max((y - h).abs());
+                    } else {
+                        misses.push((way.name.clone(), site.chainage(x, z), [x, y, z]));
+                    }
+                }
+            }
+        }
+        println!("east walk: {probes} probes, {} misses, maximum floor height difference {max_gap:.4} m", misses.len());
+        assert!(misses.is_empty() && max_gap < 0.05, "walk limits {:.3} to {:.3} m, unsupported samples {:?}, maximum difference {max_gap}", deck.plan.c_south, deck.plan.c_north, &misses[..misses.len().min(6)]);
+
+        let mut lib = Library::default();
+        lib.models.push(GpuModel { class: CLASS_PERSON, ..Default::default() });
+        lib.meta.people_models.push(0);
+        let mut feed = Feeder::new(Arc::new(lib), Ground::Elevation(elevation.clone()), None, 7).unwrap();
+        feed.separate = true;
+        feed.bridge_walk = Some(paving.clone());
+        for chainage in [0., deck.plan.l / 2., deck.plan.l] {
+            let [x, z] = site.deck_point(chainage, deck.walk_s(chainage));
+            let y = paving.top(x, z).expect("east walk at the tower or midspan");
+            let feet = [x as f32, y as f32, z as f32];
+            let frame = Frame {
+                regions: vec![AgentBuffer { origin: [x, z], walkers: vec![AgentInstance { id: 1, kind: KIND_WALKER_BASE, ..Default::default() }], ..Default::default() }],
+                corridor: [1, 2].map(|id| CorridorInstance { id, pos: feet, kind: KIND_WALKER_BASE, ..Default::default() }).to_vec(),
+                ..Default::default()
+            };
+            let mut out = vec![];
+            feed.build(&frame, &mut out);
+            assert!((f64::from(out[0].pos[1]) - elevation.ground(x, z)).abs() < 0.01);
+            assert!(f64::from(out[0].pos[1]) < y - 4.0, "street walker climbed onto the bridge");
+            let [a, b] = [out[1].pos, out[2].pos];
+            for [x, y, z] in [a, b] {
+                let top = paving.top(x.into(), z.into()).expect("separation stayed on the sidewalk");
+                assert!((f64::from(y) - top).abs() < 0.01);
+            }
+            let gap = f64::from((a[0] - b[0]).hypot(a[2] - b[2]));
+            println!("east walk at {chainage:.1} m: pair gap {gap:.3} m, deck {y:.2} m");
+            assert!(gap >= 2. * BODY_RADIUS_M - 0.002);
+        }
+
+        let gap = eo_sim::Standards::load(&paths).unwrap().metric("following-time-gap").unwrap();
+        for expanded in [false, true] {
+            let mut sim = eo_sim::corridor::Corridors::new(walk_ways(&deck), eo_sim::corridor::Params::with_time_gap(gap), 7);
+            sim.hour_handle().store(12.0_f64.to_bits(), std::sync::atomic::Ordering::Relaxed);
+            feed.separate = expanded;
+            let mut frame = Frame::default();
+            let mut out = Vec::new();
+            let mut count = 0;
+            let mut max_error = 0.0_f64;
+            let mut previous = std::collections::HashMap::<u32, [f32; 3]>::new();
+            let mut max_step = 0.0_f32;
+            for _ in 0..900 {
+                sim.step(eo_sim::consts::FIXED_STEP_S, None);
+                frame.time = sim.time();
+                frame.corridor_time = sim.time();
+                frame.corridor.clone_from(&sim.out);
+                out.clear();
+                feed.build(&frame, &mut out);
+                assert_eq!(out.len(), frame.corridor.len());
+                for (drawn, route) in out.iter().zip(&frame.corridor) {
+                    let [x, y, z] = drawn.pos;
+                    let top = paving.top(x.into(), z.into()).unwrap_or_else(|| panic!("walker {} off bridge at {:?}", route.id, drawn.pos));
+                    max_error = max_error.max((top - f64::from(y)).abs());
+                    if let Some(last) = previous.insert(route.id, drawn.pos) {
+                        max_step = max_step.max((last[0] - x).hypot(last[2] - z));
+                    }
+                    count += 1;
+                }
+            }
+            println!("east walk crowd={expanded}: {count} moving foot placements, {max_error:.6} m maximum floor error, {max_step:.3} m largest step");
+            assert!(count >= 900 && max_error < 0.001);
+            assert!(f64::from(max_step) < BODY_RADIUS_M, "pedestrian moved a body radius in one tick");
+        }
+    }
+
     /// The deck's lanes are the lanes `suspension::road_deck` paints: its
     /// broken lines lie halfway between neighbouring lane centres, the inner
     /// lane's edge between the barrier's face and the yellow line, the outer
@@ -500,6 +613,7 @@ mod tests {
             colours: DeckColours { asphalt: [0.0; 3], sidewalk: [0.0; 3], soffit: [0.0; 3], barrier: [0.0; 3], white, yellow, rail: [0.0; 3] },
             markings: true,
             outer_railing_elsewhere: None,
+            outer_parapet: None,
         };
         road_deck(&mut deck, &mut rail, &frame, &ca, &spec);
         // each stripe's centre across the deck, on the +s side (the lanes' side).

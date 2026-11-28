@@ -85,7 +85,7 @@ pub struct Car {
     pub speed: f32,
     /// eo-sim kinds: 0 sedan, 1 taxi, 2 truck, 3 bus.
     pub kind: u8,
-    pub stopped: bool,
+    pub horn: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -343,7 +343,7 @@ struct CarVoice {
     engine: Handle,
     road: Handle,
     pitch0: f32,
-    stopped_s: f32,
+    horn_active: bool,
     seen: bool,
 }
 
@@ -415,7 +415,6 @@ pub struct Director {
     was_grounded: bool,
     foot_side: f32,
     last_slice: (ClipId, usize),
-    horn_cool: f64,
     siren_t: f64,
     siren: Option<(Handle, [f32; 3], [f32; 3], f64)>,
     streetcar_t: f64,
@@ -450,7 +449,6 @@ impl Director {
             was_grounded: true,
             foot_side: 1.0,
             last_slice: (u32::MAX, 0),
-            horn_cool: 0.0,
             siren_t: 0.0,
             siren: None,
             streetcar_t: 0.0,
@@ -555,7 +553,7 @@ impl Director {
         }
     }
 
-    // ---- traffic: an engine loop and a road roar on each near car, horns at jams.
+    // ---- traffic: engine and tire loops, plus the fleet's hazard warnings.
     fn traffic(&mut self, e: &mut Engine, bank: &Bank, inp: &CityInput, l: &Listener) {
         let mut near: Vec<(f32, usize)> = inp.cars.iter().enumerate().map(|(i, c)| (spatial::len(spatial::sub(c.pos, l.pos)), i)).filter(|(d, _)| *d < CAR_KEEP_M).collect();
         near.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -607,14 +605,15 @@ impl Director {
                         lowpass_hz: 600.0,
                     });
                     let pitch0 = 0.92 + 0.16 * ((h >> 8) & 0xff) as f32 / 255.0;
-                    self.cars.push(CarVoice { id: c.id, engine, road, pitch0, stopped_s: 0.0, seen: true });
+                    self.cars.push(CarVoice { id: c.id, engine, road, pitch0, horn_active: false, seen: true });
                     self.cars.len() - 1
                 }
             };
             let wet = inp.weather.wetness;
             let v = &mut self.cars[k];
             v.seen = true;
-            v.stopped_s = if c.stopped || c.speed < 0.3 { v.stopped_s + inp.dt } else { 0.0 };
+            let new_horn = c.horn && !v.horn_active;
+            v.horn_active = c.horn;
             let sp = c.speed.max(0.0);
             let heavy = if c.kind >= 2 { 1.25 } else { 1.0 };
             let eg = (0.9 + 0.9 * smooth(0.0, 12.0, sp)) * heavy;
@@ -623,14 +622,10 @@ impl Director {
             // Tyres on the road: the roar grows with speed; a wet road hisses.
             let rg = ((sp / 14.0).powf(1.6) * 1.4 * (1.0 + 0.6 * wet)).min(2.0) * heavy;
             e.update(v.road, c.pos, c.vel, rg, 1.0, 450.0 + 120.0 * sp + 2_500.0 * wet);
-            // Horns at a jam: a car held for a while, now and then, never two at once.
-            let stopped_s = v.stopped_s;
-            // About one honk a half minute from each held car, at most one every 10-25 s around the listener.
-            if stopped_s > 4.0 && d < 70.0 && self.time > self.horn_cool && self.rng.f() < 0.03 * inp.dt {
-                self.horn_cool = self.time + 10.0 + self.rng.range(0.0, 15.0) as f64;
-                let pitch = self.rng.range(0.97, 1.03);
+            if new_horn && d < 70.0 {
+                let pitch = 0.97 + 0.06 * (hash32(c.id) & 0xff) as f32 / 255.0;
                 self.stats.horns += 1;
-                self.one_shot(e, bank, role::HORN, Bus::Traffic, 5, 0.85, pitch, Some((c.pos, [0.0; 3], Falloff::new(4.0, 350.0, 1.0))), 20_000.0);
+                self.one_shot(e, bank, role::HORN, Bus::Traffic, 5, 0.85, pitch, Some((c.pos, c.vel, Falloff::new(4.0, 350.0, 1.0))), 20_000.0);
             }
         }
         let mut i = 0;
@@ -1075,6 +1070,39 @@ impl Director {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn traffic_mixer_plays_one_horn_per_warning_pulse() {
+        let samples = vec![1000i16; 128];
+        let bank = std::sync::Arc::new(Bank::from_clips(vec![crate::bank::Clip {
+            id: "test-horn".into(), role: role::HORN.into(), rate: crate::NULL_RATE,
+            frames: samples.len() as u32, gain: 1.0, data: Some(samples.into()),
+            path: Default::default(), channels: 1, slices: vec![], loop_region: None, lufs: -20.0,
+        }]));
+        let (mut engine, _) = Engine::offline(bank.clone(), crate::NULL_RATE);
+        let mut director = Director::new(1);
+        let listener = Listener::default();
+        let mut car = Car { id: 12, pos: [0.0, 0.0, 10.0], ..Default::default() };
+        for (horn, count) in [(false, 0), (true, 1), (true, 1), (false, 1), (true, 2)] {
+            car.horn = horn;
+            let input = CityInput {
+                dt: 1.0 / 60.0,
+                listener,
+                player: PlayerAudio::None,
+                cars: std::slice::from_ref(&car),
+                walkers_near: 0.0,
+                weather: Weather::default(),
+                hour: 12.0,
+                place: Place::default(),
+                ui: 0,
+                menu: Menu::None,
+                volume: 1.0,
+            };
+            director.traffic(&mut engine, &bank, &input, &listener);
+            assert_eq!(director.stats.horns, count);
+            assert_eq!(director.stats.one_shots, u64::from(count));
+        }
+    }
 
     #[test]
     fn places_load_and_the_nearest_point_is_on_a_track() {

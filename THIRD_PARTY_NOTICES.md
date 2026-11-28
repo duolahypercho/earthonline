@@ -105,9 +105,10 @@ carries its sources under `meta.sources`.
 
 - **OpenStreetMap**: © OpenStreetMap contributors, Open Database License
   (ODbL) 1.0, https://www.openstreetmap.org/copyright. Used in
-  `sf-city.json.gz`, `sf-lots-parks.json.gz`, `sf-map-citywide.json.gz` and
-  `building-metadata/`, and through the street grades of
-  `native/assets/sf-decks-v1.json`. These are Derivative Databases of OpenStreetMap and
+  `sf-city.json.gz`, `sf-lots-parks.json.gz`, `sf-map-citywide.json.gz`,
+  `building-metadata/` and the [traffic stop controls](native/eo-data/data/sf-traffic-stops.NOTICE.txt),
+  and through the street grades of `native/assets/sf-decks-v1.json`.
+  These are Derivative Databases of OpenStreetMap and
   are offered under the ODbL; publishing a modified version of them obliges
   you to publish it under the ODbL too. The ODbL does not apply to the code.
 - **DataSF**, City and County of San Francisco: Open Data Commons Public
@@ -122,6 +123,14 @@ carries its sources under `meta.sources`.
   `sf-elevation.bin.gz` and `native/assets/sf-decks-v1.json`; 1 arc-second DEM for the far shore, read when
   present): public domain (U.S. Government work). Credit: U.S. Geological
   Survey.
+- **OpenStreetMap contributors**. The closed movable road spans at Islais Creek use ODbL 1.0 way and node records. [Source versions and digests](native/eo-data/data/movable-road-spans.NOTICE.txt).
+- **OpenStreetMap contributors**. Connections between elevated parking aisles use shared
+  OSM nodes under ODbL 1.0. [Source versions and digests](native/eo-data/data/parking-junctions.NOTICE.txt).
+- **USGS 3DEP classified LiDAR**, CA_SanFrancisco_1_B23. Elevations for bridge roads, Saint Charles Avenue and its service drive
+  use classified bridge-deck and exposed ground returns. U.S. Geological Survey, public domain.
+  [Survey inputs and digests](native/eo-data/data/bridge-roads.NOTICE.txt).
+  The Golden Gate lamp stations and head heights use the same survey.
+  [Lamp survey and digests](native/eo-landmarks/data/golden-gate-lamps.NOTICE.txt). The concrete pylon crown measurements use the same public-domain survey. [Pylon survey and digests](native/eo-landmarks/data/golden-gate-pylons.NOTICE.txt).
 - **NOAA NCEI Continuously Updated Digital Elevation Model (CUDEM)**, 1/9
   arc-second topobathymetric tiles (seabed in `sf-elevation.bin.gz`): public
   domain (U.S. Government work). Cite as: Cooperative Institute for Research
@@ -292,6 +301,11 @@ read from the folder `EO_SURVEY_ROOT` names.
     image service: public domain (U.S. Government work,
     https://www.usa.gov/publicdomain/label/1.0/). Credit: Imagery: USDA NAIP,
     via the U.S. Geological Survey National Map.
+    The Marin landing terrain colours use these tiles. The source URLs and
+    file hashes are in [the Marin landing notice](native/assets/marin-landing.NOTICE.txt).
+    The headland and Vista Point surface atlas uses the same USDA NAIP survey.
+    Its [source tiles and attribution](native/assets/marin-headlands.NOTICE.txt) accompany the atlas.
+    The distant Marin hills use a wider National Map export. [Overview image provenance](native/assets/marin-overview.NOTICE.txt).
   - **Poly Haven** scanned rocks and plants (glTF models and their 2k
     texture maps): CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/);
     no attribution required, credited to Poly Haven (polyhaven.com).
@@ -390,3 +404,5 @@ references are listed in the provenance record. The shipped model includes
 [the original license](public/assets/ocean/reef-forms.LICENSE.txt) and a
 [provenance record](public/assets/ocean/reef-forms.provenance.json).
 [Upstream source at the pinned revision](https://github.com/Noniv/abyssal-garden/tree/a596354eff400d458bc2aeb9bdf5e0a9734b2bcf).
+
+The Bay Bridge Skyway light-standard measurements come from the USGS 3D Elevation Program, CA_SanFrancisco_1_B23, a United States Government work in the public domain. The register and generating inputs are identified in [the measurement notice](native/eo-data/data/skyway-lamps.NOTICE.txt).

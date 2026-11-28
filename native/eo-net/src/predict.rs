@@ -12,7 +12,7 @@
 //! screen is not shown at once: the drawn body and camera carry an offset
 //! that decays over `SMOOTH_S`.
 
-use crate::game::{check_of, step_player};
+use crate::game::{check_of, step_player_in_weather};
 use crate::snapshot::{Correction, Own};
 use crate::wire::{NetInput, read_player_state};
 use eo_player::world::CollisionWorld;
@@ -55,10 +55,12 @@ pub struct Predictor {
     pub cw: CollisionWorld,
     /// The last input sequence stepped.
     pub seq: u32,
+    pub weather: crate::weather::RoadWeather,
     history: VecDeque<Hist>,
     acc: f64,
     tap_jump: bool,
     tap_toggle: bool,
+    tap_shift: bool,
     tap_interact: bool,
     /// Drawn offset left by the last correction (decays to zero).
     pub smooth: DVec3,
@@ -68,19 +70,27 @@ pub struct Predictor {
 }
 
 impl Predictor {
+    /// Offline prediction starts in the default clear weather.
     pub fn new(player: Player, cw: CollisionWorld, seq: u32) -> Self {
-        Self { player, cw, seq, history: VecDeque::new(), acc: 0.0, tap_jump: false, tap_toggle: false, tap_interact: false, smooth: DVec3::ZERO, applied: 0, stats: PredictStats::default() }
+        Self::with_weather(player, cw, seq, Default::default())
+    }
+
+    pub fn with_weather(mut player: Player, cw: CollisionWorld, seq: u32, weather: crate::weather::WeatherEpoch) -> Self {
+        let mut weather = crate::weather::RoadWeather::new(weather);
+        player.set_weather(weather.at(seq));
+        Self { player, cw, seq, weather, history: VecDeque::new(), acc: 0.0, tap_jump: false, tap_toggle: false, tap_shift: false, tap_interact: false, smooth: DVec3::ZERO, applied: 0, stats: PredictStats::default() }
     }
 
     /// Reset to a player rebuilt from the state the server sent (a reconnect),
     /// in the world it was rebuilt in.
     pub fn reset(&mut self, player: Player, cw: CollisionWorld, seq: u32) {
-        self.player = player;
-        self.cw = cw;
-        self.seq = seq;
-        self.history.clear();
-        self.acc = 0.0;
-        self.smooth = DVec3::ZERO;
+        self.reset_with_weather(player, cw, seq, self.weather.epoch);
+    }
+
+    pub fn reset_with_weather(&mut self, player: Player, cw: CollisionWorld, seq: u32, weather: crate::weather::WeatherEpoch) {
+        let stats = std::mem::take(&mut self.stats);
+        *self = Self::with_weather(player, cw, seq, weather);
+        self.stats = stats;
     }
 
     /// One drawn frame: run the fixed steps due with this frame's input (taps
@@ -89,6 +99,7 @@ impl Predictor {
     pub fn frame(&mut self, input: &StepInput, dt: f64, out: &mut Vec<(u32, NetInput)>) -> usize {
         self.acc += dt.clamp(0.0, 0.25);
         self.tap_jump |= input.jump;
+        self.tap_shift |= input.shift_direction;
         self.tap_toggle |= input.vehicle_toggle;
         self.tap_interact |= input.interact;
         let mut n = 0;
@@ -96,11 +107,12 @@ impl Predictor {
             self.acc -= STEP_S;
             let mut s = *input;
             s.jump = std::mem::take(&mut self.tap_jump);
+            s.shift_direction = std::mem::take(&mut self.tap_shift);
             s.vehicle_toggle = std::mem::take(&mut self.tap_toggle);
             s.interact = std::mem::take(&mut self.tap_interact);
             let q = NetInput::quantize(&s, self.player.yaw);
             self.seq = self.seq.wrapping_add(1);
-            step_player(&mut self.player, &mut self.cw, &q);
+            step_player_in_weather(&mut self.player, &mut self.cw, &q, self.seq, &mut self.weather);
             let c = check_of(self.seq, &self.player, &self.cw);
             self.history.push_back(Hist { seq: self.seq, input: q, pos_mm: c.pos_mm });
             if self.history.len() > 600 {
@@ -152,6 +164,8 @@ impl Predictor {
         if self.cw.ensure_step_tiles(at) > 0 {
             self.cw.physics.detect_collisions(&(), &());
         }
+        self.weather.epoch = c.weather;
+        self.player.set_weather(self.weather.at(c.seq));
         let replayed = self.replay_after(c.seq);
         let after = self.player.position(&self.cw);
         if std::env::var_os("EO_NET_DEBUG").is_some() {
@@ -171,6 +185,8 @@ impl Predictor {
         let before = self.player.position(&self.cw) + self.smooth;
         self.player = player;
         self.cw = cw;
+        self.weather.epoch = c.weather;
+        self.player.set_weather(self.weather.at(c.seq));
         let replayed = self.replay_after(c.seq);
         let after = self.player.position(&self.cw);
         self.finish_correction(c, before, after, replayed, t0)
@@ -187,7 +203,7 @@ impl Predictor {
                 h.pos_mm = check_of(h.seq, &self.player, &self.cw).pos_mm;
                 continue;
             }
-            step_player(&mut self.player, &mut self.cw, &h.input);
+            step_player_in_weather(&mut self.player, &mut self.cw, &h.input, h.seq, &mut self.weather);
             h.pos_mm = check_of(h.seq, &self.player, &self.cw).pos_mm;
             replayed += 1;
         }

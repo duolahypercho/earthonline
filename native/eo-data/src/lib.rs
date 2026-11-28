@@ -10,12 +10,18 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+mod bridge_readings;
+pub mod bridge_survey;
+pub mod skyway_readings;
+pub mod parking_junctions;
+pub mod movable_spans;
 pub mod shelf;
 pub mod decks; // roof decks the bare-earth survey keeps as ground, brought down to the streets' grade (--no-deck-ground)
 pub mod detail_ground; // a finer drawn ground than the 8 m grid, when a provider is set (none yet)
 pub mod external; // where the optional open assets are read from (<repo>/external/<set>, or the set's variable)
 pub mod geo; // latitude, longitude and height above mean sea level to game coordinates
 pub mod groundscale; // the street size (the approved ground-plan deviation, 1.25)
+pub mod lidar_buildings; // per-building 3D roof, setback and penthouse massing from external/lidar
 pub mod lithology; // the city's bedrock map (USGS geologic map units as rock classes)
 pub mod roof_colours; // measured roof colours (aerial imagery)
 pub mod sim_source;
@@ -182,6 +188,8 @@ pub struct RawRoad {
     pub lanes: Option<f64>,
     #[serde(default)]
     pub maxspeed: String,
+    #[serde(default)]
+    pub sidewalk: String,
     #[serde(default)]
     pub layer: serde_json::Value,
     #[serde(default)]
@@ -455,7 +463,7 @@ impl City {
     /// the city on the ground plan of scale `s` (1.0: as surveyed),
     /// whatever this process's own scale is (the ground-plan test compares both).
     pub fn load_at(paths: &DataPaths, s: f64) -> Result<City> {
-        let raw: RawCity = parse_json(&paths.sf("sf-city.json.gz"))?;
+        let mut raw: RawCity = parse_json(&paths.sf("sf-city.json.gz"))?;
         if raw.meta.projection.axes != "x east, z south, metres" {
             bail!("sf-city.json: unexpected frame '{}'", raw.meta.projection.axes);
         }
@@ -576,6 +584,7 @@ impl City {
         };
 
         let gs = s;
+        movable_spans::add_to(&mut raw.roads);
         let roads = raw
             .roads
             .into_iter()

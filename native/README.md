@@ -143,13 +143,15 @@ Fly-through (default):
 | Input | On foot | Driving |
 | --- | --- | --- |
 | Click the window | Capture the mouse | Capture the mouse |
-| W A S D | Move (camera relative) | Throttle, brake and reverse, steer |
+| W A S D | Move (camera relative) | W accelerates, S holds the service brake, A/D steer |
+| R | Sleep when beside the bed | Switch Drive/Reverse at a stop |
 | Shift | Run; held straight ahead, sprint | |
 | C or Ctrl | Crouch | Look behind (C) |
 | Space | Jump | Handbrake |
 | F | Enter a car within reach | Get out |
 | E | At a landmark's lift stop: ride up to its deck, or back down | |
 | V | Place a new car ahead (a test helper) | |
+| F8 | Save the physics location, nearest named street and player state | Save the location, vehicle state, load and wheel contacts |
 | `[` / `]` | Step the time of day back / forward 30 minutes | Step the time of day back / forward 30 minutes |
 | `\` | Sync the clock to current San Francisco local time | Sync the clock to current San Francisco local time |
 | K | Cycle weather presets and the dynamic weather schedule | Cycle weather presets and the dynamic weather schedule |
@@ -329,6 +331,14 @@ switch it does not take.
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |
 | `--bench` | Offscreen timing run over scripted camera paths; prints and writes JSON to `bench-out/` |
 | `--bench --play` | Scripted walk and drive paths with the player |
+| `--vehicle sedan\|hatchback\|van\|catalogue-sedan` | Vehicle body and handling for `--play` and `--connect`. The default is the sedan. |
+| `--occupants-kg N`, `--cargo-kg N` | Occupant and cargo mass on the selected car, in whole kilograms. |
+| `--physics-location FILE` | Reopen an F8 location in local play and restore the saved collision-world settings. |
+| `--record-physics`, `--replay-physics FILE` | Record or verify each fixed-step input, weather sample, wheel contact and body position on a scripted walk or drive with `--play --bench`. |
+| `--no-contact-physics` | In local play, use scripted nearby traffic colliders and disable on-foot collision with rendered pedestrians. `--contact-physics` enables dynamic traffic and on-foot contacts. |
+| `--traffic-bend-braking`, `--no-traffic-bend-braking` | Preview earlier braking for mapped lane bends in the game and server. Off by default while city flow is being verified. |
+| `--traffic-contact`, `--no-traffic-contact` | Opt-in preview for `eo-server` and `eo-app --connect local`. A collision moves both the player's vehicle and the fleet car. The server sends the resulting pose to every client. Off by default. |
+| `--pedestrian-physics`, `--no-pedestrian-physics` | In local play, allow nearby vehicles to displace a supported pedestrian and show the resulting fall and recovery. Requires contact physics. Off by default. The `pedestrian_crossing` play bench includes a repeatable car and pedestrian contact. |
 | `--capture-ui SCREEN` | Writes a PNG of one screen: `title`, `loading`, `settings`, `pause`, `map`, `hud` or `all`; also (not in `all`) `settings-hyper` (the settings panel's presets with Hyper real chosen and the "Lighting and detail" row with its note), `settings-world` (its World block), `pause-settings` (the pause sheet's graphics rows), `photo` (the photo mode panel's Camera page over a frame through its pipeline, focus peaking on) and `photo-look` (its Look page, monochrome) |
 | `--ui-bench` | Interface cost over the street walk and each full-screen menu |
 | `--audio-render all --out DIR` | Offline sound mixes; no GPU, no audio device |
@@ -620,6 +630,11 @@ selection:
 | Area | Switches |
 | --- | --- |
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
+| Traffic lanes | `--traffic-street-plan` previews paved lane alignment in local play, captures, benchmarks, `--connect local`, and on a dedicated server. `--no-traffic-street-plan` restores the mapped road profile. Off by default. |
+| Traffic bodies | `EO_TRAFFIC_MODEL_FOOTPRINTS` points to a Traffic Lab scale report for the game's current vehicles. Local play and the authoritative server then drive with the measured footprints. `--no-traffic-model-footprints` disables the preview. [Traffic Lab](../Docs/TRAFFIC-LAB.md) |
+| Traffic passing | `--no-traffic-passing` turns off the paved-plan fleet's midblock passing. With the preview active, vehicles can signal and change into an adjacent clear same-direction lane across a broken white divider. |
+| Street geometry | `--no-pavement-repairs` restores the earlier street surfaces, corner banks, distant junctions and service-drive entrances for offline comparisons. The repaired entrances fit the driveway to the receiving pavement and open the kerb and retaining wall across the mapped drive. |
+| Surveyed junctions | `EO_SURVEYED_JUNCTION` loads a local surveyed pavement file for offline testing. Compare against the original street mesh with `--no-surveyed-junction`. [Traffic Lab](../Docs/TRAFFIC-LAB.md#preview-surveyed-junction-pavement) |
 | Coastal plant communities | `--coastal-habitat` includes the reef and dive optics, with bull-kelp crowns at exposed rocks, eelgrass shoots on sheltered sediment, and broken whitecaps seen from below. Add `--no-coastal-habitat` to an `--ocean-reef --dive-detail` run for the former plants. |
 | Rocky reef | `--rocky-reef` includes the coastal habitat with individual kelp forms, light filtered through the canopy, and partly buried ledges and boulders. Compare with `--coastal-habitat --no-rocky-reef`. With the reef enabled, `--no-reef-kelp`, `--no-reef-canopy-light` and `--no-reef-rocks` disable the three additions independently. |
 | Reef surfaces | `--reef-materials` adds rock, damp sand and coarse beach sand scans to the rocky reef. With `--rocky-reef`, `--no-reef-materials` restores the previous rock and sediment shaders. |
@@ -637,8 +652,31 @@ selection:
 | Black Point rockweed | `--black-point-rockweed` models forked blades with raised midribs and thickened tips on the rocky habitat. `--no-black-point-rockweed` uses the original ribbons. Blade margins transmit more backlight than the thicker rib. The geometry follows the form described by [Stanford’s Hopkins Marine Station](https://seanet.stanford.edu/brown) and the habitat reported by a [central Bay shoreline survey](https://escholarship.org/uc/item/8jt3v8mk). Individual plants are illustrative. |
 | Cove daylight | `--cove-daylight` uses one depth-dependent bed-light model on both sides of the waterline. `--no-cove-daylight` restores the prior surface and underwater lighting. The regional reference is the median of 102 downwelling-light profiles at USGS station 20, about 2.9 km from Aquatic Park. The broadband coefficient is measured, while the RGB balance and caustics are modeled. [Measurements and attribution](../THIRD_PARTY_NOTICES.md#san-francisco-bay-underwater-daylight). |
 | Dive exposure | `--dive-exposure` compensates for the loss of downwelling light at the eye. `--no-dive-exposure` restores the original exposure |
+| Golden Gate Marin approach | `--golden-gate-finish` enables the Marin steel towers, landing survey, deck asphalt and median joints in play and capture modes. For the complete surveyed crossing, start `./target/release/eo-app --play --drive-golden-gate --structures --tunnels --quality high --street-pbr --street-wear --urban-sky --golden-gate-surfaces --golden-gate-net --golden-gate-floorbeams --golden-gate-pylons --golden-gate-pylon-silhouette --distant-bridge-decks --tunnel-rock-clearance --yerba-buena-section --golden-gate-pavement --golden-gate-wheel-wear --bridge-wire-joints --tunnel-portal-exposure --presidio-tunnel-finish` from `native/`. The car starts on the south approach facing Marin. `--no-golden-gate-finish` disables the candidate finish. |
+| `--golden-gate-surfaces` / `--no-golden-gate-surfaces` | Use the surveyed Golden Gate lamp stations and amber optics, the curved approach alignment, the registered near and distant Marin aerial imagery, and the rain film on the scanned epoxy-asphalt course. The off switch restores the previous finish when used with `--golden-gate-finish`. The terrain uses the current map extent. |
+| `--golden-gate-net` / `--no-golden-gate-net` | Show the installed safety mesh and its cantilevers below the Golden Gate sidewalks, with the vertical fence at the north anchorage. Enabled by the surveyed bridge finish. |
+| `--golden-gate-floorbeams` / `--no-golden-gate-floorbeams` | Build the transverse plate girders, knee braces, deck bearings and longitudinal steel deck ribs beneath the three suspended Golden Gate spans. Off by default. |
+| `--golden-gate-pylons` / `--no-golden-gate-pylons` | Fit the eight concrete approach shafts and their stepped crowns to the 2023 USGS laser scan. Off by default. |
+| `--bay-bridge-pavement` / `--no-bay-bridge-pavement` | Use the existing scanned concrete aggregate on the [western Bay Bridge polyester-concrete road decks](https://dot.ca.gov/-/media/dot-media/district-4/documents/d4-transportation-planning-local-assistance/system-regional-planning/tcrs/f0020234_draft-final-i-80-sfobb-tcr-final-091917-a11y.pdf). Only the exposed upper roadway receives rain. Disabled by default. |
+| `--bridge-deck-markings` / `--no-bridge-deck-markings` | Shade the Golden Gate and western Bay Bridge lane lines with the same scanned paint wear as the highway markings. Rain changes the paint on the exposed decks. The lower Bay Bridge roadway stays sheltered. Disabled by default. |
+| `--distant-bridge-decks` / `--no-distant-bridge-decks` | Draw the real roadway panels, median, lane paint and open side trusses on the distant Golden Gate and Bay Bridge west spans. Both Bay Bridge road levels keep their own elevations. From `native/`, `cargo run --release -p eo-landmarks --example bridge_deck_continuity -- --distant-bridge-decks --golden-gate-surfaces` checks every contact face against both rendered models, including winding. Off by default. |
+| `--golden-gate-pylon-silhouette` / `--no-golden-gate-pylon-silhouette` | Preserve the surveyed crowns and sidewalk openings when the Golden Gate changes to its distant model. Enables the surveyed pylons. Off by default. |
+| `--golden-gate-pavement` / `--no-golden-gate-pavement` | Use the installed clean asphalt scan across the epoxy-asphalt deck and blend wear near the two Marin expansion joints. The shipped asphalt is the fallback when the optional scans are unavailable. Off by default. |
+| `--bridge-wire-joints` / `--no-bridge-wire-joints` | Fit the screen coverage of suspension wires to their filtered diameter so short loops and clamps join the hanging ropes at driving distance. Off by default. |
+| `--yerba-buena-lighting` / `--no-yerba-buena-lighting` | With the measured island tunnel section, draw paired lights along the westbound vault and eastbound sidewalls. Each pair shares the original light output. The layout follows the [upper-deck photograph](https://commons.wikimedia.org/wiki/File:Yerba_Buena_Island_tunnel.jpg) and [lower-deck photograph](https://commons.wikimedia.org/wiki/File:Lower_deck_(5947642641).jpg). Off by default. |
+| `--east-span-pavement` / `--no-east-span-pavement` | With structures enabled, use epoxy asphalt between the suspension deck hinges and polyester concrete on the two elevated Skyway roads. The mapped Oakland approaches keep their existing paving. [Skyway specification, p. 13](https://files.mtc.ca.gov/library/pub/30903.pdf#page=14) · [Suspension paving](https://mtc.ca.gov/news/bay-bridge-east-span-paving-self-anchored-suspension-span-under-way) · [Hinges, Appendix F](https://files.mtc.ca.gov/library/pub/28602.pdf) · [Skyway length, Fig. 1.1-1](https://files.mtc.ca.gov/library/pub/28860.pdf). Off by default. |
+| `--east-span-lighting` / `--no-east-span-lighting` | With structures enabled, use the surveyed median standards on both Skyway carriageways east of pier E2. The roadway optics face in the direction of travel. [Lighting reference](https://files.mtc.ca.gov/library/pub/non/47654_12.pdf). Off by default. |
+| `--yerba-buena-vault-finish` / `--no-yerba-buena-vault-finish` | With the measured island section and lighting enabled, shade the upper concrete lining along the circular section and wrap its material over the crown. Off by default. |
+| `--tunnel-mouth-lighting` / `--no-tunnel-mouth-lighting` | Carry the shadowed exterior lighting across the tunnel portal onto the pavement, markings and walls. Its contribution falls with the visible opening. See the [FHWA Lighting Handbook, Tunnel Lighting](https://highways.fhwa.dot.gov/sites/fhwa.dot.gov/files/2023-05/FHWA-Lighting-Handbook_0.pdf). Disabled by default. |
+| `--tunnel-portal-exposure` / `--no-tunnel-portal-exposure` | Meter the entrance and transition zones using the local tunnel lighting at the camera. Applies inside vehicle tunnels with `--tunnels`. Off by default. |
+| `--no-tunnel-relief-cuts` | Restore the uncut high-resolution hillside over vehicle tunnel portals for comparison. With `--tunnels`, both terrain detail levels follow the excavated road by default. |
+| `--no-tunnel-plant-clearance` | Restore plants rooted in excavated ground at vehicle tunnel approaches for comparison. Ground over enclosed tunnels can support plants. |
+| `--tunnel-rock-clearance` / `--no-tunnel-rock-clearance` | Keep scanned rock faces that reach into a vehicle tunnel or its approach out of the traffic lanes. Uses the swept three-dimensional roadway clearance with `--structures --tunnels`. |
+| `--yerba-buena-section` / `--no-yerba-buena-section` | Use the surveyed westbound vault, eastbound flat soffit, and intermediate deck at the island tunnel approaches. Heights follow [WSP figure 14 and table 3](https://catc.ca.gov/-/media/ctc-media/documents/programs/baseline-agreements/2025-10/04-2y780-baseline-agreement-new.pdf#page=54). |
+| `--presidio-tunnel-finish` / `--no-presidio-tunnel-finish` | With `--tunnels`, use the box section, concrete lining and rows of individual ceiling fixtures on the Presidio Parkway. [SFCTA cross sections](https://www.sfcta.org/sites/default/files/2020-10/Presidio_Parkway_Final_Environmental_Impact_Statement_Report-Appendices.pdf) and [MTC interior photographs](https://mtc.ca.gov/news/presidio-parkway-construction-progress). Off by default. |
+| `--golden-gate-wheel-wear` / `--no-golden-gate-wheel-wear` | Vary the exposed aggregate and roughness along the wheel paths of the six surveyed bridge lanes. Enables the deck wearing course. Off by default. |
 | Bridge detail | `--bridge-detail` enables the Golden Gate detail preview (a darker paint tone, ribbed tower legs, framed portal struts, full arch pylons, lamp standards), each part drawn only where the bridges' own passes (Bridges, below) leave it as exported; left out, the preview is off. `--no-bridge-detail` is not its off form: it is the bridges' own detail switch (Bridges), so with both the preview's legs and portal struts stand in for that pass |
-| Landmark decks | `--no-landmark-access` (the decks, their lifts and the tower bands and tower tops they take over; the collision world without them; the rooms' camera meter and the player's deck occlusion, whose shader terms compile out, `SF_LANDMARK_ACCESS`) |
+| Landmark decks | `--no-landmark-access` (the decks, their lifts and the tower bands and tower tops they take over; the base bridge sidewalk and harbour floors still support the player; the rooms' camera meter and the player's deck occlusion, whose shader terms compile out, `SF_LANDMARK_ACCESS`) |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people), `--no-crowd`, `--no-people-shading`, `--no-people-bounce`, `--no-people-contact`, `--no-people-motion`, `--no-people-evening`, `--no-people-windows`, `--no-people-stagger` |
 | Demo player avatar | `--no-test-character` |
 | Driver-door animation | `--no-car-door-animation` |
@@ -1557,11 +1595,26 @@ and lamps) and the people as skinned, instanced meshes. With the optional
 copies present, the people are Rocketbox avatars that stand, talk and phone
 with Rocketbox clips and walk in 100STYLE styles.
 
+With `--crowd`, a walker shortens its stride behind someone ahead on the same
+sidewalk who is walking in the same direction or has paused. People with room
+to pass alongside keep their pace.
+
 **Player.** `eo-player` is a kinematic character controller and a raycast
 vehicle on [Rapier](https://rapier.rs) with enhanced determinism, against a
 collision world streamed per 128 m tile from the drawn street surface and
 building prisms. The step is fixed at 1/60 s and reads no wall clock, so the
 same inputs give the same body; the server runs the same step.
+
+[Playable vehicle physics](../Docs/VEHICLE-PHYSICS.md) gives the mass and drivetrain references, payload assumptions, and instructions for inspecting wheel contact and replaying a route.
+
+The sedan takes its initial pitch and roll from the road at spawn and after
+fast travel. Its suspension and gravity control it from the first driving
+step. In local play, the character can stand on the rendered pier and plaza
+paving, moored boats, and each floor of the furnished Beaver Street house.
+The Golden Gate Bridge and both road levels of the Bay Bridge west span
+carry tires on their drawn asphalt in local and network play. With
+`--structures`, the approach joints draw and stream their contact surfaces
+with the connecting carriageways.
 
 **Props.** Signal poles, mast arms and heads, pedestrian signals, signs
 (official sign layouts when the sign art is present), street trees from the
@@ -1653,16 +1706,18 @@ What the tests cover, in short:
 
 ### Known failing tests
 
-Eight tests fail today. They are open defects, not flaky tests; do not
-loosen them to make them pass. The three `eo-look` tests and the deck-lamp
+The street surface and verge-bank regressions now pass. The release audit
+sampled 161,637 roadway positions and 33,583 sidewalk positions across 530
+tiles. It found continuous coverage at every sampled position and no terrain
+above the road. Both original test thresholds remain in force.
+
+The three `eo-look` tests and the deck-lamp
 count came with the Golden Gate branch and fail on it alone too. The two
 `eo-app` bench tests fail on Metal (Apple M5 Ultra), and did before the
 night-lighting merge too.
 
 | Test | What fails |
 | --- | --- |
-| `eo-street` `surface::street_surface_is_closed_and_on_its_section` | Two walkable surfaces fight in one place at more probes than the test allows |
-| `eo-street` `surface::verge_banks_stay_off_the_paving` | Some verge banks reach onto the paving |
 | `eo-look` `atmosphere::cie_sky_tests::the_sky_near_the_horizon_within_the_cie_clear_skies` | Near the horizon the physical sky is brighter than the CIE clear-sky range (up to x1.5 at 5 degrees elevation) |
 | `eo-look` `atmosphere::cie_sky_tests::the_sky_gradient_away_from_the_horizon_within_the_cie_clear_skies` | The gradient away from the horizon leaves the CIE range at some sun positions (up to x1.12) |
 | `eo-look` `tone::camera::tests::the_virtual_chart_renders_neutral_greys_and_keeps_hues` | The Aces2 camera style keeps 0.80 of the saturated patches' chroma, under the 0.85 the test allows |

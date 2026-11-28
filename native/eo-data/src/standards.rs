@@ -40,7 +40,16 @@ impl CaStandards {
     pub fn load(paths: &DataPaths) -> Result<Self> {
         let p = paths.repo_root.join("scripts/world-data/sources/california-street-standards.json");
         let bytes = std::fs::read(&p).with_context(|| format!("reading {}", p.display()))?;
-        let src: Source = serde_json::from_slice(&bytes)?;
+        Self::from_bytes(&bytes)
+    }
+
+    /// The same verified table for geometry built from embedded street inputs.
+    pub fn bundled() -> Result<Self> {
+        Self::from_bytes(include_bytes!("../../../scripts/world-data/sources/california-street-standards.json"))
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let src: Source = serde_json::from_slice(bytes)?;
         let known = src.entries.iter().map(|e| e.id.clone()).collect();
         let metric = src
             .entries

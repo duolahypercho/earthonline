@@ -41,7 +41,7 @@
 //! The render thread never blocks on the network (`eo_net::client`); joining
 //! builds the local collision world on a thread.
 
-use crate::agents::{AgentRuntime, PLAYER_CAR_BODY, PlayerVisual};
+use crate::agents::{AgentRuntime, PlayerVisual};
 use crate::models::{ModelRuntime, make_renderer};
 use crate::{Args, World, load_world};
 use anyhow::{Result, anyhow};
@@ -76,6 +76,7 @@ enum Mode2 {
 }
 
 struct NetOpts {
+    vehicle: eo_player::vehicle::VehicleConfig,
     mode: Mode2,
     connect: String,
     name: String,
@@ -93,6 +94,9 @@ struct NetOpts {
     pair_before: Option<std::path::PathBuf>,
     /// The local server's sky (`--time-of-day`, `--weather`, `--day-rate`).
     weather: u8,
+    weather_seed: u32,
+    weather_start_tick: u32,
+    weather_physics: bool,
     day_rate: f64,
 }
 
@@ -226,7 +230,7 @@ fn base_args() -> Args {
 
 fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
     let mut a = base_args();
-    let mut o = NetOpts { mode: Mode2::Window, connect: String::new(), name: "player".into(), spawn: None, cond: Conditions::NONE, frames: 16_000, seconds: 40.0, bots: 0, hud: true, presence: Presence::default(), shots: None, only: None, pair_before: None, weather: 0, day_rate: 1.0 };
+    let mut o = NetOpts { vehicle: eo_player::vehicle::VehicleConfig { model: eo_player::vehicle::VehicleModel::Sedan, ..Default::default() }, mode: Mode2::Window, connect: String::new(), name: "player".into(), spawn: None, cond: Conditions::NONE, frames: 16_000, seconds: 40.0, bots: 0, hud: true, presence: Presence::default(), shots: None, only: None, pair_before: None, weather: 0, weather_seed: a.look.sky.seed, weather_start_tick: 0, weather_physics: true, day_rate: 1.0 };
     let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
     let mut it = raw.iter();
     while let Some(s) = it.next() {
@@ -239,6 +243,9 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--connect" => o.connect = val()?,
             "--net-bench" => o.mode = Mode2::Bench,
             "--net-capture" => o.mode = Mode2::Capture,
+            "--vehicle" => o.vehicle.model = eo_player::vehicle::VehicleModel::parse(&val()?)?,
+            "--cargo-kg" => o.vehicle.cargo_kg = val()?.parse()?,
+            "--occupants-kg" => o.vehicle.occupants_kg = val()?.parse()?,
             "--name" => o.name = val()?,
             "--spawn" => {
                 let v: Vec<f64> = val()?.split(',').map(|x| x.trim().parse()).collect::<Result<_, _>>()?;
@@ -252,15 +259,24 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--no-remote-bodies" => o.presence.bodies = false,
             "--no-name-tags" => o.presence.tags = false,
             "--no-player-contact" => o.presence.contact = false,
+            "--traffic-contact" | "--no-traffic-contact" => {} // read when starting the embedded server
             "--no-shared-sky" => o.presence.shared_sky = false,
             "--net-shots" => {
                 o.mode = Mode2::Shots;
                 o.shots = Some(val()?.into());
             }
             "--day-rate" => o.day_rate = val()?.parse()?,
+            "--weather-seed" => {
+                a.look.sky.seed = val()?.parse()?;
+                o.weather_seed = a.look.sky.seed;
+            }
+            "--world-time" => {
+                a.look.sky.world_time_s = val()?.parse()?;
+                o.weather_start_tick = eo_net::weather::start_tick(a.look.sky.world_time_s)?;
+            }
             "--weather" => {
                 let w = val()?;
-                o.weather = eo_net::presence::weather_code(&w).ok_or_else(|| anyhow!("--weather {w}: clear, fog, overcast, drizzle, rain, storm or schedule"))?;
+                o.weather = eo_net::presence::weather_code(&w).ok_or_else(|| anyhow!("--weather {w}: expected a weather preset or schedule"))?;
                 a.look.sky.weather = match eo_sky::Kind::parse(&w) {
                     Some(k) => eo_render::sky::WeatherMode::Preset(k),
                     None => eo_render::sky::WeatherMode::Schedule,
@@ -309,6 +325,8 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--low-camera" | "--default-camera" => {}
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
             "--no-external" => {} // main's `external_flag`
+            "--traffic-street-plan" | "--no-traffic-street-plan" | "--no-traffic-passing" | "--no-traffic-model-footprints"
+            | "--traffic-bend-braking" | "--no-traffic-bend-braking" => {}
             other => anyhow::bail!("--connect: unknown argument {other} (see native/eo-app/src/net.rs)"),
         }
     }
@@ -319,23 +337,23 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
         anyhow::bail!("--connect ADDR|local");
     }
     a.bench = o.mode != Mode2::Window;
+    o.vehicle.validated()?;
+    o.weather_physics = a.look.sky.weather_fx;
     Ok((a, o))
 }
 
 /// The collision world and its parts, as `--play` builds them (the server builds the same).
 fn game_world(world: &World, access: bool) -> Result<Arc<GameWorld>> {
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
-    let mut set = BuildingSet::from_city(&world.city, lift);
-    if access {
-        // the landmarks' decks and lifts: the same as the server's (eo-net `GameWorld::load`).
-        set = set.with_decks(eo_net::game::landmark_decks(&world.elevation));
-    }
-    let buildings = Arc::new(set);
     let elevation = Arc::new(world.elevation.clone());
     let ground: Arc<dyn GroundProvider> = match &world.street {
         Some(s) => Arc::new(eo_player::street_ground::StreetGround::new(s.world.clone(), world.structures.clone())),
         None => Arc::new(ElevationGround(elevation.clone())),
     };
+    let decks = eo_net::game::city_decks(&world.paths, &elevation, ground.as_ref(), access)?;
+    let mut buildings = BuildingSet::from_city(&world.city, lift);
+    buildings.open_tunnel_approaches(world.structures.as_deref());
+    let buildings = Arc::new(buildings.with_decks(decks));
     // `with_decks`: the in-process server keeps the built decks too, so its world matches a dedicated server's (`--structures`).
     Ok(Arc::new(GameWorld::from_parts(world.city.clone(), elevation, ground, buildings, world.street.is_some(), crate::structures::options(world)).with_decks(world.structures.clone())))
 }
@@ -348,13 +366,29 @@ struct LocalServer {
     addr: std::net::SocketAddr,
 }
 
+impl NetOpts {
+    fn server_sky(&self, hour: f64, day_rate: f64, weather: u8) -> eo_server::ServerConfig {
+        eo_server::ServerConfig { hour, day_rate, weather, weather_seed: self.weather_seed,
+            traffic_contact: crate::last_switch("traffic-contact").unwrap_or(false),
+            weather_start_tick: self.weather_start_tick, weather_physics: self.weather_physics, ..Default::default() }
+    }
+}
+
 impl LocalServer {
-    fn start(world: &World, game: &Arc<GameWorld>, bot_count: usize, around: [f64; 2], sky: (f64, f64, u8)) -> Result<Self> {
+    fn start(world: &World, game: &Arc<GameWorld>, bot_count: usize, around: [f64; 2], sky: eo_server::ServerConfig) -> Result<Self> {
         // The structure level of each way (`--structures`; empty otherwise, which leaves the sim as it was).
         let levels = world.structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
-        let source = Arc::new(eo_sim::native::load(&world.paths)?.with_levels(levels));
+        let mut source = eo_sim::native::load(&world.paths)?.with_levels(levels);
+        if crate::agents::traffic_street_plan_on() {
+            source = source.with_traffic_plan(game.ground.traffic_plan())
+                .with_passing(crate::agents::traffic_passing_on());
+            if let Some(decks) = &game.decks {
+                source = source.with_deck_surfaces(decks.traffic_surfaces());
+            }
+        }
+        let source = Arc::new(eo_server::configure_traffic_previews(source)?);
         let ctl = Arc::new(Mutex::new(eo_server::predict::Ctl::default()));
-        let cfg = eo_server::ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 4, sim_threads: 4, streets: world.street.is_some(), structures: game.structures, hour: sky.0, day_rate: sky.1, weather: sky.2, ..Default::default() };
+        let cfg = eo_server::ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 4, sim_threads: 4, streets: world.street.is_some(), structures: game.structures, ..sky };
         let thread = eo_server::predict::spawn_server(cfg, game.clone(), source, ctl.clone());
         let addr = loop {
             if let Some(a) = ctl.lock().unwrap().addr {
@@ -395,7 +429,7 @@ fn world_hour(o: &NetOpts) -> f64 {
 
 fn server_addr(world: &World, game: &Arc<GameWorld>, o: &NetOpts, around: [f64; 2]) -> Result<(std::net::SocketAddr, Option<LocalServer>)> {
     if o.connect == "local" {
-        let s = LocalServer::start(world, game, o.bots, around, (world_hour(o), o.day_rate, o.weather))?;
+        let s = LocalServer::start(world, game, o.bots, around, o.server_sky(world_hour(o), o.day_rate, o.weather))?;
         Ok((s.addr, Some(s)))
     } else {
         Ok((o.connect.parse()?, None))
@@ -409,7 +443,7 @@ const PAINTS: [&str; 6] = ["#2f5d8c", "#d9d4c7", "#1d1f22", "#6b7a3a", "#c9a227"
 pub struct NetSession {
     pub client: NetClient,
     pub pred: Option<Predictor>,
-    joining: Option<Receiver<Result<(Player, CollisionWorld, u32)>>>,
+    joining: Option<Receiver<Result<(Player, CollisionWorld, u32, eo_net::weather::WeatherEpoch)>>>,
     game: Arc<GameWorld>,
     pub visual: PlayerVisual,
     remote: HashMap<u32, (f64, f64)>,
@@ -650,11 +684,11 @@ impl NetSession {
                     std::thread::Builder::new()
                         .name("eo-net-join".into())
                         .spawn(move || {
-                            let r = (|| -> Result<(Player, CollisionWorld, u32)> {
+                            let r = (|| -> Result<(Player, CollisionWorld, u32, eo_net::weather::WeatherEpoch)> {
                                 let s = read_player_state(&a.state).map_err(|e| anyhow!("{e}"))?;
                                 let mut cw = game.collision_world(2);
                                 let p = rebuild_player(&mut cw, &s, &a.car_spawns);
-                                Ok((p, cw, a.input_seq))
+                                Ok((p, cw, a.input_seq, a.weather))
                             })();
                             let _ = tx.send(r);
                         })
@@ -679,9 +713,9 @@ impl NetSession {
             if let Ok(r) = rx.try_recv() {
                 self.joining = None;
                 match r {
-                    Ok((p, cw, seq)) => match self.pred.as_mut() {
-                        Some(pr) => pr.reset(p, cw, seq),
-                        None => self.pred = Some(Predictor::new(p, cw, seq)),
+                    Ok((p, cw, seq, weather)) => match self.pred.as_mut() {
+                        Some(pr) => pr.reset_with_weather(p, cw, seq, weather),
+                        None => self.pred = Some(Predictor::with_weather(p, cw, seq, weather)),
                     },
                     Err(e) => eprintln!("net: join failed: {e:#}"),
                 }
@@ -757,6 +791,7 @@ impl NetSession {
         let mut players = 0;
         // The bodies the other players are drawn in (no street person wears one).
         let mut player_models: Vec<u32> = vec![];
+        agents.remote_traffic.clear();
         for s in &self.shown {
             let local = s.id & 0x3FFF_FFFF;
             let pos = [(s.pos[0] - origin[0]) as f32, 0.0, (s.pos[2] - origin[1]) as f32];
@@ -765,7 +800,13 @@ impl NetSession {
                     // Wheel spin from the travel integrated here (the wire carries 16 m of it).
                     let t = self.travelled.entry(s.id).or_insert(s.anim * 16.0);
                     *t += s.speed * dt;
-                    buf.vehicles.push(AgentInstance { pos, heading: s.yaw as f32, speed: s.speed as f32, anim: (*t % 10_000.0) as f32, kind: s.kind as u16, flags: s.flags, id: local });
+                    let pos = [pos[0], s.pos[1] as f32, pos[2]];
+                    let physical = eo_net::snapshot::TRAFFIC_PHYSICAL;
+                    if s.flags & physical != 0 {
+                        let rotation = eo_server::compose_ypr(s.yaw, s.pitch, s.roll);
+                        agents.remote_traffic.insert(u64::from(local), (s.pos.map(|p| p as f32), rotation.as_quat().to_array(), s.speed as f32));
+                    }
+                    buf.vehicles.push(AgentInstance { pos, heading: s.yaw as f32, speed: s.speed as f32, anim: (*t % 10_000.0) as f32, kind: s.kind as u16, flags: s.flags & !physical, id: local });
                 }
                 CLASS_WALKER => {
                     buf.walkers.push(AgentInstance { pos, heading: s.yaw as f32, speed: s.speed as f32, anim: (s.anim * std::f64::consts::TAU) as f32, kind: s.kind as u16, flags: s.flags, id: local });
@@ -824,7 +865,8 @@ impl NetSession {
                     let r = self.remote.entry(s.id).or_insert((0.0, 0.0));
                     r.1 += s.speed * dt / 0.33;
                     let q = eo_server::compose_ypr(s.yaw, s.pitch, s.roll);
-                    if let Some(c) = eo_agents::feed::player_car(lib, PLAYER_CAR_BODY, s.pos, [q.x, q.y, q.z, q.w], r.1, s.steer, s.speed, s.flags & 1 != 0, PAINTS[s.kind as usize % PAINTS.len()]) {
+                    let model = eo_player::vehicle::VehicleModel::from_code(((s.flags >> 2) & 3) as u8).unwrap_or_default();
+                    if let Some(c) = eo_agents::feed::player_car(lib, model.body(), s.pos, [q.x, q.y, q.z, q.w], r.1, s.steer, s.speed, s.flags & 1 != 0, PAINTS[s.kind as usize % PAINTS.len()]) {
                         agents.extras.push(c);
                     }
                 }
@@ -911,6 +953,9 @@ impl NetSession {
                 renderer.look.set_sky_options(eo_render::sky::SkyOptions { weather, seed: if sky.weather == eo_net::presence::WEATHER_SCHEDULE { sky.seed } else { base.seed }, ..base });
             }
             self.sky_applied = Some(sky);
+        }
+        if sky.weather == eo_net::presence::WEATHER_SCHEDULE && let Some(p) = &self.pred {
+            renderer.look.sky.set_clock(p.weather.epoch.seconds(p.seq), renderer.look.sky.frame_dt());
         }
         Some(sky)
     }
@@ -1243,6 +1288,7 @@ fn client_config(addr: std::net::SocketAddr, name: &str, o: &NetOpts, spawn: [f6
     let mut c = ClientConfig::new(addr, &format!("dev:{name}"));
     c.conditions = o.cond;
     c.seed = seed;
+    c.vehicle = o.vehicle;
     c.spawn = Some(SpawnHint { x: spawn[0] as f32, z: spawn[1] as f32, yaw: spawn[2] as f32, driving: false });
     c
 }
@@ -1554,6 +1600,7 @@ fn bench(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
         &path,
         serde_json::to_vec_pretty(&json!({
             "frames": frames, "bots": o.bots, "conditions": format!("{:?}", o.cond),
+            "weather_at_last_input": p.player.weather, "weather_world_seconds": p.weather.epoch.seconds(p.seq),
             "presence": { "remote_bodies": o.presence.bodies, "name_tags": o.presence.tags, "shared_sky": o.presence.shared_sky, "tags_max": tags_n },
             "frames_walking": walked, "frames_driving": drove, "players_near_max": players_near, "agents_near_max": entities,
             "net_main_thread_ms": summary(&net_ms), "net_definition": "eo-app net.rs NetSession: events, corrections (restore + replay), acks, inputs handed to the network thread, the interpolated view, the agent frame and the remote players' instances",
@@ -1624,7 +1671,7 @@ fn capture(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
     let mut props = crate::props::PropsRuntime::start(&world, args);
     settle(&mut g, &world, &mut props, &mut agents, &first, 600.0)?;
     let land = eo_data::LandCover::load(&world.paths).ok();
-    let mut ui = eo_ui::Ui::new(&g.ctx.device, &g.ctx.queue, Some(&world.paths.repo_root), None, Some(eo_ui::MapInputs { city: &world.city, land: land.as_ref(), backdrop_centre: [sa[0] as f32, sa[1] as f32] }));
+    let mut ui = eo_ui::Ui::new(&g.ctx.device, &g.ctx.queue, Some(&world.paths.repo_root), None, Some(eo_ui::MapInputs { city: &world.city, tunnels: crate::structures::options(&world).is_some_and(|o| o.tunnels), land: land.as_ref(), backdrop_centre: [sa[0] as f32, sa[1] as f32] }));
     ui.set_screen(eo_ui::Screen::Hud);
     // Both stand still, facing each other, while the street fills (10 s).
     let t0 = Instant::now();
@@ -1825,7 +1872,7 @@ mod window {
             let agents = AgentRuntime::start_remote(&self.world, &self.args);
             let props = crate::props::PropsRuntime::start(&self.world, &self.args);
             let land = eo_data::LandCover::load(&self.world.paths).ok();
-            let mut ui = eo_ui::Ui::new(&ctx.device, &ctx.queue, Some(&self.world.paths.repo_root), None, Some(eo_ui::MapInputs { city: &self.world.city, land: land.as_ref(), backdrop_centre: [self.spawn[0] as f32, self.spawn[1] as f32] }));
+            let mut ui = eo_ui::Ui::new(&ctx.device, &ctx.queue, Some(&self.world.paths.repo_root), None, Some(eo_ui::MapInputs { city: &self.world.city, tunnels: crate::structures::options(&self.world).is_some_and(|o| o.tunnels), land: land.as_ref(), backdrop_centre: [self.spawn[0] as f32, self.spawn[1] as f32] }));
             ui.set_screen(eo_ui::Screen::Hud);
             let pacer = eo_render::pace::WaitPacer::new(self.args.perf.submit_pacing);
             let probe = TagProbe::new(&ctx.device);
@@ -1957,8 +2004,12 @@ mod window {
             let el = self.fps_t.elapsed().as_secs_f64();
             if el >= 1.0 {
                 let st = s.client.status();
+                let range = s.pred.as_ref().and_then(|p| match p.player.mode {
+                    Mode::Driving(i) => Some(if p.player.vehicles[i].reverse_selected() { " (R)" } else { " (D)" }),
+                    Mode::OnFoot => None,
+                }).unwrap_or("");
                 g.window.set_title(&format!(
-                    "Earth Online native - online - {:.0} fps - {} - ping {:.0} ms - net {:.3} ms max - F: car, P: photo mode, Esc: mouse",
+                    "Earth Online native - online - {:.0} fps - {}{range} - ping {:.0} ms - net {:.3} ms max - F: car, P: photo mode, Esc: mouse",
                     self.fps_frames as f64 / el,
                     st.phase.label(),
                     st.rtt_ms,
@@ -1988,6 +2039,7 @@ mod window {
             let cam = to_camera(&view, aspect as f32, self.args.far);
             ph.game_hour = g.renderer.look.time_of_day(); // (the clock's with `--smooth-time`)
             ph.enter(&cam, crate::photo::anchor_of(p.player.position(&p.cw)));
+            self.raw.direction_pressed = false;
             self.raw.held.clear();
         }
     }
@@ -2025,6 +2077,7 @@ mod window {
                     }
                 }
                 WindowEvent::Focused(false) => {
+                    self.raw.direction_pressed = false;
                     self.raw.held = HashSet::new();
                     self.set_looking(false);
                 }
@@ -2076,6 +2129,10 @@ mod window {
                                         KeyCode::KeyT => self.session.travel_next(),
                                         _ => {}
                                     }
+                                }
+                                if code == KeyCode::KeyR {
+                                    if photo_on { return; }
+                                    self.raw.direction_pressed |= !event.repeat;
                                 }
                                 self.raw.held.insert(name);
                             }
@@ -2326,7 +2383,7 @@ mod net_shots {
         }
         // The server, its clock held still at the first scene's hour, and every scene's bots.
         let first = &scenes[0];
-        let server = LocalServer::start(&world, &game, 0, [first.frame.o[0], first.frame.o[1]], (first.hour, 0.0, first.weather))?;
+        let server = LocalServer::start(&world, &game, 0, [first.frame.o[0], first.frame.o[1]], o.server_sky(first.hour, 0.0, first.weather))?;
         let graph = Arc::new(RoadGraph::new(vec![]));
         let bots = BotRun::start(BotConfig { server: server.addr, count: visits.len(), threads: 1, spawn: eo_server::bots::Spawn::Spread, drive_share: 0.0, drive_mps: 0.0, seed: 5, conditions: Conditions::NONE, send_hz: 30.0, structures: game.structures, visits }, graph)?;
         let aspect = args.width as f32 / args.height as f32;
@@ -2348,7 +2405,7 @@ mod net_shots {
                 let agents = AgentRuntime::start_remote(&world, args);
                 let props = crate::props::PropsRuntime::start(&world, args);
                 let land = eo_data::LandCover::load(&world.paths).ok();
-                let mut ui = eo_ui::Ui::new(&g.ctx.device, &g.ctx.queue, Some(&world.paths.repo_root), None, Some(eo_ui::MapInputs { city: &world.city, land: land.as_ref(), backdrop_centre: [sc.frame.o[0] as f32, sc.frame.o[1] as f32] }));
+                let mut ui = eo_ui::Ui::new(&g.ctx.device, &g.ctx.queue, Some(&world.paths.repo_root), None, Some(eo_ui::MapInputs { city: &world.city, tunnels: crate::structures::options(&world).is_some_and(|o| o.tunnels), land: land.as_ref(), backdrop_centre: [sc.frame.o[0] as f32, sc.frame.o[1] as f32] }));
                 ui.set_screen(eo_ui::Screen::Hud);
                 ui.hud_chrome = false;
                 if let Some(w) = g.renderer.water.get() {

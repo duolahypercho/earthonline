@@ -3785,6 +3785,29 @@
       "confidence": "primary-source-checked"
     },
     {
+      "id": "yerba-buena-tunnel-interior-section",
+      "topic": "existing vehicle tunnel section",
+      "value": {
+        "width": 66,
+        "spring": 8,
+        "crown": 30,
+        "lower": 16
+      },
+      "unit": "ft",
+      "metricValue": {
+        "width": 20.1168,
+        "spring": 2.4384,
+        "crown": 9.144,
+        "lower": 4.8768
+      },
+      "condition": "Existing Yerba Buena Island tunnel on I-80. Width between inner walls, height at the upper arch spring and crown, and clearance to the underside of the deck above the lower roadway.",
+      "source": "WSP, Caltrans tunnel risk assessment, December 27, 2021, reproduced in California Transportation Commission project 04-2Y780 baseline agreement, October 2025",
+      "section": "Figure 14, YBI cross section, and Table 3, printed p. 9 (PDF p. 54)",
+      "url": "https://catc.ca.gov/-/media/ctc-media/documents/programs/baseline-agreements/2025-10/04-2y780-baseline-agreement-new.pdf#page=54",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
       "id": "structure-vertical-clearance-freeway",
       "topic": "vertical clearance",
       "value": 16.5,
@@ -3835,6 +3858,7 @@
     {"id": "concrete-barrier-type-60m-height", "topic": "road closures", "value": 42, "unit": "in", "metricValue": 1.067, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Height of the section over the lower roadbed; at the same drawing scale the sheet's lettered 36 in roadbed offset measures 36.0 in", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet A76A Concrete Barrier Type 60M, section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__a76a.dgn", "quote": "CONCRETE BARRIER TYPE 60M", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
     {"id": "concrete-barrier-type-60m-base-width", "topic": "road closures", "value": 24, "unit": "in", "metricValue": 0.61, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Width of the section at the roadbed, 24.0 in at the scale above", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet A76A Concrete Barrier Type 60M, section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__a76a.dgn", "quote": "CONCRETE BARRIER TYPE 60M", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
     {"id": "noise-barrier-height-max", "topic": "road closures", "value": 14, "unit": "ft", "metricValue": 4.267, "condition": "Maximum height from the pavement at the barrier's face within 15 ft of the traveled way (16 ft over the ground further out). The map-edge wall stands no taller than this over its own foot", "source": "Caltrans Highway Design Manual, 7th Edition, Chapter 1100", "section": "Index 1102.3(2), p. 1100-3", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp1100-a11y.pdf", "quote": "Noise barriers should not exceed 14 feet in height", "applicability": "state highway only", "confidence": "primary-source-checked"},
+    {"id": "golden-gate-moveable-median", "topic": "Golden Gate Bridge roadway", "value": {"width": 12, "height": 32, "length": 39, "footWidth": 24}, "unit": "in", "metricValue": {"width": 0.3048, "height": 0.8128, "length": 0.9906, "footWidth": 0.6096}, "condition": "Installed steel-clad, concrete-filled centre barrier on the Golden Gate Bridge. Unit length and footplate width from the District Finding of Effect, revised draft October 2011, section 2.3, plate 1, https://www.goldengate.org/assets/1/6/finding_of_effect_ggb_mmb.pdf", "source": "Golden Gate Bridge, Highway and Transportation District", "section": "Moveable Median Barrier, Final Design and Budget, installed January 2015", "url": "https://www.goldengate.org/bridge/bridge-operations/moveable-median-barrier/final-design-budget/", "applicability": "Golden Gate Bridge only", "confidence": "verified"},
     {"id": "temporary-railing-type-k-width", "topic": "road closures", "value": 24, "unit": "in", "metricValue": 0.61, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Base of the panel section: 6, 12 and 6 in along the pavement line, the section's levels 3, 13 and 32 in", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet T3A Temporary Railing (Type K), panel section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__t03a.dgn", "quote": "TEMPORARY RAILING (TYPE K)", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
     {"id": "temporary-railing-type-k-segment-length", "topic": "road closures", "value": 20, "unit": "ft", "metricValue": 6.096, "condition": "One precast panel, lettered on the sheet", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet T3A Temporary Railing (Type K), typical panel", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__t03a.dgn", "quote": "PRECAST CONCRETE PANEL (20'-0\" LAYING LENGTH)", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
     {"id": "temporary-railing-type-k-height", "topic": "road closures", "value": 32, "unit": "in", "metricValue": 0.813, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Top of the panel section over the PAVEMENT OR GROUND LINE, at the scale where its feet measure 6 in and its base 24 in", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet T3A Temporary Railing (Type K), panel section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__t03a.dgn", "quote": "TEMPORARY RAILING (TYPE K)", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},

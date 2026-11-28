@@ -28,4 +28,5 @@ pub mod predict;
 pub mod presence;
 pub mod proto;
 pub mod snapshot;
+pub mod weather;
 pub mod wire;

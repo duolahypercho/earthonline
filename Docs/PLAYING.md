@@ -61,7 +61,8 @@ On foot and driving:
 | --- | --- | --- |
 | Click the window | Capture the mouse | Capture the mouse |
 | Mouse | Look | Look |
-| W A S D | Move | Throttle, brake and reverse, steer |
+| W A S D | Move | W accelerates, S holds the service brake, A/D steer |
+| R | Sleep when beside the bed | Switch Drive/Reverse at a stop |
 | Shift | Run; hold it going straight ahead to sprint | |
 | C or Ctrl | Crouch | Look behind (C) |
 | Space | Jump | Handbrake |

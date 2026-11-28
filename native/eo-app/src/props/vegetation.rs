@@ -47,24 +47,32 @@ impl TerrainGrid {
                 continue;
             }
             let base = o.base_vertex as usize;
-            let Some(first) = scene.vertices.get(base) else { continue };
-            let ci = ((first.pos[0] as f64 - g.ox) / g.cell - 0.5).round() as i64;
-            let cj = ((first.pos[2] as f64 - g.oz) / g.cell - 0.5).round() as i64;
-            for vz in 0..side {
-                for vx in 0..side {
-                    let Some(v) = scene.vertices.get(base + vz * side + vx) else { continue };
-                    let (i, j) = (ci + vx as i64, cj + vz as i64);
-                    if i < 0 || j < 0 || i as usize >= w || j as usize >= h {
-                        continue;
-                    }
-                    let k = j as usize * w + i as usize;
-                    g.y[k] = v.pos[1];
-                    g.rgba[k] = v.color;
-                }
-            }
+            let Some(tile) = scene.vertices.get(base..base + side * side) else { continue };
+            g.copy_lattice_vertices(tile, side);
             tiles += 1;
         }
         (tiles > 0).then_some(g)
+    }
+
+    fn copy_lattice_vertices(&mut self, tile: &[eo_render::scene::Vertex], side: usize) {
+        // The renderer reuses the 33-by-33 topology for coarse tiles and
+        // quarter-spacing relief patches. Only copy vertices on the elevation
+        // lattice, at their actual coordinates. A fine patch occupies eight
+        // coarse cells and must never move props in the next three patches.
+        let first = tile[0].pos;
+        let cx = ((f64::from(first[0]) - self.ox) / self.cell - 0.5).round() as i64;
+        let cz = ((f64::from(first[2]) - self.oz) / self.cell - 0.5).round() as i64;
+        let step = f64::from(tile[1].pos[0] - first[0]);
+        let stride = (self.cell / step).round().max(1.) as usize;
+        for (j, vz) in (0..side).step_by(stride).enumerate() {
+            for (i, vx) in (0..side).step_by(stride).enumerate() {
+                if let Some(k) = self.at(cx + i as i64, cz + j as i64) {
+                    let v = tile[vz * side + vx];
+                    self.y[k] = v.pos[1];
+                    self.rgba[k] = v.color;
+                }
+            }
+        }
     }
 
     fn at(&self, i: i64, j: i64) -> Option<usize> {
@@ -286,6 +294,17 @@ fn presidio_ring(repo_root: &std::path::Path) -> Option<Vec<[f64; 2]>> {
         .map(|g| g.polygon)
 }
 
+/// The source footprint where a portal or an open approach replaces soil.
+pub(crate) fn portal_ground(roads: Option<&Arc<eo_structures::StructureWorld>>) -> Option<&Arc<eo_structures::StructureWorld>> {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let enabled = *ENABLED.get_or_init(|| !std::env::args().any(|a| a == "--no-tunnel-plant-clearance"));
+    roads.filter(|w| enabled && !w.terrain_cuts().is_empty())
+}
+
+pub(crate) fn retain_rooted(roads: &eo_structures::StructureWorld, plants: &mut Vec<Plant>) {
+    plants.retain(|p| roads.terrain_cut_at(p.pos[0], p.pos[2]).is_none());
+}
+
 /// What the plants read: the drawn terrain, the street world (footprints,
 /// paved surfaces), the open spaces' greens, the land cover, the shore field.
 /// (`--no-city-planting`, Docs/HILLS-PLAN.md H6a) The hill builder's planting map
@@ -341,6 +360,7 @@ pub fn park_tree_canopy_ok(x: f64, z: f64) -> bool {
 pub struct VegGround {
     pub grid: TerrainGrid,
     pub street: Arc<eo_street::StreetWorld>,
+    portal_ground: Option<Arc<eo_structures::StructureWorld>>,
     pub land: Option<eo_data::LandCover>,
     pub water: Option<Arc<eo_water::WaterData>>,
     pub switches: Switches,
@@ -366,7 +386,7 @@ pub struct VegGround {
 }
 
 impl VegGround {
-    pub fn new(grid: TerrainGrid, street: Arc<eo_street::StreetWorld>, land: Option<eo_data::LandCover>, water: Option<Arc<eo_water::WaterData>>, switches: Switches, repo_root: &std::path::Path) -> Self {
+    pub fn new(grid: TerrainGrid, street: Arc<eo_street::StreetWorld>, portal_ground: Option<Arc<eo_structures::StructureWorld>>, land: Option<eo_data::LandCover>, water: Option<Arc<eo_water::WaterData>>, switches: Switches, repo_root: &std::path::Path) -> Self {
         let tm = eo_street::STREET_TILE_M;
         let mut tiles = HashSet::new();
         for j in 0..grid.h {
@@ -416,7 +436,7 @@ impl VegGround {
                 }
             }
         };
-        let g = VegGround { grid, street, land, water, switches, g3, naip, city, bedrock, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
+        let g = VegGround { grid, street, portal_ground, land, water, switches, g3, naip, city, bedrock, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
         g.probe_from_env();
         g
     }
@@ -594,6 +614,14 @@ impl VegGround {
         }
     }
 
+    /// The road and portal structure replace the soil in an excavation.
+    /// The land over the enclosed bore remains available for planting.
+    pub fn fine_root_clearance(&self, plants: &mut Vec<Plant>) {
+        if let Some(roads) = &self.portal_ground {
+            retain_rooted(roads, plants);
+        }
+    }
+
     /// The drawn ground at (x, z) and what grows there (None: nothing can).
     pub fn site(&self, x: f64, z: f64) -> Option<Site> {
         let sea = eo_water::SEA_LEVEL_Y;
@@ -756,6 +784,21 @@ pub fn instances(plants: &[Plant], out: &mut Vec<GpuPropInstance>, counts: &mut 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fine_patch_heights_stay_inside_the_patch_footprint() {
+        let mut ground = TerrainGrid { ox: 0., oz: 0., cell: 8., w: 40, h: 40,
+            y: vec![f32::NAN; 1600], rgba: vec![0; 1600] };
+        let side = eo_render::scene::TILE_CELLS + 1;
+        let tile: Vec<_> = (0..side*side).map(|i| {
+            let (x,z) = (4.+2.*(i%side) as f32, 4.+2.*(i/side) as f32);
+            eo_render::scene::Vertex { pos: [x, x+z, z], normal: 0, color: 0xffffffff }
+        }).collect();
+        ground.copy_lattice_vertices(&tile, side);
+        assert_eq!(ground.y[8*40+8], 136.);
+        assert!(ground.y[8*40+9].is_nan());
+        assert_eq!(ground.height(32., 32.), Some(64.));
+    }
 
     #[test]
     fn tint_packs_as_the_shader_unpacks() {

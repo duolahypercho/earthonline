@@ -212,6 +212,11 @@ source, retrieval, digests and required attribution, except
 | `sf-storm-drains.json.gz` | Gutter storm drains | PDDL 1.0 |
 | `building-metadata/v1/`, `v1-pack/` | Ground-floor shop categories per tile; inputs in each `index.json` | PDDL 1.0, ODbL 1.0, CC0 1.0 |
 
+`eo-data` embeds [stop-control nodes and directions](../native/eo-data/data/sf-traffic-stops.json)
+from the shipped city pack and a pinned OpenStreetMap extract. The
+[provenance notice](../native/eo-data/data/sf-traffic-stops.NOTICE.txt) records
+the generator, source checksums and ODbL 1.0 attribution.
+
 Two measured tables derived from USDA NAIP aerial imagery (public domain)
 ship in `native/assets/`: `roof-colours-v1.bin.gz` and
 `ground-green-v1.bin.gz`. Beside them, `native/assets/sf-lithology-v1.json.gz` is the
