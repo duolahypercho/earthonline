@@ -2216,7 +2216,22 @@ fn cg_light(p: vec3<f32>, n: vec3<f32>, env_w: f32) -> vec3<f32> {
     var sun = vec3<f32>(0.0);
     let nl = dot(n, l);
     if (nl > 0.0) {
-        sun = look.key.xyz * nl * cg_shadow(p, n) * sky_cloud_transmittance(p);
+        let g_term = select(1.0, rm_ss(0.02, 0.24, nl), SF_AAA_DETAIL);
+        sun = look.key.xyz * nl * g_term * cg_shadow(p, n) * sky_cloud_transmittance(p);
+        if (SF_AAA_DETAIL) {
+            // Soften extreme low-sun golden-hour chroma and peak intensity on procedural opposite
+            // canyon walls so shaded curtain-wall glass never shows harsh neon mustard-yellow stripes.
+            let low_s = (1.0 - rm_ss(0.08, 0.24, look.sun.y)) * rm_ss(0.0, 0.04, look.sun.y);
+            if (low_s > 0.001) {
+                let sl = lk_luma(sun);
+                let s_cap = 0.48 / max(look.key.w, 0.05);
+                if (sl > 1e-5) {
+                    let s_out = s_cap * (sl / (sl + s_cap));
+                    let soft_s = mix(sun, vec3<f32>(sl) * vec3<f32>(1.10, 0.98, 0.84), 0.42 * low_s) * (s_out / sl);
+                    sun = mix(sun, soft_s, low_s);
+                }
+            }
+        }
     }
     return sun + amb_irradiance(amb_sample(p, n), n, lk_sh(n) * env_w);
 }
@@ -2285,7 +2300,13 @@ fn cg_canyon(world: vec3<f32>, ng: vec3<f32>, r: vec3<f32>, cam_d: f32) {
     let p_air = world + r * max(t_wall - CG_AIR_M / max(rn, 0.05), 0.0);
     let e_wall = cg_light(p_air, n_o, paint_w);
     let k = rm_h(seed, 62.0);
-    let albedo = cg_facade(k) * mix(0.8, 1.15, rm_h(seed, 63.0));
+    var albedo = cg_facade(k) * mix(0.8, 1.15, rm_h(seed, 63.0));
+    if (SF_AAA_DETAIL) {
+        // Keep procedural opposite-canyon wall palette natural limestone/granite/slate in reflections
+        // rather than saturated yellow-ochre blocks under low golden-hour sun.
+        let al = lk_luma(albedo);
+        albedo = mix(albedo, vec3<f32>(al) * vec3<f32>(1.01, 1.00, 0.97), 0.50) * 0.78;
+    }
     let glazed = step(0.8, k);
     // its storeys of windows (a curtain wall nearly all glass), the ground storey a shop front
     let bay = mix(CG_BAY_M.x, CG_BAY_M.y, rm_h(seed, 64.0));

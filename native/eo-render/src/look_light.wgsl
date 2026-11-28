@@ -484,11 +484,10 @@ fn aaa_hemi_oct_encode(d: vec3<f32>) -> vec2<f32> {
 /// dome and forward-scattered Mie solar corona along upper-hemisphere direction `dir`.
 fn aaa_sky_with_clouds(dir: vec3<f32>, rough: f32) -> vec3<f32> {
     let up = normalize(vec3<f32>(dir.x, max(dir.y, 0.004), dir.z));
-    // Vertical skyline glass viewed from the Bay/waterfront reflects at R.y ~ 0.00..0.10, which
-    // otherwise hits distant bleached horizon haze; lift near-horizon sampling smoothly into the
-    // real mid-sky cloud canopy & deep-blue/sunset zenith so towers reflect vivid clouds and sky.
-    let lift = 0.14 * (1.0 - smoothstep(0.0, 0.38, up.y));
-    let sky_up = normalize(vec3<f32>(up.x, clamp(up.y + lift * 0.78, 0.055, 0.995), up.z));
+    // Subtle horizon lift so skyline glass reflects real mid-sky tone without yanking shaded
+    // street-canyon reflections up into bright overhead cumulus blobs.
+    let lift = 0.045 * (1.0 - smoothstep(0.0, 0.35, up.y));
+    let sky_up = normalize(vec3<f32>(up.x, clamp(up.y + lift * 0.72, 0.035, 0.995), up.z));
     let pw = lk_phys();
     var sky: vec3<f32>;
     if (pw >= 0.999) {
@@ -501,18 +500,17 @@ fn aaa_sky_with_clouds(dir: vec3<f32>, rough: f32) -> vec3<f32> {
         }
     }
     if (SF_AAA_CLOUD_REFL && sky_vol_clouds_on(skyu.cirrus) && sky_on(skyu.flags.x, SKY_CLOUDS) && skyu.cloud0.z > 0.0) {
-        // Optically razor-sharp mip sampling on architectural glazing (`rough = 0.015..0.045` -> mip 0..0.12)
-        // lifted into the cumulus canopy so vivid white sunlit clouds & deep cobalt zenith sky pop
-        // with true mirror contrast across downtown glass towers (`01`/`02`/`07`).
-        let mip = clamp((rough - 0.015) * 4.0, 0.0, 2.5);
-        let cl_up = normalize(vec3<f32>(up.x, clamp(up.y + lift * 1.15, 0.085, 0.995), up.z));
+        // Keep the 128^2 cloud dome smoothly pre-filtered (`mip >= 0.65`) at close range so
+        // downtown windows never show blurry low-res cloud blobs, with natural physical cloud gain.
+        let mip = clamp(0.65 + (rough - 0.04) * 5.0, 0.65, 2.8);
+        let cl_up = normalize(vec3<f32>(up.x, clamp(up.y + lift * 0.90, 0.055, 0.995), up.z));
         let cr = textureSampleLevel(lk_cloud_refl, lk_ao_samp, aaa_hemi_oct_encode(cl_up), mip);
         let day_c = smoothstep(0.05, 0.24, look.sun.y);
-        let sky_deep = sky * mix(vec3<f32>(1.0), vec3<f32>(0.84, 0.93, 1.10), day_c * 0.72);
-        let comp = sky_deep * (1.0 - clamp(cr.a, 0.0, 1.0)) + max(cr.rgb, vec3<f32>(0.0)) * 1.42;
+        let sky_deep = sky * mix(vec3<f32>(1.0), vec3<f32>(0.88, 0.95, 1.08), day_c * 0.65);
+        let comp = sky_deep * (1.0 - clamp(cr.a, 0.0, 1.0)) + max(cr.rgb, vec3<f32>(0.0)) * 1.04;
         let base_l = lk_luma(sky);
         let comp_l = lk_luma(comp);
-        sky = comp * min(1.0, (base_l * 10.5 + 1e-4) / max(comp_l, 1e-6));
+        sky = comp * min(1.0, (base_l * 5.5 + 1e-4) / max(comp_l, 1e-6));
     }
     // At night, replace muddy grey-brown sky dome reflections with deep midnight indigo-navy sky
     // (`06a_night_skyline`, `06b_night_street`) so dark glass & upper stone reflect cool blue night air.
@@ -527,18 +525,18 @@ fn aaa_sky_with_clouds(dir: vec3<f32>, rough: f32) -> vec3<f32> {
         // `g_dir_s` and clips mirror-aligned golden-hour facades to white).
         let cs = max(dot(sky_up, skyu.atmo.xyz), 0.0);
         let beam = clamp(skyu.beam.x, 0.0, 1.0) * smoothstep(-0.02, 0.08, skyu.atmo.y);
-        let corona = pow(cs, 8.0) * 0.14 * beam * (1.0 - clamp(rough * 2.2, 0.0, 0.85));
-        sky = sky + look.key.xyz * (corona * 0.045);
-        // At golden hour (`look.sun.y < 0.24`), softly roll off extreme forward-sun horizon Mie
-        // aureole radiance so east-facing curtain walls (`07` One Steuart Lane) reflect rich
-        // saturated amber/gold sky instead of pale bleached cream.
+        let corona = pow(cs, 8.0) * 0.11 * beam * (1.0 - clamp(rough * 2.2, 0.0, 0.85));
+        sky = sky + look.key.xyz * (corona * 0.035);
+        // At golden hour (`look.sun.y < 0.26`), softly roll off extreme forward-sun horizon Mie
+        // aureole radiance so curved/faceted curtain walls (`101 California`, `One Steuart Lane`)
+        // reflect natural warm golden-hour sky without harsh orange vertical banding.
         let low_sun = (1.0 - smoothstep(0.10, 0.26, look.sun.y)) * smoothstep(0.0, 0.05, look.sun.y);
-        if (low_sun > 0.001 && cs > 0.45) {
-            let sky_cap = 0.72 / max(look.key.w, 0.05);
+        if (low_sun > 0.001 && cs > 0.25) {
+            let sky_cap = 0.48 / max(look.key.w, 0.05);
             let sl = lk_luma(sky);
             if (sl > sky_cap) {
-                let comp_s = sky_cap * (1.0 + 0.20 * log(sl / sky_cap)) / max(sl, 1e-5);
-                sky = mix(sky, sky * comp_s, low_sun * smoothstep(0.45, 0.82, cs));
+                let comp_s = sky_cap * (1.0 + 0.18 * log(sl / sky_cap)) / max(sl, 1e-5);
+                sky = mix(sky, sky * comp_s, low_sun * smoothstep(0.25, 0.72, cs));
             }
         }
     }
@@ -574,9 +572,10 @@ fn aaa_building_env(r: vec3<f32>, rough: f32, world: vec3<f32>, ng: vec3<f32>, a
         let lower = mix(city_col, water_col, bay_view);
         env_col = mix(lower, sky_up, smoothstep(-0.04, 0.03, r.y));
     }
-    // Skip heightfield ray-march for high upward rays (> 27 deg), negligible glass weight, or
-    // waterfront rays reflecting straight east over open Bay water (cuts bay city-pass taps >50%).
-    if (allow_tower_refl && SF_AAA_SKYLINE_FIELD && sf_field_on() && r.y < 0.46 && bay_view < 0.72) {
+    // Skip heightfield ray-march only for steep upward rays (> 46 deg), negligible glass weight, or
+    // waterfront rays reflecting straight east over open Bay water so narrow downtown canyons
+    // (e.g. California St) actually reflect tall opposing skyscrapers across the street.
+    if (allow_tower_refl && SF_AAA_SKYLINE_FIELD && sf_field_on() && r.y < 0.72 && bay_view < 0.72) {
         // Reflect actual neighboring skyscraper silhouettes from the citywide 2.5D heightfield so
         // downtown curtain walls show crisp dark/sunlit neighbor facades slicing across bright clouds.
         let ro = sf_reflect_occlusion(world, ng, r);
@@ -1014,22 +1013,28 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             let g_env_i = sky_w2_env(mix(look.ambient.w * look.env_class.y, 1.0, lk_phys()));
             var g_rad_e = g_env * g_env_i;
             if (amb && sf_dist < 380.0) {
+                // Honor true canyon occlusion inside downtown corridors instead of leaking 72%
+                // unobstructed sky/clouds onto shaded street-level glazing.
                 let gaw = amb_reflection(av, gr_vec);
-                g_rad_e = g_rad_e * mix(0.72, 1.0, gaw.x) + amb_occluder_light() * (g_env_i * gaw.y * 0.45 / LK_PI);
+                let amb_w = 1.0 - smoothstep(180.0, 360.0, sf_dist);
+                let g_occ_sky = mix(1.0, mix(0.10, 1.0, gaw.x), amb_w);
+                let g_occ_wall = amb_occluder_light() * (g_env_i * gaw.y * amb_w * 0.75 / LK_PI);
+                g_rad_e = g_rad_e * g_occ_sky + g_occ_wall;
             }
-            // Exposed skyline / waterfront glass catches full crisp cloud & Bay mirror reflections; deep canyon glass dims cleanly.
-            g_rad_e = g_rad_e * mix(0.66, 1.46, clamp(0.55 * sf_sky_vis + 0.45 * sf_open, 0.0, 1.0));
-            let g_spec_occ = mix(0.80, 1.0, clamp(pow(gnv + ao, exp2(-16.0 * gr - 1.0)) - 1.0 + ao, 0.0, 1.0));
+            // Exposed skyline / waterfront glass catches full crisp cloud & Bay reflections; deep canyon glass dims physically.
+            g_rad_e = g_rad_e * mix(0.38, 1.06, clamp(0.55 * sf_sky_vis + 0.45 * sf_open, 0.0, 1.0));
+            let g_spec_occ = mix(0.45, 1.0, clamp(pow(gnv + ao, exp2(-16.0 * gr - 1.0)) - 1.0 + ao, 0.0, 1.0));
             var g_ind_s = g_rad_e * g_fss * g_spec_occ;
             var g_dir_s = vec3<f32>(0.0);
             let gnl = max(dot(gn, l), 0.0);
             if (gnl > 0.0 && any(key > vec3<f32>(0.0))) {
-                let key_g = key * min(gnl / max(nl, 0.08), 1.35);
-                let gr_sun = max(gr, 0.145);
+                let key_g = key * min(gnl / max(nl, 0.08), 1.20);
+                let gr_sun = max(gr, 0.185);
                 var raw_s = key_g * lk_ggx(gn, v, l, aaa_glass_f0, gr_sun);
-                // Strict post-exposure luminance knee so mirror-aligned golden-hour & sunlit facets
-                // (`07` One Steuart Lane, `02` Mira Tower) gleam warm saturated gold with 0 clipped white pixels.
-                let gs_cap = 0.34 / max(look.key.w, 0.05);
+                // Strict post-exposure luminance knee so mirror-aligned golden-hour & curved-cylinder facets
+                // (`101 California`, `One Steuart Lane`) show natural warm sheen without harsh orange bands.
+                let low_sun_g = (1.0 - smoothstep(0.08, 0.24, look.sun.y)) * smoothstep(0.0, 0.04, look.sun.y);
+                let gs_cap = mix(0.26, 0.17, low_sun_g) / max(look.key.w, 0.05);
                 let gs_l = lk_luma(raw_s);
                 if (gs_l > 1e-5) {
                     let gs_out = gs_cap * (gs_l / (gs_l + gs_cap));
@@ -1038,15 +1043,15 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
                 g_dir_s = raw_s;
             }
             // Combined glazing highlight shoulder (preserves chromaticity while preventing white-slab clipping).
-            let g_tot_cap = 0.84 / max(look.key.w, 0.05);
+            let g_tot_cap = 0.68 / max(look.key.w, 0.05);
             let g_tot_l = lk_luma(g_ind_s + g_dir_s);
             if (g_tot_l > g_tot_cap) {
-                let g_comp = g_tot_cap * (1.0 + 0.18 * log(g_tot_l / g_tot_cap)) / max(g_tot_l, 1e-5);
+                let g_comp = g_tot_cap * (1.0 + 0.16 * log(g_tot_l / g_tot_cap)) / max(g_tot_l, 1e-5);
                 g_ind_s = g_ind_s * g_comp;
                 g_dir_s = g_dir_s * g_comp;
             }
             let g_trans = max(vec3<f32>(1.0) - g_fss, vec3<f32>(0.0));
-            let g_room_d = (irr * sf_sky_vis * aaa_glass_room * 0.78 / LK_PI * ao_d + key * aaa_glass_room * (0.09 / LK_PI)) * g_trans;
+            let g_room_d = (irr * sf_sky_vis * aaa_glass_room * 1.15 / LK_PI * ao_d + key * aaa_glass_room * (0.11 / LK_PI)) * g_trans;
             direct_d = direct_d * wall_w;
             direct_s = direct_s * wall_w + g_dir_s * gcov;
             indirect_d = indirect_d * wall_w + g_room_d * gcov;
@@ -1081,22 +1086,27 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             }
         }
     } else if (SF_AAA_BRDF && !glass && (kind == 0u || kind == 4u) && lm_kind(m.flags) != 0u && abs(ng.y) < 0.45 && rough <= 0.14 && s.metal <= 0.42 && s.env <= 0 && (!SF_HOUSE || (objects[object].kind & 0xfffffe00u) == 0u)) {
-        // Glossy non-F_GLASS architectural windows on landmarks (e.g. Ferry Building upper arched windows):
-        // live volumetric cloud, sky & neighboring-tower reflections with subtle per-light thermal bow.
+        // Glossy non-F_GLASS architectural windows on landmarks (e.g. Ferry Building upper & arcade arched windows):
+        // physical dielectric F0 + canyon/arcade occlusion so recessed arches stay deep reflective dark glazing.
         let day_w = smoothstep(0.02, 0.18, look.sun.y);
         if (day_w > 0.001) {
             let tw = normalize(vec2<f32>(-ng.z, ng.x) + vec2<f32>(1e-5, 0.0));
             let cell_w = floor(vec2<f32>(dot(world.xz, tw) / 1.15, world.y / 1.65));
-            let jx = (fract(sin(dot(cell_w, vec2<f32>(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.032;
-            let jy = (fract(sin(dot(cell_w + vec2<f32>(7.3, 3.1), vec2<f32>(39.346, 11.135))) * 24634.6345) - 0.5) * 0.032;
-            let wn = normalize(n + vec3<f32>(tw.x * jx, jy + 0.036, tw.y * jx));
+            let jx = (fract(sin(dot(cell_w, vec2<f32>(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.024;
+            let jy = (fract(sin(dot(cell_w + vec2<f32>(7.3, 3.1), vec2<f32>(39.346, 11.135))) * 24634.6345) - 0.5) * 0.024;
+            let wn = normalize(n + vec3<f32>(tw.x * jx, jy + 0.015, tw.y * jx));
             let wnv = max(dot(wn, v), 1e-3);
-            let wf0 = max(f0, vec3<f32>(0.16, 0.19, 0.22));
-            let wf = wf0 + (vec3<f32>(1.0) - wf0) * pow(1.0 - wnv, 4.0);
+            let wf0 = max(f0, vec3<f32>(0.062, 0.072, 0.082));
+            let wf = wf0 + (vec3<f32>(1.0) - wf0) * pow(1.0 - wnv, 4.5);
             let wr = reflect(-v, wn);
-            let w_env = aaa_building_env(wr, max(rough, 0.042), world, ng, true);
+            var w_env = aaa_building_env(wr, max(rough, 0.055), world, ng, true);
             let w_env_i = sky_w2_env(mix(look.ambient.w * look.env_class.y, 1.0, lk_phys()));
-            indirect_s = mix(indirect_s, w_env * w_env_i * wf * mix(0.78, 1.0, spec_occ), day_w);
+            var w_rad = w_env * w_env_i;
+            if (amb) {
+                let waw = amb_reflection(av, wr);
+                w_rad = w_rad * mix(0.14, 1.0, waw.x) + amb_occluder_light() * (w_env_i * waw.y * 0.55 / LK_PI);
+            }
+            indirect_s = mix(indirect_s, w_rad * wf * mix(0.45, 1.0, spec_occ), day_w);
         }
     }
 // sf:end

@@ -177,13 +177,13 @@ fn sf_reflect_occlusion(world: vec3<f32>, n: vec3<f32>, r: vec3<f32>) -> vec2<f3
     let nh_len = length(nh);
     let n_dir = select(vec2<f32>(0.0), nh / max(nh_len, 1e-4), nh_len > 0.05);
     let grazing = 1.0 - max(dot(dir, n_dir), 0.0);
-    let start_xz = world.xz + n_dir * (cell_m * (1.75 + 0.85 * grazing)) + dir * (cell_m * 0.55);
+    let start_xz = world.xz + n_dir * (cell_m * (1.05 + 0.45 * grazing)) + dir * (cell_m * 0.35);
 
-    var d = 26.0;
-    var mip = 1.0;
+    var d = 14.0;
+    var mip = 0.5;
     var hit = 0.0;
     var hint = 0.0;
-    for (var i = 0; i < 4; i = i + 1) {
+    for (var i = 0; i < 5; i = i + 1) {
         let ray_y = world.y + d * slope;
         if (ray_y > max_y + 4.0) {
             break;
@@ -198,7 +198,7 @@ fn sf_reflect_occlusion(world: vec3<f32>, n: vec3<f32>, r: vec3<f32>) -> vec2<f3
         // reflections on waterfront towers keep bright Bay shimmer instead of building silhouettes.
         let is_water = h <= 4.0 && s.g > 0.85;
         if (!is_water) {
-            let pen = max(d * 0.055, 5.5);
+            let pen = max(d * 0.055, 4.5);
             let step_hit = clamp((h - ray_y) / pen + 0.35, 0.0, 1.0);
             if (step_hit > 0.01) {
                 let dist_w = 1.0 - 0.32 * smoothstep(260.0, 720.0, d);
@@ -213,8 +213,8 @@ fn sf_reflect_occlusion(world: vec3<f32>, n: vec3<f32>, r: vec3<f32>) -> vec2<f3
                 break;
             }
         }
-        d = d * 2.60;
-        mip = min(mip + 0.80, 3.4);
+        d = d * 2.20;
+        mip = min(mip + 0.70, 3.2);
     }
     return vec2<f32>(clamp(hit, 0.0, 1.0), hint);
 }

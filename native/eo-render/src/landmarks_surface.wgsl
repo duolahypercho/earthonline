@@ -847,31 +847,39 @@ fn lm_building_surface(s: ptr<function, Surface>, m: Material, kind: u32, world:
     let vertical = clamp(1.0 - abs(n.y), 0.0, 1.0);
     if (kind == 4u) {
 // sf:AAA_BUILDINGS-
-        let cellm = vec2<f32>(max(m.rough_flatten, 0.1), max(m.thin_absorption, 0.1));
-        let cell = floor(uv / cellm);
-        let panel_tone = lm_noise(vec3<f32>(cell.x * 0.71, cell.y * 0.53, 0.3)) * LM_PC_PATCH_TONE;
-        let drip = pow(1.0 - fract(uv.y / cellm.y), 6.0) * LM_PC_STREAK_TONE * vertical;
-        let tone = lm_noise(local / LM_PC_PATCH_M) * LM_PC_PATCH_TONE;
-        (*s).albedo = (*s).albedo * (1.0 + panel_tone + tone - drip);
-        (*s).rough = clamp((*s).rough + tone * (LM_PC_ROUGH_SPREAD / max(1e-3, LM_PC_PATCH_TONE)), 0.4, 0.95);
-        let footprint = ((abs(du.x) + abs(dv.x)) + (abs(du.y) + abs(dv.y))) * 0.5;
-        if (LM_V3) {
-            // the panels' chamfered joints (a 40 mm V-groove, its sealant and
-            // the groove's own shadow reading about half the panel's tone,
-            // INFERRED), box-filtered over the pixel so a far wall takes their share.
-            let fu = max(abs(du.x) + abs(dv.x), 1e-4) / cellm.x;
-            let fv = max(abs(du.y) + abs(dv.y), 1e-4) / cellm.y;
-            let ju = 1.0 - mix(lm_pulse(uv.x / cellm.x, fu, 1.0 - 0.04 / cellm.x), 1.0 - 0.04 / cellm.x, lm_ss(0.5, 1.0, fu));
-            let jv = 1.0 - mix(lm_pulse(uv.y / cellm.y, fv, 1.0 - 0.04 / cellm.y), 1.0 - 0.04 / cellm.y, lm_ss(0.5, 1.0, fv));
-            let joint = clamp(ju + jv - ju * jv, 0.0, 1.0) * vertical;
-            (*s).albedo = (*s).albedo * (1.0 - 0.5 * joint);
-        }
-        let fj = lm_fade(footprint, cellm.x);
-        if (fj > 0.0) {
-            let h0 = lm_precast_height(uv, cellm);
-            let hx = lm_precast_height(uv + du, cellm);
-            let hy = lm_precast_height(uv + dv, cellm);
-            (*s).n = lm_bump(n, dpx, dpy, h0 * fj, hx * fj, hy * fj);
+        if (m.rough_flatten < 0.05) {
+            // Contract with skyline.rs: `precast` with `bayM=0, storeyM=0` denotes landmark masonry
+            // trim, corner piers, cornices & roofs (never clamp bayM to 0.1 m V-grooves).
+            let tone = lm_noise(local / LM_PC_PATCH_M) * (LM_PC_PATCH_TONE * 0.65);
+            (*s).albedo = (*s).albedo * (1.0 + tone);
+            (*s).rough = clamp((*s).rough + tone * (LM_PC_ROUGH_SPREAD / max(1e-3, LM_PC_PATCH_TONE)), 0.4, 0.95);
+        } else {
+            let cellm = vec2<f32>(max(m.rough_flatten, 0.1), max(m.thin_absorption, 0.1));
+            let cell = floor(uv / cellm);
+            let panel_tone = lm_noise(vec3<f32>(cell.x * 0.71, cell.y * 0.53, 0.3)) * LM_PC_PATCH_TONE;
+            let drip = pow(1.0 - fract(uv.y / cellm.y), 6.0) * LM_PC_STREAK_TONE * vertical;
+            let tone = lm_noise(local / LM_PC_PATCH_M) * LM_PC_PATCH_TONE;
+            (*s).albedo = (*s).albedo * (1.0 + panel_tone + tone - drip);
+            (*s).rough = clamp((*s).rough + tone * (LM_PC_ROUGH_SPREAD / max(1e-3, LM_PC_PATCH_TONE)), 0.4, 0.95);
+            let footprint = ((abs(du.x) + abs(dv.x)) + (abs(du.y) + abs(dv.y))) * 0.5;
+            if (LM_V3) {
+                // the panels' chamfered joints (a 40 mm V-groove, its sealant and
+                // the groove's own shadow reading about half the panel's tone,
+                // INFERRED), box-filtered over the pixel so a far wall takes their share.
+                let fu = max(abs(du.x) + abs(dv.x), 1e-4) / cellm.x;
+                let fv = max(abs(du.y) + abs(dv.y), 1e-4) / cellm.y;
+                let ju = 1.0 - mix(lm_pulse(uv.x / cellm.x, fu, 1.0 - 0.04 / cellm.x), 1.0 - 0.04 / cellm.x, lm_ss(0.5, 1.0, fu));
+                let jv = 1.0 - mix(lm_pulse(uv.y / cellm.y, fv, 1.0 - 0.04 / cellm.y), 1.0 - 0.04 / cellm.y, lm_ss(0.5, 1.0, fv));
+                let joint = clamp(ju + jv - ju * jv, 0.0, 1.0) * vertical;
+                (*s).albedo = (*s).albedo * (1.0 - 0.5 * joint);
+            }
+            let fj = lm_fade(footprint, cellm.x);
+            if (fj > 0.0) {
+                let h0 = lm_precast_height(uv, cellm);
+                let hx = lm_precast_height(uv + du, cellm);
+                let hy = lm_precast_height(uv + dv, cellm);
+                (*s).n = lm_bump(n, dpx, dpy, h0 * fj, hx * fj, hy * fj);
+            }
         }
 // sf:end
 // sf:AAA_BUILDINGS+
@@ -1223,26 +1231,26 @@ fn lm_authored3(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec
             (*s).rough = mix((*s).rough, 0.24, curtain_w * 0.85);
             (*s).metal = mix((*s).metal, 0.74, curtain_w * 0.85);
         }
-        let tilt_amp = max(r3.y, mix(0.016, 0.028, curtain_w));
+        let tilt_amp = max(r3.y, mix(0.014, 0.022, curtain_w));
         let far_k = lm_ss(0.40, 1.35, max(fu, fv));
         let j = (vec2<f32>(st_hash(cell * vec2<f32>(1.37, 2.11) + seed + 3.3), st_hash(cell * vec2<f32>(2.71, 1.13) + seed + 8.1)) * 2.0 - 1.0) * (tilt_amp * (1.0 - far_k));
         let wave_a = vec2<f32>(u * 0.22 + seed.x * 5.0, v * 0.30);
-        let jm = (vec2<f32>(st_noise(wave_a), st_noise(wave_a + vec2<f32>(7.1, 2.9))) * 2.0 - 1.0) * mix(0.005, 0.012, curtain_w);
+        let jm = (vec2<f32>(st_noise(wave_a), st_noise(wave_a + vec2<f32>(7.1, 2.9))) * 2.0 - 1.0) * mix(0.004, 0.010, curtain_w);
         let tt = vec3<f32>(t.x, 0.0, t.y);
-        let gn = normalize(n + tt * (j.x + jm.x) + vec3<f32>(0.0, j.y + jm.y + 0.044 * curtain_w, 0.0));
+        let gn = normalize(n + tt * (j.x + jm.x) + vec3<f32>(0.0, j.y + jm.y, 0.0));
         let g_lum = max(dot(r1.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-3);
-        let g_hue = mix(vec3<f32>(1.0), clamp(r1.xyz / g_lum, vec3<f32>(0.66), vec3<f32>(1.30)), 0.58);
+        let g_hue = mix(vec3<f32>(1.0), clamp(r1.xyz / g_lum, vec3<f32>(0.68), vec3<f32>(1.28)), 0.55);
         let raw_f0 = mix(vec3<f32>(0.04), r1.xyz, r3.x);
-        let min_f0 = mix(0.13, 0.32, curtain_w) * g_hue;
-        let mac_batch = (st_noise(wave_a * 1.35 + vec2<f32>(3.3, 1.9)) * 2.0 - 1.0) * 0.095;
-        let pane_f0 = clamp(max(raw_f0 * mix(1.12, 1.65, curtain_w), min_f0) * (1.0 + mac_batch), vec3<f32>(0.09), vec3<f32>(0.46));
+        let min_f0 = mix(0.055, 0.14, curtain_w) * g_hue;
+        let mac_batch = (st_noise(wave_a * 1.35 + vec2<f32>(3.3, 1.9)) * 2.0 - 1.0) * 0.085;
+        let pane_f0 = clamp(max(raw_f0 * mix(0.90, 1.15, curtain_w), min_f0) * (1.0 + mac_batch), vec3<f32>(0.055), vec3<f32>(0.24));
         let vy_int = fract(v + clamp(view.y / vn * 0.22, -0.32, 0.32));
-        let slab_d = 1.0 - 0.72 * (1.0 - lm_ss(0.07, 0.16, vy_int) * lm_ss(0.93, 0.82, vy_int)) * (1.0 - far_k);
-        let blind_on = step(0.56, st_hash(floor(vec2<f32>(u * 0.35, v)) + seed + 2.1)) * step(0.52, vy_int) * (1.0 - far_k);
-        let room_c3 = mix(r1.xyz * (1.0 - r3.x) * mix(0.24, 0.11, curtain_w) * slab_d, vec3<f32>(0.24, 0.24, 0.25), blind_on * 0.36);
+        let slab_d = 1.0 - 0.78 * (1.0 - lm_ss(0.09, 0.20, vy_int) * lm_ss(0.92, 0.80, vy_int)) * (1.0 - far_k);
+        let blind_on = step(0.54, st_hash(floor(vec2<f32>(u * 0.35, v)) + seed + 2.1)) * step(0.48, vy_int) * (1.0 - far_k);
+        let room_c3 = mix(r1.xyz * (1.0 - r3.x) * mix(0.28, 0.16, curtain_w) * slab_d, vec3<f32>(0.24, 0.24, 0.25), blind_on * 0.42);
         aaa_bldg_on = true;
         aaa_glass_cov = glass;
-        aaa_glass_rough = clamp(sqrt(min(r1.w, 0.036) * min(r1.w, 0.036) + 0.14 * tilt_amp * tilt_amp * far_k), 0.016, 0.046);
+        aaa_glass_rough = clamp(sqrt(max(r1.w, 0.045) * max(r1.w, 0.045) + 0.18 * tilt_amp * tilt_amp * far_k), 0.045, 0.095);
         aaa_glass_f0 = pane_f0;
         aaa_glass_n = gn;
         aaa_glass_room = room_c3;
@@ -1509,7 +1517,11 @@ fn lm_authored4(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec
     let spandrel = pu * (1.0 - pv) * vertical;
     let rest = 1.0 - vertical;
 // sf:AAA_BUILDINGS-
-    (*s).albedo = frame_c * rest + pier_c * pier + frame_c * r4.x * spandrel + r1.xyz * glass;
+    let far_m = lm_ss(0.35, 1.15, max(fu, fv));
+    let med_blind = step(0.55, st_hash(floor(vec2<f32>(u * 0.45, v)) + seed + 2.1)) * step(0.54, fract(v)) * (1.0 - far_m);
+    let med_glass_c = mix(max(r1.xyz, vec3<f32>(0.045, 0.054, 0.062)), vec3<f32>(0.18, 0.19, 0.20), med_blind * 0.28);
+    let med_pier_c = mix(pier_c, frame_c * 0.88, lm_ss(0.38, 0.60, dot(pier_c, vec3<f32>(0.2126, 0.7152, 0.0722))) * 0.28);
+    (*s).albedo = frame_c * rest + med_pier_c * pier + frame_c * r4.x * spandrel + med_glass_c * glass;
     (*s).rough = frame_r * (rest + spandrel) + pier_r * pier + r1.w * glass;
     let polish = lm_ss(0.35, 0.2, (*s).rough);
     if (r2.x < 0.5) {
@@ -1569,30 +1581,54 @@ fn lm_authored4(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec
                 (*s).ao = clamp((*s).ao * mix(1.0, select(0.52, 0.82, view.y > 0.0), rev_w * 0.65), 0.18, 1.0);
             }
         }
-        let tilt_amp = max(r3.y, mix(0.016, 0.028, curtain_w));
+        let tilt_amp = max(r3.y, mix(0.014, 0.022, curtain_w));
         let j = (vec2<f32>(st_hash(cell * vec2<f32>(1.37, 2.11) + seed + 3.3), st_hash(cell * vec2<f32>(2.71, 1.13) + seed + 8.1)) * 2.0 - 1.0) * (tilt_amp * (1.0 - far_k));
         let wave_a = vec2<f32>(u * 0.22 + seed.x * 5.0, v * 0.30);
-        let jm = (vec2<f32>(st_noise(wave_a), st_noise(wave_a + vec2<f32>(7.1, 2.9))) * 2.0 - 1.0) * mix(0.005, 0.012, curtain_w);
-        let gn = normalize(n + tt * (j.x + jm.x) + vec3<f32>(0.0, j.y + jm.y + 0.044 * curtain_w, 0.0));
+        let jm = (vec2<f32>(st_noise(wave_a), st_noise(wave_a + vec2<f32>(7.1, 2.9))) * 2.0 - 1.0) * mix(0.004, 0.010, curtain_w);
+        let gn = normalize(n + tt * (j.x + jm.x) + vec3<f32>(0.0, j.y + jm.y, 0.0));
         let g_lum = max(dot(r1.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-3);
-        let g_hue = mix(vec3<f32>(1.0), clamp(r1.xyz / g_lum, vec3<f32>(0.66), vec3<f32>(1.30)), 0.58);
+        let g_hue = mix(vec3<f32>(1.0), clamp(r1.xyz / g_lum, vec3<f32>(0.68), vec3<f32>(1.28)), 0.55);
         let raw_f0 = mix(vec3<f32>(0.04), r1.xyz, r3.x);
-        let min_f0 = mix(0.13, 0.32, curtain_w) * g_hue;
-        let mac_batch = (st_noise(wave_a * 1.35 + vec2<f32>(3.3, 1.9)) * 2.0 - 1.0) * 0.095;
-        let pane_f0 = clamp(max(raw_f0 * mix(1.12, 1.65, curtain_w), min_f0), vec3<f32>(0.09), vec3<f32>(0.46));
+        let min_f0 = mix(0.055, 0.14, curtain_w) * g_hue;
+        let mac_batch = (st_noise(wave_a * 1.35 + vec2<f32>(3.3, 1.9)) * 2.0 - 1.0) * 0.085;
+        let pane_f0 = clamp(max(raw_f0 * mix(0.90, 1.15, curtain_w), min_f0), vec3<f32>(0.055), vec3<f32>(0.24));
         let suite_i = floor(v / 3.0);
         let suite_v = st_hash(vec2<f32>(suite_i * 1.93, 4.7) + seed);
-        // Parallax-shifted interior floor slab dark band & varied-height translucent roller blinds.
-        let vy_int = fract(v + clamp(view.y / vn * 0.22, -0.32, 0.32));
-        let slab_d = 1.0 - 0.75 * (1.0 - lm_ss(0.07, 0.16, vy_int) * lm_ss(0.93, 0.82, vy_int)) * (1.0 - far_k);
-        let blind_h = mix(0.24, 0.66, st_hash(floor(vec2<f32>(u * 0.35, v)) + seed + 6.7));
-        let blind_on = step(0.54, st_hash(floor(vec2<f32>(u * 0.35, v)) + seed + 2.1)) * step(1.0 - blind_h, vy_int) * (1.0 - far_k);
-        let base_room = r1.xyz * (1.0 - r3.x) * mix(0.12, 0.32, suite_v) * mix(1.0, 0.44, curtain_w) * slab_d;
-        let pane_room = mix(base_room, vec3<f32>(0.25, 0.25, 0.26), blind_on * 0.38);
+        // Close-range architectural glazing breakup: footprint-filtered internal transom bar,
+        // fine sub-mullion, parallax-shifted interior floor/ceiling slab shadows, office partitions
+        // & Venetian blinds so canyon towers show real architectural depth instead of flat sky slabs.
+        let near_k = 1.0 - far_k;
+        let aa_v = max(fv * 1.15, 0.022);
+        let aa_u = max(fu * 1.15, 0.020);
+        let transom_bar = (1.0 - lm_ss(0.018, 0.018 + aa_v, abs(fract(v) - 0.72))) * near_k;
+        let sub_mull = (1.0 - lm_ss(0.015, 0.015 + aa_u, abs(fract(u) - 0.50))) * select(0.0, 1.0, module_m >= 1.55) * near_k;
+        let int_frame = clamp(max(transom_bar, sub_mull * 0.78), 0.0, 1.0);
+        let eff_glass = glass * (1.0 - int_frame * 0.82);
+        if (int_frame > 0.02) {
+            let mul_c = mix((*s).albedo * 0.36, vec3<f32>(0.045, 0.048, 0.052), 0.68);
+            (*s).albedo = mix((*s).albedo, mul_c, int_frame * glass);
+            (*s).rough = mix((*s).rough, 0.34, int_frame * glass);
+            (*s).metal = mix((*s).metal, 0.65, int_frame * glass);
+        }
+        let vy_int = fract(v + clamp(view.y / vn * 0.24, -0.34, 0.34));
+        let ux_int = fract(u * 0.5 + clamp(dot(view.xz, t) / vn * 0.14, -0.25, 0.25));
+        let slab_d = 1.0 - 0.80 * (1.0 - lm_ss(0.08, 0.20, vy_int) * lm_ss(0.92, 0.78, vy_int)) * near_k;
+        let part_wall = 1.0 - 0.42 * (1.0 - lm_ss(0.04, 0.11, abs(ux_int - 0.5))) * near_k;
+        let office_seed = floor(vec2<f32>(u * 0.40, v)) + seed;
+        let office_h = st_hash(office_seed + vec2<f32>(4.3, 1.7));
+        let blind_h = mix(0.24, 0.68, st_hash(office_seed + vec2<f32>(6.7, 2.9)));
+        let blind_on = step(0.46, st_hash(office_seed + vec2<f32>(2.1, 8.3))) * step(1.0 - blind_h, vy_int) * near_k;
+        let slat = 0.84 + 0.16 * sin(vy_int * 68.0);
+        let ceil_band = lm_ss(0.68, 0.86, vy_int) * (0.35 + 0.65 * step(0.45, office_h)) * near_k;
+        let office_tint = mix(vec3<f32>(0.88, 0.92, 0.98), vec3<f32>(1.08, 0.98, 0.84), office_h);
+        let base_room = r1.xyz * (1.0 - r3.x) * mix(0.18, 0.42, suite_v) * mix(1.0, 0.55, curtain_w) * slab_d * part_wall * office_tint
+            + vec3<f32>(0.11, 0.11, 0.10) * office_tint * (ceil_band * 0.28);
+        let blind_col = mix(vec3<f32>(0.20, 0.20, 0.21), vec3<f32>(0.29, 0.28, 0.26), office_h) * slat;
+        let pane_room = mix(base_room, blind_col, blind_on * 0.48);
         aaa_bldg_on = true;
-        aaa_glass_cov = glass;
-        aaa_glass_rough = clamp(sqrt(min(r1.w, 0.036) * min(r1.w, 0.036) + 0.14 * tilt_amp * tilt_amp * far_k), 0.016, 0.046);
-        aaa_glass_f0 = clamp(pane_f0 * (1.0 + (st_hash(cell * vec2<f32>(3.1, 1.7) + seed) - 0.5) * 0.16 * (1.0 - far_k) + mac_batch + (suite_v - 0.5) * 0.12), vec3<f32>(0.08), vec3<f32>(0.48));
+        aaa_glass_cov = eff_glass;
+        aaa_glass_rough = clamp(sqrt(max(r1.w, 0.045) * max(r1.w, 0.045) + 0.18 * tilt_amp * tilt_amp * far_k), 0.045, 0.095);
+        aaa_glass_f0 = clamp(pane_f0 * (1.0 + (st_hash(cell * vec2<f32>(3.1, 1.7) + seed) - 0.5) * 0.16 * near_k + mac_batch + (suite_v - 0.5) * 0.10), vec3<f32>(0.050), vec3<f32>(0.26));
         aaa_glass_n = gn;
         aaa_glass_room = pane_room;
     } else {
