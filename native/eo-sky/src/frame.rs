@@ -505,9 +505,33 @@ pub fn apply_with(f: &mut LookFrame, c: &Conditions, opts: FrameOptions) -> SkyT
 }
 
 /// The haze density the physical daylight is integrated at for a weather:
-/// the clear coastal medium x (1 + 2 haze), as the GPU's tables take it.
+/// the clear coastal medium x (1 + 2 haze), as the GPU's tables take it,
+/// x `measured_aerosol_scale` (`--no-measured-aerosol` leaves it out).
+/// Its renderer consumers (`eo-render` `look.rs` / `sky.rs`) blend the physical
+/// daylight atmosphere by `eo_look::phys::weather_weight` (0 at night), so this
+/// scales daytime atmosphere only and leaves night untouched.
 pub fn daylight_density(w: &WeatherState) -> f64 {
-    1.0 + 2.0 * w.profile.haze
+    (1.0 + 2.0 * w.profile.haze) * measured_aerosol_scale()
+}
+
+/// The clear day's aerosol optical depth at 550 nm over San Francisco.
+/// MEASURED for one summer day: AERONET's sun photometers on the day of the
+/// 2011 bluff footage, interpolated over the nearest stations (UCSB 0.061,
+/// Fresno 0.083, Trinidad Head 0.116). INFERRED as the clear day's: the same
+/// column over the clear medium's 1 km scale height puts 0.087 / km of aerosol
+/// extinction at the ground, against the 0.068 / km `photo::SF_AEROSOL_EXT_PER_KM`
+/// takes from IMPROVE's Point Reyes visual ranges for the city's afternoon air;
+/// Koschmieder's visibility 3.912 / (0.087 + 0.0137 Rayleigh) is 39 km.
+/// The clear coastal medium alone (eo-look `atmosphere::COASTAL_AOD_550` x the
+/// clear preset's 1 + 2 haze) holds 0.048: a clean maritime day's, half the
+/// measured column, a sky too dark beside the sunlit street and a shade too blue.
+pub const CLEAR_DAY_AOD_550: f64 = 0.087;
+
+/// (`--measured-aerosol`, on by default) The factor on the clear coastal
+/// medium's aerosol that gives the clear day `CLEAR_DAY_AOD_550`; every weather's
+/// haze scales it as before. 1 with `--no-measured-aerosol`.
+pub fn measured_aerosol_scale() -> f64 {
+    if eo_look::features::daylight().measured_aerosol { CLEAR_DAY_AOD_550 / (eo_look::atmosphere::COASTAL_AOD_550 * (1.0 + 2.0 * weather::CLEAR.haze)) } else { 1.0 }
 }
 
 /// The physical daylight's weight for a frame's sun and weather (eo-look `phys::weather_weight`).
@@ -686,5 +710,46 @@ mod cinematic_golden_tests {
             assert_eq!((d.key, d.rim, d.hemi_sky, d.hemi_ground, d.ambient, d.env_sh), (c.key, c.rim, c.hemi_sky, c.hemi_ground, c.ambient, c.env_sh), "{hour}");
             assert_eq!(td.exposure_target, tc.exposure_target, "{hour}");
         }
+    }
+}
+
+#[cfg(test)]
+mod measured_aerosol_tests {
+    //! (`--measured-aerosol`) the clear day's air at San Francisco's measured column.
+    use super::*;
+    use eo_look::phys::Daylight;
+
+    #[test]
+    fn the_clear_day_takes_the_measured_aerosol_column() {
+        let w = weather::preset(crate::Kind::Clear);
+        let aod = eo_look::atmosphere::COASTAL_AOD_550 * daylight_density(&w);
+        if eo_look::features::daylight().measured_aerosol {
+            assert!((aod - CLEAR_DAY_AOD_550).abs() < 1e-12, "aod {aod}");
+        } else {
+            assert!((aod - 0.048).abs() < 1e-12, "aod {aod}");
+        }
+    }
+
+    #[test]
+    fn the_measured_air_brightens_and_whitens_the_noon_sky_light() {
+        // a noon sun 65 deg up (Mission and 3rd Streets, 1 August)
+        let alt = 65f64.to_radians();
+        let s = [0.0, alt.sin(), -alt.cos()];
+        let clean_d = 1.0 + 2.0 * weather::CLEAR.haze;
+        let clean = Daylight::new(s, clean_d, 1.0);
+        let measured = Daylight::new(s, clean_d * CLEAR_DAY_AOD_550 / (eo_look::atmosphere::COASTAL_AOD_550 * clean_d), 1.0);
+        let sky_h = |d: &Daylight| d.e_h - luminance(d.key) * s[1];
+        // the environment's light on a surface facing up (its sky)
+        let b_r = |d: &Daylight| {
+            let e = eo_look::sh_eval(&d.env_sh, [0.0, 1.0, 0.0]);
+            e[2] / e[0]
+        };
+        // the sky's share of a horizontal surface's light grows (0.70 -> 0.94 here) and
+        // its colour moves toward white (blue/red facing up 1.93 -> 1.65)
+        assert!(sky_h(&measured) > 1.2 * sky_h(&clean), "sky {} -> {}", sky_h(&clean), sky_h(&measured));
+        assert!(b_r(&measured) < 0.9 * b_r(&clean), "sky b/r {} -> {}", b_r(&clean), b_r(&measured));
+        // the beam loses a little (0.039 more optical depth at 65 deg: about 3 %)
+        let k = luminance(measured.key) / luminance(clean.key);
+        assert!(k > 0.9 && k < 1.0, "beam {k}");
     }
 }

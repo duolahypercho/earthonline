@@ -199,7 +199,8 @@ impl CineUniform {
         if bits & CAM_BIT_WB != 0 {
             let d = day_share(sun_alt_deg);
             let [n, dd] = CAM_WB_DEGREE;
-            u.cam6 = [(n[0] + (dd[0] - n[0]) * d) as f32, (n[1] + (dd[1] - n[1]) * d) as f32, CAM_WB_TINT_DEGREE as f32, CAM_WB_LIMIT[0] as f32];
+            let warm = wb_warm_degree(sun_alt_deg, eo_look::features::daylight().wb_high_sun);
+            u.cam6 = [(n[0] + (warm - n[0]) * d) as f32, (n[1] + (dd[1] - n[1]) * d) as f32, CAM_WB_TINT_DEGREE as f32, CAM_WB_LIMIT[0] as f32];
         }
         u
     }
@@ -395,8 +396,32 @@ pub const CAM_FLARE_GHOST_GAIN: f64 = 0.8;
 /// and at twilight and night leaves most of the light's colour (the blue hour
 /// stays blue) while taking a quarter of a sodium street's orange out.
 pub const CAM_WB_DEGREE: [[f64; 2]; 2] = [[0.25, 0.20], [0.15, 0.50]];
+/// (`--white-balance`, `--wb-high-sun`) the degree a warm light takes by day under a
+/// high sun: a camera's daylight balance renders sunlit grey neutral at midday (the
+/// matched CC0 photograph of Mission and 3rd Streets, 1 August 2011, 12:06: sunlit
+/// asphalt blue/red 0.93-1.00 in display-linear), where `CAM_WB_DEGREE`'s day 0.15
+/// left the sun's 5200 K beam's asphalt at 0.64 on Folsom Street at noon (play mode,
+/// with the measured aerosol). The whole cast: 0.6 gave 0.75, 0.8 0.79, 1.0 0.86
+/// (0.93 a little further down the street). The warmth a golden hour keeps is a low sun's.
+pub const CAM_WB_HIGH_SUN_DEGREE: f64 = 1.0;
+/// (`--wb-high-sun`) the sun's altitudes (degrees) between which the warm degree moves
+/// from `CAM_WB_DEGREE`'s day value to `CAM_WB_HIGH_SUN_DEGREE` (smoothstep): under 30
+/// degrees the afternoon's and the golden hour's warmth is kept as before.
+pub const CAM_WB_HIGH_SUN_DEG: [f64; 2] = [30.0, 50.0];
 /// (`--white-balance`) the degree along the green-magenta axis (green over red and blue).
 pub const CAM_WB_TINT_DEGREE: f64 = 0.35;
+
+/// (`--white-balance`) the day's degree for a warm light at the sun's altitude:
+/// `CAM_WB_DEGREE`'s day value, moved to `CAM_WB_HIGH_SUN_DEGREE` over
+/// `CAM_WB_HIGH_SUN_DEG` with `high_sun` (`--wb-high-sun`; off: the day value).
+pub fn wb_warm_degree(sun_alt_deg: f64, high_sun: bool) -> f64 {
+    let day = CAM_WB_DEGREE[1][0];
+    if !high_sun || sun_alt_deg.is_nan() {
+        return day;
+    }
+    let t = eo_look::math::smoothstep(CAM_WB_HIGH_SUN_DEG[0], CAM_WB_HIGH_SUN_DEG[1], sun_alt_deg);
+    day + (CAM_WB_HIGH_SUN_DEGREE - day) * t
+}
 /// (`--white-balance`) the largest correction a channel takes (log2), on each axis.
 pub const CAM_WB_LIMIT: [f64; 2] = [0.45, 0.10];
 /// (`--white-balance`) a block counts toward the estimate within these EV of
@@ -1604,6 +1629,33 @@ impl CineGpu {
 mod tests {
     use super::*;
     use wgpu::naga;
+
+    /// (`--wb-high-sun`) a high sun's warmth is taken out, a low sun's kept as before.
+    #[test]
+    fn the_white_balance_neutralises_a_high_sun_and_keeps_a_low_ones_warmth() {
+        let day = CAM_WB_DEGREE[1][0];
+        for alt in [-5.0, 5.0, 15.0, 25.0, 30.0] {
+            assert_eq!(wb_warm_degree(alt, true), day, "{alt}");
+        }
+        for alt in [50.0, 65.0, 80.0] {
+            assert!((wb_warm_degree(alt, true) - CAM_WB_HIGH_SUN_DEGREE).abs() < 1e-12, "{alt}");
+        }
+        let mut last = day;
+        for i in 0..=40 {
+            let w = wb_warm_degree(30.0 + i as f64 * 0.5, true);
+            assert!(w >= last && w <= CAM_WB_HIGH_SUN_DEGREE, "monotone");
+            last = w;
+        }
+        // the switch off: the day's degree at every altitude
+        for alt in [10.0, 40.0, 65.0] {
+            assert_eq!(wb_warm_degree(alt, false), day);
+        }
+        // the uniform at a noon sun carries it (with the process's switch on)
+        if eo_look::features::daylight().wb_high_sun {
+            let u = CineUniform::with_camera_bits(65.0, CAM_BIT_WB);
+            assert!((u.cam6[0] as f64 - CAM_WB_HIGH_SUN_DEGREE).abs() < 1e-3, "{:?}", u.cam6);
+        }
+    }
 
     #[test]
     fn the_shader_validates_and_its_uniform_matches() {

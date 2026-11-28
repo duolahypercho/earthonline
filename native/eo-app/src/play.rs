@@ -460,6 +460,8 @@ fn parse_full(raw: &[String]) -> Result<(Args, PlayOpts, PlayGlobals)> {
             "--dome-env" | "--no-dome-env" => a.look.dome_env = s == "--dome-env",
             "--dome-yield" | "--no-dome-yield" => a.look.dome_yield = s == "--dome-yield", // (`--dome-env`) the dome's colour yields to the physical daylight
             "--no-vol-sky-state" => {} // (eo-look `features::daylight`, read from the command line) the volumetric cumulus whatever the day's sky
+            "--no-measured-aerosol" => {} // (eo-look `features::daylight`, read from the command line) the clean coastal air's aerosol, not the measured column
+            "--no-wb-high-sun" => {} // (eo-look `features::daylight`, read from the command line) the camera keeps the day's warmth under a high sun
             "--wet-surfaces" | "--no-wet-surfaces" => a.look.sky.wet_surfaces = s == "--wet-surfaces",
             "--screen-reflect" | "--no-screen-reflect" => a.look.sky.screen_reflect = s == "--screen-reflect",
             "--probe-sky" | "--no-probe-sky" => a.look.sky.probe_sky = s == "--probe-sky",
