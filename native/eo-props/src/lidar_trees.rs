@@ -1,7 +1,8 @@
 //! Residential trees measured from the USGS 3DEP lidar point cloud
 //! (`--yard-lidar-trees`, off by default; `--no-yard-lidar-trees`, distinct
-//! from the hill parks' default-on `--no-lidar-trees`). The survey writes
-//! `trees.json` into `$EO_LIDAR_DIR/<area>/` (a folder outside the repository):
+//! from the hill parks' default-on `--no-lidar-trees`). The survey
+//! (eo-kit `examples/lidar_survey.rs`) writes `trees.json` into
+//! `$EO_LIDAR_DIR/<area>/` (a folder outside the repository):
 //! each crown's top on the surveyed 1:1 plan, its height above the lidar ground
 //! and its crown radius. Every area found there is read once.
 //!
