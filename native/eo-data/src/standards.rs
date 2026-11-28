@@ -81,6 +81,17 @@ impl CaStandards {
         }
     }
 
+    /// `caMetric(id, key)` for a table row: the numbers of the array under `key` (one per row).
+    pub fn metric_list(&self, id: &str, key: &str) -> Result<Vec<f64>> {
+        let v = self
+            .metric
+            .get(id)
+            .and_then(|v| v.get(key))
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| anyhow!("California street standard \"{id}\" [{key}] is not a list"))?;
+        v.iter().map(|x| x.as_f64().ok_or_else(|| anyhow!("California street standard \"{id}\" [{key}] has a value that is not a number"))).collect()
+    }
+
     /// `ceilToCm` in sf-data.js: a width drawn to the centimetre, never under its standard.
     pub fn ceil_to_cm(m: f64) -> f64 {
         (m * 100.0 - 1e-6).ceil() / 100.0
@@ -314,6 +325,17 @@ pub const CALIFORNIA_STREET_DEVIATIONS: &[Deviation] = &[
         approved_by: Some("user (chat)"),
         approved_on: Some("2026-11-16"),
     },
+    Deviation {
+        id: "signal-arm-ramp-junction-level",
+        standard: "signal-mast-arm-caltrans",
+        also: &["signal-mast-pole-top-caltrans"],
+        game_value: 0.0,
+        unit: "ft of mast-arm rise at a junction that meets a State route only through a freeway ramp (`motorway_link`, `trunk_link`): the city street's level arm (signal-mast-arm-sf-city-street)",
+        reason: "Freeway-ramp junctions on city streets (5th St & Harrison St, 4th St & Bryant St, ...) drew Caltrans ES-7E's rising State-route arms because one approach is a ramp. Asked in chat whether those junctions should keep the State-route arm or take the city street's level arm; the user chose the level arm.",
+        status: DeviationStatus::Approved,
+        approved_by: Some("user (chat)"),
+        approved_on: Some("2026-11-27"),
+    },
 ];
 
 /// the entry that makes the terrain heights follow the ground plan.
@@ -460,12 +482,18 @@ mod deviation_tests {
         for d in CALIFORNIA_STREET_DEVIATIONS {
             assert_eq!(d.status, DeviationStatus::Approved, "{}", d.id);
             assert_eq!(d.approved_by, Some("user (chat)"), "{}", d.id);
-            // the six width families on 2026-11-15, the terrain heights on 2026-11-16.
-            let on = if d.id == TERRAIN_HEIGHTS_DEVIATION { "2026-11-16" } else { "2026-11-15" };
+            // the six width families on 2026-11-15, the terrain heights on 2026-11-16, the level
+            // arms at freeway-ramp junctions on 2026-11-27.
+            let on = match d.id {
+                TERRAIN_HEIGHTS_DEVIATION => "2026-11-16",
+                "signal-arm-ramp-junction-level" => "2026-11-27",
+                _ => "2026-11-15",
+            };
             assert_eq!(d.approved_on, Some(on), "{}", d.id);
             assert!(!d.reason.contains('@'), "{}: no address in the record", d.id);
         }
-        assert_eq!(CALIFORNIA_STREET_DEVIATIONS.len(), GROUND_PLAN_DEVIATIONS.len() + 1);
+        assert_eq!(CALIFORNIA_STREET_DEVIATIONS.len(), GROUND_PLAN_DEVIATIONS.len() + 2);
+        assert_eq!(deviation("signal-arm-ramp-junction-level").unwrap(), 0.0, "the ramp junctions' level arm: no rise");
     }
 
     #[test]
