@@ -44,6 +44,20 @@ const BACKSTAY_DEG: [f64; 2] = [16.0 + 31.0 / 60.0, 17.0 + 40.0 / 60.0];
 /// 90 ft height (CIF 2008), the north housing's 347 ft (CESMD).
 const SOUTH_HOUSING_FT: [f64; 2] = [235.0, 90.0];
 const NORTH_HOUSING_FT: f64 = 347.0;
+
+/// The centre-to-centre separation of N1 and N2. The measured housing starts
+/// at the south face of N1 and ends at the north face of N2.
+pub(super) fn north_pylon_spacing() -> f64 {
+    (NORTH_HOUSING_FT - PYLON_SHAFT_FT[1]) * FT * eo_data::groundscale::scale()
+}
+
+pub(super) fn housing_half_width(site: &super::Site) -> f64 {
+    site.half_plane + PYLON_SHAFT_FT[0] * FT * eo_data::groundscale::scale() / 2.
+}
+
+pub(super) fn north_roof_top(deck: f64) -> f64 {
+    deck - 0.35
+}
 /// The tie-down's short suspenders (Strauss 1937).
 const TIE_DOWN_ROPES: usize = 6;
 
@@ -73,6 +87,7 @@ pub(super) struct Pylon {
     pub half_across: f64,
     pub half_along: f64,
     pub foot: f64,
+    centres: [f64; 2],
     pub top: f64,
 }
 
@@ -98,12 +113,12 @@ impl Ctx<'_> {
         let (gs, h) = (self.plan_scale(), self.h);
         let (half_across, half_along) = (PYLON_SHAFT_FT[0] * FT * gs / 2.0, PYLON_SHAFT_FT[1] * FT * gs / 2.0);
         let hp = self.site.half_plane;
-        let foot_at = |c: f64| {
+        let foot_at = |c: f64, centres: [f64; 2]| {
             let mut lo = f64::INFINITY;
-            for sgn in [-1.0, 1.0] {
+            for side in centres {
                 for dc in [-half_along, 0.0, half_along] {
                     for ds in [-half_across, 0.0, half_across] {
-                        let [x, z] = self.frame.point(c + dc, sgn * hp + ds);
+                        let [x, z] = self.frame.point(c + dc, side + ds);
                         lo = lo.min((self.ground)(x, z));
                     }
                 }
@@ -111,30 +126,42 @@ impl Ctx<'_> {
             lo
         };
         let south = |name: &'static str, c: f64| {
-            let foot = foot_at(c);
-            Pylon { name, c, half_across, half_along, foot: foot - 1.0, top: foot + SOUTH_PYLON_FT * FT * h }
+            let centres = [-hp, hp];
+            let foot = foot_at(c, centres);
+            Pylon { name, c, half_across, half_along, centres, foot: foot - 1.0, top: foot + SOUTH_PYLON_FT * FT * h }
         };
         let s1 = south("S1", p.arch_north_c);
         // the others stand as far over their deck as S1 over its own (INFERRED: "treated like S1";
         // S2's foot is on the hillside's slope, so 220 ft from it would not be S1's height over the deck).
         let over = s1.top - p.deck_top(s1.c);
         let like_s1 = |name: &'static str, c: f64| {
-            let foot = foot_at(c);
-            Pylon { name, c, half_across, half_along, foot: foot - 1.0, top: p.deck_top(c) + over }
+            let centres = [-hp, hp];
+            let foot = foot_at(c, centres);
+            Pylon { name, c, half_across, half_along, centres, foot: foot - 1.0, top: p.deck_top(c) + over }
         };
         let s2 = like_s1("S2", p.arch_south_c);
         let n1 = like_s1("N1", p.anchor_north_c);
         // the housing runs from N1's south face to N2's north face, 347 ft.
-        let n2_c = n1.c - n1.half_along + NORTH_HOUSING_FT * FT * gs - half_along;
+        let n2_c = super::expansion_joints(self.g, self.site)[0];
         let n2 = like_s1("N2", n2_c);
-        vec![s2, s1, n1, n2]
+        let mut pylons = vec![s2, s1, n1, n2];
+        if super::pylon_survey::enabled() {
+            for py in &mut pylons {
+                let pair = super::pylon_survey::pair(py.name);
+                let half = (pair[1].centre() - pair[0].centre()) * gs / 2.;
+                py.centres = [-half, half];
+                py.foot = foot_at(py.c, py.centres) - 1.;
+                py.top = p.deck_top(py.c) + h * pair[0].height().max(pair[1].height());
+            }
+        }
+        pylons
     }
 
     /// The two anchorage housings: the south one from S2 south, the north one from N1 to N2.
     pub(super) fn housings(&self) -> Vec<Housing> {
         let (gs, h) = (self.plan_scale(), self.h);
         let pyl = self.pylons();
-        let half = self.site.half_plane + pyl[0].half_across;
+        let half = housing_half_width(self.site);
         let s2 = &pyl[0];
         let (c0, c1) = (s2.c + s2.half_along - SOUTH_HOUSING_FT[0] * FT * gs, s2.c + s2.half_along);
         // its west (bay side) wall stands 90 ft over its own foot.
@@ -151,7 +178,7 @@ impl Ctx<'_> {
     }
 
     fn housing_top(&self, hs: &Housing, c: f64) -> f64 {
-        if hs.north { self.plan.deck_top(c) - 0.35 } else { hs.flat_top }
+        if hs.north { north_roof_top(self.plan.deck_top(c)) } else { hs.flat_top }
     }
 
     /// Where a bent stands on a housing's roof: its top there (else none).
@@ -235,17 +262,30 @@ impl Ctx<'_> {
     /// part solid), over it to a staggered top of three tiers.
     pub(super) fn draw_pylons(&self, concrete: &mut MeshArrays, far: &mut MeshArrays) {
         let (p, h, k) = (self.plan, self.h, &self.k);
-        let hp = self.site.half_plane;
         for py in self.pylons() {
             let deck = p.deck_top(py.c);
             // (`concrete2`) S1 and S2 in the retrofit's renewed concrete.
             let colour = if py.name.starts_with('S') { k.concrete_south } else { k.concrete };
             let (open0, open1) = (deck - 0.35, deck + WALK_OPENING_M * h);
             let (step, inset) = (TOP_STEP_M[0] * h, TOP_STEP_M[1] * h);
-            for sgn in [-1.0, 1.0] {
-                let s = sgn * hp;
+            for (index, s) in py.centres.into_iter().enumerate() {
+                let sgn = s.signum();
                 let ring = self.fluted_ring(py.c, s, py.half_along, py.half_across, sgn);
                 Self::extrude(concrete, &ring, py.foot, open0, false, colour);
+                if super::pylon_survey::enabled() {
+                    let cap = super::pylon_survey::pair(py.name)[index];
+                    let draw_crown = |mesh: &mut MeshArrays| cap.draw(mesh, self.frame, py.c, s, deck, open1, open0, WALK_CABLE_COVER_M, h, colour);
+                    draw_crown(concrete);
+                    let [x, z] = self.frame.point(py.c, s);
+                    if super::pylon_survey::visible_at_distance() {
+                        // Keep the terraces and walkway opening when the landmark switches detail.
+                        far.box_(x, z, py.foot, open0, py.half_along, py.half_across, self.yaw, colour, crate::geometry::NO_TOP);
+                        draw_crown(far);
+                    } else {
+                        far.box_(x, z, py.foot, deck + cap.height() * h, py.half_along, py.half_across, self.yaw, colour, ALL);
+                    }
+                    continue;
+                }
                 // the outer part beside the opening, from short of the cable plane out (the cable passes in it).
                 let (s0, s1) = (s - sgn * WALK_CABLE_COVER_M, s + sgn * py.half_across);
                 let [x, z] = self.frame.point(py.c, (s0 + s1) / 2.0);
@@ -357,11 +397,10 @@ impl Ctx<'_> {
 
     /// The pylons' shafts and the housings as colliders (to 30 m over their foot, as the other parts).
     pub(super) fn pylon_colliders(&self) -> Vec<Collider> {
-        let hp = self.site.half_plane;
         let mut out = Vec::new();
         for py in self.pylons() {
-            for (sgn, side) in [(-1.0, "west"), (1.0, "east")] {
-                let [x, z] = self.frame.point(py.c, sgn * hp);
+            for (s, side) in py.centres.into_iter().zip(["west", "east"]) {
+                let [x, z] = self.frame.point(py.c, s);
                 out.push(Collider { part: format!("{}-{side}", py.name), x, z, y0: py.foot, y1: py.top.min(py.foot + 30.0), hx: py.half_along, hz: py.half_across, yaw: self.yaw });
             }
         }

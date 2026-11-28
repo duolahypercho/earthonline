@@ -282,10 +282,17 @@ pub(crate) fn leg_walls(streets: &StreetWorld, blocked: &dyn Fn(f64, f64, f64, f
                     if (mid[0] - cx).hypot(mid[1] - cz) > reach {
                         continue;
                     }
-                    // away from the paving it holds.
+                    // Some street faces point into their paving. Reverse the
+                    // normal only when the opposite side has paving at the
+                    // wall top. On a steep or narrow edge both probes can
+                    // miss that level, and the mesh normal then owns the side.
                     let mut o2 = norm([n[0], 0.0, n[2]]);
-                    let probe = [mid[0] - o2[0] * 0.3, mid[1] - o2[2] * 0.3];
-                    if streets.paved_at(probe[0], probe[1]).is_none_or(|y| y < top - 0.5) {
+                    let paving = |d: f64| {
+                        streets.paved_at(mid[0] + o2[0] * d, mid[1] + o2[2] * d)
+                    };
+                    if paving(-0.3).is_none_or(|y| y < top - 0.5)
+                        && paving(0.3).is_some_and(|y| (y - top).abs() <= 0.5)
+                    {
                         o2 = [-o2[0], 0.0, -o2[2]];
                     }
                     // a face between two pavings (a step the street closes), not over open ground: no wall.

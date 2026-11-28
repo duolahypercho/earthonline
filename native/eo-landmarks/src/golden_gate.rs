@@ -4,9 +4,8 @@
 //! export (`data::GoldenGate`); the INFERRED structural literals of the JS
 //! generator's function bodies are kept here with their JS names.
 //!
-//! PRESENTATION ONLY, as in the JS: the deck has no collider and nothing
-//! routes onto it; the colliders are the parts a body on the ground or the
-//! water can meet.
+//! The roadway panels and player collision share their station geometry through
+//! `bridge_roads`. Piers, anchorages and the approach footings have solid colliders.
 
 use crate::Built;
 use crate::Collider;
@@ -16,9 +15,16 @@ use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, F
 use serde_json::json;
 
 pub mod aging;
+pub mod safety_net;
+pub(crate) mod floorbeams;
+mod marin;
+pub use marin::{approach_finish, deck_pavement, expansion_joints, surveyed_surfaces, wheel_wear};
+pub(crate) use marin::{abutment, apron_median};
+pub(crate) mod lamps;
 mod cables;
 pub use cables::{LAMP2_CURB_OFFSET_M, lamp2_luminaire};
 mod legs;
+mod pylon_survey;
 mod pylons;
 pub use legs::{CELL_FT, cell_m, cell_outline, face_runs};
 
@@ -229,11 +235,15 @@ pub struct Site {
     pub axis: [f64; 2],
     pub across: [f64; 2],
     pub half_plane: f64,
-    profiles: [Vec<[f64; 2]>; 2],
+    profiles: [Vec<[f64; 3]>; 2],
+    curved_approaches: bool,
 }
 
 impl Site {
     pub fn new(g: &GoldenGate) -> Self {
+        Self::with_curved_approaches(g, surveyed_surfaces())
+    }
+    fn with_curved_approaches(g: &GoldenGate, curved_approaches: bool) -> Self {
         let mid = |a: [f64; 2], b: [f64; 2]| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
         let (s, n) = (&g.tower_legs["south"], &g.tower_legs["north"]);
         let south_tower = mid(s.east, s.west);
@@ -243,9 +253,10 @@ impl Site {
         let axis = [dx / l, dz / l];
         let across = [-axis[1], axis[0]];
         let half_plane = (s.east[0] - s.west[0]).hypot(s.east[1] - s.west[1]) / 2.0;
-        let mut site = Self { south_tower, north_tower, main_span_measured: l, axis, across, half_plane, profiles: [vec![], vec![]] };
-        let p0 = site.lateral_profile(&g.carriageways[0]);
-        let p1 = site.lateral_profile(&g.carriageways[1]);
+        let mut site = Self { south_tower, north_tower, main_span_measured: l, axis, across, half_plane, profiles: [vec![], vec![]], curved_approaches };
+        let road_half = num(&g.dimensions, "roadwayM") * 0.5;
+        let p0 = site.lateral_profile(&g.carriageways[0], road_half);
+        let p1 = site.lateral_profile(&g.carriageways[1], road_half);
         site.profiles = [p0, p1];
         site
     }
@@ -257,21 +268,69 @@ impl Site {
     pub fn axis_point(&self, c: f64, s: f64) -> [f64; 2] {
         [self.south_tower[0] + self.axis[0] * c + self.across[0] * s, self.south_tower[1] + self.axis[1] * c + self.across[1] * s]
     }
-    fn lateral_profile(&self, points: &[f64]) -> Vec<[f64; 2]> {
-        let mut rows: Vec<[f64; 2]> = points
+    fn lateral_profile(&self, points: &[f64], road_half: f64) -> Vec<[f64; 3]> {
+        let mut rows: Vec<[f64; 3]> = points
             .chunks_exact(2)
             .map(|p| {
                 let c = self.chainage(p[0], p[1]);
                 let [ax, az] = self.axis_point(c, 0.0);
-                [c, (p[0] - ax) * self.across[0] + (p[1] - az) * self.across[1]]
+                [c, (p[0] - ax) * self.across[0] + (p[1] - az) * self.across[1], 0.]
             })
             .collect();
         rows.sort_by(|p, q| p[0].total_cmp(&q[0]));
+        if self.curved_approaches && rows.len() >= 2 {
+            rows.dedup_by(|a,b| a[0] == b[0]);
+            // Shape-preserving cubic tangents through the supplied carriageway
+            // vertices. The long straight between anchorages keeps its chord.
+            let slopes: Vec<_> = rows.windows(2).map(|p| {
+                let run = p[1][0]-p[0][0];
+                (run, (p[1][1]-p[0][1])/run)
+            }).collect();
+            if slopes.is_empty() { return rows; }
+            for (i,row) in rows.iter_mut().enumerate() {
+                let (h,a) = slopes[i.saturating_sub(1)];
+                let (k,b) = slopes[i.min(slopes.len()-1)];
+                row[2] = if h > self.main_span_measured { a }
+                    else if k > self.main_span_measured { b }
+                    else if a*b <= 0. { 0. }
+                    else { 3.*(h+k) / ((2.*k+h)/a + (k+2.*h)/b) };
+            }
+            // Keep each surveyed chord between its bends. Extending the cubic
+            // over an entire approach chord swung the median far enough to
+            // leave the outer traffic lane unsupported near the Marin viaduct.
+            let mut fitted = Vec::with_capacity(rows.len() * 3);
+            for (pair, &(length, slope)) in rows.windows(2).zip(&slopes) {
+                let [s, y, _] = pair[0];
+                fitted.push(pair[0]);
+                if length > 2. * road_half {
+                    for distance in [road_half, length - road_half] {
+                        fitted.push([s + distance, y + distance * slope, slope]);
+                    }
+                }
+            }
+            fitted.push(*rows.last().unwrap());
+            return fitted;
+        }
         rows
     }
     /// `ggbCentreOffset`: the mean of the two carriageways' lateral offsets.
     pub fn centre_offset(&self, c: f64) -> f64 {
-        let interp = |rows: &[[f64; 2]], c: f64| {
+        let interp = |rows: &[[f64; 3]], c: f64| {
+            if self.curved_approaches && rows.len() >= 2 {
+                // The road tips are staggered. Continue the shorter carriageway's
+                // heading through the last paired section, within the mapped extent.
+                let last = rows.len()-1;
+                let c = c.clamp(self.profiles[0][0][0].min(self.profiles[1][0][0]),
+                    self.profiles[0].last().unwrap()[0].max(self.profiles[1].last().unwrap()[0]));
+                let end = if c <= rows[0][0] { Some(rows[0]) } else if c >= rows[last][0] { Some(rows[last]) } else { None };
+                if let Some([x,y,dy]) = end { return y + (c-x)*dy; }
+                let i = rows.partition_point(|r| r[0] < c);
+                let ([x0,y0,d0],[x1,y1,d1]) = (rows[i-1],rows[i]);
+                let h = x1-x0;
+                let t = (c-x0)/h;
+                let u = 1.-t;
+                return u*u*((1.+2.*t)*y0 + h*t*d0) + t*t*((1.+2.*u)*y1 - h*u*d1);
+            }
             if c <= rows[0][0] {
                 return rows[0][1];
             }
@@ -367,8 +426,12 @@ pub fn plan<'a>(js: &LandmarksJs, site: &'a Site, ground: &dyn Fn(f64, f64) -> f
     let c_south = site.chainage(ws[0], ws[1]);
     let c_north = site.chainage(wn[0], wn[1]);
     let road_lift = js.default_road_lift_m;
-    let y_south = ground(ws[0], ws[1]) + road_lift;
-    let y_north = ground(wn[0], wn[1]) + road_lift;
+    // At an abutment the bare-earth grid samples the slope beneath the road.
+    let (y_south, y_north) = if suspension::features().scale {
+        (eo_data::bridge_survey::game_y(eo_data::bridge_survey::GATE_SOUTH_NAVD88_M), eo_data::bridge_survey::game_y(eo_data::bridge_survey::GATE_NORTH_NAVD88_M))
+    } else {
+        (ground(ws[0], ws[1]) + road_lift, ground(wn[0], wn[1]) + road_lift)
+    };
     let y_tower = water + num(d, "roadwayAtTowerM");
     let y_mid = if suspension::features().crest { water + midspan_roadway_m() } else { water + num(d, "clearanceM") + num(d, "trussDepthM") };
     let sup = |k: &str| g.supports[k].centre;
@@ -1074,7 +1137,7 @@ impl Ctx<'_> {
             &TrussSpec {
                 deck_top: &|c| p.deck_top(c),
                 c_start: p.c_start,
-                c_end: p.c_end,
+                c_end: if approach_finish() { p.c_north } else { p.c_end },
                 half_plane: self.site.half_plane,
                 depth: num(d, "trussDepthM"),
                 panel: num(d, "panelM"),
@@ -1083,6 +1146,8 @@ impl Ctx<'_> {
                 gap: &|a, b| self.in_tower_zone(a, b),
                 far_half_width: num(d, "widthM") / 2.0,
                 far_above: num(d, "railingM"),
+                end_plate_cover: if surveyed_surfaces() { suspension::DECK_PLATE_DEPTH_M } else { 0. },
+                floorbeam_span: floorbeams::enabled().then_some([p.arch_north_c, p.anchor_north_c]),
                 member: self.h,
             },
         );
@@ -1100,9 +1165,9 @@ impl Ctx<'_> {
         let hp = self.site.half_plane;
         for s in [-hp, hp] {
             let st = stations(a, b, panel / 2.0);
-            for &c in &st[..st.len() - 1] {
-                let c1 = b.min(c + panel / 2.0);
-                orange.beam(self.P(c, s, p.deck_top(c) - 0.3 - depth / 2.0), self.P(c1, s, p.deck_top(c1) - 0.3 - depth / 2.0), 0.5, depth, k.orange);
+            for pair in st.windows(2) {
+                let (c, c1) = (pair[0], pair[1]);
+                suspension::bridge_member(orange, far, self.P(c, s, p.deck_top(c) - 0.3 - depth / 2.0), self.P(c1, s, p.deck_top(c1) - 0.3 - depth / 2.0), 0.5, depth, k.orange);
             }
         }
         let st = stations(a, b, panel);
@@ -1116,16 +1181,19 @@ impl Ctx<'_> {
         let seat_bottom = (seat_top - 0.5).min((self.ground)(x, z) - 0.5);
         let width = num(d, "widthM");
         concrete.box_(x, z, seat_bottom, seat_top, 1.0, width / 2.0 + 0.5, self.yaw, k.concrete, NO_BOTTOM);
-        let [mx, mz] = self.site.deck_point((a + b) / 2.0, 0.0);
-        let mean = (p.deck_top(a) + p.deck_top(b)) / 2.0;
-        far.box_(mx, mz, mean - 0.3 - depth, mean + num(d, "railingM"), (b - a) / 2.0, width / 2.0, self.yaw, k.orange, ALL);
+        if suspension::distant_bridge_decks() {
+            far.box_(x, z, seat_bottom, seat_top, 1.0, width / 2.0 + 0.5, self.yaw, k.concrete, NO_BOTTOM);
+        } else {
+            suspension::welded_strip(far, self.frame, &|c| p.deck_top(c), a, b, suspension::FAR_STRIP_STEP_M, width / 2.0, depth + 0.3, num(d, "railingM"), k.orange);
+        }
     }
 
-    fn deck(&self, deck: &mut MeshArrays, orange: &mut MeshArrays, ca: &DeckStandards) {
+    fn deck(&self, deck: &mut MeshArrays, orange: &mut MeshArrays, far: &mut MeshArrays, ca: &DeckStandards) {
         let (d, p, k) = (self.d, self.plan, &self.k);
-        suspension::road_deck(
+        suspension::bridge_road_deck(
             deck,
             orange,
+            far,
             self.frame,
             ca,
             &DeckSpec {
@@ -1147,8 +1215,12 @@ impl Ctx<'_> {
                 markings: true,
                 // the east sidewalk's railing is the landmark deck's (access.rs) when it is built.
                 outer_railing_elsewhere: self.east_railing_by_deck.then_some(1.0),
+                outer_parapet: safety_net::enabled().then(|| safety_net::housing_limits(p)),
             },
         );
+        if floorbeams::enabled() {
+            floorbeams::deck_ribs(orange, self);
+        }
     }
 
     /// The deck plate's underside: with `detail` the orthotropic steel deck
@@ -1328,7 +1400,7 @@ impl Ctx<'_> {
         let mut north = vec![];
         let first_n = p.anchor_north_c + g.supports["northAnchor"].extent[1];
         let last_n = p.c_end - 4.0;
-        if last_n > first_n {
+        if last_n > first_n && !approach_finish() {
             north = stations(first_n, last_n, spacing);
         }
         let mut out = place(south);
@@ -1337,6 +1409,9 @@ impl Ctx<'_> {
     }
 
     fn approaches(&self, orange: &mut MeshArrays, concrete: &mut MeshArrays, far: &mut MeshArrays) {
+        if approach_finish() {
+            self.marin_viaduct(orange, concrete, far);
+        }
         let [cw, cd] = pair(self.d, "bentColumnM");
         let k = &self.k;
         for c in self.bent_stations() {
@@ -1710,6 +1785,10 @@ impl Ctx<'_> {
         // on the curb line, the arm reaching over the roadway; none where the curb passes a tower leg.
         let half = num(d, "roadwayM") / 2.0;
         let head = crate::lights::DECK_HEAD_M;
+        if surveyed_surfaces() {
+            self.measured_standards(orange);
+            return;
+        }
         if self.cable_detail {
             self.lamp_standards2(orange);
             return;
@@ -1729,6 +1808,7 @@ impl Ctx<'_> {
     fn colliders(&self) -> Vec<Collider> {
         let (g, d, w) = (self.g, self.d, self.water);
         let mut out = Vec::new();
+        if approach_finish() { self.marin_footings(&mut out); }
         for (key, pier) in [("south", &g.supports["southPier"]), ("north", &g.supports["northPier"])] {
             let [cx, cz] = pier.centre;
             out.push(Collider {
@@ -1899,6 +1979,10 @@ pub fn build_with(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, bri
 /// railing and the south tower's saddle housings are left to the decks,
 /// which draw the real picket railing and the walkable tower top.
 pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, bridge_detail: bool, open: bool) -> Built {
+    build_at(js, ground, ca, bridge_detail, open, &|x,z| ground.at(x,z))
+}
+
+pub(crate) fn build_at(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, bridge_detail: bool, open: bool, contact: &dyn Fn(f64,f64)->f64) -> Built {
     let features = suspension::features();
     let gd = data(js);
     let g = &gd;
@@ -1939,9 +2023,13 @@ pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, b
     ctx.towers(&mut orange_m, &mut concrete_m, &mut skirt, &mut far);
     let suspenders = ctx.cables(&mut wires, &mut far);
     ctx.truss(&mut orange_m, &mut far);
-    ctx.deck(&mut deck_m, &mut orange_m, ca);
+    ctx.deck(&mut deck_m, &mut orange_m, &mut far, ca);
     ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_south, plan.c_start, plan.c_south);
-    ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_end, plan.c_north, plan.c_north);
+    if approach_finish() {
+        ctx.marin_abutment(&mut deck_m, &mut concrete_m, &mut far, contact, ca);
+    } else {
+        ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_end, plan.c_north, plan.c_north);
+    }
     ctx.tower_walkways(&mut deck_m, &mut orange_m);
     if ctx.collar {
         ctx.tower_collar(&mut orange_m);
@@ -1973,6 +2061,7 @@ pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, b
         }
         ctx.lamps(&mut orange_m);
     }
+    let safety_fabric = safety_net::enabled().then(|| ctx.safety_net(&mut orange_m, &mut wires, &mut concrete_m, &mut deck_m, &mut far));
     // Past the sun's shadow reach the structure's own occlusion is baked in.
     // With `shade2` nothing is baked: the bake darkened the albedo, so the
     // sun on an inward face lost it too, and a face turned down was darkened
@@ -1993,15 +2082,17 @@ pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, b
     let r2 = |v: f64| (v * 100.0).round() / 100.0;
     let bents = ctx.bent_stations().len();
     let colliders = ctx.colliders();
-    Built {
-        id: g.id.clone(),
-        version: g.version.clone(),
-        groups: vec![
+    let mut groups = vec![
             ("orange".into(), orange_m.freeze()),
             ("deck".into(), deck_m.freeze()),
             ("concrete".into(), concrete_m.freeze()),
             ("cables".into(), wires.freeze()),
-        ],
+        ];
+    if let Some(fabric) = safety_fabric { groups.push((safety_net::DRAW.into(), fabric)); }
+    Built {
+        id: g.id.clone(),
+        version: g.version.clone(),
+        groups,
         far: far.freeze(),
         skirt: skirt.freeze(),
         colliders,

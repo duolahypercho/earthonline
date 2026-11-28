@@ -510,8 +510,13 @@ pub(crate) fn place_deck_lamps(w: &PropsWorld, s: &StructureWorld) -> std::colle
             continue;
         }
         // the landmark deck rule: both edges, every DECK_PITCH_M from half a pitch in.
+        let skyway = eo_structures::skyway_lights::coverage(c);
         let mut st = DECK_PITCH_M / 2.0;
         while st < c.length() {
+            if skyway.is_some_and(|[start, end]| (start..=end).contains(&c.frame(st).x)) {
+                st += DECK_PITCH_M;
+                continue;
+            }
             for b in s.barrier_at(c.id, st) {
                 // the pole stands on the barrier; the head DECK_HEAD_M over the deck beside it.
                 let foot = [b.x, b.top_y, b.z];

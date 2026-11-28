@@ -1,0 +1,12 @@
+Marin landing ground-colour survey
+Imagery: USDA NAIP, via the U.S. Geological Survey National Map
+Public domain (U.S. Government work; https://www.usa.gov/publicdomain/label/1.0/)
+Source grid and individual tile bounds: native/assets/survey-manifest.json, group A1.
+Rebuild: python3 native/tools/measure-marin-landing.py
+Output SHA-256: 04a56d60bb9d44bf5118b9889125a5a650685e10fb0f7389dec70face2f70270
+
+Source tiles:
+A1/rgb/r000_c001.jpg  3d8350b5cacefadf7aa9736a78e408eb4679c3deb6ded92b1279e36dae204f6d
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.492539774,37.823429120,-122.478579547,37.834500000&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image
+A1/rgb/r000_c002.jpg  2ccd43b717bd453573f890cbbd23936fcfc49bdc4b6cc4997a570b8d27a0a264
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.478579547,37.823429120,-122.464619321,37.834500000&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image

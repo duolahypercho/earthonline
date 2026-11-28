@@ -49,6 +49,7 @@ pub(crate) const WIDTH_TAPER_M: f64 = 30.0;
 /// The table's values the meshes read.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Dims {
+    pub island: Option<crate::island_section::Dimensions>,
     /// `concrete-barrier-type-60m-height` and `-base-width`; the top width
     /// follows from the 9.1-degree traffic face and a vertical back.
     pub barrier_h: f64,
@@ -72,6 +73,7 @@ impl Dims {
         let barrier_base = ca.metric("concrete-barrier-type-60m-base-width").context("eo-structures: barrier base width")?;
         let barrier_top = (barrier_base - barrier_h * BARRIER_FACE_DEG.to_radians().tan()).max(0.05);
         Ok(Self {
+            island: crate::island_section::Dimensions::read(ca)?,
             barrier_h,
             barrier_base,
             barrier_top,

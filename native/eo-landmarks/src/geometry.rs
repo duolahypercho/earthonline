@@ -63,6 +63,11 @@ pub struct MeshArrays {
     pub normals: Vec<f64>,
     pub colors: Vec<f64>,
     pub indices: Vec<u32>,
+    /// First vertex of each painted road quad, in near-left, near-right,
+    /// far-right, far-left order across the marking.
+    pub marking_quads: Vec<u32>,
+    /// First vertex of each traffic-bearing road panel, excluding the slab underside.
+    pub pavement_quads: Vec<u32>,
     pub axes: Vec<f64>,
     pub dirs: Vec<f64>,
     pub radii: Vec<f64>,
@@ -78,6 +83,9 @@ pub struct Frozen {
     pub normals: Vec<f32>,
     pub colors: Vec<f32>,
     pub indices: Vec<u32>,
+    pub marking_quads: Vec<u32>,
+    /// First vertex of each traffic-bearing road panel, excluding the slab underside.
+    pub pavement_quads: Vec<u32>,
     /// Wire records only: a point on the member's axis, its direction, its true radius.
     pub axes: Option<Vec<f32>>,
     pub dirs: Option<Vec<f32>>,
@@ -118,6 +126,8 @@ impl MeshArrays {
             normals: Vec::new(),
             colors: Vec::new(),
             indices: Vec::new(),
+            marking_quads: Vec::new(),
+            pavement_quads: Vec::new(),
             axes: Vec::new(),
             dirs: Vec::new(),
             radii: Vec::new(),
@@ -210,6 +220,16 @@ impl MeshArrays {
     pub fn quad(&mut self, a: V3, b: V3, c: V3, d: V3, color: Rgb) {
         let n = normalise(cross(sub(b, a), sub(d, a)));
         self.quad_n(a, b, c, d, color, n);
+    }
+
+    pub fn pavement_quad(&mut self, a: V3, b: V3, c: V3, d: V3, color: Rgb) {
+        self.pavement_quads.push(self.vertex_count());
+        self.quad(a, b, c, d, color);
+    }
+
+    pub fn marking_quad(&mut self, a: V3, b: V3, c: V3, d: V3, color: Rgb) {
+        self.marking_quads.push(self.vertex_count());
+        self.quad(a, b, c, d, color);
     }
 
     pub fn quad_n(&mut self, a: V3, b: V3, c: V3, d: V3, color: Rgb, n: V3) {
@@ -400,6 +420,8 @@ impl MeshArrays {
             normals: f(&self.normals),
             colors: f(&self.colors),
             indices: self.indices.clone(),
+            marking_quads: self.marking_quads.clone(),
+            pavement_quads: self.pavement_quads.clone(),
             axes: self.wire.then(|| f(&self.axes)),
             dirs: self.wire.then(|| f(&self.dirs)),
             radii: self.wire.then(|| f(&self.radii)),

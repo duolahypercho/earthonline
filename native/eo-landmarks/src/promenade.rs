@@ -24,6 +24,12 @@ struct Soup {
     c: Vec<Rgb>,
 }
 
+enum Solid<'a> {
+    Floor(&'a mut Surfaces),
+    Wall(&'a mut Surfaces),
+    Detail,
+}
+
 impl Soup {
     fn quad(&mut self, a: [f64; 3], b: [f64; 3], c: [f64; 3], d: [f64; 3], col: Rgb) {
         for v in [a, b, c, a, c, d] {
@@ -31,9 +37,9 @@ impl Soup {
             self.c.push(col);
         }
     }
-    /// `prism(s0a, s0b, s1a, s1b, y0b, y0t, y1b, y1t, col, { top })`.
+    /// Emit the visible prism and route its structural faces into the contact mesh.
     #[allow(clippy::too_many_arguments)]
-    fn prism(&mut self, s0a: [f64; 2], s0b: [f64; 2], s1a: [f64; 2], s1b: [f64; 2], y0b: f64, y0t: f64, y1b: f64, y1t: f64, col: Rgb, top: bool) {
+    fn prism(&mut self, s0a: [f64; 2], s0b: [f64; 2], s1a: [f64; 2], s1b: [f64; 2], y0b: f64, y0t: f64, y1b: f64, y1t: f64, col: Rgb, solid: Solid<'_>) {
         let a = [s0a[0], y0t, s0a[1]];
         let b = [s0b[0], y0t, s0b[1]];
         let c = [s1b[0], y1t, s1b[1]];
@@ -43,13 +49,21 @@ impl Soup {
         let cb = [s1b[0], y1b, s1b[1]];
         let db = [s1a[0], y1b, s1a[1]];
         let k = |c: Rgb, f: f64| [c[0] * f, c[1] * f, c[2] * f];
-        if top {
-            self.quad(a, d, c, b, col);
-        }
+        let top = self.p.len();
+        self.quad(a, d, c, b, col);
+        let sides = self.p.len();
         self.quad(ab, a, b, bb, k(col, 0.9));
         self.quad(db, cb, c, d, k(col, 0.9));
         self.quad(ab, db, d, a, k(col, 0.94));
         self.quad(bb, b, c, cb, k(col, 0.94));
+        match solid {
+            Solid::Floor(s) => {
+                s.walk.extend(faces(&self.p[top..sides]).map(upward));
+                s.barrier.extend(faces(&self.p[sides..]));
+            }
+            Solid::Wall(s) => s.barrier.extend(faces(&self.p[top..])),
+            Solid::Detail => {}
+        }
     }
     fn freeze(&self, name: &str) -> Frozen {
         let idx: Vec<u32> = (0..self.p.len() as u32).collect();
@@ -79,8 +93,47 @@ fn sc(a: Rgb, k: f64) -> Rgb {
     [a[0] * k, a[1] * k, a[2] * k]
 }
 
+/// Structural faces shared with player collision and crowd footing, in the
+/// same single-precision world coordinates as the drawn mesh.
+#[derive(Clone, Debug, Default)]
+pub struct Surfaces {
+    pub name: &'static str,
+    pub walk: Vec<[[f32; 3]; 3]>,
+    pub barrier: Vec<[[f32; 3]; 3]>,
+}
+
+fn faces(points: &[[f64; 3]]) -> impl Iterator<Item = [[f32; 3]; 3]> + '_ {
+    points.chunks_exact(3).map(|f| [f[0], f[1], f[2]].map(|p| p.map(|v| v as f32)))
+}
+
+fn upward(mut face: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
+    let [a, b, c] = face;
+    if (b[2] - a[2]) * (c[0] - a[0]) < (b[0] - a[0]) * (c[2] - a[2]) {
+        face.swap(1, 2);
+    }
+    face
+}
+
+/// A headless world uses the same planner and ground samples as the scene.
+pub fn collision(ground: &dyn Fn(f64, f64) -> f64) -> Vec<Surfaces> {
+    let p = &crate::LandmarksJs::get().promenades;
+    let a = &p["structureAlbedo"];
+    [plan_ocean_beach(p, a, ground, ground), plan_sunset_dunes(p, a, ground, ground)]
+        .into_iter().flatten().map(|p| p.surfaces).collect()
+}
+
+struct Plan {
+    concrete: Soup,
+    planting: Soup,
+    sand: Soup,
+    surfaces: Surfaces,
+    stations: usize,
+    stairs: usize,
+}
+
 /// What a promenade builds: its concrete (casts), and its planting and sand skins (receive only).
 pub struct Promenade {
+    pub surfaces: Surfaces,
     pub concrete: Frozen,
     pub planting: Frozen,
     pub sand: Frozen,
@@ -90,6 +143,13 @@ pub struct Promenade {
 
 /// The Ocean Beach seawall and promenade along the Esplanade (all of it: the JS draws the stations inside its window).
 pub fn ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64, sand_at: &dyn Fn(f64, f64) -> f64) -> Option<Promenade> {
+    let plan = plan_ocean_beach(p, albedo, land_at, sand_at)?;
+    Some(Promenade { concrete: plan.concrete.freeze("ocean-beach-seawall:concrete"),
+        planting: plan.planting.freeze("ocean-beach-seawall:planting"), sand: plan.sand.freeze("ocean-beach-seawall:sand"),
+        surfaces: plan.surfaces, stations: plan.stations, stairs: plan.stairs })
+}
+
+fn plan_ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64, sand_at: &dyn Fn(f64, f64) -> f64) -> Option<Plan> {
     let o = &p["oceanBeach"];
     let s = &o["SECTION"];
     let n = |k: &str| s[k].as_f64().unwrap();
@@ -138,6 +198,7 @@ pub fn ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64,
     let face_col = rgb(&albedo["pier"]);
     let foot_col = rgb(&albedo["pierFoot"]);
     let (mut walkable, mut barrier, mut plants, mut sand, mut decor) = (Soup::default(), Soup::default(), Soup::default(), Soup::default(), Soup::default());
+    let mut surfaces = Surfaces { name: "Ocean Beach Esplanade", ..Default::default() };
     let mut stairs = 0;
     for i in 0..sts.len() - 1 {
         let (p, q) = (&sts[i], &sts[i + 1]);
@@ -145,7 +206,7 @@ pub fn ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64,
             continue;
         }
         let tone = |period: f64, k: f64, c: Rgb| sc(c, 0.94 + 0.08 * hash((p.s / period).floor() + k));
-        walkable.prism(off(p, n("parapetLand")), off(p, n("walkLand")), off(q, n("parapetLand")), off(q, n("walkLand")), p.walk_y - n("walkH") - 0.25, p.walk_y, q.walk_y - n("walkH") - 0.25, q.walk_y, tone(walk_panel, 7.0, walk_col), true);
+        walkable.prism(off(p, n("parapetLand")), off(p, n("walkLand")), off(q, n("parapetLand")), off(q, n("walkLand")), p.walk_y - n("walkH") - 0.25, p.walk_y, q.walk_y - n("walkH") - 0.25, q.walk_y, tone(walk_panel, 7.0, walk_col), Solid::Floor(&mut surfaces));
         if (q.s / walk_panel).floor() != (p.s / walk_panel).floor() {
             let js = (q.s / walk_panel).floor() * walk_panel;
             let t = (js - p.s) / (q.s - p.s);
@@ -191,8 +252,8 @@ pub fn ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64,
         let bed_p = p.plant_base.max(p.walk_y - n("walkH")) + 0.02;
         let bed_q = q.plant_base.max(q.walk_y - n("walkH")) + 0.02;
         let soil = 0.92 + 0.12 * hash(p.s * 2.3);
-        plants.prism(off(p, n("walkLand")), off(p, n("plantLand")), off(q, n("walkLand")), off(q, n("plantLand")), p.plant_base - 0.2, bed_p, q.plant_base - 0.2, bed_q, [0.44 * soil, 0.39 * soil, 0.29 * soil], true);
-        walkable.prism(off(p, n("plantLand")), off(p, n("kerbLand")), off(q, n("plantLand")), off(q, n("kerbLand")), p.kerb_base - 0.25, p.kerb_base + n("kerbH"), q.kerb_base - 0.25, q.kerb_base + n("kerbH"), kerb_col, true);
+        plants.prism(off(p, n("walkLand")), off(p, n("plantLand")), off(q, n("walkLand")), off(q, n("plantLand")), p.plant_base - 0.2, bed_p, q.plant_base - 0.2, bed_q, [0.44 * soil, 0.39 * soil, 0.29 * soil], Solid::Floor(&mut surfaces));
+        walkable.prism(off(p, n("plantLand")), off(p, n("kerbLand")), off(q, n("plantLand")), off(q, n("kerbLand")), p.kerb_base - 0.25, p.kerb_base + n("kerbH"), q.kerb_base - 0.25, q.kerb_base + n("kerbH"), kerb_col, Solid::Floor(&mut surfaces));
         if p.stair || q.stair {
             if p.stair && !q.stair {
                 stairs += 1;
@@ -205,7 +266,7 @@ pub fn ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64,
                 let top_q = q.walk_y - (k + 1) as f64 * (drop / steps as f64);
                 let u0 = n("parapetLand") - k as f64 * n("stairTread");
                 let u1 = u0 - n("stairTread");
-                walkable.prism(off(p, u1), off(p, u0), off(q, u1), off(q, u0), (top_p - 0.25).min(base), top_p, (top_q - 0.25).min(base), top_q, if k == steps - 1 { foot_col } else { walk_col }, true);
+                walkable.prism(off(p, u1), off(p, u0), off(q, u1), off(q, u0), (top_p - 0.25).min(base), top_p, (top_q - 0.25).min(base), top_q, if k == steps - 1 { foot_col } else { walk_col }, Solid::Floor(&mut surfaces));
             }
             continue;
         }
@@ -215,16 +276,16 @@ pub fn ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64,
         let p_base = (p.walk_y - n("walkH")).min(p.sand_y) - 0.3;
         let q_base = (q.walk_y - n("walkH")).min(q.sand_y) - 0.3;
         let pc = tone(panel_m, 3.0, parapet_col);
-        barrier.prism(off(p, n("parapetSea")), off(p, n("parapetLand")), off(&qq, n("parapetSea")), off(&qq, n("parapetLand")), p_base, p_top, q_base, q_top, pc, true);
+        barrier.prism(off(p, n("parapetSea")), off(p, n("parapetLand")), off(&qq, n("parapetSea")), off(&qq, n("parapetLand")), p_base, p_top, q_base, q_top, pc, Solid::Wall(&mut surfaces));
         let cap = [(pc[0] * 1.05).min(1.0), (pc[1] * 1.05).min(1.0), (pc[2] * 1.05).min(1.0)];
-        barrier.prism(off(p, n("parapetSea") - n("capOver")), off(p, n("parapetLand") + n("capOver")), off(&qq, n("parapetSea") - n("capOver")), off(&qq, n("parapetLand") + n("capOver")), p_top, p_top + n("capH"), q_top, q_top + n("capH"), cap, true);
+        barrier.prism(off(p, n("parapetSea") - n("capOver")), off(p, n("parapetLand") + n("capOver")), off(&qq, n("parapetSea") - n("capOver")), off(&qq, n("parapetLand") + n("capOver")), p_top, p_top + n("capH"), q_top, q_top + n("capH"), cap, Solid::Wall(&mut surfaces));
         let drop = (p.walk_y - p.sand_y).clamp(0.0, n("maxDrop"));
         let steps = (drop / n("stepRise")).floor() as i64;
         for k in 0..steps {
             let top = p.walk_y - (k + 1) as f64 * n("stepRise");
             let u0 = n("parapetSea") - k as f64 * n("stepRun");
             let u1 = u0 - n("stepRun");
-            barrier.prism(off(p, u1), off(p, u0), off(&qq, u1), off(&qq, u0), p_base, top, q_base, top, if k == steps - 1 { foot_col } else { face_col }, true);
+            barrier.prism(off(p, u1), off(p, u0), off(&qq, u1), off(&qq, u0), p_base, top, q_base, top, if k == steps - 1 { foot_col } else { face_col }, Solid::Wall(&mut surfaces));
         }
     }
     let mut concrete = walkable;
@@ -232,11 +293,17 @@ pub fn ocean_beach(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64,
     concrete.c.extend(barrier.c);
     concrete.p.extend(decor.p);
     concrete.c.extend(decor.c);
-    Some(Promenade { concrete: concrete.freeze("ocean-beach-seawall:concrete"), planting: plants.freeze("ocean-beach-seawall:planting"), sand: sand.freeze("ocean-beach-seawall:sand"), stations: sts.len(), stairs })
+    Some(Plan { concrete, planting: plants, sand, surfaces, stations: sts.len(), stairs })
 }
 
 /// The Sunset Dunes seawall and its six stair flights.
 pub fn sunset_dunes(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64, sand_at: &dyn Fn(f64, f64) -> f64) -> Option<Promenade> {
+    let plan = plan_sunset_dunes(p, albedo, land_at, sand_at)?;
+    Some(Promenade { concrete: plan.concrete.freeze("sunset-dunes-seawall"), planting: Frozen::default(), sand: Frozen::default(),
+        surfaces: plan.surfaces, stations: plan.stations, stairs: plan.stairs })
+}
+
+fn plan_sunset_dunes(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64, sand_at: &dyn Fn(f64, f64) -> f64) -> Option<Plan> {
     let o = &p["sunsetDunes"];
     let g = |k: &str| o[k].as_f64().unwrap();
     let (a, b) = ([o["AXIS"]["a"][0].as_f64()?, o["AXIS"]["a"][1].as_f64()?], [o["AXIS"]["b"][0].as_f64()?, o["AXIS"]["b"][1].as_f64()?]);
@@ -270,14 +337,15 @@ pub fn sunset_dunes(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64
     let foot_col = mul(rgb(&albedo["pierFoot"]), WARM);
     let off = |x: f64, z: f64, u: f64| [x + nx * u, z + nz * u];
     let mut concrete = Soup::default();
+    let mut surfaces = Surfaces { name: "Sunset Dunes seawall", ..Default::default() };
     for i in 0..sts.len() - 1 {
         let ([px, pz, pt, pf], [qx, qz, qt, qf]) = (sts[i], sts[i + 1]);
         if qz - pz > station + 1e-3 {
             continue;
         }
-        concrete.prism(off(px, pz, 0.0), off(px, pz, -cap_m), off(qx, qz, 0.0), off(qx, qz, -cap_m), pt - 0.3, pt + 0.05, qt - 0.3, qt + 0.05, cap_col, true);
-        concrete.prism(off(px, pz, 0.25), off(px, pz, 0.0), off(qx, qz, 0.25), off(qx, qz, 0.0), pf - 0.6, pt - 0.3, qf - 0.6, qt - 0.3, face_col, true);
-        concrete.prism(off(px, pz, 0.32), off(px, pz, 0.25), off(qx, qz, 0.32), off(qx, qz, 0.25), pf - 0.6, pf + 0.45, qf - 0.6, qf + 0.45, foot_col, true);
+        concrete.prism(off(px, pz, 0.0), off(px, pz, -cap_m), off(qx, qz, 0.0), off(qx, qz, -cap_m), pt - 0.3, pt + 0.05, qt - 0.3, qt + 0.05, cap_col, Solid::Wall(&mut surfaces));
+        concrete.prism(off(px, pz, 0.25), off(px, pz, 0.0), off(qx, qz, 0.25), off(qx, qz, 0.0), pf - 0.6, pt - 0.3, qf - 0.6, qt - 0.3, face_col, Solid::Wall(&mut surfaces));
+        concrete.prism(off(px, pz, 0.32), off(px, pz, 0.25), off(qx, qz, 0.32), off(qx, qz, 0.25), pf - 0.6, pf + 0.45, qf - 0.6, qf + 0.45, foot_col, Solid::Wall(&mut surfaces));
     }
     let mut flights = 0;
     for f in o["steps"].as_array()? {
@@ -299,17 +367,17 @@ pub fn sunset_dunes(p: &Value, albedo: &Value, land_at: &dyn Fn(f64, f64) -> f64
         let z_start = zs - flight;
         let rise = drop / steps as f64;
         if z_start > zn + 0.05 {
-            concrete.prism(off(line_at(zn), zn, 0.25 + flight_w), off(line_at(zn), zn, 0.25), off(line_at(z_start), z_start, 0.25 + flight_w), off(line_at(z_start), z_start, 0.25), foot - 0.6, top, foot - 0.6, top, cap_col, true);
+            concrete.prism(off(line_at(zn), zn, 0.25 + flight_w), off(line_at(zn), zn, 0.25), off(line_at(z_start), z_start, 0.25 + flight_w), off(line_at(z_start), z_start, 0.25), foot - 0.6, top, foot - 0.6, top, cap_col, Solid::Floor(&mut surfaces));
         }
         for k in 0..steps {
             let za = z_start + k as f64 * tread;
             let zb = za + tread;
             let y = top - (k + 1) as f64 * rise;
-            concrete.prism(off(line_at(za), za, 0.25 + flight_w), off(line_at(za), za, 0.25), off(line_at(zb), zb, 0.25 + flight_w), off(line_at(zb), zb, 0.25), foot - 0.6, y, foot - 0.6, y, cap_col, true);
+            concrete.prism(off(line_at(za), za, 0.25 + flight_w), off(line_at(za), za, 0.25), off(line_at(zb), zb, 0.25 + flight_w), off(line_at(zb), zb, 0.25), foot - 0.6, y, foot - 0.6, y, cap_col, Solid::Floor(&mut surfaces));
             let zna = zb - 0.06;
-            concrete.prism(off(line_at(zna), zna, 0.25 + flight_w), off(line_at(zna), zna, 0.25), off(line_at(zb), zb, 0.25 + flight_w), off(line_at(zb), zb, 0.25), y, y + 0.004, y, y + 0.004, foot_col, true);
+            concrete.prism(off(line_at(zna), zna, 0.25 + flight_w), off(line_at(zna), zna, 0.25), off(line_at(zb), zb, 0.25 + flight_w), off(line_at(zb), zb, 0.25), y, y + 0.004, y, y + 0.004, foot_col, Solid::Detail);
         }
         flights += 1;
     }
-    Some(Promenade { concrete: concrete.freeze("sunset-dunes-seawall"), planting: Frozen::default(), sand: Frozen::default(), stations: sts.len(), stairs: flights })
+    Some(Plan { concrete, planting: Soup::default(), sand: Soup::default(), surfaces, stations: sts.len(), stairs: flights })
 }

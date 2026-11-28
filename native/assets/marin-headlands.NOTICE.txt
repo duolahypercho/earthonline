@@ -1,0 +1,20 @@
+Marin Headlands registered ground reflectance
+Imagery: USDA NAIP, via the U.S. Geological Survey National Map
+Public domain (U.S. Government work; https://www.usa.gov/publicdomain/label/1.0/)
+Coordinates: marin-image-footprints.json, native city survey metres.
+Rebuild: python3 native/tools/measure-marin-landing.py
+Output SHA-256: f6ac384bf113e6a014a3206aae889f483cf7beec4faec90b06c6fc880b821505
+
+Verified source tiles:
+A1/rgb/r000_c000.jpg  644eba4a28ec69696422fcf2a1b0d7db67c0c2210e7d8fa557ab6d18ee797391
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.506500000,37.823429120,-122.492539774,37.834500000&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image
+A1/rgb/r000_c001.jpg  3d8350b5cacefadf7aa9736a78e408eb4679c3deb6ded92b1279e36dae204f6d
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.492539774,37.823429120,-122.478579547,37.834500000&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image
+A1/rgb/r000_c002.jpg  2ccd43b717bd453573f890cbbd23936fcfc49bdc4b6cc4997a570b8d27a0a264
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.478579547,37.823429120,-122.464619321,37.834500000&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image
+A1/rgb/r001_c000.jpg  4b3e94f5c7def9cfbf43cc8c957576054586ad2abd544565bacc13e685be8fda
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.506500000,37.812358240,-122.492539774,37.823429120&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image
+A1/rgb/r001_c001.jpg  548fbe0a18ae62962f0160b7a9ddb7f95e86a31aedf5dda6860788d15911f94e
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.492539774,37.812358240,-122.478579547,37.823429120&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image
+A1/rgb/r001_c002.jpg  e627dbd77f86c12595bc7f7e55013b781de7b785f436f1d6bcb6a2c21b2fe1b8
+https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage?bbox=-122.478579547,37.812358240,-122.464619321,37.823429120&bboxSR=4326&imageSR=4326&size=2048,2048&format=jpg&compressionQuality=90&bandIds=0,1,2&interpolation=RSP_BilinearInterpolation&f=image

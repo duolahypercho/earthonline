@@ -1387,7 +1387,9 @@ fn gg_frame(js: &LandmarksJs) -> GgFrame {
     GgFrame { site: crate::golden_gate::Site::new(&js.golden_gate), water: js.sea_level_y }
 }
 
-fn golden_gate_sidewalk(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option<f64>) -> Deck {
+/// The east sidewalk on the bridge's panels, including the plates around both
+/// towers. The sidewalk is present with either version of the bridge railing.
+pub fn golden_gate_sidewalk(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option<f64>) -> Deck {
     // the bridge's own site data (golden_gate.rs `data`: its heights and member
     // sizes times the structure scale), so the walk meets the deck as drawn.
     let gd = crate::golden_gate::data(js);
@@ -1411,8 +1413,9 @@ fn golden_gate_sidewalk(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option
     let side = |c: f64| plan.deck_top(c) + curb_m;
     let pt = |c: f64, s: f64| frame.P(c, s, side(c));
     let mut b = B::new("golden-gate-east-sidewalk");
+    let parapet = crate::golden_gate::safety_net::enabled().then(|| crate::golden_gate::safety_net::housing_limits(&plan));
     // Every chainage the walk changes at, and the panels between.
-    let mut cs: Vec<f64> = crate::suspension::stations(plan.c_south, plan.c_north, panel / 2.0);
+    let mut cs = crate::suspension::railing_stations(plan.c_south, plan.c_north, panel / 2.0, parapet);
     for t in towers {
         cs.extend([t - zone, t - leg_half_along, t + leg_half_along, t + zone]);
     }
@@ -1429,7 +1432,9 @@ fn golden_gate_sidewalk(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option
         // the traffic barrier and the outer railing.
         b.wall_over(pt(a, curb + 0.15), pt(c1, curb + 0.15), 0.4, GUARD_COLLIDE_M);
         let outer = if in_zone(m) { walk_outer - 0.15 } else { half_w - 0.15 };
-        b.wall_over(pt(a, outer), pt(c1, outer), 0.4, GUARD_COLLIDE_M);
+        if !parapet.is_some_and(|[lo,hi]| m >= lo && m <= hi) {
+            b.wall_over(pt(a, outer), pt(c1, outer), 0.4, GUARD_COLLIDE_M);
+        }
     }
     for t in towers {
         for e in [t - zone, t + zone] {
@@ -1451,7 +1456,7 @@ fn golden_gate_sidewalk(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option
     let railing = num(d, "railingM");
     let gap = |a: f64, c1: f64| towers.iter().any(|t| c1 > t - zone && a < t + zone);
     let drawn = crate::suspension::stations(plan.c_south, plan.c_north, panel);
-    let rails = crate::suspension::stations(plan.c_south, plan.c_north, panel / 2.0);
+    let rails = crate::suspension::railing_stations(plan.c_south, plan.c_north, panel / 2.0, parapet);
     let open_runs = |st: &[f64]| -> Vec<(f64, f64)> {
         let mut out = vec![];
         for t in towers {
@@ -1499,7 +1504,7 @@ fn golden_gate_sidewalk(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option
     };
     for w2 in rails.windows(2) {
         let (a, c1) = (w2[0], w2[1]);
-        if gap(a, c1) {
+        if gap(a, c1) || parapet.is_some_and(|[lo,hi]| a >= lo && c1 <= hi) {
             continue;
         }
         picket(b.m("gg-orange"), a, c1);

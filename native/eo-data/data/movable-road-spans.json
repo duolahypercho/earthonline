@@ -1,0 +1,62 @@
+[
+  {
+    "id": 667768321,
+    "approach": "28846364",
+    "name": "3rd Street",
+    "highway": "primary",
+    "lanes": 2,
+    "oneway": true,
+    "maxspeed": "30 mph",
+    "sidewalk": "",
+    "surface": "asphalt",
+    "bridge": true,
+    "tunnel": false,
+    "layer": "1",
+    "points": [
+      2830.7,
+      3400.8,
+      2828.2,
+      3369.2
+    ]
+  },
+  {
+    "id": 667768323,
+    "approach": "28846361",
+    "name": "3rd Street",
+    "highway": "primary",
+    "lanes": 2,
+    "oneway": true,
+    "maxspeed": "30 mph",
+    "sidewalk": "",
+    "surface": "asphalt",
+    "bridge": true,
+    "tunnel": false,
+    "layer": "1",
+    "points": [
+      2812.6,
+      3370.5,
+      2814.9,
+      3401.9
+    ]
+  },
+  {
+    "id": 675892536,
+    "approach": "675892535",
+    "name": "Illinois Street",
+    "highway": "tertiary",
+    "lanes": 2,
+    "oneway": false,
+    "maxspeed": "",
+    "sidewalk": "separate",
+    "surface": "metal",
+    "bridge": true,
+    "tunnel": false,
+    "layer": "1",
+    "points": [
+      2916.2,
+      3359.2,
+      2918.0,
+      3385.3
+    ]
+  }
+]

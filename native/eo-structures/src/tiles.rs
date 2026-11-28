@@ -28,6 +28,9 @@ pub(crate) struct Refs {
     pub bents: Vec<(u32, u32)>,
     /// (chain, end 0 or 1).
     pub ends: Vec<(u32, u8)>,
+    pub merges: [Vec<crate::merge_surface::Patch>; 3],
+    pub skyway: Vec<crate::skyway_lights::Standard>,
+    pub east_steel: Vec<crate::east_span::Member>,
     /// Stage A9: (wall, first, last) section positions of a wall
     /// (`walls::Wall`), a run of its steps in this tile.
     pub walls: Vec<(u32, u32, u32)>,
@@ -39,8 +42,14 @@ pub(crate) struct Tiles {
     pub sweeps: Vec<Option<Sweep>>,
     pub tiles: BTreeMap<(i32, i32), Refs>,
     pub dims: Option<Dims>,
+    pub openings: Arc<eo_street::road_openings::RoadOpenings>,
     /// Drawn chains with a piece whose section came from the fallback rule.
     pub fallback_chains: usize,
+    // Actual bridge plates replace the approximate chain sweeps on these decks.
+    landmark_decks: Vec<crate::LandmarkDeck>,
+    landmark_surfaces: BTreeMap<(i32, i32), StructureSurface>,
+    /// Per deck and covered tile, the collision tile and index of each roadway face.
+    landmark_pavement: BTreeMap<(crate::LandmarkDeck, (i32, i32)), Vec<((i32, i32), usize)>>,
     /// Stage A9: the retaining walls where the joined street meets the
     /// structures (`walls.rs`; none on a street built without the joins).
     pub walls: Vec<crate::walls::Wall>,
@@ -64,9 +73,11 @@ fn draw_of(c: &Chain) -> Option<Draw> {
 }
 
 impl Tiles {
-    pub fn build(streets: &StreetWorld, chains: &[Chain], dims: Dims, class_lane: &dyn Fn(&str) -> f64) -> Self {
+    pub fn build(streets: &StreetWorld, chains: &[Chain], dims: Dims, class_lane: &dyn Fn(&str) -> f64, apron: &[u32]) -> Self {
         let ctx = Ctx { streets, chains, dims: &dims, class_lane, scale: eo_data::groundscale::scale() };
-        let sweeps: Vec<Option<Sweep>> = chains.iter().map(|c| draw_of(c).map(|d| sweep::sweep(&ctx, c, d))).collect();
+        let sweeps: Vec<Option<Sweep>> = chains.iter().map(|c| {
+            if apron.contains(&c.id) { None } else { draw_of(c).map(|d| sweep::sweep(&ctx, c, d)) }
+        }).collect();
         let mut tiles: BTreeMap<(i32, i32), Refs> = BTreeMap::new();
         let mut fallback_chains = 0;
         for (ci, sw) in sweeps.iter().enumerate() {
@@ -112,7 +123,54 @@ impl Tiles {
                 tiles.entry(tile_key(st.x, st.z)).or_default().ends.push((ci as u32, e));
             }
         }
-        Self { sweeps, tiles, dims: Some(dims), fallback_chains, walls: vec![], render: Mutex::new(HashMap::new()), surface: Mutex::new(HashMap::new()) }
+        crate::merge_surface::add(chains, &sweeps, &mut tiles);
+        for pole in crate::skyway_lights::place(chains, &sweeps, &dims) {
+            tiles.entry(tile_key(pole.foot[0], pole.foot[2])).or_default().skyway.push(pole);
+        }
+        for member in crate::east_span::steel(chains, streets) {
+            let key = tile_key((member.a[0] + member.b[0]) / 2.0, (member.a[2] + member.b[2]) / 2.0);
+            tiles.entry(key).or_default().east_steel.push(member);
+        }
+        let openings = crate::tunnel_clearance::openings(&sweeps, streets, chains);
+        Self { openings: Arc::new(openings), sweeps, tiles, dims: Some(dims), fallback_chains, walls: vec![], landmark_decks: Vec::new(), landmark_surfaces: BTreeMap::new(), landmark_pavement: BTreeMap::new(), render: Mutex::new(HashMap::new()), surface: Mutex::new(HashMap::new()) }
+    }
+
+    pub fn has_landmark_roads(&self) -> bool {
+        !self.landmark_decks.is_empty()
+    }
+
+    /// A real landmark draws its own panels across all lanes and owns their collision.
+    /// Synthetic solves without landmark geometry retain the surveyed chain surface.
+    pub fn install_landmark_roads(&mut self, chains: &[Chain], roads: Vec<eo_landmarks::bridge_roads::RoadSurface>, clear: &mut crate::clear::ClearIndex) {
+        for road in roads {
+            crate::merge_surface::bridge_ends(&road, chains, &self.sweeps, &mut self.tiles, clear);
+            self.landmark_decks.push(road.deck);
+            for (triangles, road_top) in [(road.road, true), (road.barrier, false)] {
+                for (index, tri) in triangles.into_iter().enumerate() {
+                    let key = tile_key((tri[0][0]+tri[1][0]+tri[2][0])/3., (tri[0][2]+tri[1][2]+tri[2][2])/3.);
+                    self.tiles.entry(key).or_default();
+                    let tile = self.landmark_surfaces.entry(key).or_default();
+                    if road_top && index < road.carriageway_faces {
+                        let keys = tri.map(|p| tile_key(p[0], p[2]));
+                        let xs = keys.map(|p| p.0);
+                        let zs = keys.map(|p| p.1);
+                        for x in *xs.iter().min().unwrap()..=*xs.iter().max().unwrap() {
+                            for z in *zs.iter().min().unwrap()..=*zs.iter().max().unwrap() {
+                                self.landmark_pavement.entry((road.deck, (x, z))).or_default()
+                                    .push((key, tile.street.len()));
+                            }
+                        }
+                    }
+                    if road_top { tile.street.push(tri); } else { tile.barrier.push(tri); }
+                }
+            }
+        }
+    }
+
+    pub fn landmark_road_height(&self, deck: crate::LandmarkDeck, x: f64, z: f64) -> Option<f64> {
+        self.landmark_pavement.get(&(deck, tile_key(x, z)))?.iter().find_map(|(owner, index)| {
+            mesh::plan_height(&self.landmark_surfaces[owner].street[*index], x, z)
+        })
     }
 
     /// Stage A9: add retaining walls, each step to the tile of its middle
@@ -146,11 +204,26 @@ impl Tiles {
         self.tiles.keys().copied().collect()
     }
 
+    /// A merge or abutment patch may extend past the tile of its sweep's centre.
+    pub fn join_deck_height(&self, chain: u32, x: f64, z: f64) -> Option<f64> {
+        let (tx, tz) = tile_key(x, z);
+        for dx in -1..=1 {
+            for dz in -1..=1 {
+                let Some(refs) = self.tiles.get(&(tx + dx, tz + dz)) else { continue };
+                if let Some(y) = refs.merges[0].iter().find_map(|p| p.height_on(chain, x, z)) {
+                    return Some(y);
+                }
+            }
+        }
+        None
+    }
+
     /// The render mesh of one tile at one level, built (not cached).
     pub fn build_mesh(&self, chains: &[Chain], key: (i32, i32), lod: u8) -> StructureMesh {
         let mut b = Builder::default();
         let (Some(refs), Some(dims)) = (self.tiles.get(&key), self.dims.as_ref()) else { return b.m };
         let lod = lod.min(2);
+        let mut linings = Vec::new();
         for &(ci, q0, q1) in &refs.runs[lod as usize] {
             let Some(sw) = self.sweeps[ci as usize].as_ref() else { continue };
             if sw.draw == Draw::Landmark {
@@ -160,11 +233,13 @@ impl Tiles {
             let last = q1 as usize + 1 == sw.levels[lod as usize].len();
             b.era = sw.era;
             if sw.draw == Draw::Tunnel {
-                crate::tunnel::run(&mut b, sw, &chains[ci as usize], idx, lod, dims);
+                let lining = crate::tunnel::run(&mut b, sw, &chains[ci as usize], idx, lod, dims);
+                if !lining.is_empty() { linings.push((lining, ci)); }
                 continue;
             }
             mesh::run(&mut b, sw, &chains[ci as usize], idx, lod, dims, last);
         }
+        for patch in &refs.merges[lod as usize] { patch.draw(&mut b); }
         for &(ci, k) in &refs.bents {
             if let Some(sw) = self.sweeps[ci as usize].as_ref() {
                 let c = &chains[ci as usize];
@@ -178,6 +253,8 @@ impl Tiles {
                 mesh::bent(&mut b, sw, c, k as usize, lod, dims, twin);
             }
         }
+        crate::east_span::draw(&refs.east_steel, &mut b, false);
+        crate::skyway_lights::draw(&mut b, &refs.skyway, lod);
         for &(ci, e) in &refs.ends {
             if let Some(sw) = self.sweeps[ci as usize].as_ref() {
                 b.era = sw.era;
@@ -189,6 +266,7 @@ impl Tiles {
                 crate::walls::draw(&mut b, w, q0 as usize, q1 as usize, lod, dims);
             }
         }
+        crate::tunnel_clearance::clip_concrete(&mut b.m, &self.openings, &linings, chains);
         b.m
     }
 
@@ -210,15 +288,25 @@ impl Tiles {
     /// The collision triangles of one tile: the near level's deck surface
     /// and concrete, and the landmark decks' surface.
     pub fn build_surface(&self, chains: &[Chain], key: (i32, i32)) -> StructureSurface {
-        let mut out = StructureSurface::default();
+        let mut out = self.landmark_surfaces.get(&key).cloned().unwrap_or_default();
         let (Some(refs), Some(dims)) = (self.tiles.get(&key), self.dims.as_ref()) else { return out };
         if let Some(m) = self.mesh(chains, key, 0) {
             mesh::collide(&m, &mut out.street, &mut out.barrier);
         }
         let mut b = Builder::default();
+        if !refs.east_steel.is_empty() || !refs.skyway.is_empty() {
+            crate::east_span::draw(&refs.east_steel, &mut b, true);
+            for pole in &refs.skyway {
+                crate::skyway_lights::shaft(&mut b, pole);
+            }
+            for tri in b.m.indices.chunks_exact(3) {
+                out.barrier.push([tri[0], tri[1], tri[2]].map(|i| b.m.positions[i as usize].map(f64::from)));
+            }
+            b = Builder::default();
+        }
         for &(ci, q0, q1) in &refs.runs[0] {
             let Some(sw) = self.sweeps[ci as usize].as_ref() else { continue };
-            if sw.draw != Draw::Landmark {
+            if sw.draw != Draw::Landmark || chains[ci as usize].landmark.is_some_and(|id| self.landmark_decks.contains(&id)) {
                 continue;
             }
             let idx = &sw.levels[0][q0 as usize..=q1 as usize];
@@ -239,5 +327,31 @@ impl Tiles {
             cache.clear();
         }
         Some(cache.entry(key).or_insert(s).clone())
+    }
+}
+
+#[cfg(test)]
+mod landmark_height_tests {
+    use super::*;
+    use crate::LandmarkDeck::{BayBridgeLower, BayBridgeUpper};
+    use eo_landmarks::bridge_roads::RoadSurface;
+
+    #[test]
+    fn bridge_height_follows_the_roadway_across_tiles_and_keeps_the_decks_separate() {
+        let panel = |y| [[-12., y, 0.], [6., y, 0.], [6., y, 12.]];
+        let roads = [(BayBridgeUpper, 19.), (BayBridgeLower, 12.)].map(|(deck, y)| RoadSurface {
+            deck,
+            road: vec![panel(y), [[9., y, 2.], [11., y, 2.], [11., y, 8.]]],
+            carriageway_faces: 1,
+            barrier: vec![],
+        });
+        let mut tiles = Tiles::default();
+        tiles.install_landmark_roads(&[], Vec::from(roads), &mut crate::clear::ClearIndex::default());
+        // The centroid belongs to the positive tile. Both sides of x=0 carry traffic.
+        for x in [-1., 1.] {
+            assert!((tiles.landmark_road_height(BayBridgeUpper, x, 2.).unwrap() - 19.).abs() < 1e-9);
+            assert!((tiles.landmark_road_height(BayBridgeLower, x, 2.).unwrap() - 12.).abs() < 1e-9);
+        }
+        assert_eq!(tiles.landmark_road_height(BayBridgeUpper, 10., 3.), None);
     }
 }

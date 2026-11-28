@@ -69,8 +69,15 @@ pub fn data(js: &LandmarksJs) -> BayBridgeWest {
 
 /// Smooth minimum of two heights (k metres of rounding where they cross).
 fn smin(a: f64, b: f64, k: f64) -> f64 {
-    (a + b - ((a - b).powi(2) + k * k).sqrt()) / 2.0
+    if !suspension::features().scale {
+        return (a + b - ((a - b).powi(2) + k * k).sqrt()) / 2.0;
+    }
+    // Round the crest locally so the straight approach still reaches its measured end.
+    let overlap = (k - (a - b).abs()).max(0.0);
+    a.min(b) - overlap * overlap / (4.0 * k)
 }
+
+pub(crate) const UPPER_TRAFFIC_RAIL_M: f64 = 0.9;
 
 pub struct Plan {
     pub c_a: f64,
@@ -119,8 +126,11 @@ pub fn plan(js: &LandmarksJs, ground: &dyn Fn(f64, f64) -> f64) -> Plan {
     let (sf, isl) = (&b.deck_ends["sf"], &b.deck_ends["island"]);
     let c_a = f.chainage(sf.x, sf.z);
     let c_b = f.chainage(isl.x, isl.z);
-    let y_a = ground(sf.x, sf.z) + js.default_road_lift_m + sf.clearance;
-    let y_b = ground(isl.x, isl.z) + js.default_road_lift_m + isl.clearance;
+    let (y_a, y_b) = if suspension::features().scale {
+        (eo_data::bridge_survey::game_y(eo_data::bridge_survey::BAY_SF_NAVD88_M), eo_data::bridge_survey::game_y(eo_data::bridge_survey::BAY_ISLAND_NAVD88_M))
+    } else {
+        (ground(sf.x, sf.z) + js.default_road_lift_m + sf.clearance, ground(isl.x, isl.z) + js.default_road_lift_m + isl.clearance)
+    };
     let crest = js.sea_level_y + num(d, "clearanceM") + num(d, "trussDepthM");
     let towers = b.towers.iter().map(|t| (t.reference.clone(), t.centre, f.chainage(t.centre[0], t.centre[1]))).collect();
     let a = b.center_anchorage.centre;
@@ -468,6 +478,8 @@ pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, o
             dark: k.steel_dark,
             gap: &gap,
             far_half_width: h + 0.5,
+            end_plate_cover: 0.,
+            floorbeam_span: None,
             far_above: 1.0,
             member: m,
         },
@@ -479,9 +491,10 @@ pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, o
     let lower_y = |c: f64| p.lower_top(c);
     let decks: [(bool, &dyn Fn(f64) -> f64); 2] = [(true, &upper_y), (false, &lower_y)];
     for (upper, y) in decks {
-        suspension::road_deck(
+        suspension::bridge_road_deck(
             &mut deck,
             &mut steel,
+            &mut far,
             &f,
             ca,
             &DeckSpec {
@@ -496,12 +509,13 @@ pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, o
                 curb_m: 0.2,
                 railings: upper,
                 railing_m: 1.2,
-                inner_barrier_m: if upper { 0.9 } else { 1.0 },
+                inner_barrier_m: if upper { UPPER_TRAFFIC_RAIL_M } else { 1.0 },
                 panel: num(d, "panelM"),
                 gap: &|_, _| false,
                 colours,
                 markings: true,
                 outer_railing_elsewhere: None,
+                outer_parapet: None,
             },
         );
     }

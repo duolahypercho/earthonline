@@ -220,7 +220,11 @@ fn lm_wire2_vs(
         let q0 = cross(normalize(dir), normalize(pos - skyu.eye.xyz));
         fw = lm_curtain_filter(axis, q0 / max(length(q0), 1e-6), radius, mpp);
     }
-    var need = max(drawn0, radius + 2.0 * fw);
+    // The side faces have open ends. At a clamp an envelope much wider than
+    // the actual wire projects its end past the adjoining loop when seen
+    // obliquely. Only the filtered silhouette needs raster coverage.
+    let filtered = radius + 2.0 * fw;
+    var need = select(max(drawn0, filtered), filtered, LM_WIRE_JOINTS);
     // a rope whose peak coverage (2 r / pixel) is under 1/64 changes no pixel
     // by more than a level of the display: its prism closes to the axis there
     // (no fragments; per vertex, so a segment tapers where it crosses the

@@ -423,7 +423,7 @@ fn by_rule(inner: Vec<Zone>) -> Option<(BentRule, Vec<Zone>)> {
 }
 
 /// The best room at station `s` (None: no column can stand there).
-fn room(sites: &Sites, c: &Chain, s: f64, free: &dyn Fn(P2, bool) -> bool) -> Option<Room> {
+pub(crate) fn room(sites: &Sites, c: &Chain, s: f64, free: &dyn Fn(P2, bool) -> bool) -> Option<Room> {
     let r = BENT_FOOTPRINT_MARGIN_M;
     let half = c.half_at(s);
     let h = half + r;
