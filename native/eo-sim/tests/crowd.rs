@@ -85,6 +85,82 @@ fn soma_with(frontage: bool, path: bool, night: bool) -> (Network, NativeSource)
 }
 
 #[test]
+fn a_walker_waits_behind_a_paused_stranger_then_follows_them() {
+    use eo_sim::pedestrians::Walker;
+    let (net, _) = soma(false, false);
+    let path = net.alive_footways().find(|&id| net.footways[id as usize].length > 80.0).unwrap();
+    let run = |reverse_order: bool| {
+        let mut cfg = RegionConfig::js_pool(7, 0);
+        cfg.vehicle_pool = 0;
+        cfg.crowd = Some(CrowdDensity::standard(1.0));
+        let focus = Focus { x: SOMA[0], z: SOMA[1], yaw: 0.0 };
+        let mut r = Region::new(&net, 0, cfg, focus);
+        r.viewers = Some(vec![focus]); // fixed pool, no local density refill
+        let walkers = [(1, 42.0, 0.0), (2, 40.0, 0.0), (3, 40.0, 0.8)];
+        for i in 0..walkers.len() {
+            let (key, s, lateral) = walkers[if reverse_order { 2 - i } else { i }];
+            let mut w = Walker::new(key, path, s, 1, 1.5, lateral, 1, false, 0.0);
+            w.activity_timer = 120.0;
+            if key == 1 { w.activity = consts::Activity::Stand; }
+            r.crowd.push(w);
+        }
+        r.crowd.refresh_positions(&net);
+        let mut trace = Vec::new();
+        for frame in 0..360 {
+            let at = |id| r.crowd.walkers.iter().position(|w| w.key == id).unwrap();
+            let (leader, follower, passing) = (at(1), at(2), at(3));
+            if frame == 180 { r.crowd.walkers[leader].activity = consts::Activity::Walk; }
+            r.step(&net, frame as f64 / 60.0, 1.0 / 60.0);
+            let w = &r.crowd.walkers;
+            assert!(w[leader].s - w[follower].s >= 0.59, "overlap on step {frame}");
+            if frame == 179 {
+                assert!(w[follower].s > 41.0 && w[follower].ground_speed < 0.1);
+                assert!(w[passing].s > w[leader].s + 2.0);
+            }
+            trace.push((w[follower].s, w[follower].gait));
+        }
+        assert!(trace.last().unwrap().0 > 44.0, "the follower stayed blocked");
+        trace
+    };
+    assert_eq!(run(false), run(true));
+}
+
+#[test]
+fn head_on_walkers_make_room_and_both_continue_on_their_original_path() {
+    use eo_sim::pedestrians::Walker;
+    let (net, _) = soma(false, false);
+    let path = net.alive_footways().find(|&id| net.footways[id as usize].length > 80.0).unwrap();
+    let run = |reverse_order: bool| {
+        let mut cfg = RegionConfig::js_pool(7, 0);
+        cfg.vehicle_pool = 0;
+        cfg.crowd = Some(CrowdDensity::standard(1.0));
+        let focus = Focus { x: SOMA[0], z: SOMA[1], yaw: 0.0 };
+        let mut r = Region::new(&net, 0, cfg, focus);
+        r.viewers = Some(vec![focus]);
+        let mut walkers = [(1, 40.0, 1), (2, 44.0, -1)];
+        if reverse_order { walkers.reverse(); }
+        for (id, s, dir) in walkers {
+            let mut w = Walker::new(id, path, s, dir, 1.5, 0.0, 1, false, 0.0);
+            w.activity_timer = 120.0;
+            r.crowd.push(w);
+        }
+        r.crowd.refresh_positions(&net);
+        let mut trace = Vec::new();
+        for frame in 1..=360 {
+            r.step(&net, frame as f64 / 60.0, 1.0 / 60.0);
+            let i = usize::from(reverse_order);
+            let separation = (r.crowd.x[i] - r.crowd.x[1-i]).hypot(r.crowd.z[i] - r.crowd.z[1-i]);
+            assert!(separation >= consts::WALKER_WIDTH_M, "frame {frame}, separation {separation}");
+            trace.push((r.crowd.x[i], r.crowd.z[i]));
+        }
+        let i = usize::from(reverse_order);
+        assert!(r.crowd.walkers[i].s > 46.0 && r.crowd.walkers[1-i].s < 38.0);
+        trace
+    };
+    assert_eq!(run(false), run(true));
+}
+
+#[test]
 fn the_survey_measures_fronts_and_adds_walks_of_their_own() {
     let (plain, _) = soma(false, false);
     assert!(plain.footways.iter().all(|f| f.activity == FootActivity::default()), "no survey, no activity");
@@ -190,7 +266,7 @@ fn the_footways_stand_on_the_drawn_walks() {
     };
     let (mut on, mut all) = (0, 0);
     for (i, f) in drawn.footways.iter().enumerate() {
-        let Some(j) = f.cross_index.map(|j| j as usize).filter(|&j| j > i) else { continue };
+        let Some(j) = f.cross_index[0].map(|j| j as usize).filter(|&j| j > i) else { continue };
         let (p, q) = (mid(f), mid(&drawn.footways[j]));
         let c = [(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0];
         let Some(seg) = plain.segments.iter().find(|s| eo_sim::geom::dist_to_polyline(&s.points, c[0], c[1]) < 0.3) else { continue };
@@ -241,6 +317,351 @@ fn the_footways_stand_on_the_drawn_walks() {
     }
 }
 
+#[test]
+fn a_divided_road_preserves_sidewalks_and_links_on_each_side_of_a_cut() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficLane, TrafficSection};
+
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let half = base.dims.city_lane_m / 2.0;
+    let width = base.dims.throughway_m;
+    let cut_z = 100.0 - half - width / 2.0;
+    let road = |id: &str, points| SimRoad {
+        id: id.into(), name: "Boulevard".into(), highway: "secondary".into(),
+        oneway: Oneway::Forward, lanes: Some(1), maxspeed: String::new(),
+        sidewalk: "both".into(), bridge: false, tunnel: false, layer: 0, points,
+    };
+    let main = road("main", vec![[20.0, 100.0], [120.0, 100.0]]);
+    let opposing = road("opposing", vec![[85.0, cut_z], [55.0, cut_z]]);
+    let section = |road: &SimRoad| TrafficSection {
+        way: road.id.clone(), points: road.points.clone(), half, walks: [width; 2], walk_gaps: [vec![], vec![]],
+        lanes: vec![TrafficLane { direction: 1, width: 2.0 * half, lateral: 0.0 }],
+        shared_bidirectional: false, paint_span: None, paint: vec![], crosses_road: false, surface: vec![], carriageway_spans: vec![],
+    };
+    let sections = vec![section(&main), section(&opposing)];
+    let source = native::NativeSource::new(SimSource { roads: vec![main, opposing], signals: vec![] }, base.dims, base.timing)
+        .with_traffic_sections(sections);
+    let tiles = [eo_sim::network::TileKey { x: 0, z: 0 }];
+    let built = source.build(&tiles);
+    let on_main: Vec<_> = built.footways.iter().enumerate().filter(|(_, f)| f.segment == "nmain:0").collect();
+    let [(left, start), (right, finish), (outside, far)] = on_main.as_slice() else {
+        panic!("the median walk should be split and the outside walk should be continuous");
+    };
+    assert_eq!(start.points[0][0], 20.0);
+    assert!(start.points.last().unwrap()[0] < 55.0);
+    assert!(finish.points[0][0] > 85.0);
+    assert_eq!(finish.points.last().unwrap()[0], 120.0);
+    assert_eq!(start.cross_index, [Some(*outside as u32), None]);
+    assert_eq!(finish.cross_index, [None, Some(*outside as u32)]);
+    assert_eq!(far.cross_index, [Some(*left as u32), Some(*right as u32)]);
+    assert_eq!(far.original_arc_start, None);
+
+    let above = source.with_levels([("opposing".into(), 1)].into());
+    assert_eq!(above.build(&tiles).footways.iter().filter(|f| f.segment == "nmain:0").count(), 2);
+}
+
+#[test]
+fn painted_sidewalk_gaps_match_both_section_directions_and_keep_the_kerbs() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficSection};
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let half = base.dims.city_lane_m;
+    let width = base.dims.throughway_m;
+    let road = SimRoad {
+        id: "street".into(), name: "Street".into(), highway: "residential".into(),
+        oneway: Oneway::Both, lanes: Some(2), maxspeed: String::new(),
+        sidewalk: "both".into(), bridge: false, tunnel: false, layer: 0,
+        points: vec![[20.0, 100.0], [120.0, 100.0]],
+    };
+    let section = |points, walk_gaps| TrafficSection {
+        way: road.id.clone(), points, half, walks: [width; 2], walk_gaps,
+        lanes: vec![], shared_bidirectional: false, paint_span: None, paint: vec![],
+        crosses_road: false, surface: vec![], carriageway_spans: vec![],
+    };
+    let sections = vec![
+        section(vec![[20.0, 100.0], [70.0, 100.0]], [vec![], vec![[25.0, 50.0]]]),
+        section(vec![[120.0, 100.0], [70.0, 100.0]], [vec![[35.0, 50.0]], vec![]]),
+    ];
+    let source = native::NativeSource::new(SimSource { roads: vec![road], signals: vec![] }, base.dims, base.timing)
+        .with_traffic_sections(sections);
+    let tile = eo_sim::network::TileKey::of(70.0, 100.0);
+    let build = source.build(&[tile]);
+    let [start, finish, opposite] = build.footways.as_slice() else {
+        panic!("the two gaps should cut the same sidewalk into two walks");
+    };
+    assert_eq!(start.points[0][0], 20.0);
+    assert!(start.points.last().unwrap()[0] < 45.0);
+    assert!(finish.points[0][0] > 85.0);
+    assert_eq!(finish.points.last().unwrap()[0], 120.0);
+    assert_eq!(opposite.original_arc_start, None);
+    assert_eq!(start.cross_index, [Some(2), None]);
+    assert_eq!(finish.cross_index, [None, Some(2)]);
+    assert_eq!(opposite.cross_index, [Some(0), Some(1)]);
+    assert!(start.ends[1].no_crossing && finish.ends[0].no_crossing);
+}
+
+#[test]
+fn an_adjacent_motor_lane_cuts_a_walk_without_cutting_transverse_or_elevated_lanes() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficLane, TrafficSection};
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let half = base.dims.city_lane_m;
+    let width = base.dims.throughway_m;
+    let walk_z = 100.0 - half - width / 2.0;
+    let make_road = |id: &str, points, sidewalk: &str| SimRoad {
+        id: id.into(), name: id.into(), highway: "residential".into(),
+        oneway: Oneway::Both, lanes: Some(2), maxspeed: String::new(),
+        sidewalk: sidewalk.into(), bridge: false, tunnel: false, layer: 0, points,
+    };
+    let roads = vec![
+        make_road("street", vec![[20.0, 100.0], [120.0, 100.0]], "both"),
+        make_road("parallel", vec![[45.0, walk_z], [85.0, walk_z]], "separate"),
+        make_road("crossing", vec![[95.0, 60.0], [95.0, 140.0]], "separate"),
+    ];
+    let sections = roads.iter().map(|road| TrafficSection {
+        way: road.id.clone(), points: road.points.clone(), half, walks: [width; 2], walk_gaps: Default::default(),
+        lanes: if road.id == "street" { vec![] } else {
+            vec![TrafficLane { direction: 1, lateral: 0.0, width: half }]
+        },
+        shared_bidirectional: false, paint_span: None, paint: vec![], crosses_road: false, surface: vec![], carriageway_spans: vec![],
+    }).collect();
+    let source = native::NativeSource::new(SimSource { roads, signals: vec![] }, base.dims, base.timing)
+        .with_traffic_sections(sections);
+    let tile = eo_sim::network::TileKey::of(70.0, 100.0);
+    let build = source.build(&[tile]);
+    let [start, finish, opposite] = build.footways.as_slice() else {
+        panic!("only the adjacent lane should cut the walk");
+    };
+    assert!(start.points.last().unwrap()[0] < 45.0);
+    assert!(finish.points[0][0] > 85.0 && finish.points[0][0] < 95.0);
+    assert_eq!(finish.points.last().unwrap()[0], 120.0);
+    assert_eq!(opposite.cross_index, [Some(0), Some(1)]);
+
+    let above = source.with_levels([("parallel".into(), 1)].into()).build(&[tile]);
+    assert_eq!(above.footways.len(), 2);
+    assert!(above.footways.iter().all(|f| f.original_arc_start.is_none()));
+}
+
+#[test]
+fn a_skewed_junction_lane_ends_the_sidewalk_before_its_motor_lanes() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficLane, TrafficSection};
+    use eo_sim::network::TileKey;
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let half = base.dims.city_lane_m;
+    let width = base.dims.throughway_m;
+    let road = |id: &str, points, sidewalk: &str| SimRoad {
+        id: id.into(), name: id.into(), highway: "residential".into(),
+        oneway: Oneway::Both, lanes: Some(2), maxspeed: String::new(),
+        sidewalk: sidewalk.into(), bridge: false, tunnel: false, layer: 0, points,
+    };
+    for approach in [
+        vec![[20.0, 100.0], [120.0, 100.0]],
+        // A short final piece leaves the lane conflict on the preceding piece.
+        vec![[20.0, 100.0], [119.5, 100.0], [120.0, 100.0]],
+    ] {
+        let roads = vec![
+            road("sidewalk", approach, "both"),
+            road("skew", vec![[120.0, 100.0], [80.0, 130.0]], "separate"),
+        ];
+        let sections = roads.iter().map(|road| TrafficSection {
+            way: road.id.clone(), points: road.points.clone(), half, walks: [width; 2],
+            walk_gaps: Default::default(), lanes: if road.id == "skew" {
+                vec![TrafficLane { direction: 1, lateral: 0.0, width: half }]
+            } else { vec![] },
+            shared_bidirectional: false, paint_span: None, paint: vec![], crosses_road: false,
+            surface: vec![], carriageway_spans: vec![],
+        }).collect();
+        let source = native::NativeSource::new(SimSource { roads, signals: vec![] }, base.dims.clone(), base.timing.clone())
+            .with_traffic_sections(sections);
+        let tile = [TileKey::of(70.0, 100.0)];
+        let build = source.build(&tile);
+        let [south, north] = build.footways.as_slice() else {
+            panic!("a separated approach must leave two usable sidewalks");
+        };
+        let endpoint = north.points.last().unwrap();
+        assert!(endpoint[0] < 120.0 - half && endpoint[1] > 100.0, "approach endpoint {endpoint:?}, other sidewalk {:?}", south.points);
+        assert_eq!(north.cross_index, [Some(0), None]);
+        assert_eq!(south.cross_index, [Some(1), None]);
+        assert_eq!(south.points.last().unwrap()[0], 120.0);
+        let crossing = [[120.0, 100.0], [80.0, 130.0]];
+        let clearance = eo_sim::geom::dist_to_polyline(&crossing, endpoint[0], endpoint[1]);
+        assert!(clearance >= half / 2.0 + eo_sim::consts::PERSON_CAPSULE_R_M);
+
+        let above = source.with_levels([("skew".into(), 1)].into()).build(&tile);
+        assert_eq!(above.footways.len(), 2);
+        assert!(above.footways.iter().all(|f| f.original_arc_start.is_none()));
+    }
+}
+
+#[test]
+fn a_separate_at_grade_lane_cuts_the_sidewalk_only_inside_paved_bounds() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficLane, TrafficSection};
+    use eo_sim::network::TileKey;
+
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let half = base.dims.city_lane_m;
+    let width = base.dims.throughway_m;
+    let road = |id: &str, points, sidewalk: &str| SimRoad {
+        id: id.into(), name: String::new(), highway: "residential".into(),
+        oneway: Oneway::Both, lanes: Some(2), maxspeed: String::new(),
+        sidewalk: sidewalk.into(), bridge: false, tunnel: false, layer: 0, points,
+    };
+    let roads = vec![
+        road("sidewalk", vec![[20.0, 100.0], [120.0, 100.0]], "both"),
+        // The motor approach begins inside the sidewalk and the extracts
+        // have no common road vertex or drawn junction.
+        road("separate", vec![[100.0, 100.0 + half], [100.0, 150.0]], "separate"),
+    ];
+    let sections = roads.iter().map(|road| TrafficSection {
+        way: road.id.clone(), points: road.points.clone(), half, walks: [width; 2],
+        walk_gaps: Default::default(), lanes: if road.id == "separate" {
+            vec![TrafficLane { direction: 1, lateral: 0.0, width: half }]
+        } else { vec![] },
+        shared_bidirectional: false, paint_span: None, paint: vec![], crosses_road: false,
+        surface: vec![], carriageway_spans: vec![],
+    }).collect();
+    let source = native::NativeSource::new(SimSource { roads, signals: vec![] }, base.dims, base.timing)
+        .with_traffic_sections(sections);
+    let tile = [TileKey::of(70.0, 100.0)];
+    let build = source.build(&tile);
+    let [south, west, east] = build.footways.as_slice() else {
+        panic!("the lane should split only the north sidewalk");
+    };
+    assert_eq!(south.road_side, 1);
+    assert_eq!(west.road_side, -1);
+    assert_eq!(east.road_side, -1);
+    let west_gap = 100.0 - west.points.last().unwrap()[0];
+    let east_gap = east.points[0][0] - 100.0;
+    for gap in [west_gap, east_gap] {
+        assert!((half / 2.0..half / 2.0 + eo_sim::consts::WALKER_LATERAL_LIMIT_M).contains(&gap));
+    }
+    assert_eq!(west.cross_index, [Some(0), None]);
+    assert_eq!(east.cross_index, [None, Some(0)]);
+
+    let above = source.with_levels([("separate".into(), 1)].into()).build(&tile);
+    assert_eq!(above.footways.len(), 2);
+    assert!(above.footways.iter().all(|foot| foot.original_arc_start.is_none()));
+}
+
+#[test]
+fn a_shared_service_road_does_not_route_walkers_through_a_crossing_motor_lane() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficLane, TrafficSection};
+    use eo_sim::network::TileKey;
+
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let width = base.dims.city_lane_m;
+    let make_road = |id: &str, highway: &str, points, lanes, sidewalk: &str| SimRoad {
+        id: id.into(), name: id.into(), highway: highway.into(), points,
+        oneway: Oneway::Both, lanes: Some(lanes), maxspeed: String::new(), sidewalk: sidewalk.into(),
+        bridge: false, tunnel: false, layer: 0,
+    };
+    let roads = vec![
+        make_road("service", "service", vec![[20.0, 100.0], [120.0, 100.0]], 1, "both"),
+        make_road("through", "tertiary", vec![[70.0, 40.0], [70.0, 160.0]], 2, "separate"),
+    ];
+    let build = |crosses_road, elevated| {
+        let sections = roads.iter().map(|road| {
+            let shared = road.id == "service";
+            TrafficSection {
+                way: road.id.clone(), points: road.points.clone(),
+                half: if shared { width / 2.0 } else { width },
+                walks: [base.dims.throughway_m; 2], walk_gaps: Default::default(),
+                lanes: if shared { vec![] } else { vec![
+                    TrafficLane { direction: 1, lateral: -width / 2.0, width },
+                    TrafficLane { direction: -1, lateral: width / 2.0, width },
+                ] },
+                shared_bidirectional: shared, paint_span: None, paint: vec![],
+                crosses_road: shared && crosses_road, surface: vec![], carriageway_spans: vec![],
+            }
+        }).collect();
+        let levels = if elevated { [("through".into(), 1)].into() } else { Default::default() };
+        native::NativeSource::new(SimSource { roads: roads.clone(), signals: vec![] }, base.dims.clone(), base.timing.clone())
+            .with_levels(levels).with_traffic_sections(sections).build(&[TileKey::of(70.0, 100.0)])
+    };
+    let crossed = build(true, false);
+    assert!(crossed.lanes.iter().all(|lane| lane.segment == "nthrough:0"));
+    assert_eq!(crossed.footways.len(), 4);
+    for sidewalk in &crossed.footways {
+        let start = sidewalk.points[0][0];
+        let end = sidewalk.points.last().unwrap()[0];
+        assert!(end <= 70.0 - width || start >= 70.0 + width);
+    }
+    for compared in [build(false, false), build(true, true)] {
+        assert_eq!(compared.footways.len(), 2);
+        assert!(compared.footways.iter().all(|walk| walk.original_arc_start.is_none()));
+    }
+}
+
+#[test]
+fn matched_street_sections_only_route_pedestrians_on_drawn_sides() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficLane, TrafficSection};
+
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let half = base.dims.city_lane_m;
+    let width = base.dims.throughway_m;
+    let road = SimRoad {
+        id: "connector".into(), name: String::new(), highway: "tertiary_link".into(),
+        oneway: Oneway::Both, lanes: Some(2), maxspeed: String::new(),
+        sidewalk: String::new(), bridge: false, tunnel: false, layer: 0,
+        points: vec![[20.0, 100.0], [120.0, 100.0]],
+    };
+    let section = |walks| TrafficSection {
+        way: road.id.clone(), points: road.points.iter().rev().copied().collect(),
+        half, walks, walk_gaps: Default::default(),
+        lanes: vec![
+            TrafficLane { direction: 1, lateral: -half / 2.0, width: half },
+            TrafficLane { direction: -1, lateral: half / 2.0, width: half },
+        ],
+        shared_bidirectional: false, paint_span: None, paint: vec![], crosses_road: false, surface: vec![], carriageway_spans: vec![],
+    };
+    let tile = eo_sim::network::TileKey::of(70.0, 100.0);
+    let build = |sections| {
+        native::NativeSource::new(SimSource { roads: vec![road.clone()], signals: vec![] }, base.dims.clone(), base.timing.clone())
+            .with_traffic_sections(sections).build(&[tile])
+    };
+    assert_eq!(build(vec![]).footways.len(), 2);
+    let closed = build(vec![section([0.0, 0.0])]);
+    assert_eq!(closed.lanes.len(), 2);
+    assert!(closed.footways.is_empty());
+    let open = build(vec![section([width, 0.0])]);
+    let [walk] = open.footways.as_slice() else { panic!("only one side has a drawn walk"); };
+    assert_eq!(walk.road_side, 1);
+    assert_eq!(walk.cross_index, [None; 2]);
+}
+
+#[test]
+fn adjoining_kerbs_can_consume_the_whole_sidewalk_of_a_short_connector() {
+    use eo_data::sim_source::{Oneway, SimRoad, SimSource, TrafficSection};
+    use eo_sim::network::TileKey;
+    let base = native::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+    let half = 2.0 * base.dims.city_lane_m;
+    let width = base.dims.throughway_m;
+    let roads: Vec<_> = [
+        ("connector", [20.0, 100.0], [30.0, 100.0]),
+        ("west", [20.0, 100.0], [20.0, 160.0]),
+        ("east", [30.0, 100.0], [30.0, 40.0]),
+    ].into_iter().map(|(id, start, end)| SimRoad {
+        id: id.into(), name: id.into(), highway: "residential".into(),
+        oneway: Oneway::Both, lanes: Some(4), maxspeed: String::new(), sidewalk: "both".into(),
+        bridge: false, tunnel: false, layer: 0, points: vec![start, end],
+    }).collect();
+    let sections = roads.iter().map(|road| TrafficSection {
+        way: road.id.clone(), points: road.points.clone(), half, walks: [width; 2], walk_gaps: Default::default(),
+        lanes: vec![],
+        shared_bidirectional: false, paint_span: None, paint: vec![], crosses_road: false, surface: vec![], carriageway_spans: vec![],
+    }).collect();
+    let source = native::NativeSource::new(SimSource { roads, signals: vec![] }, base.dims, base.timing)
+        .with_traffic_sections(sections);
+    let tiles = [TileKey::of(20.0, 100.0)];
+    let build = source.build(&tiles);
+    assert!(build.lanes.iter().any(|lane| lane.segment == "nconnector:0"));
+    assert_eq!(build.footways.len(), 4);
+    for (i, walk) in build.footways.iter().enumerate() {
+        assert_ne!(walk.segment, "nconnector:0");
+        for (end, other) in walk.cross_index.iter().enumerate() {
+            let other = other.expect("each remaining kerb still has its paired approach");
+            assert_eq!(build.footways[other as usize].cross_index[end], Some(i as u32));
+        }
+    }
+}
+
 /// (`with_crossings`) With the crosswalks known, a walker crosses an
 /// unsignalled junction's street only where one is mapped: none mapped, no
 /// footway end may be crossed but at a signal; every band mapped, all may.
@@ -265,8 +686,8 @@ fn walkers_cross_where_a_crosswalk_is_mapped() {
     };
     let mut mapped = vec![];
     for f in &plain.footways {
-        let Some(j) = f.cross_index else { continue };
         for e in 0..2 {
+            let Some(j) = f.cross_index[e] else { continue };
             let (p, q) = (band(f, e), band(&plain.footways[j as usize], e));
             mapped.push([(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0]);
         }
@@ -383,8 +804,8 @@ fn walkers_cross_on_the_drawn_zebras() {
     };
     let mut zebras = vec![];
     for f in &plain.footways {
-        let Some(j) = f.cross_index else { continue };
         for e in 0..2 {
+            let Some(j) = f.cross_index[e] else { continue };
             let (p, q) = (point(f, e, 2.0), point(&plain.footways[j as usize], e, 2.0));
             zebras.push([(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0]);
         }
@@ -393,10 +814,11 @@ fn walkers_cross_on_the_drawn_zebras() {
     let mut moved = 0;
     let mut ends = 0;
     for (f, g) in plain.footways.iter().zip(&on.footways) {
-        if f.segment.starts_with('p') || f.cross_index.is_none() {
+        if f.segment.starts_with('p') {
             continue;
         }
         for e in 0..2 {
+            if f.cross_index[e].is_none() { continue; }
             ends += 1;
             assert!(g.ends[e].zebra_only);
             if !g.ends[e].no_crossing && (g.ends[e].crossing_arc - f.ends[e].crossing_arc - 2.0).abs() < 0.5 {
@@ -406,7 +828,7 @@ fn walkers_cross_on_the_drawn_zebras() {
     }
     assert!(moved * 10 > ends * 8, "{moved} of {ends} bands on their zebra");
     let none = load().with_zebras(vec![[1.0e7, 1.0e7]]).build(&tiles);
-    assert!(none.footways.iter().filter(|f| !f.segment.starts_with('p') && f.cross_index.is_some()).all(|f| f.ends.iter().all(|e| e.no_crossing && e.zebra_only)), "no zebra drawn: no crossing");
+    assert!(none.footways.iter().filter(|f| !f.segment.starts_with('p') && f.cross_index.iter().any(Option::is_some)).all(|f| f.ends.iter().all(|e| e.no_crossing && e.zebra_only)), "no zebra drawn: no crossing");
 }
 
 /// (`--people-crosswalks`) With the drawn zebras known a corner leg keeps to
@@ -432,8 +854,8 @@ fn corner_legs_keep_to_their_corner() {
     };
     let mut zebras = vec![];
     for f in &plain.footways {
-        let Some(j) = f.cross_index else { continue };
         for e in 0..2 {
+            let Some(j) = f.cross_index[e] else { continue };
             let (p, q) = (point(f, e), point(&plain.footways[j as usize], e));
             zebras.push([(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0]);
         }
@@ -461,7 +883,7 @@ fn corner_legs_keep_to_their_corner() {
         // the mouth of a lane with no walks of its own is the walk going on.
         let mut centre: Vec<[[f64; 2]; 2]> = vec![];
         for (i, f) in net.footways.iter().enumerate() {
-            let Some(c) = net.footways.get(f.cross as usize).filter(|c| f.alive && c.alive && (f.cross as usize) > i && c.pts.len() == f.pts.len()) else { continue };
+            let Some(c) = net.footways.get(f.cross[0] as usize).filter(|c| f.alive && c.alive && (f.cross[0] as usize) > i && c.pts.len() == f.pts.len()) else { continue };
             let mid: Vec<[f64; 2]> = f.pts.iter().zip(&c.pts).map(|(a, b)| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]).collect();
             centre.extend(mid.windows(2).map(|w| [w[0], w[1]]));
         }
@@ -631,4 +1053,31 @@ fn a_shopping_street_keeps_its_evening() {
         assert!(shop_footfall(h) <= hour_footfall(h) + 1e-12);
     }
     assert_eq!(footway_density_with(w, shops, 15.5, false), footway_density(w, shops, 15.5));
+}
+
+#[test]
+fn a_walker_passes_a_player_standing_on_the_footway() {
+    use eo_sim::pedestrians::Walker;
+    use eo_sim::vehicles::TrafficObstacle;
+    let (net,_) = soma(false,false);
+    let path = net.alive_footways().find(|&id| net.footways[id as usize].length > 80.0).unwrap();
+    let way = &net.footways[path as usize];
+    let (x,z,_,_,_) = eo_sim::geom::at_arc(&way.pts,&way.cum,43.0);
+    let mut cfg = RegionConfig::js_pool(7,0);
+    cfg.vehicle_pool = 0;
+    cfg.crowd = Some(CrowdDensity::standard(1.0));
+    let focus = Focus {x,z,yaw:0.0};
+    let mut r = Region::new(&net,0,cfg,focus);
+    r.viewers = Some(vec![focus]);
+    r.on_foot_player = Some(TrafficObstacle {pos:[x,z],level:0,length:0.70,width:0.70,yaw:0.0});
+    let mut w = Walker::new(1,path,40.0,1,1.5,0.0,1,false,0.0);
+    w.activity_timer = 120.0;
+    r.crowd.push(w);
+    r.crowd.refresh_positions(&net);
+    for frame in 1..=360 {
+        r.step(&net,frame as f64/60.0,1.0/60.0);
+        let distance = (r.crowd.x[0]-x).hypot(r.crowd.z[0]-z);
+        assert!(distance >= 0.60,"frame {frame}: distance {distance}");
+    }
+    assert!(r.crowd.walkers[0].s > 46.0);
 }

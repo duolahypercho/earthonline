@@ -103,31 +103,13 @@ impl AgentsJs {
 
     /// The catalogue ids a simulation kind (0 sedan, 1 taxi, 2 truck, 3 bus) draws from.
     pub fn pool(&self, kind: u16) -> &[String] {
-        let name = match kind {
-            1 => "taxi",
-            2 => "truck",
-            3 => "bus",
-            _ => "sedan",
-        };
+        let name = eo_sim::vehicle_catalogue::kind_name(kind);
         self.traffic_kind_map.get(name).or_else(|| self.traffic_kind_map.get("sedan")).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     /// `spawnCar` (src/citygen/traffic.js): `pool[floor(keyedRandom(`${seedInt}:${entityId}`, `vehicle-catalogue:${kind}`) * pool.length)]`.
     pub fn pick_body(&self, seed_int: u32, entity: u32, kind: u16) -> Option<&str> {
-        let pool = self.pool(kind);
-        if pool.is_empty() {
-            return None;
-        }
-        let name = match kind {
-            1 => "taxi",
-            2 => "truck",
-            3 => "bus",
-            _ => "sedan",
-        };
-        let seed = if seed_int == 0 { 1 } else { seed_int };
-        let draw = eo_sim::rng::keyed_random(&format!("{seed}:{entity}"), &format!("vehicle-catalogue:{name}"));
-        let i = ((draw * pool.len() as f64).floor() as usize).min(pool.len() - 1);
-        Some(pool[i].as_str())
+        eo_sim::vehicle_catalogue::pick(seed_int, entity, kind, self.pool(kind))
     }
 
     /// The car's paint: `pickWeighted(PAINT_SETS[spec.paintSet], draw)` with a

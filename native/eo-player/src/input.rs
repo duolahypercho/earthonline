@@ -25,6 +25,7 @@ pub enum Action {
     Aim,
     Interact,
     VehicleToggle,
+    ShiftDirection,
     Throttle,
     Brake,
     Handbrake,
@@ -32,7 +33,7 @@ pub enum Action {
     Pause,
 }
 
-pub const ALL_ACTIONS: [Action; 15] = [
+pub const ALL_ACTIONS: [Action; 16] = [
     Action::WalkForward,
     Action::WalkBackward,
     Action::WalkLeft,
@@ -43,6 +44,7 @@ pub const ALL_ACTIONS: [Action; 15] = [
     Action::Aim,
     Action::Interact,
     Action::VehicleToggle,
+    Action::ShiftDirection,
     Action::Throttle,
     Action::Brake,
     Action::Handbrake,
@@ -64,6 +66,7 @@ impl Action {
             Action::Aim => "aim",
             Action::Interact => "interact",
             Action::VehicleToggle => "vehicleToggle",
+            Action::ShiftDirection => "shiftDirection",
             Action::Throttle => "throttle",
             Action::Brake => "brake",
             Action::Handbrake => "handbrake",
@@ -85,6 +88,7 @@ impl Action {
             Action::Aim => &["Mouse2"],
             Action::Interact => &["KeyE"],
             Action::VehicleToggle => &["KeyF"],
+            Action::ShiftDirection => &["KeyR"],
             Action::Throttle => &["KeyW", "ArrowUp"],
             Action::Brake => &["KeyS", "ArrowDown"],
             Action::Handbrake => &["Space"],
@@ -103,6 +107,7 @@ impl Action {
             Action::Aim => &[LT],
             Action::Interact => &[Y],
             Action::VehicleToggle => &[B],
+            Action::ShiftDirection => &[X],
             Action::Throttle => &[RT],
             Action::Brake => &[LT],
             Action::Handbrake => &[A],
@@ -186,6 +191,8 @@ pub fn mouse_look_delta(mx: f64, my: f64, s: &InputSettings, aiming: bool) -> (f
 pub struct RawInput {
     /// Held keys and mouse buttons by code name.
     pub held: HashSet<String>,
+    /// Drive/Reverse key-down received between rendered frames.
+    pub direction_pressed: bool,
     /// Mouse motion since the last frame, pixels.
     pub mouse_dx: f64,
     pub mouse_dy: f64,
@@ -215,6 +222,7 @@ pub struct InputFrame {
     pub throttle: f64,
     pub brake: f64,
     pub steer: f64,
+    pub analog_steer: bool,
 }
 
 impl InputFrame {
@@ -258,6 +266,9 @@ impl ActionMap {
             }
             value.insert(a, if keyboard { 1.0 } else { pad_value });
         }
+        if std::mem::take(&mut raw.direction_pressed) {
+            f.just_pressed.insert(Action::ShiftDirection);
+        }
         let p = |a| f.pressed.contains(&a) as i32 as f64;
         f.move_x = p(Action::WalkRight) - p(Action::WalkLeft);
         f.move_y = p(Action::WalkForward) - p(Action::WalkBackward);
@@ -267,6 +278,7 @@ impl ActionMap {
         f.brake = if f.pressed.contains(&Action::Brake) { value[&Action::Brake] } else { 0.0 };
         if let Some(pad) = &pad {
             let (lx, ly, lm) = apply_stick_curve(pad.axes[0], pad.axes[1]);
+            f.analog_steer = lm > 0.0 || f.steer == 0.0;
             if lm > 0.0 {
                 f.move_x = lx;
                 f.move_y = -ly;

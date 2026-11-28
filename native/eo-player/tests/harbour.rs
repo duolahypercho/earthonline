@@ -64,6 +64,25 @@ fn tilt(q: glam::DQuat) -> f64 {
 }
 
 #[test]
+fn a_walker_lands_on_the_moored_deck_and_can_walk_off_it() {
+    let fleet = Arc::new(Fleet { boats: vec![Moored { hull: YACHT, pos: [20.0, 0.0], heading: 0.0 }], sea_y: 0.0 });
+    let mut w = world(&fleet, &sea(), 100.0);
+    let start = DVec3::new(20.0, YACHT.freeboard() + 0.6, 0.0);
+    w.load_blocking(start, 50.0);
+    w.stream_harbour(start);
+    let mut p = eo_player::Player::new(start, 0.0);
+    for _ in 0..120 {
+        p.fixed_step(&mut w, &Default::default());
+    }
+    assert!(p.character.grounded);
+    assert!((p.character.feet().y - YACHT.freeboard()).abs() < 0.03, "feet {:?}", p.character.feet());
+    for _ in 0..240 {
+        p.fixed_step(&mut w, &eo_player::StepInput { move_y: 1.0, ..Default::default() });
+    }
+    assert!(p.character.feet().z > YACHT.beam / 2.0 && p.character.feet().y < 0.0);
+}
+
+#[test]
 fn no_wave_no_motion() {
     // 20 m off the shore the drawn sea has no waves: the boat floats at rest.
     let sea = sea();
@@ -140,4 +159,87 @@ fn float_pose_is_the_still_water_rest() {
     let (p, q) = harbour::float_pose(&sea, &m, 1.5, 42.0);
     assert_eq!(p, DVec3::new(20.0, 1.5, 0.0));
     assert!(tilt(q) < 1e-12);
+}
+
+#[test]
+fn a_rider_moves_with_a_dynamic_deck_and_keeps_its_speed_when_jumping() {
+    use eo_player::{Player, StepInput};
+    use rapier3d::prelude::*;
+    let mut w = CollisionWorld::new(Arc::new(Seabed), Arc::new(BuildingSet::empty()), 1);
+    w.load_blocking(DVec3::ZERO, 100.0);
+    let body = w.physics.insert_body(RigidBodyBuilder::dynamic().gravity_scale(0.0).build());
+    let deck = ColliderBuilder::cuboid(3.0, 0.25, 6.0).mass(3000.0)
+        .collision_groups(InteractionGroups::new(eo_player::world::layer::BOAT, Group::ALL, InteractionTestMode::And));
+    w.physics.insert_collider(deck, Some(body));
+    let mut p = Player::new(DVec3::new(0.0,0.25,0.0),0.0);
+    for _ in 0..30 { p.fixed_step(&mut w,&StepInput::default()); }
+    assert!(p.character.grounded);
+    w.physics.bodies[body].set_linvel(Vector::new(1.5,0.0,0.0),true);
+    for _ in 0..180 { p.fixed_step(&mut w,&StepInput::default()); }
+    assert!((p.position(&w).x - 4.5).abs() < 0.08, "rider {:?}",p.position(&w));
+    assert!(p.ground_speed < 0.05, "stationary rider animated at {} m/s", p.ground_speed);
+    let from = p.position(&w);
+    p.fixed_step(&mut w,&StepInput { jump:true,..Default::default() });
+    for _ in 0..14 { p.fixed_step(&mut w,&StepInput::default()); }
+    let delta = p.position(&w) - from;
+    assert!((delta.x - 0.375).abs() < 0.04 && delta.y > 0.25, "airborne travel {delta:?}");
+}
+
+#[test]
+fn a_lift_ride_keeps_the_harbour_on_the_same_fixed_step() {
+    use eo_player::{Decks, LiftDef, Player, StepInput};
+    let stop = DVec3::new(580.0, -40.0, 30.0);
+    let berth = [600.0, 50.0];
+    let sea = sea();
+    let fleet = Arc::new(Fleet {
+        boats: vec![Moored {
+            hull: YACHT,
+            pos: berth,
+            heading: 0.3,
+        }],
+        sea_y: 0.0,
+    });
+    let spawn = || {
+        let maps = BuildingSet::empty().with_decks(Decks {
+            lifts: vec![LiftDef {
+                name: "test lift".into(),
+                bottom: stop,
+                bottom_yaw: 0.0,
+                top: stop + DVec3::Y * 5.0,
+                top_yaw: 0.0,
+            }],
+            ..Default::default()
+        });
+        let mut world = CollisionWorld::new(Arc::new(Seabed), Arc::new(maps), 1);
+        world.load_blocking(stop, 80.0);
+        world.set_harbour(fleet.clone(), sea.clone(), 100.0);
+        world.stream_harbour(stop);
+        (Player::new(stop, 0.0), world)
+    };
+    let (mut rider, mut a) = spawn();
+    let (mut watcher, mut b) = spawn();
+    for tick in 0..eo_player::lift::RIDE_STEPS {
+        rider.fixed_step(
+            &mut a,
+            &StepInput {
+                interact: tick == 0,
+                ..Default::default()
+            },
+        );
+        watcher.fixed_step(&mut b, &StepInput::default());
+        assert_eq!(rider.lift.is_some(), tick + 1 < eo_player::lift::RIDE_STEPS);
+        let riding = a.harbour.as_ref().unwrap();
+        let watching = b.harbour.as_ref().unwrap();
+        assert_eq!(
+            riding.time, watching.time,
+            "sea clock while riding at tick {tick}"
+        );
+        let boats = watching.poses(&b.physics);
+        assert_eq!(boats.len(), 1);
+        assert_eq!(
+            riding.poses(&a.physics),
+            boats,
+            "boat pose while riding at tick {tick}"
+        );
+    }
 }

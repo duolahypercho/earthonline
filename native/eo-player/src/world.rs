@@ -88,6 +88,10 @@ pub mod layer {
     pub const CHARACTER: Group = Group::GROUP_4;
     /// Moored boats (harbour.rs): met by vehicles, characters and each other.
     pub const BOAT: Group = Group::GROUP_5;
+    pub const PEDESTRIAN: Group = Group::GROUP_6;
+    /// Static vertical faces still block the chassis. A suspension ray
+    /// grazing one reaches the load-bearing surface behind it.
+    pub const VERTICAL_FACE: Group = Group::GROUP_7;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -126,6 +130,13 @@ pub struct SurfaceMesh {
 pub trait GroundProvider: Send + Sync {
     /// Bare ground height at (x, z), game metres (what the heightfield samples).
     fn ground_y(&self, x: f64, z: f64) -> f64;
+    /// Paved street cross-sections and junctions shared with traffic on this ground.
+    fn traffic_plan(&self) -> eo_data::sim_source::TrafficPlan {
+        eo_data::sim_source::TrafficPlan::default()
+    }
+    /// Mapped carriageway nearest this elevation for an arrival with no height hint.
+    fn arrival_road_y(&self, _x: f64, _z: f64, _near_y: f64) -> Option<f64> { None }
+
     /// Sea floor and still-water surface for a playable water column, in world metres.
     fn water_column(&self, _x: f64, _z: f64) -> Option<(f64, f64)> { None }
     /// Street/sidewalk/kerb triangles inside a tile, if this provider has them.
@@ -141,10 +152,16 @@ pub trait GroundProvider: Send + Sync {
     fn multi_level(&self) -> bool {
         false
     }
-    /// The floor of a cut through the ground at (x, z), where the ground is
-    /// cut away (a tunnel's approach cut, `--tunnels`): the heightfield has
-    /// no cells there and the floor queries read this height instead. None
-    /// (no cut) unless a provider says otherwise.
+    /// The streamed surface already contains the physical landmark bridge panels.
+    fn has_landmark_roads(&self) -> bool {
+        false
+    }
+    /// Structural cut polygons intersecting a tile and its terrain sampling border.
+    fn terrain_cuts_in(&self, _min: [f64; 2], _max: [f64; 2]) -> Vec<&eo_structures::TerrainCut> { Vec::new() }
+
+    /// Reference elevation of the tunnel cut at (x, z). Providers with
+    /// cut polygons distinguish a lowered open approach from a portal opening.
+    /// A scalar-only provider retains the original removed-cell contract.
     fn terrain_cut(&self, _x: f64, _z: f64) -> Option<f64> {
         None
     }
@@ -181,7 +198,7 @@ pub struct BuildingSet {
     /// Metres the drawn shells stand above bare terrain (moves the prism top).
     pub ground_lift_m: f64,
     /// landmark access: the walkable decks, their lifts and the prisms they open.
-    pub decks: Arc<Decks>,
+    pub decks: Arc<InstalledDecks>,
 }
 
 /// One landmark deck's collision: walkable floors (STREET layer) and its
@@ -192,8 +209,17 @@ pub struct BuildingSet {
 #[derive(Clone, Debug, Default)]
 pub struct DeckPart {
     pub name: String,
+    /// Building floors also participate in WORLD-only architectural probes.
+    pub building_floor: bool,
     pub walk: Vec<[[f64; 3]; 3]>,
     pub barrier: Vec<[[f64; 3]; 3]>,
+}
+
+impl From<&eo_landmarks::promenade::Surfaces> for DeckPart {
+    fn from(s: &eo_landmarks::promenade::Surfaces) -> Self {
+        let triangles = |faces: &[[[f32; 3]; 3]]| faces.iter().map(|t| t.map(|p| p.map(f64::from))).collect();
+        Self { name: s.name.into(), walk: triangles(&s.walk), barrier: triangles(&s.barrier), ..Default::default() }
+    }
 }
 
 /// Building prisms whose footprint centroid lies within `radius_m` of
@@ -224,6 +250,19 @@ pub struct Decks {
     pub parts: Vec<DeckPart>,
     pub cuts: Vec<PrismCut>,
     pub lifts: Vec<LiftDef>,
+}
+
+/// Immutable map geometry. Each simulation world needs its own collider
+/// handles, but all can reference the same cooked triangle meshes and BVHs.
+#[derive(Default)]
+pub struct InstalledDecks {
+    layout: Decks,
+    colliders: Vec<Collider>,
+}
+
+impl std::ops::Deref for InstalledDecks {
+    type Target = Decks;
+    fn deref(&self) -> &Decks { &self.layout }
 }
 
 impl Decks {
@@ -267,13 +306,24 @@ impl BuildingSet {
             let cz = b.ring.iter().map(|p| p[1]).sum::<f64>() / n;
             by_tile.entry(TileKey::of(cx, cz)).or_default().push(i as u32);
         }
-        Self { buildings, by_tile, ground_lift_m, decks: Arc::new(Decks::default()) }
+        Self { buildings, by_tile, ground_lift_m, decks: Arc::default() }
     }
 
     /// The same buildings with landmark decks (their lifts, the prisms they open).
     pub fn with_decks(mut self, decks: Decks) -> Self {
-        self.decks = Arc::new(decks);
+        self.decks = Arc::new(InstalledDecks { colliders: deck_colliders(&decks), layout: decks });
         self
+    }
+
+    /// Remove the footprint records the renderer omits at tunnel mouths.
+    /// Retain city record indices so landmark replacements still address the same buildings.
+    pub fn open_tunnel_approaches(&mut self, structures: Option<&eo_structures::StructureWorld>) {
+        let Some(w) = structures.filter(|w| !w.terrain_cuts().is_empty()) else { return };
+        let rings = self.buildings.iter().map(|b| b.ring.as_slice()).collect::<Vec<_>>();
+        let omitted = w.buildings_over_cuts(&rings);
+        for bucket in self.by_tile.values_mut() {
+            bucket.retain(|&i| omitted.binary_search(&(i as usize)).is_err());
+        }
     }
 
     /// Every merged building of the city (`City::buildings`).
@@ -310,11 +360,14 @@ pub struct TileHeights {
     pub n: usize,
     /// Row-major by z then x: `h[iz * n + ix]`.
     pub h: Vec<f32>,
-    /// Cells left out of the heightfield (a tunnel's cut through the ground,
-    /// `GroundProvider::terrain_cut`), row-major by z then x over the `n - 1`
-    /// cells: the cut's floor, NaN where the cell is kept. Empty when no cell
-    /// is cut.
+    /// The cut reference floor by cell (row-major z then x). Open cuts
+    /// use the sampled terrain heights. Inside a portal opening this is
+    /// the query fallback. Outside cuts the value is NaN.
     pub cut: Vec<f32>,
+    /// Cells replaced by terrain triangles clipped at the cut or canopy.
+    removed: Vec<bool>,
+    canopy_rings: Vec<Vec<[f64; 2]>>,
+    open_rings: Vec<(Vec<[f64; 2]>, f64)>,
 }
 
 impl TileHeights {
@@ -329,16 +382,19 @@ impl TileHeights {
         }
         let j = (fx.floor() as usize).min(self.n - 2);
         let i = (fz.floor() as usize).min(self.n - 2);
-        if let Some(&f) = self.cut.get(i * (self.n - 1) + j) {
-            if f.is_finite() {
-                return Some(f as f64);
-            }
+        let cell = i * (self.n - 1) + j;
+        if self.removed.get(cell) == Some(&true) && ((self.canopy_rings.is_empty() && self.open_rings.is_empty())
+            || self.canopy_rings.iter().any(|ring| point_in_ring(x, z, ring))) {
+            return Some(self.cut[cell] as f64);
         }
         let u = fx - j as f64;
         let v = fz - i as f64;
         let y = |iz: usize, ix: usize| self.h[iz * self.n + ix] as f64;
         let (y00, y10, y01, y11) = (y(i, j), y(i + 1, j), y(i, j + 1), y(i + 1, j + 1));
-        Some(if u + v <= 1.0 { y00 + (y01 - y00) * u + (y10 - y00) * v } else { y11 + (y10 - y11) * (1.0 - u) + (y01 - y11) * (1.0 - v) })
+        let terrain = if u + v <= 1.0 { y00 + (y01 - y00) * u + (y10 - y00) * v } else { y11 + (y10 - y11) * (1.0 - u) + (y01 - y11) * (1.0 - v) };
+        Some(if self.removed.get(cell) == Some(&true) {
+            self.open_rings.iter().filter(|(ring, _)| point_in_ring(x, z, ring)).map(|(_, floor)| *floor).fold(terrain, f64::min)
+        } else { terrain })
     }
 }
 
@@ -391,6 +447,44 @@ pub fn heightfield_offset_m() -> [f64; 2] {
     })
 }
 
+/// Sample modified terrain on the elevation grid the city draws, then subdivide
+/// its two triangles onto the physics lattice. Unmodified terrain retains its
+/// normal height sampling. Adjacent physics tiles use the same survey origin.
+fn shape_open_cut_ground(heights: &mut [f32], n: usize, origin: [f64; 2], spacing: f64,
+    cell: f64, reach: f64, cuts: &[&eo_structures::TerrainCut], ground: &dyn GroundProvider) {
+    let scale = eo_data::groundscale::scale();
+    let first = ELEVATION_ORIGIN_SURVEYED_M.map(|v| v * scale + cell * 0.5);
+    let base = [0, 1].map(|i| first[i] + ((origin[i] - first[i]) / cell).floor() * cell);
+    let span = (n - 1) as f64 * spacing;
+    let dims = [0, 1].map(|i| ((origin[i] + span - base[i]) / cell).floor() as usize + 2);
+    let mut vertices = Vec::with_capacity(dims[0] * dims[1]);
+    for iz in 0..dims[1] {
+        for ix in 0..dims[0] {
+            let (x, z) = (base[0] + ix as f64 * cell, base[1] + iz as f64 * cell);
+            let y = ground.ground_y(x, z) as f32;
+            let lowered = eo_structures::cut_ground::terrain_cut_floor(cuts, x, z, reach)
+                .map_or(y, |floor| y.min(floor as f32));
+            vertices.push((lowered, lowered < y));
+        }
+    }
+    for (k, height) in heights.iter_mut().enumerate() {
+        let x = (origin[0] - base[0] + (k % n) as f64 * spacing) / cell;
+        let z = (origin[1] - base[1] + (k / n) as f64 * spacing) / cell;
+        let j = z.floor() as usize * dims[0] + x.floor() as usize;
+        let (u, v) = (x.fract() as f32, z.fract() as f32);
+        let (ids, weights) = if u + v <= 1.0 {
+            ([j, j + 1, j + dims[0]], [1.0 - u - v, u, v])
+        } else {
+            ([j + dims[0] + 1, j + dims[0], j + 1], [u + v - 1.0, 1.0 - u, 1.0 - v])
+        };
+        if ids.iter().any(|&i| vertices[i].1) {
+            // Difference form keeps a flat cut floor exactly at its surveyed height.
+            let [a, b, c] = ids.map(|i| vertices[i].0);
+            *height = a + (b - a) * weights[1] + (c - a) * weights[2];
+        }
+    }
+}
+
 /// Cook one tile: heightfield, building prisms, provider surface. Pure; runs on any thread.
 pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &BuildingSet) -> BuiltTile {
     let t = Instant::now();
@@ -411,29 +505,73 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
             h[iz * n + ix] = ground.ground_y(x0 + ix as f64 * spacing, z0 + iz as f64 * spacing) as f32;
         }
     }
+    let mut colliders = vec![];
+    let mut triangles = cells * cells * 2;
+    // Locate cut cells and preserve the existing heightfield away from tunnels.
+    let corner_cut: Vec<Option<f64>> = (0..n * n).map(|k| ground.terrain_cut(x0 + (k % n) as f64 * spacing, z0 + (k / n) as f64 * spacing)).collect();
+    let grid_cell = 8.0 * eo_data::groundscale::scale();
+    let reach = eo_structures::cut_ground::CUT_REACH_CELLS * grid_cell;
+    let border = reach + grid_cell;
+    let cuts = ground.terrain_cuts_in([x0 - border, z0 - border], [x0 + span + border, z0 + span + border]);
+    if !cuts.is_empty() {
+        shape_open_cut_ground(&mut h, n, [x0, z0], spacing, grid_cell, reach, &cuts, ground);
+    }
+    let sections: Vec<_> = cuts.iter().flat_map(|c| c.sections()).collect();
+    let mut cut = vec![];
+    let mut removed = vec![];
+    let mut edges = vec![];
+    if !sections.is_empty() || corner_cut.iter().any(Option::is_some) {
+        cut = vec![f32::NAN; cells * cells];
+        removed = vec![false; cells * cells];
+        for iz in 0..cells {
+            for ix in 0..cells {
+                let cell = iz * cells + ix;
+                let k = iz * n + ix;
+                let corners = [k, k + 1, k + n, k + n + 1];
+                let floor = corners.iter().filter_map(|&i| corner_cut[i]).fold(f64::INFINITY, f64::min);
+                if floor.is_finite() {
+                    cut[cell] = floor as f32;
+                    removed[cell] = cuts.is_empty(); // A provider with only the historical cut mask.
+                }
+                let (x, z) = (x0 + ix as f64 * spacing, z0 + iz as f64 * spacing);
+                let mut boundary: Option<Vec<[[f64; 3]; 3]>> = None;
+                let original = || {
+                    let p = corners.map(|i| [x0 + (i % n) as f64 * spacing, f64::from(h[i]), z0 + (i / n) as f64 * spacing]);
+                    [[p[0], p[2], p[1]], [p[1], p[2], p[3]]]
+                };
+                for section in &sections {
+                    if !section.intersects([x, z], [x + spacing, z + spacing]) { continue; }
+                    let mut next = Vec::new();
+                    let mut changed = false;
+                    for triangle in boundary.take().unwrap_or_else(|| original().to_vec()) {
+                        let Some(polys) = section.shape(triangle) else { next.push(triangle); continue };
+                        changed = true;
+                        for poly in polys {
+                            for j in 1..poly.len()-1 {
+                                let tri = [poly[0], poly[j], poly[j+1]];
+                                let ab = DVec3::from_array(tri[1]) - DVec3::from_array(tri[0]);
+                                let ac = DVec3::from_array(tri[2]) - DVec3::from_array(tri[0]);
+                                if ab.cross(ac).y > 1e-8 { next.push(tri); }
+                            }
+                        }
+                    }
+                    if changed {
+                        removed[cell] = true;
+                        // Preserve a floor-query fallback inside canopy holes
+                        // whose tips may fall between all four lattice corners.
+                        cut[cell] = if cut[cell].is_finite() { cut[cell].min(section.floor as f32) } else { section.floor as f32 };
+                    }
+                    if removed[cell] { boundary = Some(next); }
+                }
+                if let Some(tris) = boundary { edges.extend(tris); }
+            }
+        }
+    }
     // Parry: rows advance along z, columns along x, column-major data.
     let mut data = vec![0f32; n * n];
     for j in 0..n {
         for i in 0..n {
             data[i + j * n] = h[i * n + j];
-        }
-    }
-    let mut colliders = vec![];
-    let mut triangles = cells * cells * 2;
-    // the cells a tunnel's cut leaves out (any corner in a cut; `--tunnels`
-    // only: without one this is the old heightfield, built the old way).
-    let corner_cut: Vec<Option<f64>> = (0..n * n).map(|k| ground.terrain_cut(x0 + (k % n) as f64 * spacing, z0 + (k / n) as f64 * spacing)).collect();
-    let mut cut = vec![];
-    if corner_cut.iter().any(Option::is_some) {
-        cut = vec![f32::NAN; cells * cells];
-        for iz in 0..cells {
-            for ix in 0..cells {
-                let corners = [iz * n + ix, iz * n + ix + 1, (iz + 1) * n + ix, (iz + 1) * n + ix + 1];
-                let floor = corners.iter().filter_map(|&k| corner_cut[k]).fold(f64::INFINITY, f64::min);
-                if floor.is_finite() {
-                    cut[iz * cells + ix] = floor as f32;
-                }
-            }
         }
     }
     let shape = Vector::new(span as f32, 1.0, span as f32);
@@ -444,7 +582,7 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
         let mut field = HeightField::new(Array2::new(n, n, data), shape);
         for iz in 0..cells {
             for ix in 0..cells {
-                if cut[iz * cells + ix].is_finite() {
+                if removed[iz * cells + ix] {
                     field.set_cell_status(iz, ix, HeightFieldCellStatus::CELL_REMOVED);
                     triangles -= 2;
                 }
@@ -458,7 +596,14 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
         .collision_groups(InteractionGroups::new(layer::WORLD, Group::ALL, InteractionTestMode::And))
         .build();
     colliders.push(hf);
-    let heights = Arc::new(TileHeights { origin: [x0, z0], spacing, n, h, cut });
+    triangles += edges.len();
+    if let Some(collider) = surface_collider(&edges, [x0 + span * 0.5, z0 + span * 0.5], layer::WORLD | layer::STREET) {
+        colliders.push(collider);
+    }
+    let canopy_rings = cuts.iter().filter(|c| c.canopy).map(|c| c.ring.clone()).collect();
+    // The floor is part of the same single-precision shape as the heightfield.
+    let open_rings = cuts.iter().filter(|c| !c.canopy).map(|c| (c.ring.clone(), f64::from(c.floor as f32))).collect();
+    let heights = Arc::new(TileHeights { origin: [x0, z0], spacing, n, h, cut, removed, canopy_rings, open_rings });
 
     // Building prisms.
     let mut prisms = vec![];
@@ -537,27 +682,8 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
     }
     if let Some(surface) = ground.surface_tile(key) {
         for (list, group) in [(&surface.street, layer::STREET), (&surface.barrier, layer::WORLD)] {
-            if list.is_empty() {
-                continue;
-            }
-            let mut v = vec![];
-            let mut ix = vec![];
-            for t in list.iter() {
-                let b = v.len() as u32;
-                for p in t {
-                    v.push(v3([p[0] - cx, p[1], p[2] - cz]));
-                }
-                ix.push([b, b + 1, b + 2]);
-            }
-            triangles += ix.len();
-            if let Ok(b) = ColliderBuilder::trimesh(v, ix) {
-                colliders.push(
-                    b.translation(Vector::new(cx as f32, 0.0, cz as f32))
-                        .friction(tuning::world::TERRAIN_FRICTION)
-                        .collision_groups(InteractionGroups::new(group, Group::ALL, InteractionTestMode::And))
-                        .build(),
-                );
-            }
+            triangles += list.len();
+            add_surface_colliders(&mut colliders, list, [cx, cz], group);
         }
     }
     BuiltTile { key, colliders, heights, prisms: Arc::new(prisms), cook_ms: t.elapsed().as_secs_f64() * 1e3, triangles }
@@ -695,6 +821,8 @@ pub trait TileFeed: Send + Sync {
 
 /// The Rapier world plus the tile stream.
 pub struct CollisionWorld {
+    pub walking_bodies: crate::people_contact::WalkingBodies,
+    pub contact_traffic: crate::traffic_contact::ContactTraffic,
     pub physics: PhysicsWorld,
     pub ground: Arc<dyn GroundProvider>,
     pub buildings: Arc<BuildingSet>,
@@ -757,16 +885,73 @@ impl MovableBox {
     }
 }
 
-fn new_physics(decks: &Decks) -> PhysicsWorld {
+fn new_physics(decks: &InstalledDecks) -> PhysicsWorld {
     let mut physics = PhysicsWorld::new();
     physics.gravity = Vector::new(0.0, -tuning::GRAVITY_MPS2 as f32, 0.0);
     physics.integration_parameters.dt = tuning::FIXED_STEP_S as f32;
     physics.integration_parameters.num_solver_iterations = tuning::SOLVER_ITERATIONS;
     // landmark access: every deck, from the start, in the same order on every world.
-    for c in deck_colliders(decks) {
-        physics.insert_collider(c, None);
+    for collider in &decks.colliders {
+        physics.insert_collider(collider.clone(), None);
     }
     physics
+}
+
+/// Cook the faces around a nearby origin to preserve precision. Adjacent
+/// triangles on a road or floor share an edge; a chassis contacting that
+/// edge should receive the surface normal, from either side of a deck.
+fn surface_collider<'a>(faces: impl IntoIterator<Item = &'a [[f64; 3]; 3]>, centre: [f64; 2], group: Group) -> Option<Collider> {
+    // Vertices and queries must subtract the same origin that Rapier stores.
+    // Rounding only the pose shifts the whole floor away from its drawn edge.
+    let centre = centre.map(|coordinate| f64::from(coordinate as f32));
+    let faces = faces.into_iter();
+    let count = faces.size_hint().0;
+    let mut vertices = Vec::with_capacity(count * 3);
+    let mut indices = Vec::with_capacity(count);
+    for face in faces {
+        let i = vertices.len() as u32;
+        vertices.extend(face.map(|p| v3([p[0] - centre[0], p[1], p[2] - centre[1]])));
+        indices.push([i, i + 1, i + 2]);
+    }
+    if indices.is_empty() {
+        return None;
+    }
+    let flags = if group.intersects(layer::STREET) {
+        rapier3d::parry::shape::TriMeshFlags::FIX_INTERNAL_EDGES_TWO_SIDED
+    } else {
+        Default::default()
+    };
+    let mesh = ColliderBuilder::trimesh_with_flags(vertices, indices, flags).ok()?;
+    Some(
+        mesh.translation(Vector::new(centre[0] as f32, 0.0, centre[1] as f32))
+            .friction(tuning::world::TERRAIN_FRICTION)
+            .collision_groups(InteractionGroups::new(
+                group,
+                Group::ALL,
+                InteractionTestMode::And,
+            ))
+            .build(),
+    )
+}
+
+fn add_surface_colliders(out: &mut Vec<Collider>, faces: &[[[f64; 3]; 3]], centre: [f64; 2], group: Group) {
+    if group != layer::WORLD {
+        out.extend(surface_collider(faces, centre, group));
+        return;
+    }
+    let (walls, other): (Vec<_>, Vec<_>) = faces.iter().partition(|face| {
+        let [a, b, c] = face.map(DVec3::from_array);
+        let n = (b - a).cross(c - a);
+        // A vertical plane has no projected area in plan. Allow rounding of
+        // surveyed vertices to f32 during the geometry bake.
+        n.y * n.y <= 1e-10 * n.length_squared()
+    });
+    out.extend(surface_collider(other, centre, group));
+    out.extend(surface_collider(walls, centre, group | layer::VERTICAL_FACE));
+}
+
+pub(crate) fn wheel_supports_contact(_: ColliderHandle, collider: &Collider) -> bool {
+    !collider.collision_groups().memberships.contains(layer::VERTICAL_FACE)
 }
 
 /// The decks' colliders: per part a walkable trimesh (STREET) and a barrier
@@ -774,30 +959,15 @@ fn new_physics(decks: &Decks) -> PhysicsWorld {
 pub fn deck_colliders(decks: &Decks) -> Vec<Collider> {
     let mut out = vec![];
     for part in &decks.parts {
-        for (list, group) in [(&part.walk, layer::STREET), (&part.barrier, layer::WORLD)] {
+        let floors = if part.building_floor { layer::WORLD | layer::STREET } else { layer::STREET };
+        for (list, group) in [(&part.walk, floors), (&part.barrier, layer::WORLD)] {
             if list.is_empty() {
                 continue;
             }
             let n = (list.len() * 3) as f64;
             let cx = list.iter().flatten().map(|p| p[0]).sum::<f64>() / n;
             let cz = list.iter().flatten().map(|p| p[2]).sum::<f64>() / n;
-            let mut v = Vec::with_capacity(list.len() * 3);
-            let mut ix = Vec::with_capacity(list.len());
-            for t in list.iter() {
-                let b = v.len() as u32;
-                for p in t {
-                    v.push(v3([p[0] - cx, p[1], p[2] - cz]));
-                }
-                ix.push([b, b + 1, b + 2]);
-            }
-            if let Ok(b) = ColliderBuilder::trimesh(v, ix) {
-                out.push(
-                    b.translation(Vector::new(cx as f32, 0.0, cz as f32))
-                        .friction(tuning::world::TERRAIN_FRICTION)
-                        .collision_groups(InteractionGroups::new(group, Group::ALL, InteractionTestMode::And))
-                        .build(),
-                );
-            }
+            add_surface_colliders(&mut out, list, [cx, cz], group);
         }
     }
     out
@@ -817,23 +987,35 @@ impl CollisionWorld {
             })
             .expect("spawn tile graveyard");
         let multi_level = ground.multi_level();
-        Self { physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: Some(graveyard), multi_level, harbour: None }
+        Self { walking_bodies: Default::default(), contact_traffic: Default::default(), physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: Some(graveyard), multi_level, harbour: None }
     }
 
     /// a world whose tiles come from a shared feed (no threads of its own).
     pub fn fed(ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, feed: Arc<dyn TileFeed>) -> Self {
         let multi_level = ground.multi_level();
-        Self { physics: new_physics(&buildings.decks), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None, multi_level, harbour: None }
+        Self { walking_bodies: Default::default(), contact_traffic: Default::default(), physics: new_physics(&buildings.decks), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None, multi_level, harbour: None }
     }
 
     /// The ground has walkable surfaces over others (decks, `--structures`):
     /// the level queries pick the surface nearest below a body.
     pub fn multi_level(&self) -> bool {
-        self.multi_level
+        // Landmark floors are permanently resident. They affect support
+        // queries, while only streamed structures need canonical tile order.
+        self.multi_level || !self.buildings.decks.parts.is_empty()
     }
 
     /// One physics step: the boats' buoyancy and mooring first (harbour.rs), then Rapier's.
     pub fn step_physics(&mut self) {
+        if !self.walking_bodies.is_empty() {
+            let mut walkers = std::mem::take(&mut self.walking_bodies);
+            walkers.step(self);
+            self.walking_bodies = walkers;
+        }
+        if !self.contact_traffic.is_empty() {
+            let mut traffic = std::mem::take(&mut self.contact_traffic);
+            traffic.step(self);
+            self.contact_traffic = traffic;
+        }
         if let Some(h) = self.harbour.as_mut() {
             h.apply_forces(&mut self.physics, crate::tuning::FIXED_STEP_S);
         }
@@ -1189,7 +1371,7 @@ impl CollisionWorld {
                 }
             }
             self.stats.tiles_resident = self.resident.len();
-            self.step_physics();
+            self.physics.detect_collisions(&(), &());
             return;
         }
         // Every tile cooked first, then inserted in `want`'s fixed order: the
@@ -1197,7 +1379,14 @@ impl CollisionWorld {
         // handles (and so the solver's contact order) follow the insertion order.
         let mut got: HashMap<TileKey, BuiltTile> = HashMap::new();
         if let Some(feed) = self.feed.clone() {
-            // wait on the shared feed.
+            // Use already prefetched tiles before requesting more from the feed.
+            for i in (0..self.pending.len()).rev() {
+                if want.contains(&self.pending[i].key) {
+                    let tile = self.pending.swap_remove(i);
+                    self.requested.remove(&tile.key);
+                    got.insert(tile.key, tile);
+                }
+            }
             loop {
                 for k in &want {
                     if !self.resident.contains_key(k) && !got.contains_key(k) {
@@ -1242,12 +1431,71 @@ impl CollisionWorld {
             }
         }
         self.stats.tiles_resident = self.resident.len();
-        // Let the broad phase see the new colliders.
-        self.step_physics();
+        // Make the ground queryable immediately. Loading a tile can happen
+        // between game ticks, including while a body is in free flight.
+        self.physics.detect_collisions(&(), &());
+    }
+
+    /// A joining peer can prepare the spawn off-thread, then insert all of
+    /// its shapes in the same order as a predicting client.
+    pub fn tiles_ready(&self, center: DVec3, radius: f64) -> bool {
+        Self::wanted(center.x, center.z, radius).iter().all(|k|
+            self.resident.contains_key(k) || self.pending.iter().any(|tile| tile.key == *k))
     }
 
     pub fn is_resident(&self, x: f64, z: f64) -> bool {
         self.resident.contains_key(&TileKey::of(x, z))
+    }
+
+    /// Keep the tiles for a sparse group of authoritative contact bodies.
+    /// These bodies use the shared feed and step on the server's clock.
+    pub fn sync_traffic_tiles(&mut self, footprints: &[(DVec3, f64)]) {
+        let Some(feed) = self.feed.clone() else { return };
+        let mut wanted = std::collections::BTreeSet::new();
+        for &(centre, radius) in footprints {
+            let lo = TileKey::of(centre.x - radius, centre.z - radius);
+            let hi = TileKey::of(centre.x + radius, centre.z + radius);
+            for x in lo.x..=hi.x {
+                for z in lo.z..=hi.z {
+                    wanted.insert(TileKey { x, z });
+                }
+            }
+        }
+        let mut far: Vec<_> = self.resident.keys().filter(|key| !wanted.contains(key)).copied().collect();
+        far.sort_unstable();
+        let mut changed = !far.is_empty();
+        for key in far {
+            self.remove_tile(key);
+        }
+        for key in wanted {
+            if !self.resident.contains_key(&key) && let Some(tile) = feed.fetch(key, key.origin()) {
+                self.insert(tile);
+                changed = true;
+            }
+        }
+        self.stats.tiles_resident = self.resident.len();
+        if changed {
+            self.physics.detect_collisions(&(), &());
+        }
+    }
+
+    /// The swept footprint must have collision before the actor can enter it.
+    /// Usually the render-frame pump has already prefetched these tiles.
+    pub fn prepare_support(&mut self, start: DVec3, end: DVec3, radius: f64) {
+        let low = TileKey::of(start.x.min(end.x) - radius, start.z.min(end.z) - radius);
+        let high = TileKey::of(start.x.max(end.x) + radius, start.z.max(end.z) + radius);
+        for z in low.z..=high.z {
+            for x in low.x..=high.x {
+                let key = TileKey { x, z };
+                if !self.resident.contains_key(&key) {
+                    let (ox, oz) = key.origin();
+                    let at = DVec3::new(ox + TILE_SIZE_M * 0.5, end.y, oz + TILE_SIZE_M * 0.5);
+                    if self.ensure_step_tiles(at) > 0 {
+                        self.physics.detect_collisions(&(), &());
+                    }
+                }
+            }
+        }
     }
 
     /// The floor under (x, z): the resident heightfield's own triangle, or the
@@ -1265,10 +1513,29 @@ impl CollisionWorld {
     /// or sidewalk where the provider draws one (resident tiles), else the floor.
     pub fn surface_y(&self, x: f64, z: f64) -> f64 {
         let floor = self.floor_y(x, z);
+        self.surface_at_floor(x, z, floor)
+    }
+
+    fn surface_at_floor(&self, x: f64, z: f64, floor: f64) -> f64 {
         match self.raycast(DVec3::new(x, floor + 3.0, z), DVec3::NEG_Y, 3.5, layer::STREET, None) {
             Some(h) => h.point.y.max(floor),
             None => floor,
         }
+    }
+
+    /// A map arrival starts on a road where one is drawn. A graded tunnel
+    /// approach can be well above the underlying terrain. Existing walkers
+    /// and parked cars with a known floor use level-relative probes instead.
+    pub fn arrival_y(&self, x: f64, z: f64) -> f64 {
+        let local = self.surface_y(x, z);
+        if !self.multi_level() || local > self.floor_y(x, z) + tuning::capsule::CONTROLLER_OFFSET_M {
+            return local;
+        }
+        let Some(road) = self.ground.arrival_road_y(x, z, local) else { return local };
+        if road <= local { return local; }
+        let margin = tuning::kerb::GROUND_CONTACT_TOLERANCE_M;
+        self.raycast(DVec3::new(x, road + margin, z), DVec3::NEG_Y, 2.0 * margin, layer::STREET, None)
+            .map_or(local, |hit| hit.point.y)
     }
 
     /// The walkable surface nearest below `from_y` at (x, z) (the body's
@@ -1280,17 +1547,55 @@ impl CollisionWorld {
     /// structures' concrete (a barrier top, or the inside of a girder a
     /// reference height may start in). Where the ground stands over `from_y`
     /// (under the terrain: a future tunnel) the street layer under it, else
-    /// the floor. One level (no structures): `surface_y`, exactly.
+    /// the floor. A measured street can cross above the terrain even in
+    /// surface-street mode. Probe from the caller's level on that crossing.
     pub fn surface_below(&self, x: f64, z: f64, from_y: f64) -> f64 {
-        if !self.multi_level {
-            return self.surface_y(x, z);
-        }
         let floor = self.floor_y(x, z);
+        if !self.multi_level() {
+            // An elevated surveyed crossing is still walkable with structures
+            // disabled. Ordinary streets use the same ray origin as surface_y:
+            // probing them from flight height loses precision in the collider.
+            let street_limit = floor + 3.0;
+            if from_y > street_limit
+                && let Some(y) = self.street_below(x, z, from_y, floor)
+                && y > street_limit
+            {
+                return y;
+            }
+            return self.surface_at_floor(x, z, floor);
+        }
         match self.street_below(x, z, from_y, floor) {
             Some(y) if floor <= from_y => y.max(floor),
             Some(y) => y,
             None => floor,
         }
+    }
+
+    /// Follow the walker's level to a nearby parking spot. Resolving the
+    /// intervening slope keeps an overhead floor out of the next probe.
+    pub fn surface_beside(&self, feet: DVec3, x: f64, z: f64) -> f64 {
+        if !self.multi_level() {
+            let floor = self.floor_y(x, z);
+            if feet.y + LEVEL_REACH_M <= floor + 3.0 {
+                return self.surface_at_floor(x, z, floor);
+            }
+        }
+        let dx = x - feet.x;
+        let dz = z - feet.z;
+        let distance = dx.hypot(dz);
+        if distance > LOAD_RADIUS_M {
+            // A remote spawn has no resident path to trace.
+            return self.surface_below(x, z, feet.y + LEVEL_REACH_M);
+        }
+        let steps = (distance / tuning::capsule::CENTER_FROM_FEET_M).ceil().max(1.0) as usize;
+        let rise = tuning::capsule::MAX_STEP_HEIGHT_M + distance / steps as f64
+            * tuning::capsule::MAX_SLOPE_DEGREES.to_radians().tan();
+        let mut y = feet.y;
+        for i in 1..=steps {
+            let t = i as f64 / steps as f64;
+            y = self.surface_below(feet.x + t * dx, feet.z + t * dz, y + rise);
+        }
+        y
     }
 
     /// The height a body moving to (x, z) is never let below (the on-foot
@@ -1337,7 +1642,28 @@ impl CollisionWorld {
         if let Some(b) = exclude {
             f = f.exclude_rigid_body(b);
         }
-        let (h, hit) = self.physics.cast_ray_and_get_normal(&ray, max as f32, true, f)?;
+        let (h, hit) = if dir == DVec3::NEG_Y && filter.intersects(layer::WORLD | layer::STREET) {
+            // Rounding a city coordinate to f32 before subtracting the tile
+            // origin can move a ray across a road seam or a cut terrain edge.
+            // Find candidates in world space and cast in each shape's frame.
+            let bottom = (origin.y - max) as f32;
+            let bounds = Aabb::new(
+                Vector::new(ray.origin.x.next_down(), bottom.next_down(), ray.origin.z.next_down()),
+                Vector::new(ray.origin.x.next_up(), ray.origin.y.next_up(), ray.origin.z.next_up()),
+            );
+            self.physics.intersect_aabb_conservative(bounds, f).filter_map(|(handle, collider)| {
+                let pose = collider.position();
+                let offset = origin - DVec3::new(pose.translation.x.into(), pose.translation.y.into(), pose.translation.z.into());
+                let inverse = pose.rotation.inverse();
+                let local = Ray::new(inverse * Vector::new(offset.x as f32, offset.y as f32, offset.z as f32), inverse * ray.dir);
+                let mut hit = collider.shape().cast_local_ray_and_get_normal(&local, max as f32, true)?;
+                hit.normal = pose.rotation * hit.normal;
+                Some((handle, hit))
+            }).min_by(|(ha, a), (hb, b)| a.time_of_impact.total_cmp(&b.time_of_impact)
+                .then_with(|| ha.into_raw_parts().cmp(&hb.into_raw_parts())))
+        } else {
+            self.physics.cast_ray_and_get_normal(&ray, max as f32, true, f)
+        }?;
         let vehicle = self.physics.colliders.get(h).map(|c| c.collision_groups().memberships.contains(layer::VEHICLE)).unwrap_or(false);
         let d = hit.time_of_impact as f64;
         Some(RayHit {

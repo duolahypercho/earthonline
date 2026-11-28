@@ -33,11 +33,54 @@ pub struct MoveResult {
     /// The movement Rapier applied (after every guard).
     pub moved: DVec3,
     pub grounded: bool,
+    pub support_motion: DVec3,
     pub building_limited: bool,
     pub kerb_lift: bool,
 }
 
+/// Point on a supporting body at the start of one fixed tick.
+pub struct FloorStep {
+    body: RigidBodyHandle,
+    pose: Pose,
+    point: Vector,
+    velocity: DVec3,
+}
+
+#[derive(Clone, Copy)]
+struct SoleContact {
+    collider: ColliderHandle,
+    point: Vector,
+    edge: bool,
+}
+
+impl FloorStep {
+    fn displacement(&self, next: &Pose) -> DVec3 {
+        let offset = self.point - self.pose.translation;
+        let rotation = next.rotation * self.pose.rotation.inverse();
+        let delta = (next.translation - self.pose.translation) + (rotation * offset - offset);
+        DVec3::from_array(delta.to_array().map(f64::from))
+    }
+
+    /// Carry the rider after the world's rigid bodies have advanced once.
+    pub fn finish(self, rider: &mut Character, world: &mut CollisionWorld) {
+        let Some(body) = world.physics.bodies.get(self.body) else {
+            return;
+        };
+        let delta = self.displacement(body.position());
+        if rider.grounded {
+            let point = self.point + Vector::from_array(delta.as_vec3().to_array());
+            rider.support_velocity =
+                DVec3::from_array(body.velocity_at_point(point).to_array().map(f64::from));
+        }
+        if !world.lockstep && (delta.x != 0.0 || delta.z != 0.0) {
+            world.prepare_support(rider.position, rider.position + delta, capsule::RADIUS_M);
+        }
+        rider.carry(world, self.body, delta);
+    }
+}
+
 pub struct Character {
+    pub(crate) support_velocity: DVec3,
     /// Capsule centre.
     pub position: DVec3,
     pub vertical_velocity: f64,
@@ -59,6 +102,7 @@ pub struct Character {
 /// `Character::state` (plain data: a network peer sends it, a client rewinds to it).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct CharacterState {
+    pub support_velocity: [f64; 3],
     pub position: [f64; 3],
     pub vertical_velocity: f64,
     pub grounded: bool,
@@ -92,6 +136,7 @@ impl Character {
             normal_nudge_factor: capsule::NORMAL_NUDGE_M as f32,
         };
         let mut c = Self {
+            support_velocity: DVec3::ZERO,
             position: DVec3::ZERO,
             vertical_velocity: 0.0,
             grounded: false,
@@ -122,6 +167,7 @@ impl Character {
 
     /// `capsuleCenterPosition`: feet + centre height + offset.
     pub fn teleport_feet(&mut self, feet: DVec3) {
+        self.support_velocity = DVec3::ZERO;
         self.position = DVec3::new(feet.x, feet.y + self.half_extent_y() + capsule::CONTROLLER_OFFSET_M, feet.z);
         self.vertical_velocity = 0.0;
         self.kerb_step_lift = 0.0;
@@ -139,6 +185,7 @@ impl Character {
         let pose = Pose::from_translation(Vector::new(self.position.x as f32, self.position.y as f32, self.position.z as f32));
         let result = controller.move_shape(dt as f32, &queries, &self.shape(), &pose, Vector::new(delta.x as f32, delta.y as f32, delta.z as f32), |_| {});
         self.position += DVec3::new(result.translation.x as f64, result.translation.y as f64, result.translation.z as f64);
+        self.support_velocity = DVec3::ZERO;
         self.vertical_velocity = 0.;
         self.grounded = false;
         self.perched_steps = 0;
@@ -150,13 +197,14 @@ impl Character {
         Capsule::new_y(self.half_height as f32, capsule::RADIUS_M as f32)
     }
 
-    fn filter() -> Group {
-        layer::WORLD | layer::STREET | layer::VEHICLE
+    pub(crate) fn filter() -> Group {
+        layer::WORLD | layer::STREET | layer::VEHICLE | layer::BOAT | layer::PEDESTRIAN
     }
 
     /// the body between steps: everything `step` reads and writes.
     pub fn state(&self) -> CharacterState {
         CharacterState {
+            support_velocity: self.support_velocity.to_array(),
             position: self.position.to_array(),
             vertical_velocity: self.vertical_velocity,
             grounded: self.grounded,
@@ -172,6 +220,7 @@ impl Character {
 
     /// put the body back in a state `state` returned (here or on a server).
     pub fn set_state(&mut self, s: &CharacterState) {
+        self.support_velocity = DVec3::from_array(s.support_velocity);
         self.position = DVec3::from_array(s.position);
         self.vertical_velocity = s.vertical_velocity;
         self.grounded = s.grounded;
@@ -190,7 +239,8 @@ impl Character {
             return false;
         }
         self.grounded = false;
-        self.vertical_velocity = speed;
+        self.vertical_velocity = speed + self.support_velocity.y;
+        self.support_velocity.y = 0.0;
         true
     }
 
@@ -229,8 +279,14 @@ impl Character {
     /// what blocks the body is not a step.
     fn probe_kerb_rise(&self, world: &CollisionWorld, center: DVec3, dx: f64, dz: f64) -> Option<f64> {
         let feet_y = center.y - self.half_extent_y() - capsule::CONTROLLER_OFFSET_M;
-        let under = Self::ray_down(world, center, self.half_extent_y() + capsule::CONTROLLER_OFFSET_M + 0.08)?;
-        let foot_y = feet_y.min(under.point.y);
+        // On a short tread the rounded sole can be grounded on its leading
+        // edge while the centre ray passes behind it to the step below.
+        let foot_y = if self.grounded {
+            feet_y
+        } else {
+            let under = Self::ray_down(world, center, self.half_extent_y() + capsule::CONTROLLER_OFFSET_M + 0.08)?;
+            feet_y.min(under.point.y)
+        };
         let reach = capsule::RADIUS_M + 0.12;
         let origin = DVec3::new(center.x + dx * reach, foot_y + kerb::STEP_MAX_RISE_M + 0.05, center.z + dz * reach);
         let top = Self::ray_down(world, origin, kerb::STEP_MAX_RISE_M + 0.05 + 0.02)?;
@@ -241,9 +297,12 @@ impl Character {
         if !(kerb::STEP_MIN_RISE_M..=kerb::STEP_MAX_RISE_M).contains(&rise) {
             return None;
         }
-        for lift in [0.04, 0.45] {
+        // Check ankle clearance up to the sampled tread. Looking past it
+        // rejects the next riser of a staircase as an obstacle to this step.
+        // At torso height the full clearance check still applies.
+        for (lift, distance) in [(0.04, reach), (0.45, capsule::RADIUS_M + 0.3)] {
             let o = DVec3::new(center.x, foot_y + rise + lift, center.z);
-            if world.raycast(o, DVec3::new(dx, 0.0, dz), capsule::RADIUS_M + 0.3, layer::WORLD | layer::STREET | layer::VEHICLE, None).is_some() {
+            if world.raycast(o, DVec3::new(dx, 0.0, dz), distance, Self::filter(), None).is_some() {
                 return None;
             }
         }
@@ -305,10 +364,194 @@ impl Character {
         (d.x, d.z, false)
     }
 
-    /// One fixed step: `desired` is the horizontal stride (x, z) this step.
-    pub fn step(&mut self, world: &CollisionWorld, desired_x: f64, desired_z: f64, apply_gravity: bool) -> MoveResult {
+    fn support_contact(&self, world: &CollisionWorld, planting: bool) -> Option<SoleContact> {
+        let reach = capsule::CONTROLLER_OFFSET_M + kerb::GROUND_CONTACT_TOLERANCE_M;
+        let origin = self.feet() + DVec3::Y * reach;
+        if let Some(hit) = world
+            .raycast(origin, DVec3::NEG_Y, 2.0 * reach, Self::filter(), None)
+            .filter(|hit| hit.normal.y > 0.5)
+        {
+            return Some(SoleContact { collider: hit.collider, point: Vector::from_array(hit.point.as_vec3().to_array()), edge: false });
+        }
+        // The middle of the shoe can clear the edge before the rounded sole does.
+        if self.support_velocity == DVec3::ZERO && !planting {
+            return None;
+        }
+        let pose = Pose::from_translation(Vector::from_array(
+            (self.position + DVec3::Y * reach).as_vec3().to_array(),
+        ));
+        let filter = QueryFilter::default().groups(InteractionGroups::new(
+            layer::CHARACTER,
+            Self::filter(),
+            InteractionTestMode::And,
+        ));
+        let (handle, hit) = world.physics.cast_shape(
+            &pose,
+            Vector::NEG_Y,
+            &self.shape(),
+            rapier3d::parry::query::ShapeCastOptions::with_max_time_of_impact((2. * reach) as f32),
+            filter,
+        )?;
+        (hit.normal1.y > 0.5).then_some(SoleContact { collider: handle, point: hit.witness1, edge: true })
+    }
+
+    /// When the rounded sole lands across two treads, place the resting stance
+    /// over its actual contact. A ledge with open space below has no lower tread.
+    fn plant_on_tread(&self, world: &CollisionWorld, handle: ColliderHandle, point: Vector) -> DVec3 {
+        let feet = self.feet();
+        let toward = DVec3::new(f64::from(point.x) - feet.x, 0., f64::from(point.z) - feet.z);
+        let distance = toward.length();
+        let skin = capsule::CONTROLLER_OFFSET_M;
+        let collider = &world.physics.colliders[handle];
+        if distance < 1e-6 || distance > capsule::RADIUS_M || collider.parent().is_some()
+            || !collider.collision_groups().memberships.contains(layer::STREET)
+        {
+            return DVec3::ZERO;
+        }
+        let rise = capsule::MAX_STEP_HEIGHT_M;
+        let reach = skin + kerb::GROUND_CONTACT_TOLERANCE_M;
+        let inside = toward * (1. + skin / distance);
+        let lower = Self::ray_down(world, feet + DVec3::Y * reach, rise + reach);
+        let upper = Self::ray_down(world, feet + inside + DVec3::Y * rise, rise + reach);
+        let walkable = capsule::MAX_SLOPE_DEGREES.to_radians().cos();
+        if let (Some(lo), Some(hi)) = (lower, upper)
+            && lo.normal.y >= walkable && hi.normal.y >= walkable
+            && feet.y - lo.point.y > reach
+            && (hi.point.y - feet.y).abs() <= reach
+            && (reach..=rise).contains(&(hi.point.y - lo.point.y))
+        {
+            return inside.clamp_length_max(tuning::speed::WALK_MPS * tuning::FIXED_STEP_S);
+        }
+        DVec3::ZERO
+    }
+
+    /// Displacement and departure velocity at the point touched by the sole.
+    fn moving_floor(
+        world: &CollisionWorld,
+        handle: ColliderHandle,
+        point: Vector,
+    ) -> Option<FloorStep> {
+        let collider = &world.physics.colliders[handle];
+        if !collider
+            .collision_groups()
+            .memberships
+            .intersects(layer::WORLD | layer::STREET | layer::VEHICLE | layer::BOAT)
+        {
+            return None;
+        }
+        let handle = collider.parent()?;
+        let body = &world.physics.bodies[handle];
+        if body.is_fixed() {
+            return None;
+        }
+        let dt = tuning::FIXED_STEP_S as f32;
+        let scripted = body.body_type() == RigidBodyType::KinematicPositionBased;
+        let velocity = if scripted {
+            RigidBodyPosition {
+                position: *body.position(),
+                next_position: *body.next_position(),
+            }
+            .interpolate_velocity(dt.recip(), body.local_center_of_mass())
+            .velocity_at_point(point, body.center_of_mass())
+        } else {
+            body.velocity_at_point(point)
+        };
+        Some(FloorStep {
+            body: handle,
+            pose: *body.position(),
+            point,
+            velocity: DVec3::from_array(velocity.to_array().map(f64::from)),
+        })
+    }
+
+    fn carry(
+        &mut self,
+        world: &CollisionWorld,
+        body: RigidBodyHandle,
+        delta: DVec3,
+    ) -> (DVec3, bool) {
+        if delta == DVec3::ZERO {
+            return (DVec3::ZERO, false);
+        }
+        let (x, z, limited) = self.limit_building_sweep(world, delta);
+        let filter = QueryFilter::default()
+            .groups(InteractionGroups::new(
+                layer::CHARACTER,
+                Self::filter(),
+                InteractionTestMode::And,
+            ))
+            .exclude_rigid_body(body);
+        let queries = world.physics.query_pipeline_with_filter(filter);
+        let mut ctl = self.controller;
+        ctl.snap_to_ground = None;
+        ctl.autostep = None;
+        let pose = Pose::from_translation(Vector::from_array(self.position.as_vec3().to_array()));
+        let carried = ctl.move_shape(
+            0.0,
+            &queries,
+            &self.shape(),
+            &pose,
+            Vector::new(x as f32, delta.y as f32, z as f32),
+            |_| {},
+        );
+        let moved = DVec3::from_array(carried.translation.to_array().map(f64::from));
+        self.position += moved;
+        (moved, limited)
+    }
+
+    /// Advance a standalone controller using the current floor motion.
+    pub fn step(
+        &mut self,
+        world: &CollisionWorld,
+        desired_x: f64,
+        desired_z: f64,
+        apply_gravity: bool,
+    ) -> MoveResult {
+        let (mut result, floor) =
+            self.step_before_physics(world, desired_x, desired_z, apply_gravity);
+        if let Some(floor) = floor {
+            let body = &world.physics.bodies[floor.body];
+            let next = if body.body_type() == RigidBodyType::KinematicPositionBased {
+                *body.next_position()
+            } else {
+                body.predict_position_using_velocity(tuning::FIXED_STEP_S as f32)
+            };
+            let (motion, limited) = self.carry(world, floor.body, floor.displacement(&next));
+            result.moved += motion;
+            result.support_motion = motion;
+            result.building_limited |= limited;
+        }
+        result
+    }
+
+    /// Resolve the stride on the present floor. Complete the returned floor step
+    /// after the shared physics tick so suspension and collision impulses carry the rider.
+    pub fn step_before_physics(&mut self, world: &CollisionWorld, desired_x: f64, desired_z: f64, apply_gravity: bool) -> (MoveResult, Option<FloorStep>) {
         let step = tuning::FIXED_STEP_S;
+        let was_grounded = self.grounded;
+        let planting = desired_x == 0. && desired_z == 0. && self.support_velocity == DVec3::ZERO;
+        // The swept capsule can already be bearing weight at a sharp edge
+        // while the controller still reports the refused-fall pressure.
+        let perched = planting && self.vertical_velocity == -kerb::PERCHED_FALL_PRESS_MPS;
+        let contact = if apply_gravity && (was_grounded || perched) { self.support_contact(world, planting) } else { None };
+        let floor = contact.filter(|_| was_grounded).and_then(|c| Self::moving_floor(world, c.collider, c.point));
+        if !apply_gravity {
+            self.support_velocity = DVec3::ZERO;
+        } else if contact.is_some() {
+            self.support_velocity = floor.as_ref().map_or(DVec3::ZERO, |f| f.velocity);
+        }
+        let mut support_motion = DVec3::ZERO;
         let mut d = DVec3::new(desired_x, 0.0, desired_z);
+        let plant = if planting && let Some(c) = contact.filter(|c| c.edge) {
+            self.plant_on_tread(world, c.collider, c.point)
+        } else {
+            DVec3::ZERO
+        };
+        d += plant;
+        if contact.is_none() {
+            support_motion = self.support_velocity * step;
+            d += support_motion;
+        }
         if apply_gravity {
             self.vertical_velocity -= tuning::GRAVITY_MPS2 * step;
             d.y += self.vertical_velocity * step;
@@ -349,8 +592,15 @@ impl Character {
         }
         self.kerb_step_lift = 0.0;
 
-        let snap = !kerb_lifting && self.kerb_hold_steps == 0;
+        let ascending = self.vertical_velocity > 0.0;
+        let snap = !ascending && !kerb_lifting && self.kerb_hold_steps == 0 && floor.is_none();
         let mut ctl = self.controller;
+        if planting && contact.is_some() && floor.is_none() {
+            // Repeated lateral normal nudges can push a resting sole off its
+            // tread. An adjustment of the stance must not climb another riser.
+            ctl.normal_nudge_factor = 0.;
+            ctl.autostep = None;
+        }
         if !snap {
             ctl.snap_to_ground = None;
         }
@@ -359,21 +609,47 @@ impl Character {
         let filter = QueryFilter::default().groups(InteractionGroups::new(layer::CHARACTER, Self::filter(), InteractionTestMode::And));
         let queries = world.physics.query_pipeline_with_filter(filter);
         let mut collisions: Vec<CharacterCollision> = vec![];
-        let r = ctl.move_shape(step as f32, &queries, &shape, &pose, Vector::new(d.x as f32, d.y as f32, d.z as f32), |c| collisions.push(c));
-        let moved = DVec3::new(r.translation.x as f64, r.translation.y as f64, r.translation.z as f64);
+        // Resolve the stride against the present floor. With a moving floor we
+        // apply its motion separately, so Rapier's kinematic friction needs no time advance.
+        let friction_dt = if floor.is_some() { 0.0 } else { step as f32 };
+        let r = ctl.move_shape(friction_dt, &queries, &shape, &pose, Vector::new(d.x as f32, d.y as f32, d.z as f32), |c| collisions.push(c));
+        let moved = DVec3::from_array(r.translation.to_array().map(f64::from));
+        if ascending && moved.y < d.y {
+            // Lose the inward component of a jump on the actual underside.
+            // A moving ceiling constrains velocity relative to its contact point.
+            let velocity = Vector::from_array((d / step).as_vec3().to_array());
+            let mut vertical = self.vertical_velocity;
+            for c in &collisions {
+                let normal = c.hit.normal1;
+                if normal.y >= 0.0 { continue; }
+                let surface = world.physics.colliders[c.handle].parent()
+                    .map_or(Vector::ZERO, |body| world.physics.bodies[body].velocity_at_point(c.hit.witness1));
+                let inward = (velocity - surface).dot(normal).min(0.0);
+                vertical = vertical.min(self.vertical_velocity - f64::from(inward * normal.y));
+            }
+            self.vertical_velocity = vertical;
+        }
         let start = self.position;
         self.position += moved;
-        self.grounded = r.grounded;
+        // The sweep can still report the departure surface on the first jump tick.
+        self.grounded = r.grounded && !ascending;
         if self.grounded && self.vertical_velocity < 0.0 {
             self.vertical_velocity = 0.0;
         } else if !self.grounded && self.vertical_velocity < -kerb::PERCHED_FALL_PRESS_MPS && d.y < 0.0 && moved.y > d.y * 0.25 {
             // A fall the world refuses is not a fall: keep only a light press.
             self.vertical_velocity = -kerb::PERCHED_FALL_PRESS_MPS;
-            self.perched_steps += 1;
+            // A triangle seam can refuse gravity while the full horizontal
+            // stride succeeds. Only a blocked stride can build up a curb lift.
+            let requested = d.x * d.x + d.z * d.z;
+            if requested > 1e-8 && moved.x * d.x + moved.z * d.z < requested * kerb::STEP_REFUSED_SHARE {
+                self.perched_steps += 1;
+            } else {
+                self.perched_steps = 0;
+            }
         } else if self.grounded || moved.y <= d.y * 0.25 {
             self.perched_steps = 0;
         }
-        if !kerb_lifting && !collisions.is_empty() {
+        if !ascending && !kerb_lifting && plant == DVec3::ZERO && !collisions.is_empty() {
             let feet_y = start.y - self.half_extent_y() - capsule::CONTROLLER_OFFSET_M;
             let toward = kerb_contact_toward(world, &collisions, d, feet_y);
             let into = toward.map(|t| d.x * t.0 + d.z * t.1).unwrap_or(0.0);
@@ -391,7 +667,11 @@ impl Character {
         } else {
             self.kerb_blocked_steps = 0;
         }
-        MoveResult { moved, grounded: self.grounded, building_limited, kerb_lift: kerb_lifting }
+        if was_grounded && !self.grounded {
+            self.vertical_velocity += self.support_velocity.y;
+            self.support_velocity.y = 0.0;
+        }
+        (MoveResult { moved, grounded: self.grounded, support_motion, building_limited, kerb_lift: kerb_lifting }, floor)
     }
 }
 
@@ -404,7 +684,7 @@ fn kerb_contact_toward(world: &CollisionWorld, contacts: &[CharacterCollision], 
     }
     let mut best: Option<(f64, f64, f64)> = None;
     for c in contacts {
-        let vehicle = world.physics.colliders.get(c.handle).map(|co| co.collision_groups().memberships.contains(layer::VEHICLE)).unwrap_or(true);
+        let vehicle = world.physics.colliders.get(c.handle).map(|co| co.collision_groups().memberships.intersects(layer::VEHICLE | layer::BOAT)).unwrap_or(true);
         if vehicle {
             continue;
         }

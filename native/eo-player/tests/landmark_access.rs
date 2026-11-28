@@ -39,6 +39,27 @@ fn yaw_of_heading(h: f64) -> f64 {
 }
 
 #[test]
+fn a_building_floors_two_edges_stay_at_their_surveyed_coordinates() {
+    let x = 8191.12518;
+    let z = 16.013;
+    let edge = 2.;
+    let walk = quad(
+        [x-edge, 7., z-1.], [x-edge, 7., z+1.],
+        [x+edge, 7., z+1.], [x+edge, 7., z-1.],
+    ).to_vec();
+    let decks = Decks { parts: vec![DeckPart { walk, ..Default::default() }], ..Default::default() };
+    let mut cw = CollisionWorld::new(Arc::new(Flat), Arc::new(BuildingSet::empty().with_decks(decks)), 1);
+    cw.load_blocking(DVec3::new(x, 7., z), 8.);
+    for side in [-1., 1.] {
+        for (offset, supported) in [(-0.00005, true), (0.00005, false)] {
+            let at = DVec3::new(x + side * (edge + offset), 7.03, z);
+            let hit = cw.raycast(at, DVec3::NEG_Y, 0.06, world::layer::STREET, None);
+            assert_eq!(hit.is_some(), supported, "floor edge at {at:?}");
+        }
+    }
+}
+
+#[test]
 fn a_deck_inside_a_building_opens_its_prism_and_its_railing_stops_the_walker() {
     // A 20 m square tower 60 m tall; a deck at 40 m inside it, 16 m square,
     // with a wall round it (the glazing) and a lift from the ground.
@@ -77,6 +98,8 @@ fn a_deck_inside_a_building_opens_its_prism_and_its_railing_stops_the_walker() {
     assert_eq!(p.lift_fade(), 0.0);
     let feet = p.character.feet();
     assert!((feet.y - y).abs() < 0.05 && feet.x.abs() < 1.0 && feet.z.abs() < 3.0, "not on the deck after the ride: {feet:?}");
+    assert!((cw.surface_below(feet.x, feet.z, feet.y + 0.5) - y).abs() < 0.01);
+    assert_eq!(cw.surface_below(feet.x, feet.z, y - 1.0), 0.0);
     // Run at the glazing: the deck holds the walker and the wall stops it.
     p.yaw = 0.0; // +z
     for _ in 0..240 {
@@ -104,7 +127,7 @@ fn real() -> &'static RealCity {
         let access = eo_landmarks::access::AccessSet::build(&|x, z| elevation.sample(x, z));
         let yaw = |h: f64| yaw_of_heading(h);
         let decks = Decks {
-            parts: access.decks.iter().map(|d| DeckPart { name: d.id.clone(), walk: d.walk.clone(), barrier: d.barrier.clone() }).collect(),
+            parts: access.decks.iter().map(|d| DeckPart { name: d.id.clone(), walk: d.walk.clone(), barrier: d.barrier.clone(), ..Default::default() }).collect(),
             cuts: access.decks.iter().flat_map(|d| d.cuts.iter()).map(|c| PrismCut { centre: c.centre, radius_m: c.radius_m, y0: c.y0, y1: c.y1 }).collect(),
             lifts: access.lifts().map(|l| LiftDef { name: l.name.clone(), bottom: DVec3::from_array(l.bottom.feet), bottom_yaw: yaw(l.bottom.heading_deg), top: DVec3::from_array(l.top.feet), top_yaw: yaw(l.top.heading_deg) }).collect(),
         };

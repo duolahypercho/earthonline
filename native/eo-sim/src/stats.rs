@@ -6,6 +6,8 @@ use crate::network::Network;
 use crate::pedestrians::LegKind;
 use crate::region::Region;
 
+pub const BODY_OVERLAP_MIN_M: f64 = 0.1;
+
 #[derive(Clone, Debug, Default)]
 pub struct Sample {
     pub t: f64,
@@ -49,12 +51,14 @@ pub fn sample(net: &Network, r: &Region, t: f64) -> Sample {
     s.mean_speed = speed_sum / f.cars.len().max(1) as f64;
     for a in 0..f.cars.len() {
         for b in (a + 1)..f.cars.len() {
-            if geom::hypot(f.x[a] - f.x[b], f.z[a] - f.z[b]) > 14.0 {
+            if !net.shares_surface(f.surface(a), f.surface(b))
+                || geom::hypot(f.x[a] - f.x[b], f.z[a] - f.z[b]) > 14.0
+            {
                 continue;
             }
             let pa = (f.x[a], f.z[a], f.yaw[a], f.cars[a].len, f.cars[a].wid);
             let pb = (f.x[b], f.z[b], f.yaw[b], f.cars[b].len, f.cars[b].wid);
-            if geom::obb_penetration(pa, pb) > 0.1 {
+            if geom::obb_penetration(pa, pb) > BODY_OVERLAP_MIN_M {
                 s.overlaps += 1;
             }
         }
@@ -82,7 +86,7 @@ pub fn sample(net: &Network, r: &Region, t: f64) -> Sample {
             }
         }
         for (k, c) in f.cars.iter().enumerate() {
-            if geom::hypot(f.x[k] - x, f.z[k] - z) > 8.0 {
+            if f.level[k] != 0 || geom::hypot(f.x[k] - x, f.z[k] - z) > 8.0 {
                 continue;
             }
             if geom::obb_clearance(x, z, (f.x[k], f.z[k], f.yaw[k], c.len, c.wid)) <= 0.0 {

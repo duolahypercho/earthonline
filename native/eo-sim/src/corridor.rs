@@ -40,6 +40,7 @@
 use crate::consts::{ACCEL, DRIVER_PACE_MIN, DRIVER_PACE_SPAN, FOLLOW_DECEL, LOCAL_RECYCLE_RADIUS, MIN_BUMPER_GAP, PED_CRUISE_MAX, PED_CRUISE_MIN, PRESENTED_LENGTH, TRAFFIC_KIND_MIX};
 use crate::output::{CorridorInstance, FLAG_BRAKING, KIND_WALKER_BASE};
 use crate::pedestrians::cadence_for_speed;
+use crate::consts::{WALKER_LEN_M, WALKER_SLOW_GAP_M};
 use crate::rng::Mulberry32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -81,14 +82,8 @@ pub struct WaySpec {
 /// a set clock (a shot's hour, a time picked in the menu) refills and a
 /// running one never does.
 pub const REFILL_JUMP_H: f64 = 0.25;
-/// Walkers on the walk. INFERRED, not counted: a walker's length along the
-/// walk (0.6 m, a body ellipse's long axis, about the HCM's 0.6 x 0.5 m
-/// pedestrian body), the gap below which a walker slows behind the one ahead
-/// (1.5 m, a step and a half), the share of a vehicle's following gap the
-/// fill spaces walkers by (0.3), and the clear length a walker needs at the
-/// walk's start to enter (0.5 m).
-const WALKER_LEN_M: f64 = 0.6;
-const WALKER_SLOW_GAP_M: f64 = 1.5;
+/// Share of a vehicle's following gap used to fill a walk, and the clear
+/// length needed to enter it (inferred).
 const WALKER_FILL_GAP_SHARE: f64 = 0.3;
 const WALKER_ENTRY_CLEAR_M: f64 = 0.5;
 /// The clear length a vehicle needs at a way's start to enter: half its

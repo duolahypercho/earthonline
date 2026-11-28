@@ -16,7 +16,7 @@ const HYDROPLANE_START_MPS: f64 = 10.0;
 const HYDROPLANE_FULL_MPS: f64 = 28.0;
 
 /// Weather state consumed by `eo-player` physics steps.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct WeatherPhysics {
     /// Road-surface water film wetness, 0 (dry) .. 1 (saturated).
     pub wetness: f64,
@@ -25,7 +25,7 @@ pub struct WeatherPhysics {
     /// Rainfall rate, mm/h (0 clear, 0.5 drizzle, 1.8 light rain, 3.5 sun-rain,
     /// 6 medium rain, 16 heavy rain, 22 storm).
     pub rain_mm_h: f64,
-    /// Horizontal wind velocity vector (m/s, x east, z south).
+    /// Steady horizontal wind before the gust multiplier (m/s, x east, z south).
     pub wind: [f64; 2],
     /// Gust factor (~0.65..1.35; 1.0 steady).
     pub gust: f64,

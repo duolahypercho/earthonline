@@ -34,6 +34,7 @@ use crate::network::Network;
 use crate::corridor::Corridors;
 use crate::output::{AgentBuffer, CorridorInstance};
 use crate::region::{Focus, Region};
+use crate::vehicles::TrafficObstacle;
 
 #[derive(Clone, Copy)]
 struct Task {
@@ -331,6 +332,7 @@ struct Mailbox {
     /// Frame time posted by the render thread and not yet simulated.
     pending_dt: f64,
     foci: Vec<Option<Focus>>,
+    traffic_obstacle: Option<(Option<TrafficObstacle>, Option<TrafficObstacle>)>,
     middle: Frame,
     fresh: bool,
     shutdown: bool,
@@ -364,6 +366,7 @@ impl AsyncSim {
             mail: Mutex::new(Mailbox {
                 pending_dt: 0.0,
                 foci: vec![None; regions],
+                traffic_obstacle: None,
                 middle: first.clone(),
                 fresh: false,
                 shutdown: false,
@@ -377,7 +380,7 @@ impl AsyncSim {
                 let mut back = Frame::default();
                 let mut foci: Vec<Option<Focus>> = vec![None; regions];
                 loop {
-                    let dt = {
+                    let (dt, obstacle) = {
                         let mut m = s.mail.lock().unwrap();
                         while m.pending_dt <= 0.0 && !m.shutdown {
                             m = s.wake.wait(m).unwrap();
@@ -389,12 +392,16 @@ impl AsyncSim {
                         for f in m.foci.iter_mut() {
                             *f = None;
                         }
-                        std::mem::take(&mut m.pending_dt)
+                        (std::mem::take(&mut m.pending_dt), m.traffic_obstacle.take())
                     };
                     for (i, f) in foci.iter().enumerate() {
                         if let Some(f) = f {
                             world.set_focus(i, *f);
                         }
+                    }
+                    if let (Some((vehicle, person)), Some(region)) = (obstacle, world.regions.first_mut()) {
+                        region.traffic_obstacle = vehicle;
+                        region.on_foot_player = person;
                     }
                     hook(&mut world); // agents
                     if world.advance(dt) > 0 {
@@ -411,8 +418,23 @@ impl AsyncSim {
 
     /// Render thread, once per frame: hand over the frame's time and focus inputs.
     pub fn post(&self, frame_dt: f64, foci: &[(usize, Focus)]) {
+        self.post_frame(frame_dt, foci, None);
+    }
+
+    pub fn post_with_obstacle(&self, frame_dt: f64, foci: &[(usize, Focus)], obstacle: Option<TrafficObstacle>) {
+        self.post_local(frame_dt, foci, obstacle, None);
+    }
+
+    pub fn post_local(&self, frame_dt: f64, foci: &[(usize, Focus)], vehicle: Option<TrafficObstacle>, person: Option<TrafficObstacle>) {
+        self.post_frame(frame_dt, foci, Some((vehicle,person)));
+    }
+
+    fn post_frame(&self, frame_dt: f64, foci: &[(usize, Focus)], obstacle: Option<(Option<TrafficObstacle>,Option<TrafficObstacle>)>) {
         let mut m = self.shared.mail.lock().unwrap();
         m.pending_dt += frame_dt;
+        if obstacle.is_some() {
+            m.traffic_obstacle = obstacle;
+        }
         for &(i, f) in foci {
             if let Some(slot) = m.foci.get_mut(i) {
                 *slot = Some(f);
