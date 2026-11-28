@@ -36,6 +36,7 @@ const SOURCES: &[&[u8]] = &[
     include_bytes!("street.rs"),
     include_bytes!("cook.rs"),
     include_bytes!("coastal.rs"),
+    include_bytes!("garden.rs"),
 ];
 
 /// Which ring a street form is drawn in.

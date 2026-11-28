@@ -29,6 +29,7 @@ pub mod clearance;
 pub mod data;
 pub mod eztree;
 pub mod furniture;
+pub mod lidar_trees; // residential trees measured from the USGS lidar (eo-app `--yard-lidar-trees`)
 pub mod overhead;
 pub mod pads;
 pub mod props_v2; // street props v2 (eo-app `--no-street-props-v2`)
@@ -44,6 +45,7 @@ pub mod signals;
 pub mod sign_models; // the SFMTA sign plates as Blender models (eo-app `--no-sign-models`)
 pub mod signs;
 pub mod trees;
+pub mod yards; // rear-yard fences and ground measured from parcels, lidar and aerial (eo-app `--yard-detail`)
 
 use anyhow::Result;
 use eo_data::CaStandards;
