@@ -389,7 +389,7 @@ impl StreetWorld {
     /// The ground the street's own banks and retaining faces meet at (x, z):
     /// `street_ground` with the street ground on, else the 8 m carpet.
     pub fn edge_ground(&self, x: f64, z: f64) -> f64 {
-        if street_ground_on() { self.street_ground(x, z) } else { self.carpet_y(x, z) }
+        if self.o.pavement_repairs && street_ground_on() { self.street_ground(x, z) } else { self.carpet_y(x, z) }
     }
 
     /// The highest the ground may stand at (x, z) under a paved corridor or a
@@ -588,7 +588,7 @@ impl StreetWorld {
     /// the paving, `street_ground`, eased down to the 8 m carpet round a
     /// building (`HOLD_FADE_M`).
     pub fn overlay_grid(&self, key: (i32, i32)) -> Option<Arc<OverlayGrid>> {
-        if !street_ground_on() || !self.tiles.contains_key(&key) {
+        if !self.o.pavement_repairs || !street_ground_on() || !self.tiles.contains_key(&key) {
             return None;
         }
         if let Some(g) = self.overlay_cache.lock().unwrap().get(&key) {
@@ -1433,7 +1433,7 @@ impl StreetWorld {
     /// (`cached_mesh`) and, with the street ground on, its ground (`ground_overlay`).
     pub fn drawn_mesh(&self, key: (i32, i32)) -> std::sync::Arc<TileMesh> {
         let paving = self.cached_mesh(key);
-        if !street_ground_on() {
+        if !self.o.pavement_repairs || !street_ground_on() {
             return paving;
         }
         if let Some(m) = self.drawn_cache.lock().unwrap().get(&key) {

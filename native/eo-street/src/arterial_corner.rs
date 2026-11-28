@@ -379,7 +379,13 @@ impl StreetWorld {
 
         let faces = mesh.indices.split_off(first_face * 3);
         let layers = mesh.layers.split_off(first_face);
-        for (tri, layer) in faces.chunks_exact(3).zip(layers) {
+        let old_edge = if mesh.edge_paving.len() > first_face {
+            mesh.edge_paving.split_off(first_face)
+        } else {
+            Vec::new()
+        };
+        for (idx, (tri, layer)) in faces.chunks_exact(3).zip(layers).enumerate() {
+            let is_edge = old_edge.get(idx).copied().unwrap_or(false);
             let mut pieces = vec![tri.to_vec()];
             for q in &quads {
                 let mut next = Vec::new();
@@ -398,8 +404,12 @@ impl StreetWorld {
                     if crate::mesh::tri_area(&a, &b, &c) <= 1e-9 {
                         continue;
                     }
+                    let face_idx = mesh.layers.len();
                     mesh.indices.extend_from_slice(&indices);
                     mesh.layers.push(layer);
+                    if is_edge {
+                        mesh.mark_edge_paving(face_idx);
+                    }
                 }
             }
         }

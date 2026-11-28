@@ -1331,7 +1331,7 @@ fn plan_junction(node: &mut Node, entries: &mut [Entry], o: &StreetOptions) {
         }
     }
     // (`merge_trim`) a slip alongside a through leg, neither with a walk.
-    if has_through && crate::seams::road_seams() {
+    if has_through && o.pavement_repairs && crate::seams::road_seams() {
         let walkless = |a: &Approach| !(entries[a.entry].walks[0] >= o.min_sidewalk_width) && !(entries[a.entry].walks[1] >= o.min_sidewalk_width);
         for i in 0..count {
             if !slip[i] || !walkless(&node.approaches[i]) {
@@ -1583,11 +1583,11 @@ impl CorridorIndex {
 }
 
 /// The junction pads (the hull of each node's approaches' trimmed mouths,
-/// shrunk `PAD_SHRINK_M`), gridded, for the walk yield.
+/// shrunk `PAD_SHRINK_M`, and each pad's actual mouth+corner ring), gridded, for the walk yield.
 #[derive(Default)]
 pub(crate) struct PadIndex {
-    /// (hull, its node's approach entries, the node)
-    hulls: Vec<(Vec<P2>, Vec<usize>, usize)>,
+    /// (hull, pad ring, its node's approach entries, the node)
+    hulls: Vec<(Vec<P2>, Vec<P2>, Vec<usize>, usize)>,
     cells: HashMap<(i64, i64), Vec<usize>>,
 }
 
@@ -1596,18 +1596,53 @@ pub(crate) struct PadIndex {
 const PAD_SHRINK_M: f64 = 0.5;
 const PAD_CELL_M: f64 = 24.0;
 
+fn pad_point_in_ring(x: f64, z: f64, ring: &[P2]) -> bool {
+    let n = ring.len();
+    if n < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let mut j = n - 1;
+    for i in 0..n {
+        let (xi, zi) = (ring[i][0], ring[i][1]);
+        let (xj, zj) = (ring[j][0], ring[j][1]);
+        if ((zi > z) != (zj > z)) && (x < (xj - xi) * (z - zi) / (zj - zi) + xi) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
 impl PadIndex {
-    pub(crate) fn new(nodes: &[Node], entries: &[Entry]) -> Self {
+    pub(crate) fn new(nodes: &[Node], entries: &[Entry], o: &StreetOptions) -> Self {
         let mut out = PadIndex::default();
+        let seams = o.pavement_repairs && crate::seams::road_seams();
         for (ni, n) in nodes.iter().enumerate() {
             if n.approaches.len() < 3 {
                 continue;
             }
+            let merge: Vec<bool> = n.approaches.iter().map(|a| a.merge_trim.is_some() && seams).collect();
             let mut pts: Vec<P2> = vec![];
-            for app in &n.approaches {
+            let mut ring: Vec<P2> = vec![];
+            for (i, app) in n.approaches.iter().enumerate() {
                 let f = approach_end_frame(entries, app);
                 pts.push(f.at(-app.half));
                 pts.push(f.at(app.half));
+                let s = if app.at_start { 1.0 } else { -1.0 };
+                if !merge[i] {
+                    for lat in o.section_offsets(app.half) {
+                        ring.push(f.at(s * lat));
+                    }
+                }
+                if let Some(path) = n.paths.get(i).filter(|p| !merge.get(p.a).copied().unwrap_or(false) && !merge.get(p.b).copied().unwrap_or(false)) {
+                    let last = path.stations.len().saturating_sub(1);
+                    for (q, st) in path.stations.iter().enumerate() {
+                        if q != 0 && q != last {
+                            ring.push([st.x, st.z]);
+                        }
+                    }
+                }
             }
             let hull = convex_hull(pts);
             if hull.len() < 3 {
@@ -1626,14 +1661,25 @@ impl PadIndex {
                     out.cells.entry((gx, gz)).or_default().push(k);
                 }
             }
-            out.hulls.push((hull, n.approaches.iter().map(|a| a.entry).collect(), ni));
+            out.hulls.push((hull, ring, n.approaches.iter().map(|a| a.entry).collect(), ni));
         }
         out
     }
 
-    /// (x, z) lies on the pad of a junction run `me` is not an approach of.
+    /// (x, z) lies on the drawn pad ring of a junction run `me` is not an approach of.
     fn on_pad(&self, x: f64, z: f64, me: usize) -> bool {
-        self.find(x, z, |apps, _| !apps.contains(&me))
+        let Some(list) = self.cells.get(&((x / PAD_CELL_M).floor() as i64, (z / PAD_CELL_M).floor() as i64)) else { return false };
+        list.iter().any(|&k| {
+            let (h, ring, apps, _) = &self.hulls[k];
+            !apps.contains(&me)
+                && (0..h.len()).all(|i| {
+                    let (a, b) = (h[i], h[(i + 1) % h.len()]);
+                    let (ex, ez) = (b[0] - a[0], b[1] - a[1]);
+                    let l = hypot(ex, ez).max(1e-9);
+                    (ex * (z - a[1]) - ez * (x - a[0])) / l >= PAD_SHRINK_M
+                })
+                && pad_point_in_ring(x, z, ring)
+        })
     }
 
     /// (x, z) lies on the pad of a junction other than node `ni` (a corner
@@ -1657,7 +1703,7 @@ impl PadIndex {
     fn find_by(&self, x: f64, z: f64, shrink: f64, keep: impl Fn(&[usize], usize) -> bool) -> bool {
         let Some(list) = self.cells.get(&((x / PAD_CELL_M).floor() as i64, (z / PAD_CELL_M).floor() as i64)) else { return false };
         list.iter().any(|&k| {
-            let (h, apps, n) = &self.hulls[k];
+            let (h, _, apps, n) = &self.hulls[k];
             keep(apps, *n)
                 && (0..h.len()).all(|i| {
                     let (a, b) = (h[i], h[(i + 1) % h.len()]);
@@ -1756,8 +1802,9 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
     // centreline lies on the other's carriageway up: the clearance (`shrink`,
     // the run's whole reach) is for a run alongside, and kept both ribbons
     // drawn coplanar there, fighting.
-    let strict = walk_yield_strict();
-    let covered_by = |x: f64, z: f64, shrink: f64, mine: usize, ux: f64, uz: f64| -> Option<usize> {
+    let strict = o.pavement_repairs && walk_yield_strict();
+    let entries_c: &[Entry] = entries;
+    let covered_by = |x: f64, z: f64, shrink: f64, mine: usize, ux: f64, uz: f64, driveway: bool| -> Option<usize> {
         let (gx, gz) = ((x / cover.cell).floor() as i64, (z / cover.cell).floor() as i64);
         let mut best = None;
         let mut best_depth = 0.0;
@@ -1778,8 +1825,12 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                     t = clamp(t, 0.0, 1.0);
                     let (ex, ez) = (x - (e.a[0] + dx * t), z - (e.a[1] + dz * t));
                     // (a stub raised to a structure too: where it crosses another run its
-                    // ramp is back at the datum, and the two stood coplanar, fighting)
-                    let crossing = strict && len2 > 1e-9 && ((dx * ux + dz * uz) / len2.sqrt()).abs() < std::f64::consts::FRAC_1_SQRT_2;
+                    // ramp is back at the datum, and the two stood coplanar, fighting;
+                    // walkless service drives entering a non-service through street are
+                    // landed and fitted by `driveway.rs` instead of stopping on the kerb line)
+                    let recv = &entries_c[e.owner];
+                    let driveway_receiver = driveway && recv.highway != "service" && !city.segments[recv.road].separated;
+                    let crossing = strict && !driveway_receiver && len2 > 1e-9 && ((dx * ux + dz * uz) / len2.sqrt()).abs() < std::f64::consts::FRAC_1_SQRT_2;
                     let reach = e.half - if crossing { 0.0 } else { shrink };
                     if ex > reach || ex < -reach || ez > reach || ez < -reach {
                         continue;
@@ -1798,7 +1849,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
     let chunk = entries.len().div_ceil(threads).max(1);
     let ids: Vec<usize> = (0..entries.len()).collect();
     // (`walk_yield_strict`) the junction pads, for both passes.
-    let pads = if walk_yield_strict() { PadIndex::new(nodes, entries) } else { PadIndex::default() };
+    let pads = if strict { PadIndex::new(nodes, entries, o) } else { PadIndex::default() };
     // Pass 1: the ribbon spans each run gives up.
     let spans1: Vec<Vec<(f64, f64, usize)>> = {
         let entries_r: &[Entry] = entries;
@@ -1812,6 +1863,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             let clear = reach * clamp(o.yield_clear_fraction, 0.0, 2.0);
             let probe_step = (0.75f64).max((2.0f64).min(half + 0.5));
             let mine = rank[ei];
+            let driveway = o.pavement_repairs && e.highway == "service" && e.walks.iter().all(|w| *w < o.min_sidewalk_width);
             let at = |s: f64| e.frame(s, false);
             let mut spans: Vec<(f64, f64, usize)> = vec![];
             let mut run_start = -1.0;
@@ -1822,7 +1874,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                 let f = at(p);
                 // (`walk_yield_strict`) a centreline crossing a junction's pad it
                 // is not an approach of gives that span up too (the pad draws it).
-                let id = covered_by(f.x, f.z, clear, mine, f.tx, f.tz).or_else(|| pads.on_pad(f.x, f.z, ei).then_some(usize::MAX));
+                let id = covered_by(f.x, f.z, clear, mine, f.tx, f.tz, driveway).or_else(|| pads.on_pad(f.x, f.z, ei).then_some(usize::MAX));
                 if id.is_some() && prev.is_none() {
                     run_start = p;
                 }
@@ -1851,7 +1903,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
                 for _ in 0..12 {
                     let mid = (a + b) / 2.0;
                     let f = at(mid);
-                    if (covered_by(f.x, f.z, clear, mine, f.tx, f.tz).is_some() || pads.on_pad(f.x, f.z, ei)) == want {
+                    if (covered_by(f.x, f.z, clear, mine, f.tx, f.tz, driveway).is_some() || pads.on_pad(f.x, f.z, ei)) == want {
                         b = mid;
                     } else {
                         a = mid;
@@ -1959,8 +2011,16 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             // both runs meet at, where the corner returns take over; two runs
             // that share no junction keep no such walk: it would lie on the
             // other's roadway at its own level, a slab over or under it.)
-            if !merging && rank[owner] > rank[me] && (!walk_yield_strict() || neighbours[me].contains(&owner)) {
-                let guard = se.half + se.walks[0].max(se.walks[1]) + 0.5;
+            let guard = se.half + se.walks[0].max(se.walks[1]) + 0.5;
+            if o.pavement_repairs {
+                if ow.driveway_owners[0] == Some(me) && ow.yield_spans.first().is_some_and(|sp| station < sp[1] + guard) {
+                    continue;
+                }
+                if ow.driveway_owners[1] == Some(me) && ow.yield_spans.last().is_some_and(|sp| station > sp[0] - guard) {
+                    continue;
+                }
+            }
+            if !merging && rank[owner] > rank[me] && (!strict || neighbours[me].contains(&owner)) {
                 if station < ow.trim_start + guard || station > ow.length - ow.trim_end - guard {
                     continue;
                 }

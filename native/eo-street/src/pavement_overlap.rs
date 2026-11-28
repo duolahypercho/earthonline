@@ -21,9 +21,12 @@ struct Span {
 }
 
 impl Span {
-    fn new(id: SpanId, frames: [Frame; 2], half: f64) -> Self {
+    fn new(id: SpanId, frames: [Frame; 2], clip_a: (f64, f64), clip_b: (f64, f64)) -> Option<Self> {
+        if clip_a.1 - clip_a.0 <= 1e-4 && clip_b.1 - clip_b.0 <= 1e-4 {
+            return None;
+        }
         let [a, b] = frames;
-        let corners = [a.at(-half), b.at(-half), b.at(half), a.at(half)];
+        let corners = [a.at(clip_a.0), b.at(clip_b.0), b.at(clip_b.1), a.at(clip_a.1)];
         let limits = [
             std::array::from_fn(|axis| {
                 corners
@@ -38,11 +41,11 @@ impl Span {
                     .fold(f64::NEG_INFINITY, f64::max)
             }),
         ];
-        Self {
+        Some(Self {
             id,
             corners,
             limits,
-        }
+        })
     }
 
     fn cells(&self) -> impl Iterator<Item = (i32, i32)> {
@@ -88,7 +91,14 @@ impl PavementOverlap {
                 if !keep {
                     continue;
                 }
-                let span = Span::new((ei, i), [g.stations[i], g.stations[i + 1]], e.half);
+                let Some(span) = Span::new(
+                    (ei, i),
+                    [g.stations[i], g.stations[i + 1]],
+                    g.clip(i, e.half),
+                    g.clip(i + 1, e.half),
+                ) else {
+                    continue;
+                };
                 candidates.clear();
                 for key in span.cells() {
                     if let Some(ids) = cells.get(&key) {
@@ -156,12 +166,18 @@ impl PavementOverlap {
             let [x, z] = g.stations[i].at(u);
             [x, g.pavement_y(&w.o, i, u, half), z].map(|v| v as f32)
         };
+        let ((cla, cha), (clb, chb)) = (g.clip(j, half), g.clip(j + 1, half));
         let cuts = self.cuts.entry(target).or_default();
         for band in g.section_offsets(&w.o, half).windows(2) {
-            let a = vertex(j, band[0]);
-            let b = vertex(j + 1, band[0]);
-            let c = vertex(j + 1, band[1]);
-            let d = vertex(j, band[1]);
+            let (a0, a1) = (band[0].clamp(cla, cha), band[1].clamp(cla, cha));
+            let (b0, b1) = (band[0].clamp(clb, chb), band[1].clamp(clb, chb));
+            if a1 - a0 <= 1e-4 && b1 - b0 <= 1e-4 {
+                continue;
+            }
+            let a = vertex(j, a0);
+            let b = vertex(j + 1, b0);
+            let c = vertex(j + 1, b1);
+            let d = vertex(j, a1);
             cuts.add_surface([a, b, c], below, above);
             cuts.add_surface([a, c, d], below, above);
         }

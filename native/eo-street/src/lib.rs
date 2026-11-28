@@ -721,8 +721,8 @@ impl StreetWorld {
             bike_dims: None,
             midblock: vec![],
         };
-        if plan::walk_yield_strict() {
-            w.pads = plan::PadIndex::new(&w.plan.nodes, &w.plan.entries);
+        if w.o.pavement_repairs && plan::walk_yield_strict() {
+            w.pads = plan::PadIndex::new(&w.plan.nodes, &w.plan.entries, &w.o);
         }
         if w.o.tapers {
             w.tapers = w.plan_tapers();
@@ -736,7 +736,7 @@ impl StreetWorld {
         w.rises_ok = w.check_rises();
         w.geoms = (0..w.plan.entries.len()).map(|ei| w.entry_geom(ei)).collect();
         if w.o.pavement_repairs { continuous::join(&w.plan, &w.city, &mut w.geoms); }
-        if seams::road_seams() {
+        if w.o.pavement_repairs && seams::road_seams() {
             w.mitre_joints();
             w.apply_seams();
             w.seam_walks();
@@ -797,6 +797,11 @@ impl StreetWorld {
     pub fn refresh_graded_pavement(&mut self) {
         if self.o.pavement_repairs {
             continuous::join(&self.plan, &self.city, &mut self.geoms);
+            if seams::road_seams() {
+                self.mitre_joints();
+                self.apply_seams();
+                self.seam_walks();
+            }
             self.divided_carriageways = self.index_divided_carriageways();
             self.fit_driveways();
             self.pavement_overlap = pavement_overlap::PavementOverlap::build(self);
@@ -808,6 +813,8 @@ impl StreetWorld {
         }
         self.surface_cache.get_mut().unwrap().clear();
         self.mesh_cache.get_mut().unwrap().clear();
+        self.drawn_cache.get_mut().unwrap().clear();
+        self.overlay_cache.get_mut().unwrap().clear();
     }
 
     pub fn ground(&self, x: f64, z: f64) -> f64 {
@@ -1626,6 +1633,8 @@ impl StreetWorld {
         self.paving_cache.get_mut().unwrap().clear();
         self.surface_cache.get_mut().unwrap().clear();
         self.mesh_cache.get_mut().unwrap().clear();
+        self.drawn_cache.get_mut().unwrap().clear();
+        self.overlay_cache.get_mut().unwrap().clear();
     }
 
     /// The near (full) street surface of one tile.
@@ -1633,6 +1642,8 @@ impl StreetWorld {
         let mut m = self.draw_tile(key, true);
         if self.o.pavement_repairs {
             self.finish_paving(key, &mut m);
+        } else {
+            m.edge_paving = Vec::new();
         }
         m
     }

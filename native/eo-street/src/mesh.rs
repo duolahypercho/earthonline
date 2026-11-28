@@ -191,9 +191,32 @@ pub struct TileMesh {
     /// above the gutter flow line, on a marking its across-the-line coordinate
     /// (0..1), else -1.
     pub kerb: Vec<f32>,
+    /// Temporary per-face flag marking `with_edges`-only hard paving (`wall_coping`,
+    /// `--bikeways` island caps) so `paving::PavingTile` stays identical between
+    /// `draw_tile(key, false)` and `draw_tile(key, true)` and never shifts ordinals.
+    /// Cleared before the tile enters `mesh_cache`.
+    pub(crate) edge_paving: Vec<bool>,
 }
 
 impl TileMesh {
+    pub(crate) fn mark_edge_paving(&mut self, from_face: usize) {
+        let len = self.layers.len();
+        if from_face >= len {
+            return;
+        }
+        if self.edge_paving.len() < len {
+            self.edge_paving.resize(len, false);
+        }
+        for flag in &mut self.edge_paving[from_face..len] {
+            *flag = true;
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is_edge_paving(&self, face: usize) -> bool {
+        self.edge_paving.get(face).copied().unwrap_or(false)
+    }
+
     pub(crate) fn open_roadways(&mut self, openings: &crate::road_openings::RoadOpenings) {
         if self.indices.is_empty() || openings.is_empty() { return; }
         let (lo, hi) = self.bounds();
@@ -210,12 +233,22 @@ impl TileMesh {
     pub(crate) fn clip_faces_with(&mut self, first: usize, mut clip: impl FnMut(usize, Layer, [[f32; 3]; 3]) -> Option<Vec<[crate::road_openings::Vertex; 3]>>) {
         let old = self.indices.split_off(first * 3);
         let layers = self.layers.split_off(first);
+        let old_edge = if self.edge_paving.len() > first {
+            self.edge_paving.split_off(first)
+        } else {
+            Vec::new()
+        };
         for (t, (face, layer)) in old.chunks_exact(3).zip(layers).enumerate() {
+            let is_edge = old_edge.get(t).copied().unwrap_or(false);
             let ids = [face[0], face[1], face[2]].map(|i| i as usize);
             let source = ids.map(|i| self.positions[i]);
             let Some(pieces) = clip(first+t, layer, source) else {
+                let face_idx = self.layers.len();
                 self.indices.extend_from_slice(face);
                 self.layers.push(layer);
+                if is_edge {
+                    self.mark_edge_paving(face_idx);
+                }
                 continue;
             };
             for triangle in pieces {
@@ -237,8 +270,12 @@ impl TileMesh {
                     self.colors.push(v.color(ids.map(|i| self.colors[i])));
                     self.kerb.push(v.interpolate(ids.map(|i| [self.kerb[i]]))[0]);
                 }
+                let face_idx = self.layers.len();
                 self.indices.extend_from_slice(&[k, k+1, k+2]);
                 self.layers.push(layer);
+                if is_edge {
+                    self.mark_edge_paving(face_idx);
+                }
             }
         }
     }
@@ -600,14 +637,17 @@ impl StreetWorld {
             // ground it holds, capped by a coping run back over that ground, and
             // closed behind down into it (not a bare face flush with the turf)
             let (a2, b2) = ([a[0] + a_out[0] * COPING_WIDTH_M, a[1] + a_out[1] * COPING_WIDTH_M], [b[0] + b_out[0] * COPING_WIDTH_M, b[1] + b_out[1] * COPING_WIDTH_M]);
-            let cope = wall_coping()
+            let cope = self.o.pavement_repairs
+                && wall_coping()
                 && (ta - ay).max(tb - by) > COPING_MIN_RISE_M
                 && !self.buildings.contains(a2[0], a2[1])
                 && !self.buildings.contains(b2[0], b2[1]);
             let (ca, cb) = if cope { (ta + COPING_UPSTAND_M, tb + COPING_UPSTAND_M) } else { (ta, tb) };
             m.quad(Layer::CurbFace, [p3(a, ay - RETAINING_TUCK_M), p3(b, by - RETAINING_TUCK_M), p3(b, cb), p3(a, ca)], [CURB_FACE(); 4], Some(inward));
             if cope {
+                let first_coping = m.layers.len();
                 m.quad(Layer::CurbTop, [p3(a, ca), p3(b, cb), p3(b2, cb), p3(a2, ca)], [CURB_TOP(); 4], None);
+                m.mark_edge_paving(first_coping);
                 let back = |p: [f64; 2], top: f64| (self.edge_ground(p[0], p[1]) - self.o.verge_undercut).min(top) - RETAINING_TUCK_M;
                 let out = [a_out[0] + b_out[0], a_out[1] + b_out[1]];
                 m.quad(Layer::CurbFace, [p3(a2, ca), p3(b2, cb), p3(b2, back(b2, cb)), p3(a2, back(a2, ca))], [CURB_FACE(); 4], Some(out));
@@ -652,7 +692,7 @@ impl StreetWorld {
         // another street's paving starting at the walk's edge is a face down
         // under that paving, not a sliver of verge lying over it.
         let span = |p: [f64; 2], f: [f64; 2]| (f[0] - p[0]).hypot(f[1] - p[1]);
-        if crate::ground::street_ground_on() && span(a, fa) < BANK_SLIVER_M && span(b, fb) < BANK_SLIVER_M {
+        if self.o.pavement_repairs && crate::ground::street_ground_on() && span(a, fa) < BANK_SLIVER_M && span(b, fb) < BANK_SLIVER_M {
             let face = [a_out[0] + b_out[0], a_out[1] + b_out[1]];
             m.quad(Layer::CurbFace, [p3(a, ay), p3(b, by), p3(b, fby.min(by) - RETAINING_TUCK_M), p3(a, fay.min(ay) - RETAINING_TUCK_M)], [CURB_FACE(); 4], Some(face));
             return;
@@ -1199,7 +1239,9 @@ impl StreetWorld {
                         let hgt = o.curb_face_height;
                         let top = |s: f64, u: f64| pt(s, u, hgt);
                         let base = |s: f64, u: f64| pt(s, u, 0.0);
+                        let first_island = m.layers.len();
                         m.quad(Layer::CurbTop, [top(s0, u_in), top(s1, u_in), top(s1, u_out), top(s0, u_out)], [CURB_TOP(); 4], None);
+                        m.mark_edge_paving(first_island);
                         let nrm = [a.nx, a.nz];
                         for (u, out) in [(u_in, -1.0), (u_out, 1.0)] {
                             m.quad_kerb_face(Layer::CurbFace, [base(s0, u), base(s1, u), top(s1, u), top(s0, u)], [CURB_FACE(); 4], Some([nrm[0] * out, nrm[1] * out]), [0.0, 0.0, hgt as f32, hgt as f32]);
@@ -1454,7 +1496,7 @@ impl StreetWorld {
             }
             // The corner path from this approach to the next (interior stations: the kerb line).
             let path = &node.paths[i];
-            let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1);
+            let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1, false);
             let last = path.stations.len().saturating_sub(1);
             for (k, st) in path.stations.iter().enumerate() {
                 if k == 0 || k == last {
@@ -1488,6 +1530,19 @@ impl StreetWorld {
         (vertex(center), rim.into_iter().map(vertex).collect(), triangles)
     }
 
+    fn node_junction_ground(&self, node: &Node, ends: &[(Frame, f64)]) -> bool {
+        if !self.o.pavement_repairs || !junction_ground() {
+            return false;
+        }
+        // Surveyed bridge/rail crossings (e.g. Mariposa over the rail cut) carry measured
+        // elevations that intentionally sit above the bare-earth DEM; do not bend their pads
+        // or corner returns down toward the bare-earth terrain.
+        !node.approaches.iter().zip(ends).any(|(a, (f, _))| {
+            let terrain = self.ground(f.x, f.z) + self.o.road_lift;
+            self.surveyed_datum(&self.plan.entries[a.entry], [f.x, f.z], terrain).is_some()
+        })
+    }
+
     pub(crate) fn emit_node(&self, m: &mut TileMesh, ni: usize, with_edges: bool) {
         let o = &self.o;
         let node: &Node = &self.plan.nodes[ni];
@@ -1498,11 +1553,12 @@ impl StreetWorld {
         let ends: Vec<(Frame, f64)> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
         // (`seams`) a slip road merging alongside a through leg (`plan::Approach::merge_trim`)
         // is drawn by its own ribbon: no mouth in the pad, no corner either side of it.
-        let merge: Vec<bool> = node.approaches.iter().map(|a| a.merge_trim.is_some() && crate::seams::road_seams()).collect();
+        let merge: Vec<bool> = node.approaches.iter().map(|a| a.merge_trim.is_some() && o.pavement_repairs && crate::seams::road_seams()).collect();
+        let use_jg = self.node_junction_ground(node, &ends);
         let pad = PAD();
-        if junction_ground() {
+        if use_jg {
             // --- the pad: one ring round the node, fanned from its centre. -------
-            let ring = self.pad_ring(node, &ends, &merge);
+            let ring = self.pad_ring(node, &ends, &merge, use_jg);
             let mean_half = node.approaches.iter().map(|a| a.half).sum::<f64>() / n as f64;
             // the fan subdivided every JUNCTION_GROUND_STEP_M along each spoke,
             // each point on the ground (+ road lift) plus an offset blended from
@@ -1522,7 +1578,7 @@ impl StreetWorld {
                 Some(k) => k,
                 None => {
                     if self.emit_pad_clipped(m, &ring, &off, lift, pad) {
-                        return self.emit_node_rest(m, ni, &ends, &merge, with_edges);
+                        return self.emit_node_rest(m, ni, &ends, &merge, use_jg, with_edges);
                     }
                     node.position
                 }
@@ -1563,11 +1619,11 @@ impl StreetWorld {
                 m.tri(Layer::Carriageway, [a, c, b], [pad; 3]);
             }
         }
-        self.emit_node_rest(m, ni, &ends, &merge, with_edges);
+        self.emit_node_rest(m, ni, &ends, &merge, use_jg, with_edges);
     }
 
     /// A node's corner returns and paint (after its pad).
-    fn emit_node_rest(&self, m: &mut TileMesh, ni: usize, ends: &[(Frame, f64)], merge: &[bool], with_edges: bool) {
+    fn emit_node_rest(&self, m: &mut TileMesh, ni: usize, ends: &[(Frame, f64)], merge: &[bool], use_jg: bool, with_edges: bool) {
         let o = &self.o;
         let node: &Node = &self.plan.nodes[ni];
         let merge_path = |p: &crate::plan::CornerPath| merge.get(p.a).copied().unwrap_or(false) || merge.get(p.b).copied().unwrap_or(false);
@@ -1579,7 +1635,7 @@ impl StreetWorld {
                 || (datum - (self.ground(f.x, f.z) + o.road_lift)).abs() > RAISED_M
         });
         for path in node.paths.iter().filter(|p| !merge_path(p)) {
-            let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1);
+            let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1, use_jg);
             let st = &path.stations;
             let reach_full = o.curb_top_width + o.ramp_run;
             let deps: Vec<f64> = st
@@ -1719,7 +1775,7 @@ impl StreetWorld {
     /// A node's pad ring: each approach's mouth section (a merging slip's
     /// none), then the corner path to the next (its interior stations, the
     /// kerb line), with their heights.
-    fn pad_ring(&self, node: &Node, ends: &[(Frame, f64)], merge: &[bool]) -> Vec<([f64; 2], f64)> {
+    fn pad_ring(&self, node: &Node, ends: &[(Frame, f64)], merge: &[bool], use_jg: bool) -> Vec<([f64; 2], f64)> {
         let o = &self.o;
         let mut ring: Vec<([f64; 2], f64)> = vec![];
         for (i, app) in node.approaches.iter().enumerate() {
@@ -1734,7 +1790,7 @@ impl StreetWorld {
             if merge.get(path.a).copied().unwrap_or(false) || merge.get(path.b).copied().unwrap_or(false) {
                 continue;
             }
-            let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1);
+            let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1, use_jg);
             let last = path.stations.len().saturating_sub(1);
             for (k, st) in path.stations.iter().enumerate() {
                 if k == 0 || k == last {
@@ -1814,8 +1870,9 @@ impl StreetWorld {
             return (0, 0);
         }
         let ends: Vec<(Frame, f64)> = node.approaches.iter().map(|a| self.approach_datum(a)).collect();
-        let merge: Vec<bool> = node.approaches.iter().map(|a| a.merge_trim.is_some() && crate::seams::road_seams()).collect();
-        let ring = self.pad_ring(node, &ends, &merge);
+        let merge: Vec<bool> = node.approaches.iter().map(|a| a.merge_trim.is_some() && self.o.pavement_repairs && crate::seams::road_seams()).collect();
+        let use_jg = self.node_junction_ground(node, &ends);
+        let ring = self.pad_ring(node, &ends, &merge, use_jg);
         let a = node.position;
         let cross: Vec<f64> = (0..ring.len()).map(|k| { let (p, q) = (ring[k].0, ring[(k + 1) % ring.len()].0); (p[0] - a[0]) * (q[1] - a[1]) - (p[1] - a[1]) * (q[0] - a[0]) }).filter(|c| c.abs() > 1e-6).collect();
         let pos = cross.iter().filter(|&&c| c > 0.0).count();
@@ -1823,7 +1880,7 @@ impl StreetWorld {
         let folded = pos.min(neg);
         // (with `junction_ground`: none where the ring has a kernel (the fan
         // from its centroid) or ear-clips; the fan from the node else)
-        if folded > 0 && junction_ground() {
+        if folded > 0 && use_jg {
             let lift = self.o.road_lift;
             let off: Vec<f64> = ring.iter().map(|(p, y)| y - (self.pad_ground(p[0], p[1]) + lift)).collect();
             if Self::ring_kernel(&ring).is_some() || self.emit_pad_clipped(&mut TileMesh::default(), &ring, &off, lift, PAD()) {
@@ -1836,13 +1893,13 @@ impl StreetWorld {
     /// One datum per corner station, blended by chord length from A's to B's
     /// (with `junction_ground`, the ground at the station plus the road lift
     /// and that blend's offset from it, so a long corner follows its slope).
-    fn path_datums(&self, st: &[CurbStation], da: f64, db: f64) -> Vec<f64> {
+    fn path_datums(&self, st: &[CurbStation], da: f64, db: f64, use_jg: bool) -> Vec<f64> {
         let mut cum = vec![0.0];
         for k in 1..st.len() {
             cum.push(cum[k - 1] + ((st[k].x - st[k - 1].x).powi(2) + (st[k].z - st[k - 1].z).powi(2)).sqrt());
         }
         let total = cum.last().copied().unwrap_or(0.0).max(1e-9);
-        if junction_ground() && st.len() >= 2 {
+        if use_jg && st.len() >= 2 {
             let g = |k: usize| self.pad_ground(st[k].x, st[k].z) + self.o.road_lift;
             let (oa, ob) = (da - g(0), db - g(st.len() - 1));
             return cum.iter().enumerate().map(|(k, c)| g(k) + oa + (ob - oa) * c / total).collect();
@@ -2095,7 +2152,7 @@ impl StreetWorld {
         let node = &self.plan.nodes[ni];
         let mut ring: Vec<([f64; 2], f64)> = vec![];
         let mut sum = 0.0;
-        for app in node.approaches.iter().filter(|a| !(a.merge_trim.is_some() && crate::seams::road_seams())) {
+        for app in node.approaches.iter().filter(|a| !(a.merge_trim.is_some() && o.pavement_repairs && crate::seams::road_seams())) {
             let (f, d) = self.approach_datum(app);
             let s = if app.at_start { 1.0 } else { -1.0 };
             ring.push((f.at(-s * app.half), d));

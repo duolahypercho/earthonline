@@ -109,7 +109,10 @@ impl PavingTile {
     fn build(mesh: &TileMesh) -> Self {
         let mut tile = Self::default();
         let mut ordinal = 0;
-        for (face, &layer) in mesh.indices.chunks_exact(3).zip(&mesh.layers) {
+        for (face_id, (face, &layer)) in mesh.indices.chunks_exact(3).zip(&mesh.layers).enumerate() {
+            if mesh.is_edge_paving(face_id) {
+                continue;
+            }
             let Some(kind) = Surface::of(mesh, layer, face[0]) else {
                 continue;
             };
@@ -252,7 +255,8 @@ impl StreetWorld {
             let Some(kind) = Surface::of(mesh, layer, ids[0]) else {
                 continue;
             };
-            if kind != Surface::Bank {
+            let edge_paving = mesh.is_edge_paving(face);
+            if kind != Surface::Bank && !edge_paving {
                 ordinal += 1;
             }
             if kind == Surface::Road {
@@ -261,13 +265,14 @@ impl StreetWorld {
             let triangle = [ids[0], ids[1], ids[2]].map(|i| mesh.positions[i as usize]);
             targets.push(Target {
                 face,
-                ordinal,
+                ordinal: if edge_paving { usize::MAX } else { ordinal },
                 kind,
                 triangle,
                 bounds: Bounds::of(&triangle),
             });
         }
         if targets.is_empty() {
+            mesh.edge_paving = Vec::new();
             return;
         }
         let mut cuts = HashMap::new();
@@ -303,6 +308,7 @@ impl StreetWorld {
                 )
             });
         }
+        mesh.edge_paving = Vec::new();
     }
     /// Register all tiles that a span's finished paving can reach. Derived
     /// from the same surveyed width and frontage limit as the street builder.
