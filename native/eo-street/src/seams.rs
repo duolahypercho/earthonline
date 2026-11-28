@@ -169,49 +169,66 @@ impl StreetWorld {
         // two runs meeting end to end meet at one datum: each moved runs its
         // own move, so a joint between a moved run and the next stood a step.
         // Both ends go to their mean (or to the held one), the difference
-        // faded back along each over `SEAM_BLEND_M`.
-        for ei in 0..self.plan.entries.len() {
-            for k in 0..2 {
-                let Some((oi, o_start)) = self.joints[ei][k] else { continue };
-                if oi < ei {
-                    continue;
-                }
-                let ko = if o_start { 0 } else { 1 };
-                let last = |g: &EntryGeom, k: usize| if k == 0 { 0 } else { g.stations.len() - 1 };
-                let (ia, ib) = (last(&self.geoms[ei], k), last(&self.geoms[oi], ko));
-                let (da, db) = (self.geoms[ei].datums[ia], self.geoms[oi].datums[ib]);
-                if (da - db).abs() < 1e-4 {
-                    continue;
-                }
-                // (a stub raised or lowered to a structure, `joins`, is never moved: its end meets the deck)
-                let stub = |r: usize| {
-                    let e = &self.plan.entries[r];
-                    e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty()
-                };
-                let held = |r: usize, i: usize| stub(r) || pinned[r].get(i).copied().unwrap_or(false);
-                let mid = match (held(ei, ia), held(oi, ib)) {
-                    (true, true) => continue,
-                    (true, false) => da,
-                    (false, true) => db,
-                    (false, false) => (da + db) / 2.0,
-                };
-                for (r, end, i) in [(ei, k, ia), (oi, ko, ib)] {
-                    let diff = mid - self.geoms[r].datums[i];
-                    if diff.abs() < 1e-6 || stub(r) {
+        // faded back along each over `SEAM_BLEND_M`. Repeat until chains of
+        // short runs settle so blending one joint does not open the previous.
+        for _pass in 0..16 {
+            let mut moved = false;
+            for ei in 0..self.plan.entries.len() {
+                for k in 0..2 {
+                    let Some((oi, o_start)) = self.joints[ei][k] else { continue };
+                    if oi < ei {
                         continue;
                     }
-                    let g = &mut self.geoms[r];
-                    let s_end = g.stations[i].s;
-                    for j in 0..g.stations.len() {
-                        if pinned[r].get(j).copied().unwrap_or(false) {
+                    let ko = if o_start { 0 } else { 1 };
+                    let last = |g: &EntryGeom, k: usize| if k == 0 { 0 } else { g.stations.len() - 1 };
+                    let (ia, ib) = (last(&self.geoms[ei], k), last(&self.geoms[oi], ko));
+                    let (da, db) = (self.geoms[ei].datums[ia], self.geoms[oi].datums[ib]);
+                    if (da - db).abs() < 1e-4 {
+                        continue;
+                    }
+                    // (a stub raised or lowered to a structure, `joins`, is never moved: its end meets the deck)
+                    let stub = |r: usize| {
+                        let e = &self.plan.entries[r];
+                        e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty()
+                    };
+                    let held = |r: usize, i: usize| stub(r) || pinned[r].get(i).copied().unwrap_or(false);
+                    let both_pinned = !stub(ei)
+                        && !stub(oi)
+                        && pinned[ei].get(ia).copied().unwrap_or(false)
+                        && pinned[oi].get(ib).copied().unwrap_or(false);
+                    let mid = match (held(ei, ia), held(oi, ib)) {
+                        (true, true) => {
+                            if !both_pinned {
+                                continue;
+                            }
+                            (da + db) / 2.0
+                        }
+                        (true, false) => da,
+                        (false, true) => db,
+                        (false, false) => (da + db) / 2.0,
+                    };
+                    for (r, end, i) in [(ei, k, ia), (oi, ko, ib)] {
+                        let diff = mid - self.geoms[r].datums[i];
+                        if diff.abs() < 1e-6 || stub(r) {
                             continue;
                         }
-                        let dist = if end == 0 { g.stations[j].s - s_end } else { s_end - g.stations[j].s };
-                        let w = (1.0 - dist.abs() / SEAM_BLEND_M).max(0.0);
-                        g.datums[j] += diff * w;
+                        let g = &mut self.geoms[r];
+                        let s_end = g.stations[i].s;
+                        for j in 0..g.stations.len() {
+                            if !both_pinned && pinned[r].get(j).copied().unwrap_or(false) {
+                                continue;
+                            }
+                            let dist = if end == 0 { g.stations[j].s - s_end } else { s_end - g.stations[j].s };
+                            let w = (1.0 - dist.abs() / SEAM_BLEND_M).max(0.0);
+                            g.datums[j] += diff * w;
+                        }
+                        g.seamed = true;
+                        moved = true;
                     }
-                    g.seamed = true;
                 }
+            }
+            if !moved {
+                break;
             }
         }
     }

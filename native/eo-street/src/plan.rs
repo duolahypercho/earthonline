@@ -1668,18 +1668,7 @@ impl PadIndex {
 
     /// (x, z) lies on the drawn pad ring of a junction run `me` is not an approach of.
     fn on_pad(&self, x: f64, z: f64, me: usize) -> bool {
-        let Some(list) = self.cells.get(&((x / PAD_CELL_M).floor() as i64, (z / PAD_CELL_M).floor() as i64)) else { return false };
-        list.iter().any(|&k| {
-            let (h, ring, apps, _) = &self.hulls[k];
-            !apps.contains(&me)
-                && (0..h.len()).all(|i| {
-                    let (a, b) = (h[i], h[(i + 1) % h.len()]);
-                    let (ex, ez) = (b[0] - a[0], b[1] - a[1]);
-                    let l = hypot(ex, ez).max(1e-9);
-                    (ex * (z - a[1]) - ez * (x - a[0])) / l >= PAD_SHRINK_M
-                })
-                && pad_point_in_ring(x, z, ring)
-        })
+        self.find(x, z, |apps, _| !apps.contains(&me))
     }
 
     /// (x, z) lies on the pad of a junction other than node `ni` (a corner
@@ -1703,7 +1692,7 @@ impl PadIndex {
     fn find_by(&self, x: f64, z: f64, shrink: f64, keep: impl Fn(&[usize], usize) -> bool) -> bool {
         let Some(list) = self.cells.get(&((x / PAD_CELL_M).floor() as i64, (z / PAD_CELL_M).floor() as i64)) else { return false };
         list.iter().any(|&k| {
-            let (h, _, apps, n) = &self.hulls[k];
+            let (h, ring, apps, n) = &self.hulls[k];
             keep(apps, *n)
                 && (0..h.len()).all(|i| {
                     let (a, b) = (h[i], h[(i + 1) % h.len()]);
@@ -1711,6 +1700,7 @@ impl PadIndex {
                     let l = hypot(ex, ez).max(1e-9);
                     (ex * (z - a[1]) - ez * (x - a[0])) / l >= shrink
                 })
+                && pad_point_in_ring(x, z, ring)
         })
     }
 }
@@ -2259,13 +2249,31 @@ fn chord_path(position: P2, a: &Approach, b: &Approach, o: &StreetOptions, start
     let mut stations = vec![];
     for i in 0..knots.len() - 1 {
         let (ka, kb) = (knots[i], knots[i + 1]);
+        let (mut ka_out, mut kb_out) = (ka.out, kb.out);
+        if o.pavement_repairs {
+            // Where one end of an acute junction chord faces back across the chord into
+            // the roadway (e.g. a walkless alley meeting a through street), blending to it
+            // swings the outward normal into the pad; hold that end on the chord's outward normal.
+            let (dx, dz) = (kb.x - ka.x, kb.z - ka.z);
+            let len = hypot(dx, dz);
+            if len > 1e-6 {
+                let chord_out = [dz / len, -dx / len];
+                let da = ka_out[0] * chord_out[0] + ka_out[1] * chord_out[1];
+                let db = kb_out[0] * chord_out[0] + kb_out[1] * chord_out[1];
+                if da > 0.0 && db < 0.0 && kb.walk < o.min_sidewalk_width {
+                    kb_out = chord_out;
+                } else if db > 0.0 && da < 0.0 && ka.walk < o.min_sidewalk_width {
+                    ka_out = chord_out;
+                }
+            }
+        }
         let steps = clamp((hypot(kb.x - ka.x, kb.z - ka.z) / 2.0).ceil(), 1.0, 16.0) as usize;
         for k in 1..=steps {
             if i == knots.len() - 2 && k == steps {
                 break;
             }
             let t = k as f64 / steps as f64;
-            let (mut ox, mut oz) = (ka.out[0] + (kb.out[0] - ka.out[0]) * t, ka.out[1] + (kb.out[1] - ka.out[1]) * t);
+            let (mut ox, mut oz) = (ka_out[0] + (kb_out[0] - ka_out[0]) * t, ka_out[1] + (kb_out[1] - ka_out[1]) * t);
             let ol = hypot(ox, oz);
             if ol < 1e-6 {
                 continue;

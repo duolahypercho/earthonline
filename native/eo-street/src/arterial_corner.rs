@@ -306,6 +306,7 @@ impl StreetWorld {
         match self.city.segments[self.plan.entries[entry].road].street_id.as_deref()? {
             "sf-street-25337673" => Some("sf-street-119237657"), // Mission at the US 101 exit
             "sf-street-204965181" => Some("sf-street-87554961"), // Market at Octavia
+            "sf-street-28596015" => Some("sf-street-28596014"), // Central Freeway at Market
             _ => None,
         }
     }

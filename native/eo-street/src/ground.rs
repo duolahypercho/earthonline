@@ -426,17 +426,48 @@ impl StreetWorld {
                 // the walk on the point's own side (plan frames: walks[0] on
                 // the normal (-dz, dx), walks[1] opposite), not the wider of the two:
                 // a street with a wide walk on one side only does not hold the
-                // open ground down on the other.
+                // open ground down on the other; yielded or seamed-away walks and
+                // carriageways do not hold open ground down either.
+                let station = e.cum[crate::seg_index(e, a)] + t * len2.sqrt();
+                if e.in_yield_span(station) {
+                    continue;
+                }
                 let side = (x - px) * -dz + (z - pz) * dx;
-                let walk = if side >= 0.0 { e.walks[0] } else { e.walks[1] };
-                let reach = e.half + walk;
+                let k_side = if side >= 0.0 { 0 } else { 1 };
+                let mut half_reach = e.half;
+                let mut walk = if e.walk_yield_spans[k_side].iter().any(|sp| station >= sp[0] && station <= sp[1]) {
+                    0.0
+                } else {
+                    e.walks[k_side]
+                };
+                if let Some(g) = self.geoms.get(ei as usize) {
+                    if g.stations.len() >= 2 {
+                        let (lo, hi) = g.clip_at(station, e.half);
+                        if hi - lo < 1e-3 {
+                            continue;
+                        }
+                        let clipped_side = if k_side == 0 {
+                            half_reach = hi.max(0.0);
+                            hi < e.half - 1e-3
+                        } else {
+                            half_reach = (-lo).max(0.0);
+                            lo > -e.half + 1e-3
+                        };
+                        if clipped_side {
+                            walk = 0.0;
+                        } else if walk > 0.0 && !g.walk_w[k_side].is_empty() {
+                            let kk = g.stations.partition_point(|f| f.s <= station).clamp(1, g.stations.len() - 1);
+                            walk = g.walk_at(k_side, kk - 1, walk).max(g.walk_at(k_side, kk, walk));
+                        }
+                    }
+                }
+                let reach = half_reach + walk;
                 let dist = ((x - px).powi(2) + (z - pz).powi(2)).sqrt();
                 if dist > reach + margin || end_cap {
                     // past the walk: the cut slope from its back edge (`cut_slopes`)
                     if cut && dist <= reach + CUT_BAND_M {
-                        let station = e.cum[crate::seg_index(e, a)] + t * len2.sqrt();
                         if let Some(d) = self.geoms.get(ei as usize).and_then(|g| self.datum_at_station(g, station)) {
-                            let edge = if walk > 0.0 { self.o.sidewalk_surface_y(d, reach, e.half) } else { self.o.cross_section_y(d, e.half, e.half) };
+                            let edge = if walk > 0.0 { self.o.sidewalk_surface_y(d, reach, e.half) } else { self.o.cross_section_y(d, half_reach, e.half) };
                             let over = (real.get_or_insert_with(|| self.terrain.grid.ground(x, z) + self.terrain.carpet_lift).to_owned() - edge - CUT_SLOPE * CUT_BAND_M).max(0.0);
                             let y = edge + CUT_SLOPE * (dist - reach - SNAP_PROBE_M).max(0.0) + over;
                             cap = Some(cap.map_or(y, |c: f64| c.min(y)));
@@ -448,7 +479,7 @@ impl StreetWorld {
                 // a stub raised or lowered to a structure (`joins`), a run moved to meet
                 // a busier one's surface (`seams`): its drawn datum.
                 if e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty() || self.geoms.get(ei as usize).is_some_and(|g| g.seamed) {
-                    if let Some(d) = self.geoms.get(ei as usize).and_then(|g| self.datum_at_station(g, e.cum[crate::seg_index(e, a)] + t * len2.sqrt())) {
+                    if let Some(d) = self.geoms.get(ei as usize).and_then(|g| self.datum_at_station(g, station)) {
                         y = y.min(d + lift);
                     }
                 }
@@ -779,6 +810,10 @@ impl StreetWorld {
             }
             let pts: Vec<[f64; 2]> = members.iter().map(|&k| { let (x, z) = at(i0 + (k % we) as i64 - wr, j0 + (k / we) as i64 - wr); [x, z] }).collect();
             let Some(outline) = self.island_outline(&pts) else { continue };
+            let tris = triangulate(&outline);
+            if tris.len() + 2 != outline.len() {
+                continue;
+            }
             traced[id] = true;
             // the owner: the tile holding the island's lowest lattice index (the same in every tile)
             let first = members.iter().map(|&k| (j0 + (k / we) as i64 - wr, i0 + (k % we) as i64 - wr)).min().unwrap();
@@ -787,7 +822,7 @@ impl StreetWorld {
                 continue;
             }
             let y = |p: [f64; 2]| island_y(id, p[0], p[1]);
-            for t in triangulate(&outline) {
+            for t in tris {
                 island_tris.push(t.map(|p| [p[0], y(p), p[1]]));
             }
             let n = outline.len();
@@ -815,6 +850,7 @@ impl StreetWorld {
         // each vertex: under the paving, snapped to its edge, or free
         let mut pos = vec![[0.0f64; 3]; ge * ge];
         let mut under = vec![false; ge * ge];
+        let mut was_under = vec![false; ge * ge];
         // the vertices standing on the open survey itself (not held by a
         // street, a building or the paving's edge): shaded as the terrain is
         let mut natural = vec![false; ge * ge];
@@ -855,11 +891,11 @@ impl StreetWorld {
                         for _ in 0..SNAP_ITERATIONS {
                             let t = 0.5 * (lo + hi);
                             match self.low_paving(x + (nx - x) * t, z + (nz - z) * t) {
-                                Some(p) => {
+                                Some(p) if (p - here).abs() < SLIVER_STEP_M => {
                                     lo = t;
                                     ph = p;
                                 }
-                                None => hi = t,
+                                _ => hi = t,
                             }
                         }
                         if best.is_none_or(|(bt, _)| lo < bt) {
@@ -868,6 +904,7 @@ impl StreetWorld {
                     }
                     if let Some((_, p)) = best {
                         pos[k] = p;
+                        was_under[k] = true;
                         continue;
                     }
                     under[k] = true;
@@ -966,11 +1003,11 @@ impl StreetWorld {
                     for _ in 0..SNAP_ITERATIONS {
                         let t = 0.5 * (lo + hi);
                         match self.low_paving(x + (nx - x) * t, z + (nz - z) * t) {
-                            Some(p) => {
+                            Some(p) if (p - here).abs() < SLIVER_STEP_M => {
                                 lo = t;
                                 ph = p;
                             }
-                            None => hi = t,
+                            _ => hi = t,
                         }
                     }
                     if best.is_none_or(|(bt, _)| lo < bt) {
@@ -982,6 +1019,7 @@ impl StreetWorld {
             .collect();
         for (k, p) in snapped_under {
             under[k] = false;
+            was_under[k] = true;
             pos[k] = p;
         }
         let gcell = ge - 1;
@@ -1076,6 +1114,19 @@ impl StreetWorld {
                     // plan area (x, z), negative the lattice's own winding
                     if u[0] * v[2] - u[2] * v[0] > -MIN_TRI_AREA2 {
                         continue;
+                    }
+                    // a snapped sliver triangle spanning across a narrow carriageway or
+                    // driveway must never poke up through the paving it crosses
+                    if !gap[j * gcell + i][t] && tri.iter().any(|&(a, b)| was_under[b * ge + a]) {
+                        let pokes = GAP_SAMPLES.iter().any(|bc| {
+                            let px = bc[0] * p0[0] + bc[1] * p1[0] + bc[2] * p2[0];
+                            let py = bc[0] * p0[1] + bc[1] * p1[1] + bc[2] * p2[1];
+                            let pz = bc[0] * p0[2] + bc[1] * p1[2] + bc[2] * p2[2];
+                            self.low_paving(px, pz).is_some_and(|p| py > p + 0.01)
+                        });
+                        if pokes {
+                            continue;
+                        }
                     }
                     drawable[j * gcell + i][t] = true;
                     // the face normal (area weighted), up
