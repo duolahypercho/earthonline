@@ -2234,6 +2234,109 @@ pub struct BuiltTower {
     pub lights: Vec<LandmarkLight>,
 }
 
+/// Emit a deeply recessed 3D ground-floor colonnade / lobby arcade in Near for tall skyline
+/// towers (`h >= 50 m`), restoring authentic street-level depth along downtown canyons
+/// (e.g. California St) in both `--play` and default `medium` while keeping `Role::Far` untouched.
+fn emit_ground_arcade(ms: &mut TowerMeshes, near_ring: &[[f64; 2]], y0: f64, base: f64, y_lobby: f64, stone: Rgb) {
+    let pts = orient_ring(near_ring);
+    let n = pts.len();
+    if n < 3 || y_lobby <= base + 3.0 {
+        return;
+    }
+    let area2 = |r: &[[f64; 2]]| -> f64 {
+        let mut s = 0.0;
+        for i in 0..r.len() {
+            let (a, b) = (r[i], r[(i + 1) % r.len()]);
+            s += a[0] * b[1] - b[0] * a[1];
+        }
+        s
+    };
+    let orig_a = area2(&pts);
+    let inset_cand = offset_ring_out(&pts, -2.1);
+    let cand_a = area2(&inset_cand);
+    let valid_inset = orig_a.abs() > 1.0
+        && cand_a.signum() == orig_a.signum()
+        && cand_a.abs() >= orig_a.abs() * 0.35
+        && (0..inset_cand.len()).all(|i| {
+            let (a, b) = (inset_cand[i], inset_cand[(i + 1) % inset_cand.len()]);
+            (b[0] - a[0]).hypot(b[1] - a[1]) > 0.35
+        });
+    let lobby_ring = if valid_inset { inset_cand } else { scale_about(&pts, ring_centroid(&pts), 0.86) };
+
+    // 1. Overhanging transfer lintel band + deeply shadowed arcade ceiling soffit.
+    let lintel_c = stone.map(|v| (v * 0.96).clamp(0.06, 0.86));
+    let soffit_c = stone.map(|v| (v * 0.30).clamp(0.02, 0.28));
+    let lip = offset_ring_out(&pts, 0.16);
+    walls(&mut ms.roof_near, &lip, y_lobby - 0.58, y_lobby + 0.24, lintel_c);
+    soffit_cap(&mut ms.roof_near, &lip, y_lobby - 0.58, soffit_c);
+
+    // 2. Deeply recessed dark architectural lobby storefront glazing + anodized transom, mullions & kickplate.
+    let glass_c: Rgb = [0.052, 0.060, 0.068];
+    let mull_c: Rgb = [0.11, 0.112, 0.116];
+    let kick_y = (base + 0.46).min(y_lobby - 2.2);
+    let trans_y = (y_lobby - 1.65).max(kick_y + 1.4);
+    let mid_y = (kick_y + trans_y) * 0.5;
+    walls(&mut ms.roof_near, &lobby_ring, y0, kick_y, stone.map(|v| v * 0.62));
+    walls(&mut ms.glass_near, &lobby_ring, kick_y, y_lobby - 0.48, glass_c);
+    let trans_ring = offset_ring_out(&lobby_ring, 0.07);
+    walls(&mut ms.metal_near, &trans_ring, trans_y - 0.11, trans_y + 0.11, mull_c);
+    walls(&mut ms.metal_near, &trans_ring, mid_y - 0.045, mid_y + 0.045, mull_c);
+    // Vertical anodized storefront mullions along the recessed lobby glazing (lean budget: capped per edge).
+    let ln = lobby_ring.len();
+    for i in 0..ln {
+        let (p, q) = (lobby_ring[i], lobby_ring[(i + 1) % ln]);
+        let (dx, dz) = (q[0] - p[0], q[1] - p[1]);
+        let len = dx.hypot(dz);
+        if len < 3.0 {
+            continue;
+        }
+        let (nx, nz) = (-dz / len, dx / len);
+        let yaw = dz.atan2(dx);
+        let bays = ((len / 2.8).round() as usize).clamp(2, 12);
+        for k in 1..bays {
+            let frac = k as f64 / bays as f64;
+            let mx = p[0] + dx * frac + nx * 0.05;
+            let mz = p[1] + dz * frac + nz * 0.05;
+            ms.metal_near.box_(mx, mz, kick_y, y_lobby - 0.48, 0.06, 0.09, yaw, mull_c, crate::geometry::Faces { top: false, bottom: false });
+        }
+    }
+
+    // 3. Sturdy 3D perimeter granite colonnade piers (spaced cleanly around the arcade perimeter,
+    //    skipping tight consecutive polygon vertices on circular/chamfered plans).
+    let pier_c = stone.map(|v| (v * 0.92).clamp(0.06, 0.84));
+    let mut last_pier: Option<[f64; 2]> = None;
+    let mut place_pier = |px: f64, pz: f64, yaw: f64, w: f64, d: f64| {
+        if let Some(prev) = last_pier {
+            if (px - prev[0]).hypot(pz - prev[1]) < 2.6 {
+                return;
+            }
+        }
+        last_pier = Some([px, pz]);
+        ms.roof_near.box_(px, pz, y0, y_lobby - 0.50, w * 0.5, d * 0.5, yaw, pier_c, crate::geometry::Faces { top: false, bottom: false });
+    };
+    for i in 0..n {
+        let (p, q) = (pts[i], pts[(i + 1) % n]);
+        let (dx, dz) = (q[0] - p[0], q[1] - p[1]);
+        let len = dx.hypot(dz);
+        if len < 0.5 {
+            continue;
+        }
+        let (nx, nz) = (-dz / len, dx / len);
+        let yaw = dz.atan2(dx);
+        // Corner pier pulled slightly inward so its outer face aligns flush with the shaft above.
+        place_pier(p[0] - nx * 0.45, p[1] - nz * 0.45, yaw, 1.08, 0.96);
+        if len > 7.2 {
+            let spans = ((len / 6.2).round() as usize).clamp(2, 7);
+            for k in 1..spans {
+                let frac = k as f64 / spans as f64;
+                let px = p[0] + dx * frac - nx * 0.42;
+                let pz = p[1] + dz * frac - nz * 0.42;
+                place_pier(px, pz, yaw, 0.88, 0.84);
+            }
+        }
+    }
+}
+
 /// Build one entry on its footprint record (`points`, unscaled) and ground
 /// sampler (`ground_at`, the drawn ground of its scaled site at real-site coordinates).
 pub fn build_tower(e: &Entry, points: &[f64], ground_at: &dyn Fn(f64, f64) -> f64) -> Option<BuiltTower> {
@@ -2258,7 +2361,7 @@ pub fn build_tower(e: &Entry, points: &[f64], ground_at: &dyn Fn(f64, f64) -> f6
     // Primary tier stack. The foot stands 0.5 m into the ground (a sloping street never shows under it).
     let mut y_prev = base - 0.5;
     let mut plans: Vec<(Vec<[f64; 2]>, Vec<[f64; 2]>, f64, f64)> = Vec::new();
-    for t in &e.tiers {
+    for (t_idx, t) in e.tiers.iter().enumerate() {
         let (near_plan, far_plan) = tier_rings(&ring, &frame, t);
         if near_plan.len() < 3 {
             continue;
@@ -2267,7 +2370,16 @@ pub fn build_tower(e: &Entry, points: &[f64], ground_at: &dyn Fn(f64, f64) -> f6
         let t_style = t.facade.as_deref().unwrap_or(&e.facade);
         let t_stone = t.stone_srgb.as_deref().map(hex_linear).unwrap_or(stone);
         let t_rough = t.stone_roughness.unwrap_or(e.stone_roughness);
-        emit_shaft_span(&mut ms, &near_plan, &far_plan, y_prev, y1, t_style, t_rough, t_stone, roof_c, t.taper, t.twist_deg, &mech_ys, t.recess_band);
+        let has_arcade = t_idx == 0 && h >= 50.0 && !t.recess_band && t.twist_deg.abs() <= 0.5 && (t.taper - 1.0).abs() <= 1e-3 && (y1 - base) >= 14.0;
+        if has_arcade {
+            let y_lobby = base + 6.2_f64.min((y1 - base) * 0.42);
+            emit_ground_arcade(&mut ms, &near_plan, y_prev, base, y_lobby, t_stone);
+            // Keep Role::Far full-height (including mechanical bands) while Role::Near shaft rises above the recessed arcade.
+            walls(ms.facade_far(t_style, t_rough), &far_plan, y_prev, y_lobby, t_stone);
+            emit_shaft_span(&mut ms, &near_plan, &far_plan, y_lobby, y1, t_style, t_rough, t_stone, roof_c, t.taper, t.twist_deg, &mech_ys, false);
+        } else {
+            emit_shaft_span(&mut ms, &near_plan, &far_plan, y_prev, y1, t_style, t_rough, t_stone, roof_c, t.taper, t.twist_deg, &mech_ys, t.recess_band);
+        }
         // Setback / top roof cap.
         let (cap_near, cap_far) = if (t.taper - 1.0).abs() > 1e-3 || t.twist_deg.abs() > 0.5 {
             let rad = t.twist_deg.to_radians();

@@ -445,13 +445,12 @@ const PARTS: [PartSpec; 11] = [
     ("stone", None, true, false, 0.0, 0.0), // the spec's kit (limestone-ashlar), set below
     ("trim", Some("cast-stone-trim"), true, false, 0.0, 0.0),
     ("plinth", Some("cast-stone"), true, false, 0.0, 0.0),
-    // the upper windows: double-pane architectural glass over the nave/offices,
-    // carrying crisp sky/cloud Fresnel reflection (effective F0 ~0.075) rather than flat black voids.
-    ("glass", None, false, false, 0.08, 0.28),
+    // the upper windows: float glass over a dark interior, a dielectric
+    // (F0 4 %, n = 1.52) whose reflection is its Fresnel term, nearly smooth.
+    ("glass", None, false, false, 0.08, 0.0),
     // the shop fronts in the galleries: the same glass over lit shops.
-    ("shop", None, false, false, 0.08, 0.18),
-    // historic painted heritage bronze-putty sash & radial fanlight muntins (contrasts cleanly with reflective glazing).
-    ("frame", Some("cast-stone-trim"), true, false, 0.0, 0.0),
+    ("shop", None, false, false, 0.08, 0.0),
+    ("frame", Some("painted-steel"), true, false, 0.0, 0.0),
     // the low-slope roofs either side of the monitor (a dark built-up roof, INFERRED).
     ("roof", Some("asphalt-roof"), true, false, 0.0, 0.0),
     // the nave's skylight: glass over the lit nave, as the windows'.
@@ -507,19 +506,15 @@ impl B {
     fn tone(&self, k: F) -> Rgb {
         match k {
             F::Stone => self.stone,
-            // the trim in the weathered sandstone's warm buff tone over its smooth bake.
-            F::Trim => [self.stone[0] * 1.03, self.stone[1] * 1.01, self.stone[2] * 0.98],
-            // historic weathered architectural bronze-taupe window sashes & divided-light muntins.
-            F::Frame => [0.38, 0.36, 0.33],
+            // the trim in the stone's tone over its smooth bake.
+            F::Trim => [self.stone[0] * 1.02, self.stone[1] * 1.02, self.stone[2] * 1.02],
             // the granite-grey base course (INFERRED: darker than the ashlar above; the second pass's own tone).
-            F::Plinth => self.dt.as_ref().map(|d| d.plinth_linear).unwrap_or([0.56, 0.56, 0.57]),
+            F::Plinth => self.dt.as_ref().map(|d| d.plinth_linear).unwrap_or([0.62, 0.62, 0.63]),
             F::Dark => [0.012, 0.012, 0.013],
-            // upper arched windows: cool sky-reflected architectural glass over softly lit nave/office depth (never opaque black).
-            F::Glass => [0.082, 0.102, 0.122],
-            // the marketplace shop fronts in the open ground arcade: warm sunlit travertine
-            // and lit shop displays behind glass so the arches read as a lively colonnade, not black voids.
-            F::Shop => [0.23, 0.185, 0.132],
-            F::Skylight => [0.085, 0.10, 0.118],
+            // the room behind the glass in daylight (INFERRED: a dim interior seen through it).
+            F::Glass => [0.028, 0.031, 0.034],
+            F::Shop => [0.05, 0.045, 0.037],
+            F::Skylight => [0.06, 0.065, 0.07],
             // the gallery floor's paving tone (multiplies the street's concrete).
             F::Floor => [0.62, 0.6, 0.57],
             _ => [1.0; 3],
@@ -675,27 +670,18 @@ impl B {
         let wt = self.wt(w, 1.0);
         let base = self.tone(F::Glass);
         let c = self.p(w, o.s, o.spring, 0.0);
-        let pick = |i: i64, sky_lift: f64| -> Rgb {
+        let pick = |i: i64| -> Rgb {
             let h = h01(c[0], c[2], 101 + i);
-            if h < (rl.blind_share * 1.45).min(0.28) {
-                // Warm sunlit linen shade / softly lit historic gallery office behind glass.
-                let k = 0.88 + 0.30 * h01(c[0], c[2], 401 + i);
-                [rl.blind_linear[0] * 1.25 * k, rl.blind_linear[1] * 1.20 * k, rl.blind_linear[2] * 1.12 * k]
+            if h < rl.blind_share {
+                rl.blind_linear
             } else {
                 let t = h01(c[0], c[2], 211 + 3 * i);
-                let mult = rl.light_tone_spread[0] + (rl.light_tone_spread[1] - rl.light_tone_spread[0]) * t;
-                // Upper lights and fanlights catch cooler bright sky reflection; lower lights show deeper warm interior.
-                let warm_room = if h > 0.76 { [0.055, 0.044, 0.028] } else { [0.0; 3] };
-                [
-                    base[0] * mult * (0.94 + 0.24 * sky_lift) + warm_room[0],
-                    base[1] * mult * (0.98 + 0.30 * sky_lift) + warm_room[1],
-                    base[2] * mult * (1.02 + 0.38 * sky_lift) + warm_room[2],
-                ]
+                mul(base, rl.light_tone_spread[0] + (rl.light_tone_spread[1] - rl.light_tone_spread[0]) * t)
             }
         };
         let pane_nrm = |i: i64| -> V3 {
-            let tx = (h01(c[0], c[2], 521 + 7 * i) - 0.5) * 0.075;
-            let ty = (h01(c[0], c[2], 643 + 11 * i) - 0.5) * 0.075 + 0.025;
+            let tx = (h01(c[0], c[2], 521 + 7 * i) - 0.5) * 0.04;
+            let ty = (h01(c[0], c[2], 643 + 11 * i) - 0.5) * 0.04 + 0.015;
             let nx = want[0] + wt[0] * tx;
             let ny = want[1] + ty;
             let nz = want[2] + wt[2] * tx;
@@ -708,11 +694,10 @@ impl B {
         let mut tris: Vec<([V3; 3], Rgb, V3)> = Vec::new();
         let mut i = 0;
         for r in 0..n {
-            let sky_lift = (r as f64 + 0.5) / n as f64;
             let (y0, y1) = (o.sill + (o.spring - o.sill) * r as f64 / n as f64, o.sill + (o.spring - o.sill) * (r + 1) as f64 / n as f64);
             for cc in cols.windows(2) {
                 let q = [self.p(w, cc[0], y0, d), self.p(w, cc[1], y0, d), self.p(w, cc[1], y1, d), self.p(w, cc[0], y1, d)];
-                quads.push((q, pick(i, sky_lift), pane_nrm(i)));
+                quads.push((q, pick(i), pane_nrm(i)));
                 i += 1;
             }
         }
@@ -721,7 +706,7 @@ impl B {
             for k in 0..ARC {
                 // the radial bars at 45 and 135 degrees split the fan in three.
                 let sector = if 4 * k < ARC { 0 } else if 4 * k < 3 * ARC { 1 } else { 2 };
-                let col = pick(100 + sector, 1.15);
+                let col = pick(100 + sector);
                 let nrm = pane_nrm(100 + sector);
                 let at = |b: &B, j: usize| {
                     let th = PI - PI * j as f64 / ARC as f64;
@@ -825,7 +810,7 @@ impl B {
     fn mullions(&mut self, w: &Wall, o: &Op, d: f64, shop: bool) {
         let proud = self.rl.as_ref().map(|r| r.frame_proud_m).unwrap_or(0.07);
         let fw = self.rl.as_ref().map(|r| r.frame_width_m).unwrap_or(0.1);
-        let (bw, dd) = (0.105, [d, d + proud]);
+        let (bw, dd) = (0.08, [d, d + proud]);
         // divided lights (INFERRED: quarter-width lights about a metre tall); a shop front's door and side lights.
         let verticals = if shop { vec![o.s - o.w * 0.32, o.s, o.s + o.w * 0.32] } else { vec![o.s - o.w / 4.0, o.s, o.s + o.w / 4.0] };
         let arc_y = |x: f64| if o.arch { o.spring + (o.r() * o.r() - (x - o.s).powi(2)).max(0.0).sqrt() } else { o.spring };
@@ -1177,8 +1162,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
     };
     let dt = crate::features::ferry_building_detail().then(|| sp.detail.clone());
     let rl = (dt.is_some() && crate::features::ferry_building_relief()).then(|| sp.relief.clone());
-    let stone_patina = [sp.stone.tint_linear[0] * 0.90, sp.stone.tint_linear[1] * 0.85, sp.stone.tint_linear[2] * 0.76];
-    let mut b = B { f, m: PARTS.iter().map(|(k, ..)| MeshArrays::new(&format!("ferry-building:{k}"))).collect(), stone: stone_patina, dt: dt.clone(), rl: rl.clone() };
+    let mut b = B { f, m: PARTS.iter().map(|(k, ..)| MeshArrays::new(&format!("ferry-building:{k}"))).collect(), stone: sp.stone.tint_linear, dt: dt.clone(), rl: rl.clone() };
     // the upper windows' reveal (the second pass sets the glazing deeper)
     let upper_reveal = dt.as_ref().map(|d| d.upper_reveal_m).unwrap_or(inf.upper_reveal_m);
 
@@ -1264,19 +1248,19 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             let (g0, g1) = (arcade[0].l() - 0.8, arcade[arcade.len() - 1].rt() + 0.8);
             let back_d = -wall_t - gallery;
             // the front wall's inner face (seen through the other arches)
-            b.panel(F::Stone, &w, [g0, g1], [0.0, ceil], -wall_t, -1.0, &arcade, 0.84);
-            // the ceiling (warm bounced daylight from the plaza paving)
+            b.panel(F::Stone, &w, [g0, g1], [0.0, ceil], -wall_t, -1.0, &arcade, 0.6);
+            // the ceiling
             {
-                let col = mul(b.tone(F::Stone), 0.92);
+                let col = mul(b.tone(F::Stone), 0.55);
                 let q = [b.p(&w, g0, ceil, -wall_t), b.p(&w, g1, ceil, -wall_t), b.p(&w, g1, ceil, back_d), b.p(&w, g0, ceil, back_d)];
                 quad(b.mesh(F::Stone), q[0], q[1], q[2], q[3], col, [0.0, -1.0, 0.0]);
             }
-            // the back wall's shop fronts, one per bay (warm gallery stone catching reflected light)
+            // the back wall's shop fronts, one per bay
             let shops: Vec<Op> = centres.iter().map(|&c| Op { s: c, w: inf.arcade_arch_width_m - 0.6, sill: 0.0, spring: inf.arcade_spring_m - 0.9, arch: true }).collect();
             let back_wall = Wall { a: [w.a[0] + w.n[0] * back_d, w.a[1] + w.n[1] * back_d], ..w };
-            b.panel(F::Stone, &back_wall, [g0, g1], [0.0, ceil], 0.0, 1.0, &shops, 0.94);
+            b.panel(F::Stone, &back_wall, [g0, g1], [0.0, ceil], 0.0, 1.0, &shops, 0.62);
             for o in &shops {
-                b.reveal(F::Stone, &back_wall, o, 0.0, -0.25, false, 0.80);
+                b.reveal(F::Stone, &back_wall, o, 0.0, -0.25, false, 0.55);
                 let k = b.shop_tone(&back_wall, o.s);
                 b.pane(F::Shop, &back_wall, o, -0.25, k);
                 b.mullions(&back_wall, o, -0.25, true);
@@ -1285,7 +1269,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             for (sx, sign) in [(g0, 1.0), (g1, -1.0)] {
                 let q = [b.p(&w, sx, 0.0, -wall_t), b.p(&w, sx, 0.0, back_d), b.p(&w, sx, ceil, back_d), b.p(&w, sx, ceil, -wall_t)];
                 let want = b.wt(&w, sign);
-                let col = mul(b.tone(F::Stone), 0.84);
+                let col = mul(b.tone(F::Stone), 0.6);
                 quad(b.mesh(F::Stone), q[0], q[1], q[2], q[3], col, want);
             }
             // the paved floor, out to the face
