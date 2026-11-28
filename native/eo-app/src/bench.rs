@@ -577,6 +577,7 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
 pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     shots::preflight()?; // a shots file that does not parse stops here, before the world loads
     // the render thread above normal (workers lower themselves when started).
+    hitch::set_worker_priority_lowered(args.perf.thread_priority);
     let raised = args.perf.thread_priority && hitch::raise_render_thread();
     eo_render::alloc::claim_render_thread(); // this thread allocates from a heap no worker takes
     // the check compares two frames pixel for pixel; the AO pass
