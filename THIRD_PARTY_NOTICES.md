@@ -91,7 +91,10 @@ file digests and the changes made are in
 - **Overpass 3.0.5** (read when present): SIL Open Font License 1.1,
   Copyright 2015 Red Hat, Inc. (the font is dual OFL-1.1 / LGPL-2.1; used
   under OFL-1.1). The sign atlases rasterise its glyphs when the sign art
-  folder is present; the font file is not copied into the repository.
+  folder is present, and `scripts/assets/build-signal-poles-v1.py` bakes them
+  into the push buttons' R10-3e(CA) sign in `public/assets/signal-poles/` (its
+  digest is in that set's provenance); the font file is not copied into the
+  repository.
   Source and digest are in `native/eo-props/data/sign-art-manifest.json`.
 
 ## City and map data (shipped)
@@ -183,6 +186,27 @@ source, licence and SHA-256; the program refuses a file that does not match.
   James Ray Cock), `sandwichBoard` (Standing Chalkboard 01, ParzivalCG) and
   `utilityBox` (Utility Box 02, James Ray Cock). Source pages and digests are
   in `public/assets/street-props/street-props-v1.provenance.json`.
+- **Signal poles** (`public/assets/signal-poles/`): built in code by
+  `scripts/assets/build-signal-poles-v1.py` from the dimensions of Caltrans
+  Revised Standard Plans ES-7C and ES-7E and the CA MUTCD 2026 (push button
+  height, sign sizes; the R10-3e(CA) sign redrawn after Figure 2B-27(CA)); no
+  third-party geometry or image is used. The push button sign's legends are
+  Overpass glyphs (see [Fonts](#fonts)). Sources and digests:
+  `public/assets/signal-poles/signal-poles-v1.provenance.json`.
+- **Signal heads** (`public/assets/street-signals/`): built by
+  `scripts/assets/build-street-signals-v1.py` from two models by
+  Signalrenders, each licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
+  "[McCain Leotek 12 Inch Signal Set](https://sketchfab.com/3d-models/mccain-leotek-12-inch-signal-set-5d1544f61cc74047a2453d55791882ba)"
+  and "[McCain LED Pedestrian Signals Pack](https://sketchfab.com/3d-models/mccain-led-pedestrian-signals-pack-8c245f9477594831908c570c4f9a1385)".
+  Only their geometry is used. Modified: one head of each kept, rescaled to
+  the game's lens pitch and re-framed, a backplate with a yellow border added,
+  the housings rebaked and weathered. The photographs the models carry as lens
+  and face textures are not used: the lens and face images are drawn by the
+  script.
+  The sources' digests, what was changed and the built files' digests are in
+  `public/assets/street-signals/street-signals-v1.provenance.json`. The
+  licensor does not endorse this project.
 
 ### Not distributed
 
