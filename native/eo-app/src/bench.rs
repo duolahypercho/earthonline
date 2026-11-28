@@ -2430,7 +2430,7 @@ fn clear_path_frame(seg: &Segment, i: usize, total: usize) -> (usize, Option<Str
 /// only moves forward to it: a fixed restart value made a capture's last frame
 /// stamp equal the card before's, and the lit fog's composite took that card's
 /// volume when its own passes were skipped (no lamp lit).
-const CAPTURE_PHASE_PERIOD: u32 = 1 << 14;
+pub(crate) const CAPTURE_PHASE_PERIOD: u32 = 1 << 14;
 
 pub(crate) fn capture(
     ctx: &GpuContext,

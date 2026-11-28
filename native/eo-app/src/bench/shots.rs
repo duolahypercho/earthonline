@@ -878,6 +878,11 @@ impl Io<'_> {
 
     /// Draw until the temporal resolve has converged under the static camera, then write the PNG.
     pub fn converge_and_write(&self, cam: &Camera, png: &Path) -> Result<Value> {
+        // the frames start at one fixed frame phase (the TAA jitter, the frame-seeded
+        // noise), as bench.rs's captures do: the settle before them draws as many
+        // frames as loading took, and a phase carried from it made two builds' (or two
+        // runs') captures of one shot differ by a sub-pixel shift along every edge.
+        self.renderer.look.align_frame_phase(super::CAPTURE_PHASE_PERIOD);
         let mut frames = 0;
         let mut prev: Option<Vec<u8>> = None;
         let mut last = (f64::NAN, f64::NAN);
