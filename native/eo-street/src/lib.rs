@@ -44,7 +44,7 @@ pub use plan::Plan;
 
 use eo_data::ElevationGrid;
 use mesh::EntryGeom;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 pub const STREET_PORT_VERSION: &str = "eo-street-port-v1";
@@ -1701,7 +1701,7 @@ impl StreetWorld {
                         continue;
                     }
                     let mut m = TileMesh::default();
-                    self.emit_span(&mut m, ei as usize, i as usize);
+                    self.emit_span(&mut m, ei as usize, i as usize, true);
                     probe(&m, format!("run {ei} span {i}"));
                 }
                 for &ni in &refs.nodes {
@@ -1709,7 +1709,7 @@ impl StreetWorld {
                         continue;
                     }
                     let mut m = TileMesh::default();
-                    self.emit_node(&mut m, ni as usize);
+                    self.emit_node(&mut m, ni as usize, true);
                     probe(&m, format!("node {ni}"));
                 }
             }
